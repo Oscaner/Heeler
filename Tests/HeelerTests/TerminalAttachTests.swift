@@ -875,7 +875,7 @@ struct TerminalAttachTests {
         defer { window.isHidden = true }
         try await waitForGhosttyContentLayer(in: terminal)
 
-        terminal.terminalSession.sendInput(Data("abc".utf8))
+        terminal.insertText("abc")
         let insertDeadline = ContinuousClock.now + .seconds(1)
         while sent != Data("abc".utf8), ContinuousClock.now < insertDeadline {
             await Task.yield()
@@ -901,6 +901,66 @@ struct TerminalAttachTests {
         #expect(terminal.offset(
             from: terminal.beginningOfDocument,
             to: terminal.endOfDocument) == 2)
+    }
+
+    /// Third-party keyboards (Gboard) re-read the line on every
+    /// `textDidChange` and derive their next edit from it; a line that lags
+    /// one commit behind makes them drop a doubled letter.
+    @MainActor
+    @Test func typedTextIsInTheTextInputContextWhenUIKitHearsItChanged() {
+        let terminal = TerminalScreenView.makeConfiguredTerminal()
+        var lines: [String] = []
+        let inputDelegate = TextInputDelegateRecorder(events: { event in
+            guard event == "textDidChange",
+                  let line = terminal.textRange(
+                      from: terminal.beginningOfDocument, to: terminal.endOfDocument)
+            else { return }
+            lines.append(terminal.text(in: line) ?? "")
+        })
+        terminal.inputDelegate = inputDelegate
+
+        for character in "https" {
+            terminal.insertText(String(character))
+        }
+
+        #expect(lines == ["h", "ht", "htt", "http", "https"])
+    }
+
+    @MainActor
+    @Test func keyboardReplacementErasesTheReplacedTextBeforeTypingItsOwn() async throws {
+        var sent = Data()
+        let terminal = TerminalScreenView.makeConfiguredTerminal(
+            onSend: { sent.append($0) })
+        let window = try await Self.host(terminal)
+        defer { window.isHidden = true }
+
+        terminal.insertText("say teh")
+        let word = try #require(terminal.textRange(
+            from: try #require(terminal.position(from: terminal.endOfDocument, offset: -3)),
+            to: terminal.endOfDocument))
+        terminal.replace(word, withText: "the")
+
+        await Self.expectOutput(
+            Data("say teh".utf8) + Data([0x7F, 0x7F, 0x7F]) + Data("the".utf8),
+            received: { sent })
+        let line = try #require(terminal.textRange(
+            from: terminal.beginningOfDocument, to: terminal.endOfDocument))
+        #expect(terminal.text(in: line) == "say the")
+    }
+
+    @MainActor
+    @Test func appOwnedKeysClearTheTypedLine() async throws {
+        let terminal = TerminalScreenView.makeConfiguredTerminal()
+        let window = try await Self.host(terminal)
+        defer { window.isHidden = true }
+
+        terminal.insertText("ls")
+        terminal.sendQuickKey(.left)
+        #expect(terminal.offset(from: terminal.beginningOfDocument, to: terminal.endOfDocument) == 0)
+
+        terminal.insertText("ls")
+        terminal.noteReliableInputBegan()
+        #expect(terminal.offset(from: terminal.beginningOfDocument, to: terminal.endOfDocument) == 0)
     }
 
     @MainActor

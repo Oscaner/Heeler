@@ -7,6 +7,12 @@ Entries reference the pull request that made the change.
 
 ## [Unreleased]
 
+### Fixed
+
+- Gboard and other third-party keyboards no longer drop doubled letters
+  (`https` became `htps`) or leave the misspelled word behind when they
+  paste or autocorrect in Direct Input and shell terminals.
+
 ## [0.1.14] - 2026-10-15
 
 ### Added

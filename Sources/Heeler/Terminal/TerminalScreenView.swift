@@ -454,7 +454,6 @@ final class TerminalSessionCallbackBridge {
     var onViewport: ((InMemoryTerminalViewport) -> Void)?
     var isSizeReportCurrent: ((_ columns: Int, _ rows: Int) -> Bool)?
     var onReliableInput: (() -> Void)?
-    var onTerminalInput: ((Data) -> Void)?
     /// Reports every freeze transition. The return to `.live` carries the grid
     /// the thaw forwarded, or `nil` when the freeze had none to forward —
     /// the difference between "the settled grid reached the Host" and "the
@@ -496,7 +495,6 @@ final class TerminalSessionCallbackBridge {
     nonisolated func send(_ data: Data) {
         Task { @MainActor [weak self] in
             self?.onReliableInput?()
-            self?.onTerminalInput?(data)
             self?.onSend?(data)
         }
     }
@@ -794,15 +792,15 @@ final class HeelerTerminalView: UITerminalView, TerminalByteSink {
     private var textInputStyle = TerminalTextInputStyle.terminal
     private var defaultLeadingAssistantGroups: [UIBarButtonItemGroup]?
     private var defaultTrailingAssistantGroups: [UIBarButtonItemGroup]?
-    // Ghostty keeps only marked text in its UITextInput document. UIKit needs
-    // committed text to remain in that document so Backspace can observe a
-    // shrinking selection and continue its native key repeat.
+    // Ghostty keeps only marked text in its UITextInput document. Keyboards
+    // read the line typed so far from this one: UIKit's Backspace watches the
+    // selection shrink to keep repeating, and third-party keyboards (Gboard)
+    // derive their pastes and corrections from it. Text is recorded as it is
+    // committed, before UIKit hears the text changed, or a keyboard reading
+    // the line after its own edit finds it missing.
     private var textInputStorage = ""
     private var textInputSelection = NSRange(location: 0, length: 0)
     private var koreanResyllabification = HangulInput.ResyllabificationTransaction()
-    /// Korean commits recorded into the document up front, awaiting their
-    /// asynchronous echo from the byte sink (which must then be skipped).
-    private var preRecordedKoreanInput: [Data] = []
     private var terminalGridSize = (columns: 80, rows: 24)
     private var hasTerminalGridMetrics = false
     private var terminalCellSize = CGSize(width: 8, height: 16)
@@ -1062,9 +1060,6 @@ final class HeelerTerminalView: UITerminalView, TerminalByteSink {
         // The view is its own surface delegate so orphan-layer cleanup runs
         // wherever the view is used, not only under the SwiftUI representable.
         delegate = self
-        callbackBridge.onTerminalInput = { [weak self] data in
-            self?.recordTerminalInput(data)
-        }
         pasteConfiguration = UIPasteConfiguration(forAccepting: String.self)
         inputAccessoryItems = []
         configuration = TerminalSurfaceOptions(backend: .inMemory(terminalSession))
@@ -1372,14 +1367,58 @@ final class HeelerTerminalView: UITerminalView, TerminalByteSink {
         if applyKoreanComposition(text) {
             return
         }
-        if text != "\n", isKoreanTextInput, isCaretAtEndOfTextInput {
-            sendKoreanCommit(text)
-            return
-        }
         if text == "\n" {
+            // Ghostty sends Return as a key, which ends the line without
+            // telling UIKit; the keyboard must not keep it as context.
+            inputDelegate?.textWillChange(self)
+            recordCommittedText(text)
             super.insertText("\r")
+            inputDelegate?.textDidChange(self)
             return
         }
+        commitText(text)
+    }
+
+    /// Ghostty's own `replace` inserts without removing the range. Ranges
+    /// ending at the caret are erased with one Backspace per character, which
+    /// is what a remote line editor understands.
+    override func replace(_ range: UITextRange, withText text: String) {
+        guard isLocalInputEnabled else { return }
+        guard markedTextRange == nil,
+              let range = range as? TerminalInputTextRange,
+              range.location + range.length == textInputSelection.location
+        else {
+            recordCommittedText(text)
+            super.replace(range, withText: text)
+            return
+        }
+        let replaced = NSRange(location: range.location, length: range.length)
+        let replacedText = (textInputStorage as NSString).substring(with: replaced)
+
+        inputDelegate?.textWillChange(self)
+        inputDelegate?.selectionWillChange(self)
+        for _ in replacedText {
+            super.deleteBackward()
+        }
+        deleteFromTextInputStorage(in: replaced)
+        inputDelegate?.selectionDidChange(self)
+        inputDelegate?.textDidChange(self)
+
+        if !text.isEmpty {
+            commitText(text)
+        }
+    }
+
+    override func unmarkText() {
+        if let markedTextRange, let committed = text(in: markedTextRange) {
+            recordCommittedText(committed)
+        }
+        super.unmarkText()
+    }
+
+    /// Ghostty brackets the send with `textWillChange`/`textDidChange`.
+    private func commitText(_ text: String) {
+        recordCommittedText(text)
         super.insertText(text)
     }
 
@@ -1418,21 +1457,6 @@ final class HeelerTerminalView: UITerminalView, TerminalByteSink {
         }
         inputDelegate?.selectionDidChange(self)
         inputDelegate?.textDidChange(self)
-    }
-
-    private func recordTerminalInput(_ data: Data) {
-        guard !data.contains(0x1B), !data.contains(0x7F),
-              !data.contains(where: { $0 < 0x20 && $0 != 0x0A && $0 != 0x0D }),
-              let text = String(data: data, encoding: .utf8)
-        else { return }
-        if let expected = preRecordedKoreanInput.first {
-            preRecordedKoreanInput.removeFirst()
-            if expected == data { return }
-            // The sent bytes differ from the commit (e.g. a keyboard
-            // protocol re-encoded them): stop matching and record normally.
-            preRecordedKoreanInput.removeAll()
-        }
-        recordCommittedText(text)
     }
 
     private func recordCommittedText(_ text: String) {
@@ -1530,19 +1554,23 @@ final class HeelerTerminalView: UITerminalView, TerminalByteSink {
             deleteFromTextInputStorage(in: range)
             super.deleteBackward()
         }
-        sendKoreanCommit(text)
+        commitText(text)
         inputDelegate?.selectionDidChange(self)
         inputDelegate?.textDidChange(self)
     }
 
-    /// Sends a Korean commit and records it into the document now. The byte
-    /// sink records sent input asynchronously, but the keyboard issues its
-    /// delete → reinsert → syllable edits back to back and reads the document
-    /// in between, so the document must already hold each commit.
-    private func sendKoreanCommit(_ text: String) {
-        recordCommittedText(text)
-        preRecordedKoreanInput.append(Data(text.utf8))
-        super.insertText(text)
+    /// App-owned keys and snippets reach the pane past this document, so the
+    /// line the keyboard knew about no longer describes what precedes the
+    /// remote cursor.
+    func forgetTypedLine() {
+        koreanResyllabification.reset()
+        guard !textInputStorage.isEmpty else { return }
+        inputDelegate?.textWillChange(self)
+        inputDelegate?.selectionWillChange(self)
+        textInputStorage = ""
+        textInputSelection = NSRange(location: 0, length: 0)
+        inputDelegate?.selectionDidChange(self)
+        inputDelegate?.textDidChange(self)
     }
 
     private func textInputDeletionRange() -> NSRange? {
@@ -2453,6 +2481,7 @@ final class HeelerTerminalView: UITerminalView, TerminalByteSink {
     /// Ghostty `sendInput`, so it calls this instead of relying on that hook.
     func noteReliableInputBegan() {
         reliableInputDidBegin()
+        forgetTypedLine()
     }
 }
 
