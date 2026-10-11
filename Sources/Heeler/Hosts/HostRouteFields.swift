@@ -7,12 +7,10 @@ struct HostRouteFields: View {
     @Binding var route: HostRouteDraft
     /// Steers the Jump Host footer's credential requirement.
     let authMethod: Host.AuthMethod
-    /// Hosts the peer picker may tag as already reached.
-    let otherHosts: [Host]
-    /// Applies a peer chosen from the route's Overlay Network.
-    let onPeerChosen: (OverlayPeerCandidate, OverlayPeerCandidate.AddressStyle) -> Void
+    /// Shows the peer picker, which the enclosing Form presents with
+    /// `overlayPeerPicker(isPresented:route:otherHosts:onPeerChosen:)`.
+    @Binding var isChoosingOverlayPeer: Bool
 
-    @State private var isChoosingOverlayPeer = false
     /// Absent in previews and hosting tests; the Network picker then offers
     /// only Direct (plus the route's current choice).
     @Environment(OverlayNetworkStore.self) private var overlayNetworks: OverlayNetworkStore?
@@ -30,21 +28,6 @@ struct HostRouteFields: View {
                 .textInputAutocapitalization(.never)
             TextField("Port", text: $route.port)
                 .keyboardType(.numberPad)
-        }
-        // On one section only: a modifier on several sections would
-        // present the sheet from each of them.
-        .sheet(isPresented: $isChoosingOverlayPeer) {
-            if let overlayNetworks, let network = selectedOverlayNetwork {
-                OverlayPeerPickerView(
-                    network: network,
-                    target: route.overlayPeerTarget,
-                    chosenAddress: route.overlayPeerAddress,
-                    model: OverlayPeerPickerModel(store: overlayNetworks, networkID: network.id),
-                    hosts: otherHosts
-                ) { candidate, style in
-                    onPeerChosen(candidate, style)
-                }
-            }
         }
         jumpSection
         if !networkLeads {
@@ -191,14 +174,61 @@ struct HostRouteFields: View {
     }
 }
 
+/// Presents the peer picker of a route's Overlay Network.
+private struct OverlayPeerPickerSheet: ViewModifier {
+    @Binding var isPresented: Bool
+    let route: HostRouteDraft
+    /// Hosts the peer picker may tag as already reached.
+    let otherHosts: [Host]
+    let onPeerChosen: (OverlayPeerCandidate, OverlayPeerCandidate.AddressStyle) -> Void
+
+    @Environment(OverlayNetworkStore.self) private var overlayNetworks: OverlayNetworkStore?
+
+    func body(content: Content) -> some View {
+        content.sheet(isPresented: $isPresented) {
+            if let overlayNetworks,
+               let network = route.overlayNetworkID.flatMap({ overlayNetworks.network(id: $0) })
+            {
+                OverlayPeerPickerView(
+                    network: network,
+                    target: route.overlayPeerTarget,
+                    chosenAddress: route.overlayPeerAddress,
+                    model: OverlayPeerPickerModel(store: overlayNetworks, networkID: network.id),
+                    hosts: otherHosts
+                ) { candidate, style in
+                    onPeerChosen(candidate, style)
+                }
+            }
+        }
+    }
+}
+
+extension View {
+    /// Presents the peer picker `HostRouteFields` asks for. Apply it to the
+    /// whole Form: a sheet on one of its Sections is installed more than
+    /// once, so a tap presents it several times and dismissing the extra
+    /// presentations closes the sheet holding the Form.
+    func overlayPeerPicker(
+        isPresented: Binding<Bool>,
+        route: HostRouteDraft,
+        otherHosts: [Host],
+        onPeerChosen: @escaping (OverlayPeerCandidate, OverlayPeerCandidate.AddressStyle) -> Void
+    ) -> some View {
+        modifier(
+            OverlayPeerPickerSheet(
+                isPresented: isPresented, route: route, otherHosts: otherHosts,
+                onPeerChosen: onPeerChosen))
+    }
+}
+
 /// One route's own page, for a Host with more than one.
 struct HostRouteFormView: View {
     @Binding var draft: HostDraft
     let routeID: HostRouteDraft.ID
     let otherHosts: [Host]
 
+    @State private var isChoosingOverlayPeer = false
     @Environment(\.dismiss) private var dismiss
-    @Environment(OverlayNetworkStore.self) private var overlayNetworks: OverlayNetworkStore?
 
     var body: some View {
         Form {
@@ -206,10 +236,7 @@ struct HostRouteFormView: View {
                 HostRouteFields(
                     route: route,
                     authMethod: draft.authMethod,
-                    otherHosts: otherHosts
-                ) { candidate, style in
-                    draft.applyOverlayPeer(candidate, style: style, toRoute: routeID)
-                }
+                    isChoosingOverlayPeer: $isChoosingOverlayPeer)
                 if draft.routes.count > 1 {
                     Section {
                         Button("Delete Route", role: .destructive) {
@@ -219,6 +246,11 @@ struct HostRouteFormView: View {
                     }
                 }
             }
+        }
+        .overlayPeerPicker(
+            isPresented: $isChoosingOverlayPeer, route: route.wrappedValue, otherHosts: otherHosts
+        ) { candidate, style in
+            draft.applyOverlayPeer(candidate, style: style, toRoute: routeID)
         }
         .navigationTitle(index.map { "Route \($0 + 1)" } ?? "Route")
         .navigationBarTitleDisplayMode(.inline)

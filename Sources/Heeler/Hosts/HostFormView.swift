@@ -23,6 +23,7 @@ struct HostFormView: View {
     @State private var rsaKeyReplacementError: String?
     /// The route page on screen, for a Host with more than one route.
     @State private var routePath: [HostRouteDraft.ID] = []
+    @State private var isChoosingOverlayPeer = false
     @FocusState private var isUsernameFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -52,6 +53,12 @@ struct HostFormView: View {
         NavigationStack(path: $routePath) {
             Form {
                 formSections
+            }
+            .overlayPeerPicker(
+                isPresented: $isChoosingOverlayPeer, route: draft.primaryRoute,
+                otherHosts: otherHosts
+            ) { candidate, style in
+                draft.applyOverlayPeer(candidate, style: style)
             }
             .navigationDestination(for: HostRouteDraft.ID.self) { routeID in
                 HostRouteFormView(draft: $draft, routeID: routeID, otherHosts: otherHosts)
@@ -141,10 +148,7 @@ struct HostFormView: View {
             HostRouteFields(
                 route: $draft.primaryRoute,
                 authMethod: draft.authMethod,
-                otherHosts: otherHosts
-            ) { candidate, style in
-                draft.applyOverlayPeer(candidate, style: style)
-            }
+                isChoosingOverlayPeer: $isChoosingOverlayPeer)
         } else {
             routesSection
         }
