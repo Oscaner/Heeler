@@ -1,6 +1,13 @@
 # EasyTier setup
 
-Use EasyTier to reach a Mac running SSH and herdr from Heeler. Heeler contains its own EasyTier node, so the phone needs no other VPN app or system VPN. Use **Network** for a single Mac. Use **Config Server** when an administrator assigns networks to the phone from a web console.
+Use EasyTier to reach a Mac running SSH and herdr from Heeler. Heeler contains its own EasyTier node, so the phone needs no other VPN app or system VPN.
+
+| Mode | Where you configure the network | Use for |
+| --- | --- | --- |
+| **Network** | Enter the network name, secret, and Peers in Heeler | Manual setup |
+| **Config Server** | Enter the server URL in Heeler; assign the network from its web console | Centrally managed devices |
+
+Both modes work on a LAN or over the internet. A Config Server distributes settings, not traffic; outside the LAN, use a [reachable peer or your own VPS relay](#reaching-a-mac-outside-the-lan).
 
 The macOS commands were checked against the official **EasyTier v2.6.4** release on **2026-10-09**. On another release, check `easytier-core --version` and `--help` first. The Linux installer, `systemctl`, and `/dev/net/tun` instructions do not apply to macOS.
 
@@ -19,7 +26,7 @@ The macOS commands were checked against the official **EasyTier v2.6.4** release
 | Mac virtual address | `10.144.144.2/24` | Mac peer; the Host address is `10.144.144.2` |
 | Heeler virtual address | `10.144.144.3/24` | Heeler's **Advanced > Fixed IPv4** |
 
-The phone enters EasyTier through TCP `21010` and reaches SSH inside the virtual network. You never forward public TCP `22` to the Mac.
+**Peers** is the entry address used to join EasyTier, such as `tcp://192.168.1.20:21010`. **Host Address** is the Mac's virtual address used for SSH after joining, `10.144.144.2` with port `22`. The LAN example below needs no public port forwarding.
 
 ## Install the macOS CLI
 
@@ -103,16 +110,77 @@ Saving starts the Host checks. Verify the SSH fingerprint before tapping **Trust
 To inspect the peer from the Mac, open a second Terminal, set `ET_BIN` again, and run:
 
 ```sh
-"$ET_BIN/easytier-cli" -p 127.0.0.1:15888 node
 "$ET_BIN/easytier-cli" -p 127.0.0.1:15888 peer
 "$ET_BIN/easytier-cli" -p 127.0.0.1:15888 route
 ```
 
-Expect the Mac at `.2` and Heeler at `.3`. A peer entry does not prove SSH or herdr work. Without a TUN, `ssh` or `ping` from the Mac to a virtual address cannot stand in for Heeler's checks.
+Expect a route to Heeler at `10.144.144.3`. The JSON output of `easytier-cli -o json node` includes the network secret. Without a TUN, test SSH through Heeler rather than the Mac's system `ssh` or `ping`.
 
 ### Reaching a Mac outside the LAN
 
-A LAN address works only where the phone can reach that LAN. Elsewhere, expose a reachable EasyTier TCP endpoint, or use a relay both devices can reach. For a relay, add `--peers tcp://YOUR_RELAY:PORT` to the Mac command and put the same endpoint in Heeler's **Peers**. Use a relay you run or are allowed to use ([shared-node guide](https://github.com/EasyTier/easytier.github.io/blob/main/en/guide/network/quick-networking.md)). `--disable-p2p` keeps traffic on these explicit connections. A Config Server delivers settings but is not a relay.
+A phone on cellular cannot reach the Mac's LAN address. Use a Linux VPS with a public IP as a private relay: both the Mac and phone connect outward to it, so the Mac needs no public IP or router port forwarding. Traffic follows **Heeler → VPS → Mac → SSH**.
+
+#### 1. Start the VPS relay
+
+Download and extract the [v2.6.4 Linux ZIP](https://github.com/EasyTier/EasyTier/releases/tag/v2.6.4) for the VPS architecture: `easytier-linux-x86_64-v2.6.4.zip` or `easytier-linux-aarch64-v2.6.4.zip`. Set `ET_BIN` to the extracted directory. Allow inbound **TCP 21010** in the VPS firewall and cloud security group; keep management port **15888** on loopback.
+
+Run in Bash on the VPS, entering the same secret used by the Mac and Heeler:
+
+```bash
+ET_BIN="$HOME/easytier-linux-x86_64"
+read -r -s -p 'EasyTier network secret: ' ET_NETWORK_SECRET
+printf '\n'
+export ET_NETWORK_SECRET
+
+"$ET_BIN/easytier-core" \
+  --network-name heeler-home \
+  --hostname heeler-relay \
+  --listeners tcp://0.0.0.0:21010 \
+  --rpc-portal 127.0.0.1:15888 \
+  --no-tun \
+  --private-mode true \
+  --disable-upnp \
+  --disable-p2p \
+  --accept-dns false
+```
+
+The relay has no `--ipv4` or DHCP assignment; it only forwards traffic. Private mode restricts it to your network name and secret ([shared-node guide](https://github.com/EasyTier/easytier.github.io/blob/main/en/guide/network/host-public-server.md)).
+
+#### 2. Connect the Mac to the relay
+
+Stop the earlier Mac peer with **Control-C**. In the same Terminal, replace its startup command with the following, keeping `ET_BIN` and `ET_NETWORK_SECRET` from the Mac setup. Replace `YOUR_VPS_IP` with the VPS public IP:
+
+```sh
+"$ET_BIN/easytier-core" \
+  --network-name heeler-home \
+  --hostname heeler-mac \
+  --ipv4 10.144.144.2/24 \
+  --peers tcp://YOUR_VPS_IP:21010 \
+  --no-listener \
+  --rpc-portal 127.0.0.1:15888 \
+  --no-tun \
+  --private-mode true \
+  --disable-upnp \
+  --disable-p2p \
+  --accept-dns false
+```
+
+`--no-listener` removes the Mac's inbound EasyTier listener; its outgoing relay connection carries SSH traffic in both directions. `--disable-p2p` keeps this setup on the relay. Keep both processes running; these commands do not install boot services.
+
+#### 3. Connect Heeler over cellular
+
+| Heeler field | Value |
+| --- | --- |
+| Network name | `heeler-home` |
+| Secret | The same secret as the Mac and VPS |
+| Peers | `tcp://YOUR_VPS_IP:21010` |
+| Advanced > Fixed IPv4 | `10.144.144.3/24` |
+| Host > Network | This EasyTier network |
+| Host > Address / Port | `10.144.144.2` / `22`, not the VPS address |
+
+Turn off phone Wi-Fi, connect the network, and run the Host checks. Expect the Mac at `10.144.144.2` and a working SSH terminal over cellular. If the relay is unreachable, check its process and TCP 21010; if the Mac is missing, check the Mac's relay connection and the three devices' network name and secret.
+
+With **Config Server**, assign the same VPS endpoint as **Peer URL** instead of the Mac's LAN endpoint. The configuration server URL must also be reachable from the phone; use WSS for internet access as described below.
 
 ## Config Server: assign the phone a network from a web console
 
@@ -204,10 +272,11 @@ To run EasyTier at startup, follow the [macOS service guide](https://github.com/
 
 ## References
 
-EasyTier sources checked on 2026-10-09:
+EasyTier sources checked on 2026-10-09 unless noted:
 
 - [v2.6.4 release](https://github.com/EasyTier/EasyTier/releases/tag/v2.6.4).
 - [Installation](https://github.com/EasyTier/easytier.github.io/blob/main/en/guide/installation.md), [no-TUN mode](https://github.com/EasyTier/easytier.github.io/blob/main/en/guide/network/no-root.md), and [shared-node networking](https://github.com/EasyTier/easytier.github.io/blob/main/en/guide/network/quick-networking.md).
+- [Hosting a shared node](https://github.com/EasyTier/easytier.github.io/blob/main/en/guide/network/host-public-server.md) (checked 2026-10-11).
 - [Web console](https://github.com/EasyTier/easytier.github.io/blob/main/en/guide/network/web-console.md) and [hosted-service notice](https://github.com/EasyTier/easytier.github.io/blob/main/.vitepress/components/WebRedirect.vue).
 - [TCP proxy](https://github.com/EasyTier/EasyTier/blob/v2.6.4/easytier/src/gateway/tcp_proxy.rs#L765), [configuration listener](https://github.com/EasyTier/EasyTier/blob/v2.6.4/easytier-web/src/main.rs#L206), and [Noise transport](https://github.com/EasyTier/EasyTier/blob/v2.6.4/easytier/src/web_client/security.rs).
 

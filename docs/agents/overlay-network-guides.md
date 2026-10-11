@@ -26,6 +26,15 @@ On Simulators, candidate `bb266061` passed a Network entry against the official 
 
 Not covered: physical phones, other internet, NAT, and relay setups, the eight-network limit, overlapping assignments, and WSS certificate failures. The self-hosting command was checked against v2.6.4 help and source; the live Config Server test used an isolated container.
 
+### EasyTier relay recipe check (2026-10-11)
+
+The relay documentation update on base `4395595d` was checked with the official macOS **2.6.4-8428a89d** binaries. Relay and Mac arguments were extracted from the tutorial, substituting loopback endpoints, isolated ports, a temporary network name and secret, and subnet `10.222.241.0/24`. A third CLI node stood in for the phone and forwarded a local test port to the Mac node's virtual port 22.
+
+- A private no-TUN relay without an IPv4 assignment connected two outbound-only no-TUN peers with P2P disabled. The test client received the Mac's actual SSH banner through the relay.
+- Stopping the relay prevented new SSH connections, confirming that traffic did not bypass it. All three test processes and scratch logs were removed; existing test services stayed running.
+- The CLI's flag-only `--check-config` invocation exited with code 1 and no diagnostics; the checks above used actual process startup instead.
+- Not tested: a Linux VPS, public firewall rules, cellular access, SSH authentication, or Heeler through this relay. This local check does not replace the tutorial's cellular acceptance step.
+
 ## Screenshots
 
 The guides' screenshots are unedited Add Network forms from build `137a4aa3`, captured on **2026-10-10** on an iPhone 17 Pro Simulator (iOS 26.5), in dark appearance at the default text size. Names, addresses, and the server URL are examples. Credentials are blank, and the Machine ID belongs to a disposable Simulator.
