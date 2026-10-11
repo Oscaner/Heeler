@@ -287,10 +287,10 @@ struct HostOnboardingView: View {
         }
     }
 
-    /// The card's quiet action at its end: Stop while the Console is
-    /// dialing, a round Reconnect while connected. A Reconnect press keeps
-    /// the circle, spinning, until the dial starts, so the card holds its
-    /// size; `retry()` ignores a second press meanwhile.
+    /// The card's quiet action at its end, always a round button: Stop
+    /// while the Console is dialing, Reconnect while connected. A Reconnect
+    /// press keeps the circle, spinning, until the dial starts, so the card
+    /// holds its size; `retry()` ignores a second press meanwhile.
     @ViewBuilder
     private func trailingConnectionAction(
         _ status: HostRouteStatusPresentation
@@ -299,22 +299,22 @@ struct HostOnboardingView: View {
             Button(role: .cancel) {
                 Task { await stopConnecting() }
             } label: {
-                Text("Stop")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(minHeight: 44)
+                // A filled square reads heavier than the outlined arrow.
+                HostCircleActionLabel(systemImage: "stop.fill")
+                    .imageScale(.small)
             }
             .accessibilityLabel("Stop Connecting")
             .accessibilityHint(
                 "Stops trying to connect without waiting for a timeout. "
                     + "The Host stays paused until you reconnect.")
         } else if isManualReconnectInFlight {
-            HostReconnectCircle(isInFlight: true)
+            HostCircleActionLabel(systemImage: nil)
                 .accessibilityHidden(true)
         } else if status.tone == .connected, retryConnection != nil {
             Button {
                 retry()
             } label: {
-                HostReconnectCircle(isInFlight: false)
+                HostCircleActionLabel(systemImage: "arrow.clockwise")
             }
             .accessibilityLabel("Reconnect")
         }
@@ -687,21 +687,21 @@ private struct HostReconnectFill: ShapeStyle {
     }
 }
 
-/// Reconnect while connected: a round tinted button that leaves the
-/// subtitle its width, spinning once pressed.
-private struct HostReconnectCircle: View {
-    let isInFlight: Bool
+/// The card's quiet action: a round tinted button that leaves the
+/// subtitle its width. No symbol spins in its place.
+private struct HostCircleActionLabel: View {
+    let systemImage: String?
 
     @ScaledMetric(relativeTo: .body) private var size = 36
 
     var body: some View {
         Group {
-            if isInFlight {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.subheadline.weight(.semibold))
+            } else {
                 ProgressView()
                     .controlSize(.small)
-            } else {
-                Image(systemName: "arrow.clockwise")
-                    .font(.subheadline.weight(.semibold))
             }
         }
         .frame(width: size, height: size)
