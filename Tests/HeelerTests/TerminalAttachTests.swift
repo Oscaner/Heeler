@@ -2131,13 +2131,13 @@ struct TerminalAttachTests {
         center.post(
             name: UIResponder.keyboardWillShowNotification, object: nil,
             userInfo: [UIResponder.keyboardFrameEndUserInfoKey: completeFrame])
-        try await Task.sleep(for: .milliseconds(120))
-        #expect(inset.height == 402)
+        try #require(await Self.eventually { inset.height == 402 })
 
         inset.pauseHeightCapture()
         center.post(
             name: UIResponder.keyboardWillChangeFrameNotification, object: nil,
             userInfo: [UIResponder.keyboardFrameEndUserInfoKey: withoutCandidateRow])
+        // The shorter frame must not land, so this waits out its delivery.
         try await Task.sleep(for: .milliseconds(120))
         #expect(inset.height == 402)
         #expect(inset.lastPresentedHeight == 402)
@@ -2150,8 +2150,7 @@ struct TerminalAttachTests {
         center.post(
             name: UIResponder.keyboardWillShowNotification, object: nil,
             userInfo: [UIResponder.keyboardFrameEndUserInfoKey: completeFrame])
-        try await Task.sleep(for: .milliseconds(120))
-        #expect(inset.height == 402)
+        try #require(await Self.eventually { inset.height == 402 })
     }
 
     /// Moving a visible system keyboard between Composer and Direct Input can
@@ -2169,8 +2168,7 @@ struct TerminalAttachTests {
         center.post(
             name: UIResponder.keyboardWillShowNotification, object: nil,
             userInfo: [UIResponder.keyboardFrameEndUserInfoKey: completeFrame])
-        try await Task.sleep(for: .milliseconds(120))
-        #expect(inset.height == 402)
+        try #require(await Self.eventually { inset.height == 402 })
 
         let handoffID = inset.beginResponderHandoff()
         center.post(name: UIResponder.keyboardWillHideNotification, object: nil)
@@ -2207,8 +2205,7 @@ struct TerminalAttachTests {
             name: UIResponder.keyboardWillShowNotification, object: nil,
             userInfo: [UIResponder.keyboardFrameEndUserInfoKey: CGRect(
                 x: 0, y: 554, width: 440, height: 436)])
-        try await Task.sleep(for: .milliseconds(120))
-        #expect(inset.height == 402)
+        try #require(await Self.eventually { inset.height == 402 })
 
         let handoffID = inset.beginDestinationOwnedResponderHandoff()
         center.post(
@@ -2239,8 +2236,7 @@ struct TerminalAttachTests {
             name: UIResponder.keyboardWillShowNotification, object: nil,
             userInfo: [UIResponder.keyboardFrameEndUserInfoKey: CGRect(
                 x: 0, y: 554, width: 440, height: 436)])
-        try await Task.sleep(for: .milliseconds(120))
-        #expect(inset.height == 402)
+        try #require(await Self.eventually { inset.height == 402 })
 
         var ownerHandoffID: UUID?
         var expiredHandoffID: UUID?
@@ -2273,8 +2269,7 @@ struct TerminalAttachTests {
             name: UIResponder.keyboardWillShowNotification, object: nil,
             userInfo: [UIResponder.keyboardFrameEndUserInfoKey: CGRect(
                 x: 0, y: 554, width: 440, height: 436)])
-        try await Task.sleep(for: .milliseconds(120))
-        #expect(inset.height == 402)
+        try #require(await Self.eventually { inset.height == 402 })
 
         _ = inset.beginResponderHandoff(currentHeight: { 402 })
         center.post(name: UIResponder.keyboardWillHideNotification, object: nil)
@@ -2299,8 +2294,7 @@ struct TerminalAttachTests {
             name: UIResponder.keyboardWillShowNotification, object: nil,
             userInfo: [UIResponder.keyboardFrameEndUserInfoKey: CGRect(
                 x: 0, y: 554, width: 440, height: 436)])
-        try await Task.sleep(for: .milliseconds(120))
-        #expect(inset.height == 402)
+        try #require(await Self.eventually { inset.height == 402 })
 
         let handoffID = inset.beginDestinationOwnedResponderHandoff()
         center.post(name: UIResponder.keyboardWillHideNotification, object: nil)
@@ -2327,8 +2321,7 @@ struct TerminalAttachTests {
             object: nil,
             userInfo: [UIResponder.keyboardFrameEndUserInfoKey: CGRect(
                 x: 0, y: 554, width: 440, height: 436)])
-        try await Task.sleep(for: .milliseconds(120))
-        #expect(inset.height == 402)
+        try #require(await Self.eventually { inset.height == 402 })
 
         var expiredID: UUID?
         let handoffID = inset.beginDestinationOwnedResponderHandoff(
@@ -2350,7 +2343,7 @@ struct TerminalAttachTests {
             name: UIResponder.keyboardWillShowNotification, object: nil,
             userInfo: [UIResponder.keyboardFrameEndUserInfoKey: CGRect(
                 x: 0, y: 554, width: 440, height: 436)])
-        try await Task.sleep(for: .milliseconds(120))
+        try #require(await Self.eventually { inset.height == 402 })
 
         let handoffID = inset.beginResponderHandoff()
         center.post(name: UIResponder.keyboardWillHideNotification, object: nil)
