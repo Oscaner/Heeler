@@ -103,6 +103,10 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         # ActivityKit starts Live Activities from the app; HeelerWidgets renders them.
         INFOPLIST_KEY_NSSupportsLiveActivities: YES
+        # The catalog holds only the app icon's pre-rendered 1024px images;
+        # space-optimized encoding stays lossless and saves ~0.46 MB per
+        # device. Decoding is the system's, at icon render time.
+        ASSETCATALOG_COMPILER_OPTIMIZATION: space
     dependencies:
       - package: HeelerSSH
       - package: GhosttyTerminal
