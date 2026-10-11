@@ -291,7 +291,7 @@ struct HostOnboardingView: View {
         }
     }
 
-    /// Reconnect, with Stop Connecting at the row's end while the Console
+    /// Reconnect, with Stop at the row's end while the Console
     /// is dialing. The status card shows a press as Connecting…, so the
     /// button keeps its look; `retry()` ignores a second press meanwhile.
     private var reconnectRow: some View {
@@ -303,9 +303,15 @@ struct HostOnboardingView: View {
             }
             Spacer(minLength: 12)
             if isAttemptingConnection, let stopConnecting {
-                Button("Stop Connecting", role: .cancel) {
+                Button("Stop", role: .cancel) {
                     Task { await stopConnecting() }
                 }
+                // Secondary to Reconnect: a small gray capsule, not a link.
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
+                .tint(.primary)
+                .accessibilityLabel("Stop Connecting")
                 .accessibilityHint(
                     "Stops trying to connect without waiting for a timeout. "
                         + "The Host stays paused until you reconnect.")
