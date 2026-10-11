@@ -655,18 +655,6 @@ struct AgentTerminalView: View {
         ) {
             pasteReviewSheet
         }
-        .confirmationDialog(
-            "Close \(title)?", isPresented: $isConfirmingClose, titleVisibility: .visible
-        ) {
-            Button("Close Agent", role: .destructive) {
-                Task { await performClose() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "This closes the pane on the Host and removes the agent everywhere. "
-                    + "This can't be undone.")
-        }
     }
 
     private var alertSurface: some View {
@@ -930,7 +918,9 @@ struct AgentTerminalView: View {
             softwareKeyboardDismissed: keyboardInset.isSoftwareKeyboardDismissed)
     }
 
-    private var composerActions: AgentComposerActions {
+    /// `anchorsClose` is true for the one input chrome on screen; during the
+    /// Direct-to-Composer handoff both are mounted and Direct Input shows.
+    private func composerActions(anchorsClose: Bool) -> AgentComposerActions {
         AgentComposerActions(
             canBegin: attach.staging.canBegin,
             attachLinkCount: attach.attachLinks.count,
@@ -956,7 +946,13 @@ struct AgentTerminalView: View {
                 } : nil,
             renameAgent: { isRenamingAgent = true },
             renameWorkspace: { isRenamingWorkspace = true },
-            closeAgent: { isConfirmingClose = true })
+            closeAgent: { isConfirmingClose = true },
+            closeConfirmation: anchorsClose
+                ? AgentCloseConfirmation(
+                    title: title,
+                    isPresented: $isConfirmingClose,
+                    close: { Task { await performClose() } })
+                : nil)
     }
 
     private func makeWorktreeStore(checkout: RepositoryCheckout) -> WorktreeDetailStore {
@@ -1208,7 +1204,7 @@ struct AgentTerminalView: View {
                     isToolsKeyboardPresented: usesDirectToolsKeyboard),
                 interactions: .init(
                     switcher: agentSwitcher,
-                    actions: composerActions,
+                    actions: composerActions(anchorsClose: true),
                     toggleKeyboard: toggleDirectKeyboard,
                     switchKeyboard: directKeyboardSwitchAction,
                     sendQuickKey: sendAgentQuickKey,
@@ -1245,7 +1241,7 @@ struct AgentTerminalView: View {
             keyboardHandoff: keyboardHandoff,
             inheritsKeyboardHandoff: inheritsKeyboardHandoff,
             keyboardHeight: composerKeyboardLayout.availableToolsHeight,
-            actions: composerActions,
+            actions: composerActions(anchorsClose: directToComposerHandoffID == nil),
             attachLinksPopover: attachLinksPopover(from: .composerChip),
             skills: skills,
             keyboardPresentation: $composerKeyboardPresentation,
