@@ -280,17 +280,7 @@ struct HostOnboardingView: View {
             Section {
                 HostConnectionStatusCard(presentation: routeStatus)
                 if retryConnection != nil {
-                    reconnectButton
-                    if isAttemptingConnection, let stopConnecting {
-                        Button(role: .cancel) {
-                            Task { await stopConnecting() }
-                        } label: {
-                            Label("Stop Connecting", systemImage: "xmark.circle")
-                        }
-                        .accessibilityHint(
-                            "Stops trying to connect without waiting for a timeout. "
-                                + "The Host stays paused until you reconnect.")
-                    }
+                    reconnectRow
                 }
             } footer: {
                 connectionFooter
@@ -301,15 +291,28 @@ struct HostOnboardingView: View {
         }
     }
 
-    /// The status card above shows the press as Connecting…; the button
-    /// only rests until the request settles.
-    private var reconnectButton: some View {
-        Button {
-            retry()
-        } label: {
-            Label("Reconnect", systemImage: "arrow.clockwise")
+    /// Reconnect, with Stop Connecting at the row's end while the Console
+    /// is dialing. The status card shows a press as Connecting…, so the
+    /// button keeps its look; `retry()` ignores a second press meanwhile.
+    private var reconnectRow: some View {
+        HStack {
+            Button {
+                retry()
+            } label: {
+                Label("Reconnect", systemImage: "arrow.clockwise")
+            }
+            Spacer(minLength: 12)
+            if isAttemptingConnection, let stopConnecting {
+                Button("Stop Connecting", role: .cancel) {
+                    Task { await stopConnecting() }
+                }
+                .accessibilityHint(
+                    "Stops trying to connect without waiting for a timeout. "
+                        + "The Host stays paused until you reconnect.")
+            }
         }
-        .disabled(isManualReconnectInFlight)
+        // Two buttons in one row: each takes only its own taps.
+        .buttonStyle(.borderless)
     }
 
     @ViewBuilder
