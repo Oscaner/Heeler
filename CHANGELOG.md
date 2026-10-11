@@ -17,7 +17,7 @@ Entries reference the pull request that made the change.
   starting. Pairing adds every address the Pairing Code offers. A Host's key
   is trusted once for all of its routes: another machine answering one of
   its addresses is refused, and adding an overlay address no longer asks to
-  confirm the key again. (#PR)
+  confirm the key again. (#437)
 - Reach a Host through Tailscale, ZeroTier, or EasyTier without turning on a
   VPN. Add a network in Settings › Overlay Networks, then choose it under
   Network when editing the Host. Heeler joins the network itself while it is
