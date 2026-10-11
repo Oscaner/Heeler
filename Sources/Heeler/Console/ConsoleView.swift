@@ -389,6 +389,7 @@ struct ConsoleView: View {
             connectionStatuses: console.hostStatuses,
             standingFailures: console.hostStandingFailures,
             latencies: console.hostLatencies,
+            routeIDs: console.hostRouteIDs,
             syncIssues: console.hostSyncErrors,
             manualReconnectInFlightHostIDs: manualReconnectInFlightHostIDs,
             retryConnection: { await reconnectHost($0) },

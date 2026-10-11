@@ -3,6 +3,10 @@ import Foundation
 /// The app-side abstraction that executes herdr API requests over SSH.
 /// UI code talks to Transport, never to SSH primitives (ADR 0011).
 protocol Transport: Sendable {
+    /// The catalog route this connection reached (ADR 0022); nil where the
+    /// transport does not know one.
+    var routeID: UUID? { get }
+
     /// Verifies the server speaks a protocol version we support and returns
     /// its identity. Must be the first herdr API call on every new connection
     /// path; Host-local session discovery may run before it.
@@ -281,6 +285,8 @@ protocol Transport: Sendable {
 }
 
 extension Transport {
+    var routeID: UUID? { nil }
+
     /// Test doubles and alternative transports that do not expose Host-level
     /// session discovery can opt out without inventing sessions.
     func listSessions() async throws -> [HerdrSession] { [] }
@@ -1105,6 +1111,8 @@ struct RouteFailure: Sendable, Equatable {
     /// device's current network (`SSHRoute.mayNameAnotherMachine`).
     let mayNameAnotherMachine: Bool
     let error: TransportError
+    /// The catalog route that failed (`SSHRoute.id`), when known.
+    var routeID: UUID? = nil
 
     /// A changed host key on a route whose address names the same machine
     /// wherever the device is: an Overlay Network address, one resolved by a

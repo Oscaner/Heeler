@@ -100,5 +100,6 @@ stream or hop, with the same channels once connected.
   authenticated once.
 - An Overlay Network named by a deferred Route is started only when that
   Route starts. A Host whose LAN address answers never starts it.
-- The Console does not yet show which Route a connection took; the Host's
-  detail lists its Routes.
+- The Console records which Route each connection took. The Host's detail
+  marks that Route In Use, and when no Route reached the Host, each Route's
+  own failure.

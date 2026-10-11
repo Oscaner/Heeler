@@ -270,6 +270,9 @@ extension HostDraft {
         _ candidate: OverlayPeerCandidate, style: OverlayPeerCandidate.AddressStyle = .ipAddress,
         toRoute routeID: HostRouteDraft.ID? = nil
     ) {
+        if routeID == nil, routes.isEmpty {
+            routes = [HostRouteDraft()]
+        }
         let index =
             if let routeID {
                 routes.firstIndex { $0.id == routeID }

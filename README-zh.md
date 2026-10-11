@@ -87,6 +87,8 @@ Windows 原生 Host（herdr >= 0.9.3）通过 SSH 连接，需手动添加。
 - [逐步搭建远程访问](docs/guides/vps-jump-host-setup.md)
 - [架构、安全边界与 VPS 迁移手册](docs/guides/vps-jump-host.md)
 
+一个 Host 可以有多条路由，例如在家用局域网地址，在外走 Overlay Network 或跳板机：[多路由使用教程](docs/guides/host-routes.md)。
+
 ## 安装
 
 从 [App Store](https://apps.apple.com/us/app/heeler-for-herdr/id6797263135) 或

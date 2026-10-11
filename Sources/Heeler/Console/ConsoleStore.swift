@@ -20,6 +20,8 @@ final class ConsoleStore {
     private(set) var hostStatuses: [Host.ID: EventsSessionStatus] = [:]
     private(set) var hostStandingFailures: [Host.ID: TransportError] = [:]
     private(set) var hostLatencies: [Host.ID: Duration] = [:]
+    /// The route each connected Host's current connection reached.
+    private(set) var hostRouteIDs: [Host.ID: HostRoute.ID] = [:]
     private(set) var hostSyncErrors: [Host.ID: String] = [:]
     private(set) var hostConnectionGenerations: [Host.ID: UInt64] = [:]
     /// Hosts whose current connection has not produced its first snapshot.
@@ -768,6 +770,10 @@ final class ConsoleStore {
         hostLatencies = Dictionary(
             uniqueKeysWithValues: current.compactMap { projection in
                 projection.latency.map { (projection.host.id, $0) }
+            })
+        hostRouteIDs = Dictionary(
+            uniqueKeysWithValues: current.compactMap { projection in
+                projection.routeID.map { (projection.host.id, $0) }
             })
         hostSyncErrors = Dictionary(
             uniqueKeysWithValues: current.compactMap { projection in

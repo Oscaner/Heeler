@@ -203,6 +203,9 @@ struct SSHRoute: Sendable {
     /// the Jump Host when one is set (ADR 0021). nil dials over this device's
     /// own network. The Jump Host's onward hop to the Host never uses it.
     var overlay: OverlayRoute? = nil
+    /// The catalog route this is (`HostRoute.id`), reported back as the
+    /// route a connection reached; nil outside the catalog.
+    var id: UUID? = nil
 
     /// Whether the device dials the Host itself over its own network. Such
     /// routes start a race at once; the others wait a moment, so a reachable

@@ -1733,6 +1733,30 @@ struct ConsoleStoreTests {
         #expect(store.hostLatencies.isEmpty)
     }
 
+    /// The route a Host reached (ADR 0022) is published with `.connected`
+    /// and dropped with the connection, like its latency.
+    @Test func hostRouteIDFollowsTheConnectionThatReachedIt() async throws {
+        let host = Host.fixture()
+        let routeID = try #require(host.routes.first?.id)
+        let transport = ScriptedTransport(snapshot: .fixture(), routeID: routeID)
+        let store = makeStore(transports: [host.id: transport])
+
+        store.setHosts([host])
+        await store.resume()
+        try await waitUntil("the Host should report connected") {
+            store.hostStatuses[host.id] == .connected
+        }
+        #expect(store.hostRouteIDs[host.id] == routeID)
+
+        await store.suspend()
+        try await waitUntil("the Host should report suspended") {
+            store.hostStatuses[host.id] == .suspended
+        }
+        #expect(store.hostRouteIDs[host.id] == nil)
+
+        store.setHosts([])
+    }
+
     /// A latency belongs to the connection that measured it (#236), and the
     /// projection folds both from one ordered source — so every assertion here
     /// is made the instant the status is observable, with nothing waited for

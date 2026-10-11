@@ -50,13 +50,6 @@ struct HostRouteDraft: Identifiable, Equatable, Sendable {
             && (!usesJumpHost || jumpPortNumber != nil)
     }
 
-    /// True while every field still has the value Add Route gave it.
-    var isBlank: Bool {
-        var blank = HostRouteDraft()
-        blank.id = id
-        return self == blank
-    }
-
     /// The route this draft describes, or nil while invalid.
     func makeRoute() -> HostRoute? {
         guard isValid, let portNumber else { return nil }
@@ -81,9 +74,10 @@ struct HostDraft: Equatable, Sendable {
     /// Blank means "keep the stored password" when editing.
     var password = ""
     var sessionName = ""
-    /// The Host's routes in order; never empty. A Host with one route edits
-    /// it inline, through the forwarding properties below.
-    var routes = [HostRouteDraft()]
+    /// The Host's routes in order. A new Host starts with none and cannot
+    /// be saved until Add Route gives it one; the forwarding properties
+    /// below create the first route when set.
+    var routes: [HostRouteDraft] = []
 
     init() {}
 
@@ -144,7 +138,7 @@ struct HostDraft: Equatable, Sendable {
         return String(stem)
     }
 
-    /// The first route, which a single-route form edits inline.
+    /// The first route; blank while there is none.
     var primaryRoute: HostRouteDraft {
         get { routes.first ?? HostRouteDraft() }
         set {
@@ -191,24 +185,6 @@ struct HostDraft: Equatable, Sendable {
     var jumpPortNumber: Int? { primaryRoute.jumpPortNumber }
 
     var usesJumpHost: Bool { primaryRoute.usesJumpHost }
-
-    /// Appends a blank route and returns its id.
-    @discardableResult
-    mutating func addRoute() -> HostRouteDraft.ID {
-        let route = HostRouteDraft()
-        routes.append(route)
-        return route.id
-    }
-
-    /// Removes route `id` while it is still blank, as when Add Route's page
-    /// is left without typing anything. Keeps at least one route.
-    mutating func discardRouteIfBlank(id: HostRouteDraft.ID) {
-        guard routes.count > 1,
-              let index = routes.firstIndex(where: { $0.id == id }),
-              routes[index].isBlank
-        else { return }
-        routes.remove(at: index)
-    }
 
     /// Removes the routes at `offsets`, keeping at least one.
     mutating func removeRoutes(atOffsets offsets: IndexSet) {

@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// The sections that edit one route (ADR 0022): its Overlay Network, the
-/// Host's address and port, and an optional Jump Host. A Host with one route
-/// shows them inline in its form; with more, each route has its own page.
+/// Host's address and port, and an optional Jump Host. Each route has its own
+/// page, opened from the Host form's Routes list.
 struct HostRouteFields: View {
     @Binding var route: HostRouteDraft
     /// Steers the Jump Host footer's credential requirement.
@@ -221,7 +221,76 @@ extension View {
     }
 }
 
-/// One route's own page, for a Host with more than one.
+/// A page pushed from a Host form.
+enum HostRoutePage: Hashable {
+    /// A listed route, edited in place like the rest of the form.
+    case route(HostRouteDraft.ID)
+    /// Add Route's page, whose route joins the Host only on Save.
+    case newRoute
+}
+
+/// Add Route's page. It edits a copy of the Host with the new route
+/// appended, written back only on Save, so going Back adds nothing. A peer
+/// chosen here names a still-unnamed Host, as on any route's page.
+struct NewHostRouteView: View {
+    @Binding var draft: HostDraft
+    let otherHosts: [Host]
+
+    /// Both fixed at first appearance: a parent redraw re-runs `init`, and a
+    /// fresh id there would no longer name the route `pending` holds.
+    @State private var pending: HostDraft
+    @State private var routeID: HostRouteDraft.ID
+    @State private var isChoosingOverlayPeer = false
+    @Environment(\.dismiss) private var dismiss
+
+    init(draft: Binding<HostDraft>, otherHosts: [Host]) {
+        _draft = draft
+        self.otherHosts = otherHosts
+        let route = HostRouteDraft()
+        _routeID = State(initialValue: route.id)
+        var pending = draft.wrappedValue
+        pending.routes.append(route)
+        _pending = State(initialValue: pending)
+    }
+
+    var body: some View {
+        Form {
+            HostRouteFields(
+                route: route,
+                authMethod: pending.authMethod,
+                isChoosingOverlayPeer: $isChoosingOverlayPeer)
+        }
+        .overlayPeerPicker(
+            isPresented: $isChoosingOverlayPeer, route: route.wrappedValue, otherHosts: otherHosts
+        ) { candidate, style in
+            pending.applyOverlayPeer(candidate, style: style, toRoute: routeID)
+        }
+        .navigationTitle("New Route")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    draft = pending
+                    dismiss()
+                }
+                .disabled(!route.wrappedValue.isValid)
+            }
+        }
+    }
+
+    /// The appended route; `pending` always holds it.
+    private var route: Binding<HostRouteDraft> {
+        Binding(
+            get: { pending.routes.first { $0.id == routeID } ?? HostRouteDraft() },
+            set: { updated in
+                if let index = pending.routes.firstIndex(where: { $0.id == routeID }) {
+                    pending.routes[index] = updated
+                }
+            })
+    }
+}
+
+/// One listed route's own page.
 struct HostRouteFormView: View {
     @Binding var draft: HostDraft
     let routeID: HostRouteDraft.ID
@@ -276,24 +345,28 @@ struct HostRouteFormView: View {
 /// A route's row in a Host form's Routes list.
 struct HostRouteRow: View {
     let route: HostRouteDraft
-    let index: Int
 
     @Environment(OverlayNetworkStore.self) private var overlayNetworks: OverlayNetworkStore?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        HostRouteLabel(
+            kind: HostRouteKind(
+                usesOverlay: route.overlayNetworkID != nil, usesJumpHost: route.usesJumpHost)
+        ) {
             Text(title)
+                .font(.body.monospaced())
                 .foregroundStyle(route.isValid ? Color.primary : Color.red)
+        } subtitle: {
             Text(subtitle)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
         }
-        .accessibilityElement(children: .combine)
+    }
+
+    private var address: String {
+        route.address.trimmingCharacters(in: .whitespaces)
     }
 
     private var title: String {
-        let address = route.address.trimmingCharacters(in: .whitespaces)
-        guard !address.isEmpty else { return "Route \(index + 1): no address" }
+        guard !address.isEmpty else { return "No address" }
         return route.port == "22" ? address : "\(address):\(route.port)"
     }
 
@@ -307,5 +380,95 @@ struct HostRouteRow: View {
             parts.append("via \(route.jumpAddress.trimmingCharacters(in: .whitespaces))")
         }
         return parts.isEmpty ? "Direct" : parts.joined(separator: " · ")
+    }
+}
+
+/// How a route reaches its Host, as its row's icon shows it. An Overlay
+/// Network leads: it carries the first hop, Jump Host or not.
+enum HostRouteKind: Equatable {
+    case direct
+    case overlay
+    case jumpHost
+
+    init(usesOverlay: Bool, usesJumpHost: Bool) {
+        self = usesOverlay ? .overlay : usesJumpHost ? .jumpHost : .direct
+    }
+
+    init(_ route: HostRoute) {
+        self.init(usesOverlay: route.overlayNetworkID != nil, usesJumpHost: route.usesJumpHost)
+    }
+
+    var systemImage: String {
+        switch self {
+        case .direct: "wifi"
+        case .overlay: "point.3.connected.trianglepath.dotted"
+        case .jumpHost: "arrow.triangle.branch"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .direct: .blue
+        case .overlay: .indigo
+        case .jumpHost: .orange
+        }
+    }
+}
+
+/// A route's row content: its kind's icon, then the address over a
+/// subtitle, and an optional trailing tag.
+struct HostRouteLabel<Title: View, Subtitle: View, Trailing: View>: View {
+    let kind: HostRouteKind
+    @ViewBuilder let title: Title
+    @ViewBuilder let subtitle: Subtitle
+    @ViewBuilder let trailing: Trailing
+
+    @ScaledMetric(relativeTo: .body) private var iconSize = 30
+
+    init(
+        kind: HostRouteKind,
+        @ViewBuilder title: () -> Title,
+        @ViewBuilder subtitle: () -> Subtitle,
+        @ViewBuilder trailing: () -> Trailing = { EmptyView() }
+    ) {
+        self.kind = kind
+        self.title = title()
+        self.subtitle = subtitle()
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: kind.systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(kind.tint)
+                .frame(width: iconSize, height: iconSize)
+                .background(kind.tint.opacity(0.14), in: .rect(cornerRadius: 8))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                title
+                subtitle
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            trailing
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A short capsule beside a route: In Use, Failed.
+struct HostRouteTag: View {
+    let text: String
+    let tint: Color
+
+    var body: some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(tint.opacity(0.14), in: .capsule)
     }
 }
