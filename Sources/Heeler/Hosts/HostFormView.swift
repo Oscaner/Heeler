@@ -64,9 +64,7 @@ struct HostFormView: View {
                 case .route(let routeID):
                     HostRouteFormView(draft: $draft, routeID: routeID, otherHosts: otherHosts)
                 case .newRoute:
-                    NewHostRouteView(authMethod: draft.authMethod, otherHosts: otherHosts) {
-                        draft.routes.append($0)
-                    }
+                    NewHostRouteView(draft: $draft, otherHosts: otherHosts)
                 }
             }
             .navigationTitle(editing == nil ? "Add Host" : "Edit Host")
@@ -193,7 +191,11 @@ struct HostFormView: View {
                 }
             }
         } footer: {
-            if draft.routes.count > 1 {
+            if draft.routes.isEmpty {
+                Text(
+                    "Add the address Heeler connects to: directly, over an overlay network, "
+                        + "or through a Jump Host.")
+            } else if draft.routes.count > 1 {
                 Text(
                     "Heeler tries every route each time it connects and keeps the first that "
                         + "reaches the Host. Routes over this device's own network start first; "

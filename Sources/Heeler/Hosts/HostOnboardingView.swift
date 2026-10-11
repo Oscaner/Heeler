@@ -28,7 +28,6 @@ struct HostOnboardingView: View {
     /// connection once (see `HostOnboardingConsoleRecovery`).
     @State private var isConsoleRecoveryArmed = false
     @State private var isShowingPluginNotice = false
-    @State private var isAddingRoute = false
     @Environment(OverlayNetworkStore.self) private var overlayNetworks: OverlayNetworkStore?
 
     init(
@@ -126,17 +125,7 @@ struct HostOnboardingView: View {
         .sheet(isPresented: $isEditing) {
             HostFormView(store: catalog, editing: store.host)
         }
-        .sheet(isPresented: $isAddingRoute) {
-            NavigationStack {
-                NewHostRouteView(
-                    authMethod: store.host.authMethod,
-                    otherHosts: catalog.hosts.filter { $0.id != store.host.id },
-                    showsCancel: true
-                ) { draft in
-                    try addRoute(draft)
-                }
-            }
-        }
+
         .pluginNoticeSheet(pluginPresentation.notice, isPresented: $isShowingPluginNotice) {
             Task { await store.runChecks() }
         }
@@ -282,16 +271,6 @@ struct HostOnboardingView: View {
         return parts.isEmpty ? "Direct" : parts.joined(separator: " · ")
     }
 
-    /// Appends a route to the catalog Host. The detail is keyed by the Host
-    /// value, so it reloads with the new route once saved.
-    private func addRoute(_ draft: HostRouteDraft) throws {
-        guard let route = draft.makeRoute(),
-              var host = catalog.hosts.first(where: { $0.id == store.host.id })
-        else { throw HostStoreError.unknownHost }
-        host.routes.append(route)
-        try catalog.update(host)
-    }
-
     /// The status card, with Reconnect and Stop Connecting beneath it where
     /// the Console offers them, and the failure's whole message as footer.
     @ViewBuilder
@@ -361,7 +340,7 @@ struct HostOnboardingView: View {
     }
 
     /// Every route, marking the one in use, or each route's own failure
-    /// when none reached the Host; then Add Route.
+    /// when none reached the Host. Routes are added and edited in Edit.
     private var routesSection: some View {
         let status = routeStatus
         return Section {
@@ -380,12 +359,6 @@ struct HostOnboardingView: View {
                     }
                 }
             }
-            Button {
-                isAddingRoute = true
-            } label: {
-                Label("Add Route", systemImage: "plus")
-            }
-            .disabled(catalog.catalogLoadError != nil)
         } header: {
             Text("Routes")
         } footer: {

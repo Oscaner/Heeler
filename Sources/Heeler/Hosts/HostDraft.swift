@@ -74,9 +74,10 @@ struct HostDraft: Equatable, Sendable {
     /// Blank means "keep the stored password" when editing.
     var password = ""
     var sessionName = ""
-    /// The Host's routes in order; never empty. A Host with one route edits
-    /// it inline, through the forwarding properties below.
-    var routes = [HostRouteDraft()]
+    /// The Host's routes in order. A new Host starts with none and cannot
+    /// be saved until Add Route gives it one; the forwarding properties
+    /// below create the first route when set.
+    var routes: [HostRouteDraft] = []
 
     init() {}
 
@@ -137,7 +138,7 @@ struct HostDraft: Equatable, Sendable {
         return String(stem)
     }
 
-    /// The first route, which a single-route form edits inline.
+    /// The first route; blank while there is none.
     var primaryRoute: HostRouteDraft {
         get { routes.first ?? HostRouteDraft() }
         set {

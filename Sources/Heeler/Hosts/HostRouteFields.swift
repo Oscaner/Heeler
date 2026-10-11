@@ -229,60 +229,68 @@ enum HostRoutePage: Hashable {
     case newRoute
 }
 
-/// Add Route's page. The route is kept apart from the Host until Save, so
-/// going Back adds nothing.
+/// Add Route's page. It edits a copy of the Host with the new route
+/// appended, written back only on Save, so going Back adds nothing. A peer
+/// chosen here names a still-unnamed Host, as on any route's page.
 struct NewHostRouteView: View {
-    let authMethod: Host.AuthMethod
+    @Binding var draft: HostDraft
     let otherHosts: [Host]
-    /// Offers Cancel, where the page leads a sheet rather than a push.
-    var showsCancel = false
-    /// Keeps the new route; a throw keeps the page open and says so.
-    let onSave: (HostRouteDraft) throws -> Void
 
-    @State private var route = HostRouteDraft()
+    /// Both fixed at first appearance: a parent redraw re-runs `init`, and a
+    /// fresh id there would no longer name the route `pending` holds.
+    @State private var pending: HostDraft
+    @State private var routeID: HostRouteDraft.ID
     @State private var isChoosingOverlayPeer = false
-    @State private var saveFailed = false
     @Environment(\.dismiss) private var dismiss
+
+    init(draft: Binding<HostDraft>, otherHosts: [Host]) {
+        _draft = draft
+        self.otherHosts = otherHosts
+        let route = HostRouteDraft()
+        _routeID = State(initialValue: route.id)
+        var pending = draft.wrappedValue
+        pending.routes.append(route)
+        _pending = State(initialValue: pending)
+    }
 
     var body: some View {
         Form {
             HostRouteFields(
-                route: $route,
-                authMethod: authMethod,
+                route: route,
+                authMethod: pending.authMethod,
                 isChoosingOverlayPeer: $isChoosingOverlayPeer)
         }
         .overlayPeerPicker(
-            isPresented: $isChoosingOverlayPeer, route: route, otherHosts: otherHosts
+            isPresented: $isChoosingOverlayPeer, route: route.wrappedValue, otherHosts: otherHosts
         ) { candidate, style in
-            route.applyOverlayPeer(candidate, style: style)
+            pending.applyOverlayPeer(candidate, style: style, toRoute: routeID)
         }
         .navigationTitle("New Route")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if showsCancel {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
-                    do {
-                        try onSave(route)
-                        dismiss()
-                    } catch {
-                        saveFailed = true
-                    }
+                    draft = pending
+                    dismiss()
                 }
-                .disabled(!route.isValid)
+                .disabled(!route.wrappedValue.isValid)
             }
         }
-        .alert("Could not save the route", isPresented: $saveFailed) {
-            Button("OK", role: .cancel) {}
-        }
+    }
+
+    /// The appended route; `pending` always holds it.
+    private var route: Binding<HostRouteDraft> {
+        Binding(
+            get: { pending.routes.first { $0.id == routeID } ?? HostRouteDraft() },
+            set: { updated in
+                if let index = pending.routes.firstIndex(where: { $0.id == routeID }) {
+                    pending.routes[index] = updated
+                }
+            })
     }
 }
 
-/// One listed route's own page, for a Host with more than one.
+/// One listed route's own page.
 struct HostRouteFormView: View {
     @Binding var draft: HostDraft
     let routeID: HostRouteDraft.ID
@@ -345,16 +353,9 @@ struct HostRouteRow: View {
             kind: HostRouteKind(
                 usesOverlay: route.overlayNetworkID != nil, usesJumpHost: route.usesJumpHost)
         ) {
-            if address.isEmpty {
-                // A new Host's first route, not yet filled in: an invitation,
-                // not an error.
-                Text("Set Address")
-                    .foregroundStyle(.tint)
-            } else {
-                Text(title)
-                    .font(.body.monospaced())
-                    .foregroundStyle(route.isValid ? Color.primary : Color.red)
-            }
+            Text(title)
+                .font(.body.monospaced())
+                .foregroundStyle(route.isValid ? Color.primary : Color.red)
         } subtitle: {
             Text(subtitle)
         }
@@ -365,7 +366,8 @@ struct HostRouteRow: View {
     }
 
     private var title: String {
-        route.port == "22" ? address : "\(address):\(route.port)"
+        guard !address.isEmpty else { return "No address" }
+        return route.port == "22" ? address : "\(address):\(route.port)"
     }
 
     private var subtitle: String {

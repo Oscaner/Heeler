@@ -164,6 +164,18 @@ struct HostDraftRouteTests {
         return draft
     }
 
+    /// A new Host has no route until Add Route saves one.
+    @Test func aNewHostStartsWithoutARouteAndCannotSave() {
+        var draft = HostDraft()
+        draft.username = "dev"
+        #expect(draft.routes.isEmpty)
+        #expect(!draft.canSave(editing: nil))
+
+        draft.address = "192.168.1.5"
+        #expect(draft.routes.count == 1)
+        #expect(draft.canSave(editing: nil))
+    }
+
     @Test func editingAHostKeepsItsRoutesInOrder() throws {
         let host = Host(
             username: "dev",
