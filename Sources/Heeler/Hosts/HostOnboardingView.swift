@@ -253,6 +253,7 @@ struct HostOnboardingView: View {
             status: connectionStatus,
             standingFailure: standingFailure,
             connectedRouteID: connectedRouteID,
+            isManualReconnectInFlight: isManualReconnectInFlight,
             routes: store.host.routes,
             describe: routeDescription)
     }
@@ -300,21 +301,13 @@ struct HostOnboardingView: View {
         }
     }
 
+    /// The status card above shows the press as Connecting…; the button
+    /// only rests until the request settles.
     private var reconnectButton: some View {
         Button {
             retry()
         } label: {
-            ZStack(alignment: .leading) {
-                Label("Reconnect", systemImage: "arrow.clockwise")
-                    .opacity(isManualReconnectInFlight ? 0 : 1)
-                HStack {
-                    ProgressView()
-                    Text("Connecting…")
-                }
-                .opacity(isManualReconnectInFlight ? 1 : 0)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .animation(.smooth(duration: 0.25), value: isManualReconnectInFlight)
+            Label("Reconnect", systemImage: "arrow.clockwise")
         }
         .disabled(isManualReconnectInFlight)
     }
@@ -518,15 +511,24 @@ struct HostRouteStatusPresentation: Equatable {
     /// Each route's own failure Summary, from a `noRouteReached` failure.
     let routeFailures: [HostRoute.ID: String]
 
+    /// A manual Reconnect in flight reads as Connecting… at once, whatever
+    /// the status still says, and drops the outcome it is replacing.
     init(
         status: EventsSessionStatus?,
         standingFailure: TransportError? = nil,
         connectedRouteID: HostRoute.ID?,
+        isManualReconnectInFlight: Bool = false,
         routes: [HostRoute],
         describe: (HostRoute) -> String
     ) {
         let failure: TransportError?
         switch status {
+        case _ where isManualReconnectInFlight:
+            tone = .connecting
+            title = "Connecting…"
+            subtitle = nil
+            inUseRouteID = nil
+            failure = nil
         case .connected:
             tone = .connected
             title = "Connected"

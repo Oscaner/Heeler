@@ -273,6 +273,24 @@ struct HostRouteStatusPresentationTests {
         #expect(failed.routeFailures.isEmpty)
     }
 
+    /// A Reconnect press shows on the card alone, before the status moves.
+    @Test func aManualReconnectReadsAsConnecting() {
+        let failure = TransportError.noRouteReached([
+            RouteFailure(
+                route: "192.168.1.20", mayNameAnotherMachine: true, error: .timedOut,
+                routeID: home.id)
+        ])
+        for status: EventsSessionStatus in [.connected, .failed(failure)] {
+            let pressed = HostRouteStatusPresentation(
+                status: status, connectedRouteID: home.id, isManualReconnectInFlight: true,
+                routes: [home, away], describe: { _ in "Direct" })
+            #expect(pressed.tone == .connecting)
+            #expect(pressed.title == "Connecting…")
+            #expect(pressed.inUseRouteID == nil)
+            #expect(pressed.routeFailures.isEmpty)
+        }
+    }
+
     @Test func idleStatusesSayNotConnected() {
         for status: EventsSessionStatus? in [nil, .suspended, .ended] {
             let idle = presentation(status, connectedRouteID: home.id)
