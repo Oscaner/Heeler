@@ -109,7 +109,7 @@ struct HostListView: View {
     /// waits for `onDismiss` so the TOFU alert is not suppressed mid-transition
     /// (#359).
     @State private var pendingOnboardingHostID: Host.ID?
-    @State private var path: [HostRoute]
+    @State private var path: [HostDetailDestination]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
@@ -208,7 +208,7 @@ struct HostListView: View {
                         .disabled(store.catalogLoadError != nil)
                 }
             }
-            .navigationDestination(for: HostRoute.self) { route in
+            .navigationDestination(for: HostDetailDestination.self) { route in
                 let id = route.hostID
                 if let host = store.hosts.first(where: { $0.id == id }) {
                     // Keyed by the Host value: editing recreates the
@@ -337,9 +337,11 @@ struct HostListView: View {
         .readableColumn()
     }
 
-    private static func requestedRoute(_ id: Host.ID?, in store: HostStore) -> HostRoute? {
+    private static func requestedRoute(
+        _ id: Host.ID?, in store: HostStore
+    ) -> HostDetailDestination? {
         guard let id, store.hosts.contains(where: { $0.id == id }) else { return nil }
-        return HostRoute(hostID: id, isRequested: true)
+        return HostDetailDestination(hostID: id, isRequested: true)
     }
 
     private var removalConfirmationPresented: Binding<Bool> {
@@ -382,7 +384,7 @@ struct HostListView: View {
         // Every row is a link, so each one gets the chevron, press highlight
         // and pointer hover; a borderless Retry keeps its own target in it,
         // and VoiceOver offers it as one of the row's actions.
-        NavigationLink(value: HostRoute(hostID: host.id)) {
+        NavigationLink(value: HostDetailDestination(hostID: host.id)) {
             HStack(spacing: 12) {
                 HostRowLabel(host: host, presentation: entry.presentation)
                 if entry.presentation.offersRetry {
@@ -427,7 +429,7 @@ struct HostListView: View {
     private func navigateToPendingOnboardingHostIfNeeded() {
         guard let id = pendingOnboardingHostID else { return }
         pendingOnboardingHostID = nil
-        path.append(HostRoute(hostID: id))
+        path.append(HostDetailDestination(hostID: id))
     }
 
     private func retryAction(
@@ -448,7 +450,7 @@ struct HostListView: View {
 /// One pushed Host detail. The one opened on request is marked in the route
 /// itself, not inferred from where it sits on the stack, so its detail knows
 /// where Back goes from its first render.
-private struct HostRoute: Hashable {
+private struct HostDetailDestination: Hashable {
     let hostID: Host.ID
     var isRequested = false
 }

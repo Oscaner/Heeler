@@ -67,23 +67,20 @@ struct SSHTransportSettings: Sendable {
         return SupportedAgentKind.allCases.filter(discovered.contains)
     }
 
-    var host: String
-    var port: Int
+    /// The ways to reach the Host, in the user's order; never empty. With
+    /// more than one, `HeelerSSHTransport.connect` races them and keeps the
+    /// first that reaches the Host (ADR 0022).
+    var routes: [SSHRoute]
     var username: String
     var credentials: SSHCredentials
     /// TOFU host key policy (#2): the trusted-fingerprint store plus the
     /// first-connect confirmation the UI implements.
     var hostKeyPolicy: HostKeyPolicy
+    /// Where the Host's own key is trusted: by endpoint, or by the catalog
+    /// Host every route reaches. Jump Hosts are always trusted by endpoint.
+    var hostKeyTrust: HostKeyTrust = .endpoint
     /// Which herdr socket to reach on the Host.
     var socket: HerdrSocketLocation
-    /// Optional Jump Host. When set, the Transport authenticates against the
-    /// jump host first and opens the Host connection through it, so the Host
-    /// needs no inbound reachability of its own. nil is a direct connection.
-    var jump: SSHJumpSettings? = nil
-    /// Optional Overlay Network carrying the first hop — the Host itself, or
-    /// the Jump Host when one is set (ADR 0021). nil dials over this device's
-    /// own network. The Jump Host's onward hop to the Host never uses it.
-    var overlay: OverlayRoute? = nil
     /// Command that wakes a stopped herdr server, run over a no-PTY exec
     /// channel when a request hits connection-refused (#6). The default is
     /// the strategy from spec #16: `herdr remote-client-bridge` ensures the
@@ -148,6 +145,84 @@ struct SSHTransportSettings: Sendable {
     /// dispatched execs retain their lease until SSH observes their exit.
     /// Expiry reports `.gitTimedOut`, which does not trigger link recovery.
     var gitExecTimeout: Duration = Self.defaultGitExecTimeout
+
+    init(
+        routes: [SSHRoute],
+        username: String,
+        credentials: SSHCredentials,
+        hostKeyPolicy: HostKeyPolicy,
+        hostKeyTrust: HostKeyTrust = .endpoint,
+        socket: HerdrSocketLocation
+    ) {
+        precondition(!routes.isEmpty, "SSH settings need at least one route")
+        self.routes = routes
+        self.username = username
+        self.credentials = credentials
+        self.hostKeyPolicy = hostKeyPolicy
+        self.hostKeyTrust = hostKeyTrust
+        self.socket = socket
+    }
+
+    /// Settings for a single route.
+    init(
+        host: String,
+        port: Int,
+        username: String,
+        credentials: SSHCredentials,
+        hostKeyPolicy: HostKeyPolicy,
+        socket: HerdrSocketLocation,
+        jump: SSHJumpSettings? = nil,
+        overlay: OverlayRoute? = nil
+    ) {
+        self.init(
+            routes: [SSHRoute(host: host, port: port, jump: jump, overlay: overlay)],
+            username: username,
+            credentials: credentials,
+            hostKeyPolicy: hostKeyPolicy,
+            socket: socket)
+    }
+
+    /// The first route's Host address.
+    var host: String { routes.first?.host ?? "" }
+
+    /// The first route's Host port.
+    var port: Int { routes.first?.port ?? 22 }
+}
+
+/// One way to reach the Host (ADR 0022): its address and port, optionally
+/// resolved from a Jump Host, with the first hop optionally carried by an
+/// Overlay Network.
+struct SSHRoute: Sendable {
+    var host: String
+    var port: Int
+    /// Optional Jump Host. When set, the Transport authenticates against the
+    /// jump host first and opens the Host connection through it, so the Host
+    /// needs no inbound reachability of its own. nil is a direct connection.
+    var jump: SSHJumpSettings? = nil
+    /// Optional Overlay Network carrying the first hop — the Host itself, or
+    /// the Jump Host when one is set (ADR 0021). nil dials over this device's
+    /// own network. The Jump Host's onward hop to the Host never uses it.
+    var overlay: OverlayRoute? = nil
+
+    /// Whether the device dials the Host itself over its own network. Such
+    /// routes start a race at once; the others wait a moment, so a reachable
+    /// LAN address wins without starting an overlay node or a Jump Host.
+    var isDirect: Bool {
+        jump == nil && overlay == nil
+    }
+
+    /// How a failure names this route: `10.0.0.5`, `100.64.0.5 over
+    /// Tailscale`, `127.0.0.1:2222 via vps.example`.
+    var label: String {
+        var label = port == 22 ? host : "\(host):\(port)"
+        if let jump {
+            label += " via \(jump.host)"
+        }
+        if let overlay {
+            label += " over \(overlay.networkName)"
+        }
+        return label
+    }
 }
 
 /// The Jump Host in front of a Host: its own coordinates and credentials. Its
@@ -155,9 +230,10 @@ struct SSHTransportSettings: Sendable {
 /// its own endpoint, so both hops must be confirmed before either is trusted.
 ///
 /// The Host's `address`/`port` are resolved from the Jump Host, which is
-/// normally a loopback port held open by a reverse tunnel. Two Hosts behind
-/// one Jump Host therefore need distinct tunnel ports: known-hosts entries are
-/// keyed by endpoint, so a shared `127.0.0.1:12222` would collide.
+/// normally a loopback port held open by a reverse tunnel. A catalog Host's
+/// key is trusted by Host rather than by that endpoint (ADR 0022), so two
+/// Hosts behind different Jump Hosts may share a tunnel port such as
+/// `127.0.0.1:12222`.
 struct SSHJumpSettings: Sendable {
     var host: String
     var port: Int

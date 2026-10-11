@@ -972,6 +972,10 @@ indirect enum TransportError: Error, Sendable, Equatable {
     /// wrapped in `.jumpHostFailed` — the overlay sits in front of the Jump
     /// Host, which was never contacted (ADR 0021).
     case overlayFailed(network: String, reason: OverlayFailure)
+    /// Every one of the Host's routes failed (ADR 0022). Each failure is
+    /// that route's own, named by the route; a Host with a single route
+    /// reports its failure directly instead.
+    case noRouteReached([RouteFailure])
     /// The Jump Host accepted SSH authentication but its server or key policy
     /// prohibits the direct-tcpip channel required to reach the Host.
     case tcpForwardingUnavailable
@@ -1071,6 +1075,10 @@ indirect enum TransportError: Error, Sendable, Equatable {
         // rebooting VPS should reconnect on its own, a rejected key should not.
         case .jumpHostFailed(let underlying):
             underlying.isRetryable
+        // Any route that may come back on its own is worth another race: the
+        // LAN address refused away from home must not stop the overlay route.
+        case .noRouteReached(let failures):
+            failures.contains { $0.error.isRetryable }
         // A peer that is asleep, a slow node, or a device awaiting approval
         // can recover on its own; a missing network, a sign-in, a malformed
         // setting, or a start failure that outlasted its retries needs the user.
@@ -1084,6 +1092,13 @@ indirect enum TransportError: Error, Sendable, Equatable {
             }
         }
     }
+}
+
+/// One route's failure in `TransportError.noRouteReached`.
+struct RouteFailure: Sendable, Equatable {
+    /// The route as `SSHRoute.label` names it.
+    let route: String
+    let error: TransportError
 }
 
 /// An error returned by the herdr server inside a response envelope.

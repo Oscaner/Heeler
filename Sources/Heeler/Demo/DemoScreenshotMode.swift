@@ -600,7 +600,7 @@
         func connect(settings: SSHTransportSettings) async throws -> any Transport {
             guard
                 let host = DemoScreenshotFixture.hosts.first(where: {
-                    $0.address == settings.host
+                    $0.answers(toAddress: settings.host)
                 })
             else {
                 throw TransportError.sshUnreachable(detail: "No demo Host at this address.")

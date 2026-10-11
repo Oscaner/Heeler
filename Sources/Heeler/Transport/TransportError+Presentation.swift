@@ -45,6 +45,12 @@ extension TransportError {
             Self.jumpHostPresentation(underlying)
         case .overlayFailed(let network, let reason):
             Self.overlayPresentation(network: network, reason: reason)
+        case .noRouteReached(let failures):
+            TransportErrorPresentation(
+                summary: "No route reached the Host",
+                detail: failures.map { "\($0.route): \($0.error.presentation.summary)" }
+                    .joined(separator: "; "),
+                recoverySuggestion: "Check that the Host is awake, then review its routes.")
         case .tcpForwardingUnavailable:
             TransportErrorPresentation(
                 summary: "SSH TCP forwarding is disabled",
@@ -159,6 +165,10 @@ extension TransportError {
         switch self {
         case .hostKeyMismatch: true
         case .jumpHostFailed(let underlying): underlying.isHostKeySecurityFailure
+        // Only when no route escaped it: a LAN address answered by another
+        // machine away from home is expected while another route is down.
+        case .noRouteReached(let failures):
+            !failures.isEmpty && failures.allSatisfy(\.error.isHostKeySecurityFailure)
         default: false
         }
     }

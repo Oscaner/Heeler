@@ -57,6 +57,8 @@ final class HostOnboardingStore {
     @ObservationIgnored private let fingerprintTimeout: Duration
     @ObservationIgnored private var fingerprintDecision: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var fingerprintTimeoutTask: Task<Void, Never>?
+    /// Identifies the prompt `fingerprintDecision` answers.
+    @ObservationIgnored private var fingerprintPrompt: UUID?
     @ObservationIgnored private var checks: Task<Void, Never>?
     /// Identifies the run whose trust prompts may still be shown.
     @ObservationIgnored private var currentRun = UUID()
@@ -215,14 +217,33 @@ final class HostOnboardingStore {
     /// confirmation, then immediately proves the new pin by rerunning preflight.
     func trustPresentedHostKey() async {
         guard phase != .running, let replacement = pendingHostKeyReplacement else { return }
-        await knownHosts.setFingerprint(replacement.presented, host: host.address, port: host.port)
+        let key = HostKeyTrust.hostKey(host.id)
+        await knownHosts.setFingerprint(replacement.presented, host: key.host, port: key.port)
         pendingHostKeyReplacement = nil
         await runChecks()
     }
 
     private func captureHostKeyReplacement(_ error: any Error) {
-        guard case let TransportError.hostKeyMismatch(known, presented) = error else { return }
-        pendingHostKeyReplacement = HostKeyReplacement(known: known, presented: presented)
+        switch error {
+        case let TransportError.hostKeyMismatch(known, presented):
+            pendingHostKeyReplacement = HostKeyReplacement(known: known, presented: presented)
+        case TransportError.noRouteReached(let failures):
+            // Every route reaches the same Host, so a changed key is offered
+            // only when each route that reached a server saw the same one; a
+            // LAN address answered by another machine elsewhere disagrees.
+            let mismatches = failures.compactMap { failure -> HostKeyReplacement? in
+                guard case let .hostKeyMismatch(known, presented) = failure.error else {
+                    return nil
+                }
+                return HostKeyReplacement(known: known, presented: presented)
+            }
+            guard let first = mismatches.first, mismatches.allSatisfy({ $0 == first }) else {
+                return
+            }
+            pendingHostKeyReplacement = first
+        default:
+            return
+        }
     }
 
     private func failureReport(_ error: any Error) -> PreflightReport {
@@ -239,16 +260,28 @@ final class HostOnboardingStore {
     private func awaitFingerprintDecision(for candidate: HostKeyCandidate, run: UUID) async -> Bool {
         // A cancelled run's late handshake never asks the user.
         guard currentRun == run else { return false }
-        // One connect per run means one candidate at a time; decline a
-        // second defensively instead of leaking the first continuation.
-        guard fingerprintDecision == nil else { return false }
+        // The transport asks about one key at a time, even while routes
+        // race; decline a second defensively instead of leaking the first
+        // continuation.
+        guard fingerprintDecision == nil, !Task.isCancelled else { return false }
         pendingFingerprint = candidate
-        return await withCheckedContinuation { continuation in
-            fingerprintDecision = continuation
-            fingerprintTimeoutTask = Task { [fingerprintTimeout] in
-                try? await Task.sleep(for: fingerprintTimeout)
-                guard !Task.isCancelled else { return }
-                self.resolveFingerprint(false)
+        let prompt = UUID()
+        fingerprintPrompt = prompt
+        // A route that loses the race is cancelled while its key may still be
+        // on screen; its prompt goes away with it.
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                fingerprintDecision = continuation
+                fingerprintTimeoutTask = Task { [fingerprintTimeout] in
+                    try? await Task.sleep(for: fingerprintTimeout)
+                    guard !Task.isCancelled else { return }
+                    self.resolveFingerprint(false)
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in
+                // Only this prompt: a later one may already be showing.
+                if self.fingerprintPrompt == prompt { self.resolveFingerprint(false) }
             }
         }
     }
@@ -256,6 +289,7 @@ final class HostOnboardingStore {
     private func resolveFingerprint(_ trusted: Bool) {
         guard let decision = fingerprintDecision else { return }
         fingerprintDecision = nil
+        fingerprintPrompt = nil
         fingerprintTimeoutTask?.cancel()
         fingerprintTimeoutTask = nil
         pendingFingerprint = nil

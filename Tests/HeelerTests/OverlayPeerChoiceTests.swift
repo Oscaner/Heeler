@@ -83,7 +83,7 @@ struct OverlayPeerChoiceTests {
         for host in [byIPv4, byIPv6, byName, byMagicDNS, viaJump] {
             #expect(
                 OverlayPeerList.host(for: candidate, networkID: networkID, among: [host])?.id
-                    == host.id, "\(host.address) \(host.jumpAddress)")
+                    == host.id, "\(host.address) \(host.primaryRoute.jumpAddress)")
         }
     }
 

@@ -63,11 +63,24 @@ struct HostOnboardingView: View {
                     "Auth",
                     value: authenticationLabel)
                 pluginRow
-                if let networkID = store.host.overlayNetworkID {
-                    LabeledContent(
-                        "Network",
-                        value: overlayNetworks?.network(id: networkID)?.displayName
-                            ?? "Unavailable overlay network")
+                if store.host.routes.count == 1,
+                   let networkID = store.host.primaryRoute.overlayNetworkID
+                {
+                    LabeledContent("Network", value: networkName(networkID))
+                }
+            }
+
+            if store.host.routes.count > 1 {
+                Section {
+                    ForEach(Array(store.host.routes.enumerated()), id: \.element.id) { index, route in
+                        LabeledContent(
+                            "Route \(index + 1)",
+                            value: route.summary(networkName: networkName))
+                    }
+                } header: {
+                    Text("Routes")
+                } footer: {
+                    Text("Heeler tries every route and uses the first that reaches the Host.")
                 }
             }
 
@@ -272,6 +285,10 @@ struct HostOnboardingView: View {
 
     private var addressLine: String {
         "\(store.host.username)@\(store.host.address):\(String(store.host.port))"
+    }
+
+    private func networkName(_ id: UUID) -> String {
+        overlayNetworks?.network(id: id)?.displayName ?? "Unavailable overlay network"
     }
 
     private var sessionLine: String {
@@ -506,6 +523,8 @@ enum HostOnboardingConsoleRecovery {
             true
         case .jumpHostFailed(let underlying):
             isHostKeyTrustFailure(underlying)
+        case .noRouteReached(let failures):
+            !failures.isEmpty && failures.allSatisfy { isHostKeyTrustFailure($0.error) }
         default:
             false
         }
