@@ -50,6 +50,13 @@ struct HostRouteDraft: Identifiable, Equatable, Sendable {
             && (!usesJumpHost || jumpPortNumber != nil)
     }
 
+    /// True while every field still has the value Add Route gave it.
+    var isBlank: Bool {
+        var blank = HostRouteDraft()
+        blank.id = id
+        return self == blank
+    }
+
     /// The route this draft describes, or nil while invalid.
     func makeRoute() -> HostRoute? {
         guard isValid, let portNumber else { return nil }
@@ -191,6 +198,16 @@ struct HostDraft: Equatable, Sendable {
         let route = HostRouteDraft()
         routes.append(route)
         return route.id
+    }
+
+    /// Removes route `id` while it is still blank, as when Add Route's page
+    /// is left without typing anything. Keeps at least one route.
+    mutating func discardRouteIfBlank(id: HostRouteDraft.ID) {
+        guard routes.count > 1,
+              let index = routes.firstIndex(where: { $0.id == id }),
+              routes[index].isBlank
+        else { return }
+        routes.remove(at: index)
     }
 
     /// Removes the routes at `offsets`, keeping at least one.

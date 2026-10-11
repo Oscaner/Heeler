@@ -129,6 +129,11 @@ struct HostFormView: View {
                 }
             }
         }
+        .onChange(of: routePath) { previous, current in
+            for id in previous where !current.contains(id) {
+                draft.discardRouteIfBlank(id: id)
+            }
+        }
     }
 
     /// Split out of `body` so the type checker sees two smaller
