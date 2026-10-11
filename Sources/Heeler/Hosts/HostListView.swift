@@ -638,8 +638,7 @@ struct HostRowPresentation: Equatable {
             offersRetry = false
         case .connected:
             group = .connected
-            var address = "\(host.username)@\(host.address)"
-            if host.port != 22 { address += ":\(host.port)" }
+            var address = host.connectionSummary
             if case .namedSession(let session) = host.socketLocation {
                 address += " · session \(session)"
             }

@@ -261,6 +261,17 @@ struct Host: Identifiable, Codable, Hashable, Sendable {
         return trimmed.isEmpty ? "\(username)@\(address)" : trimmed
     }
 
+    /// One line for how the Host is reached: `user@address`, with the port
+    /// when it is not 22. With several routes the Console does not yet know
+    /// which one a connection took, so naming the primary route's address
+    /// could show one that did not answer; the line names the routes instead.
+    var connectionSummary: String {
+        guard routes.count == 1 else {
+            return "\(username) · \(routes.count) routes"
+        }
+        return port == 22 ? "\(username)@\(address)" : "\(username)@\(address):\(port)"
+    }
+
     /// The herdr socket this Host's session name points at.
     var socketLocation: HerdrSocketLocation {
         let trimmed = sessionName.trimmingCharacters(in: .whitespaces)

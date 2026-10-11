@@ -212,11 +212,12 @@ struct SSHRoute: Sendable {
     }
 
     /// How a failure names this route: `10.0.0.5`, `100.64.0.5 over
-    /// Tailscale`, `127.0.0.1:2222 via vps.example`.
+    /// Tailscale`, `127.0.0.1:2222 via vps.example`, `127.0.0.1:2222 via
+    /// vps.example:2022`.
     var label: String {
         var label = port == 22 ? host : "\(host):\(port)"
         if let jump {
-            label += " via \(jump.host)"
+            label += " via \(jump.port == 22 ? jump.host : "\(jump.host):\(jump.port)")"
         }
         if let overlay {
             label += " over \(overlay.networkName)"

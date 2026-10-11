@@ -114,6 +114,20 @@ struct HostRouteTests {
         #expect(host.jumpUsername(on: host.routes[1]) == "dev")
     }
 
+    /// Which route a connection took is not known yet, so a Host with
+    /// several never names the primary one as if it were in use.
+    @Test func connectionSummaryNamesTheOnlyRouteOrCountsThem() {
+        #expect(Host(address: "box.example", username: "dev").connectionSummary == "dev@box.example")
+        #expect(
+            Host(address: "box.example", port: 2222, username: "dev").connectionSummary
+                == "dev@box.example:2222")
+        #expect(
+            Host(
+                username: "dev",
+                routes: [HostRoute(address: "192.0.2.10"), HostRoute(address: "100.64.0.5")]
+            ).connectionSummary == "dev · 2 routes")
+    }
+
     @Test func transportSettingsOfferEveryRouteAndTrustTheHost() {
         let host = Host(
             username: "dev",
@@ -563,6 +577,15 @@ struct NoRouteReachedTests {
             #expect(error.isHostKeySecurityFailure)
             #expect(!error.isRetryable)
         }
+    }
+
+    @Test func aRouteNamesItsJumpHostPort() {
+        let jump = SSHJumpSettings(
+            host: "vps.example", port: 2022, username: "dev", credentials: .password("x"))
+
+        #expect(
+            SSHRoute(host: "127.0.0.1", port: 2222, jump: jump).label
+                == "127.0.0.1:2222 via vps.example:2022")
     }
 
     @Test func stopsWhenNoRouteCanRecoverOnItsOwn() {

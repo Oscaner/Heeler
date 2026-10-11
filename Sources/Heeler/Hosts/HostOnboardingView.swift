@@ -57,7 +57,14 @@ struct HostOnboardingView: View {
     var body: some View {
         List {
             Section {
-                LabeledContent("Address", value: addressLine)
+                // With several routes, the Routes section below lists every
+                // address; naming only the primary one here would read as the
+                // one in use.
+                if store.host.routes.count == 1 {
+                    LabeledContent("Address", value: addressLine)
+                } else {
+                    LabeledContent("Account", value: store.host.username)
+                }
                 LabeledContent("Session", value: sessionLine)
                 LabeledContent(
                     "Auth",

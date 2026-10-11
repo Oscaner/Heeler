@@ -63,9 +63,7 @@ struct HostConnectionDetailPresentation: Equatable {
         }
         hostID = host.id
         hostName = host.displayName
-        var address = "\(host.username)@\(host.address)"
-        if host.port != 22 { address += ":\(host.port)" }
-        self.address = address
+        address = host.connectionSummary
         self.failure = failure
         let presentation = failure.presentation
         summary = presentation.summary
