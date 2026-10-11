@@ -272,15 +272,14 @@ struct HostOnboardingView: View {
         return parts.isEmpty ? "Direct" : parts.joined(separator: " · ")
     }
 
-    /// The status card, with Reconnect and Stop Connecting beneath it where
-    /// the Console offers them, and the failure's whole message as footer.
+    /// The status card, its one action at its end, and the failure's whole
+    /// message as footer.
     @ViewBuilder
     private var connectionSection: some View {
         if connectionStatus != nil || retryConnection != nil {
             Section {
-                HostConnectionStatusCard(presentation: routeStatus)
-                if retryConnection != nil {
-                    reconnectRow
+                HostConnectionStatusCard(presentation: routeStatus) {
+                    connectionAction
                 }
             } footer: {
                 connectionFooter
@@ -291,34 +290,28 @@ struct HostOnboardingView: View {
         }
     }
 
-    /// Reconnect, with Stop at the row's end while the Console
-    /// is dialing. The status card shows a press as Connecting…, so the
-    /// button keeps its look; `retry()` ignores a second press meanwhile.
-    private var reconnectRow: some View {
-        HStack {
+    /// Stop while the Console is dialing, Reconnect otherwise: never both.
+    /// The card shows a Reconnect press as Connecting…, and `retry()`
+    /// ignores a second press meanwhile.
+    @ViewBuilder
+    private var connectionAction: some View {
+        if isAttemptingConnection, let stopConnecting {
+            Button(role: .cancel) {
+                Task { await stopConnecting() }
+            } label: {
+                HostConnectionActionLabel(title: "Stop")
+            }
+            .accessibilityLabel("Stop Connecting")
+            .accessibilityHint(
+                "Stops trying to connect without waiting for a timeout. "
+                    + "The Host stays paused until you reconnect.")
+        } else if retryConnection != nil {
             Button {
                 retry()
             } label: {
-                Label("Reconnect", systemImage: "arrow.clockwise")
-            }
-            Spacer(minLength: 12)
-            if isAttemptingConnection, let stopConnecting {
-                Button("Stop", role: .cancel) {
-                    Task { await stopConnecting() }
-                }
-                // Secondary to Reconnect: a small gray capsule, not a link.
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .controlSize(.small)
-                .tint(.primary)
-                .accessibilityLabel("Stop Connecting")
-                .accessibilityHint(
-                    "Stops trying to connect without waiting for a timeout. "
-                        + "The Host stays paused until you reconnect.")
+                HostConnectionActionLabel(title: "Reconnect")
             }
         }
-        // Two buttons in one row: each takes only its own taps.
-        .buttonStyle(.borderless)
     }
 
     @ViewBuilder
@@ -581,32 +574,38 @@ struct HostRouteStatusPresentation: Equatable {
     }
 }
 
-/// The status card leading the Host detail.
-private struct HostConnectionStatusCard: View {
+/// The status card leading the Host detail, with its action at the end.
+private struct HostConnectionStatusCard<Action: View>: View {
     let presentation: HostRouteStatusPresentation
+    @ViewBuilder let action: Action
 
     @ScaledMetric(relativeTo: .headline) private var iconSize = 40
 
     var body: some View {
         HStack(spacing: 14) {
-            icon
-                .frame(width: iconSize, height: iconSize)
-                .background(tint.opacity(0.14), in: .rect(cornerRadius: 10))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(presentation.title)
-                    .font(.headline)
-                if let subtitle = presentation.subtitle {
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+            HStack(spacing: 14) {
+                icon
+                    .frame(width: iconSize, height: iconSize)
+                    .background(tint.opacity(0.14), in: .rect(cornerRadius: 10))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(presentation.title)
+                        .font(.headline)
+                    if let subtitle = presentation.subtitle {
+                        Text(subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("hosts.detail.connectionStatus")
             Spacer(minLength: 0)
+            action
+                // The row stays inert; only the action takes taps.
+                .buttonStyle(.borderless)
         }
         .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("hosts.detail.connectionStatus")
     }
 
     @ViewBuilder
@@ -632,6 +631,21 @@ private struct HostConnectionStatusCard: View {
         case .retrying: .orange
         case .failed: .red
         }
+    }
+}
+
+/// The status card's action: a small tinted capsule on the system fill,
+/// which suits both light and dark rows.
+private struct HostConnectionActionLabel: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.subheadline.weight(.medium))
+            .lineLimit(1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color(uiColor: .secondarySystemFill), in: .capsule)
     }
 }
 
