@@ -78,14 +78,7 @@ struct HostOnboardingView: View {
                     PreflightCheckRow(check: check, status: status(for: check))
                 }
             } header: {
-                HStack {
-                    Text("Preflight")
-                    if store.phase == .running {
-                        ProgressView()
-                            .controlSize(.mini)
-                            .padding(.leading, 4)
-                    }
-                }
+                preflightHeader
             } footer: {
                 if let info = store.serverInfo {
                     // The notice is advisory and the checks still pass: a Host
@@ -102,7 +95,7 @@ struct HostOnboardingView: View {
 
             availableSessionsSection
 
-            checksActionSections
+            overlaySignInSection
 
             if store.pendingHostKeyReplacement != nil {
                 Section {
@@ -378,28 +371,39 @@ struct HostOnboardingView: View {
         store.report?[check]
     }
 
-    /// Run Checks Again (Cancel Checks while running) and the overlay
-    /// sign-in link. Out of `body`, which stays under Xcode 26.6's
-    /// type-checking limit.
-    @ViewBuilder
-    private var checksActionSections: some View {
-        Section {
+    /// Preflight, with Run Checks Again (Cancel Checks while running) at
+    /// its end: within reach, unlike a button below every check on a tall
+    /// screen. Out of `body`, which stays under Xcode 26.6's type-checking
+    /// limit.
+    private var preflightHeader: some View {
+        HStack {
+            Text("Preflight")
             if store.phase == .running {
-                Button(role: .cancel) {
-                    store.cancelChecks()
-                } label: {
-                    Label("Cancel Checks", systemImage: "xmark.circle")
-                }
-                .accessibilityHint("Stops connecting without waiting for the timeout")
-            } else {
-                Button {
-                    Task { await store.runChecks() }
-                } label: {
-                    Label("Run Checks Again", systemImage: "arrow.clockwise")
+                ProgressView()
+                    .controlSize(.mini)
+                    .padding(.leading, 4)
+            }
+            Spacer()
+            Group {
+                if store.phase == .running {
+                    Button("Cancel Checks", role: .cancel) {
+                        store.cancelChecks()
+                    }
+                    .accessibilityHint("Stops connecting without waiting for the timeout")
+                } else {
+                    Button("Run Checks Again") {
+                        Task { await store.runChecks() }
+                    }
                 }
             }
+            .font(.subheadline)
+            .textCase(nil)
         }
+    }
 
+    /// The overlay sign-in link, while a check is waiting on it.
+    @ViewBuilder
+    private var overlaySignInSection: some View {
         if let loginURL = store.overlayLoginURL {
             Section {
                 Link(destination: loginURL) {
