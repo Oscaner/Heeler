@@ -85,7 +85,7 @@ when it's disabled.
 
 Native Windows Hosts (herdr >= 0.9.3) connect over SSH and are added manually.
 
-For Tailscale, ZeroTier, or EasyTier access, follow the [Overlay Network setup guides](docs/guides/overlay-networks.md). They cover macOS installation, Tailscale userspace mode, Heeler configuration, and connection checks. Heeler joins these networks inside the app without an iOS VPN configuration; this feature requires a build containing [PR #426](https://github.com/ZingerLittleBee/Heeler/pull/426).
+For Tailscale, ZeroTier, or EasyTier access, follow the [Overlay Network setup guides](docs/guides/overlay-networks.md). They cover macOS installation, Tailscale without a VPN on the Mac, Heeler configuration, and connection checks. Heeler joins these networks inside the app without an iOS VPN configuration; you need a Heeler version with **Settings > Overlay Networks**.
 
 [View the Heeler setup screenshots](docs/guides/overlay-networks.md#heeler-setup-screenshots) for Tailscale, ZeroTier, and both EasyTier modes.
 

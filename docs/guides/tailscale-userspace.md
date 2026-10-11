@@ -1,40 +1,30 @@
-# Tailscale on macOS Without a Network Extension or TUN
+# Tailscale without a VPN on the Mac (advanced)
 
-This guide runs the Homebrew `tailscaled` binary with `--tun=userspace-networking` and forwards one tailnet TCP port to the Mac's ordinary SSH server. Heeler then reaches herdr over that SSH connection. The Mac daemon creates no TUN interface or macOS VPN configuration in this mode, and Heeler uses its own in-app Tailscale node on iOS.
+This guide runs Tailscale on the Mac from Terminal instead of the Tailscale app, so the Mac gets no VPN or network extension. Heeler joins the same tailnet and logs in to the Mac over its normal SSH.
 
-Use a Heeler build that includes [PR #426](https://github.com/ZingerLittleBee/Heeler/pull/426). This is a manual CLI setup for users who want to manage a daemon; for the standard desktop setup, use [Connect Through Tailscale](tailscale.md).
+You need a Heeler version with **Settings > Overlay Networks**. You also need [Homebrew](https://brew.sh/) and a Tailscale account that can add devices. For the usual setup with the Tailscale app, follow [Connect Heeler through Tailscale](tailscale.md) instead.
 
-```text
-Heeler's Tailscale node
-  → Mac's userspace Tailscale node, TCP 22
-  → Tailscale Serve raw TCP forwarding
-  → 127.0.0.1:22, macOS Remote Login
-  → herdr over SSH
-```
+## 1. Prepare the Mac
 
-## 1. Prepare and verify the local SSH server
-
-Complete [Prepare the Host](overlay-networks.md#prepare-the-host). Before adding the overlay, check that SSH listens on IPv4 loopback:
+Complete [Prepare the Host](overlay-networks.md#prepare-the-host). Then check that SSH answers on the Mac itself:
 
 ```sh
 nc -vz 127.0.0.1 22
 ```
 
-Expect a successful TCP connection. If refused, check Remote Login and its listening port. Verify SSH authentication from Heeler in step 6.
+The connection should succeed. If it is refused, check that **Remote Login** is on.
 
-## 2. Install the CLI binaries
-
-With [Homebrew](https://brew.sh/) installed, install the formula:
+## 2. Install Tailscale
 
 ```sh
 brew install --formula tailscale
 ```
 
-Start the daemon with the userspace flag below; `sudo brew services start tailscale` does not select this mode.
+Don't start it with `brew services`; use step 3 instead.
 
-## 3. Start a private userspace daemon
+## 3. Start Tailscale
 
-In **Terminal A**, run:
+Open a Terminal window (**Terminal A**) and run:
 
 ```sh
 TS_BIN="$(brew --prefix tailscale)/bin"
@@ -48,11 +38,11 @@ chmod 700 "$TS_STATE_DIR"
   --socket="$TS_STATE_DIR/tailscaled.socket"
 ```
 
-Leave Terminal A running. Reuse this private state directory to retain the node's identity and settings, with only one daemon using it at a time.
+Leave Terminal A open. Tailscale runs only while this window is open.
 
-## 4. Sign in through the private socket
+## 4. Sign the Mac in
 
-In **Terminal B**, define the same paths, then sign in:
+Open a second window (**Terminal B**) and run:
 
 ```sh
 TS_BIN="$(brew --prefix tailscale)/bin"
@@ -63,56 +53,48 @@ TS_STATE_DIR="$HOME/.local/share/heeler-tailscale"
 "$TS_BIN/tailscale" --socket="$TS_STATE_DIR/tailscaled.socket" ip -4
 ```
 
-Open the login URL printed by `up` and join Heeler's tailnet. Complete any required administrator approval, then record the IPv4 address from `ip -4`. This daemon is separate from any existing GUI app; use its IP and the same `--socket` in every command.
+1. Open the login link that `up` prints and sign in to the tailnet Heeler will join.
+2. If your tailnet requires device approval, approve the Mac in the admin console.
+3. Write down the IPv4 address that `ip -4` prints.
 
-Use macOS Remote Login for authentication; leave Tailscale SSH (`--ssh`) disabled.
+> [!IMPORTANT]
+> In this mode, any tailnet device that is allowed to reach the Mac can connect to every service listening on the Mac itself, not only SSH. In your tailnet's [access rules](https://tailscale.com/docs/features/access-control/grants), allow Heeler to reach this Mac only on `tcp:22`.
 
-## 5. Forward tailnet port 22 to Remote Login
+## 5. Connect Heeler
 
-In Terminal B, configure the raw TCP forwarder and inspect it:
+1. Add the network in Heeler: follow [Join the same tailnet from Heeler](tailscale.md#3-join-the-same-tailnet-from-heeler).
+2. Add the Mac as a Host: follow [Connect from Heeler](overlay-networks.md#connect-from-heeler). Under **Network**, pick this network. Use **Choose from Tailnet…** to pick `heeler-mac-userspace`, or type the IPv4 address from step 4.
+3. Use port `22`, your Mac username, and the sign-in method you picked in step 1. Leave **Jump Host** blank.
+4. Run through [Verify the connection](overlay-networks.md#verify-the-connection).
 
-```sh
-"$TS_BIN/tailscale" --socket="$TS_STATE_DIR/tailscaled.socket" serve \
-  --bg --tcp=22 tcp://127.0.0.1:22
-"$TS_BIN/tailscale" --socket="$TS_STATE_DIR/tailscaled.socket" serve status
-```
+## Stop or remove the Mac
 
-Expect tailnet TCP port `22` forwarding to `127.0.0.1:22`. Tailnet policy must allow Heeler to reach this node on TCP 22.
+To stop tailnet access to the Mac, press **Control-C** in Terminal A. To start again, run step 3 again. Tailscale also stops when you restart the Mac or log out, so keep the Mac awake and Terminal A open while you use Heeler.
 
-Serve exposes this listener only to the tailnet, without occupying the Mac's local port 22 or changing Remote Login's existing LAN access.
-
-## 6. Connect Heeler and verify the complete path
-
-Follow [Join the same tailnet from Heeler](tailscale.md#3-join-the-same-tailnet-from-heeler), then [Connect from Heeler](overlay-networks.md#connect-from-heeler). Choose this Overlay Network in the Host form, select `heeler-mac-userspace` through **Choose from Tailnet…**, or enter the exact IPv4 address from step 4. Use Port `22`, the Mac's local account, and the SSH authentication method from step 1. Leave Jump Host blank.
-
-Complete [Verify the connection](overlay-networks.md#verify-the-connection) from Heeler.
-
-## Stop forwarding or stop the daemon
-
-To remove only this Serve listener, run in Terminal B:
+To remove the Mac from the tailnet, run this while Terminal A is still running:
 
 ```sh
-"$TS_BIN/tailscale" --socket="$TS_STATE_DIR/tailscaled.socket" serve \
-  --bg --tcp=22 off
-"$TS_BIN/tailscale" --socket="$TS_STATE_DIR/tailscaled.socket" serve status
+"$(brew --prefix tailscale)/bin/tailscale" \
+  --socket="$HOME/.local/share/heeler-tailscale/tailscaled.socket" logout
 ```
 
-To stop the daemon, press **Control-C in Terminal A**. Keep the state directory. Restart with step 3's command, then check `status` and `serve status` through the same socket.
+Then press **Control-C** in Terminal A and delete the saved state:
 
-`serve --bg` saves the forwarding configuration; it does not run `tailscaled` in the background or at boot. Keep Terminal A open and the Mac awake. For unattended use, manage the daemon as a service with the same flag, state directory, and socket, or use the standard macOS app.
+```sh
+rm -rf "$HOME/.local/share/heeler-tailscale"
+```
+
+If the Mac still appears in the Tailscale admin console, remove it there. To remove Heeler, delete Heeler's device in the admin console too.
 
 ## Troubleshooting
 
-| Symptom | Check |
-|---|---|
-| The CLI cannot reach `tailscaled` | Terminal A is still running and Terminal B uses exactly the same socket path. |
-| The wrong node appears in `status` | Use the explicit Homebrew binary path and private `--socket`, then check the recorded node IP. |
-| The node is online but SSH fails | `serve status` must show TCP 22, local loopback SSH must work, and tailnet policy must allow that port. |
-| Local applications cannot reach tailnet addresses | Userspace mode provides no system routes. Use Heeler, another connected device, or configure an application-specific proxy separately. |
-| Access stops after reboot or logout | The foreground daemon was not a persistent service. Restart Terminal A and verify the saved Serve configuration. |
+| Problem | Check |
+| --- | --- |
+| Terminal B can't connect to Tailscale, or shows a different machine | Keep Terminal A running, and copy the commands in Terminal B exactly. |
+| The Mac is online but SSH times out | `nc -vz 127.0.0.1 22` works on the Mac, and your access rules allow Heeler to reach the Mac on `tcp:22`. |
+| Other Mac apps can't reach tailnet devices | Expected. In this mode, the Mac's own apps get no tailnet access. Tailnet devices can still reach the Mac. |
+| It stopped working after a restart | Run step 3 again in Terminal A. |
 
-## References
+Commands were checked against Tailscale 1.104.1 in October 2026.
 
-Commands checked against Tailscale **1.104.1** on **2026-10-09**: [macOS CLI](https://github.com/tailscale/tailscale/wiki/Tailscaled-on-macOS), [userspace networking](https://tailscale.com/docs/concepts/userspace-networking), [Serve TCP](https://tailscale.com/docs/reference/tailscale-cli/serve), and [SSH forwarding](https://tailscale.com/docs/reference/examples/serve#bind-local-services-to-your-tailnet).
-
-For live test coverage, see [guide maintenance](../agents/overlay-network-guides.md#verification-scope).
+Maintainers: see the [guide maintenance record](../agents/overlay-network-guides.md).

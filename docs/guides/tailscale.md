@@ -1,58 +1,75 @@
-# Connect Through Tailscale
+# Connect Heeler through Tailscale
 
-This guide reaches a Mac running herdr through Tailscale's standard macOS app. Heeler joins the same tailnet with its own in-app node, so the phone needs no Tailscale app or VPN.
+Heeler joins your tailnet by itself, so the phone needs no Tailscale app or VPN.
 
-You need a Heeler build with [PR #426](https://github.com/ZingerLittleBee/Heeler/pull/426), a Tailscale account, and permission to add devices to the tailnet. To keep the Mac free of a network extension and TUN interface, use [Tailscale in userspace mode](tailscale-userspace.md) instead.
+## Before you start
+
+- You need a Heeler version with **Settings > Overlay Networks**.
+- You need a Tailscale account that can add devices.
+- To keep the Mac free of a VPN, use [Tailscale without a VPN on the Mac (advanced)](tailscale-userspace.md) instead.
 
 ## 1. Prepare the Mac
 
-Complete [Prepare the Host](overlay-networks.md#prepare-the-host). This guide uses the Mac's own SSH server; Tailscale SSH (`tailscale up --ssh`) is not needed.
+Complete [Prepare the Host](overlay-networks.md#prepare-the-host). You don't need Tailscale SSH.
 
-## 2. Install the macOS app and join the tailnet
+## 2. Install Tailscale on the Mac
 
-1. Install the **Standalone** app from [Install Tailscale on macOS](https://tailscale.com/docs/install/mac) and open it. The userspace guide covers the Homebrew CLI.
-2. Allow the network extension and VPN configuration when asked. On macOS 15 and later, turn on **Tailscale Network Extension** in **System Settings → General → Login Items & Extensions → Network Extensions**. For older macOS, see the [extension instructions](https://tailscale.com/docs/concepts/macos-sysext).
-3. Sign in from the menu bar app. If the tailnet requires device approval, approve the Mac.
-4. In the [admin console](https://login.tailscale.com/admin/machines), note the Mac's Tailscale IPv4 address and machine name.
-
-The standalone app routes tailnet traffic for every Mac app, while Heeler's node serves only Heeler. See [macOS variants](https://tailscale.com/docs/concepts/macos-variants).
+1. Download the **Standalone** app from [Install Tailscale on macOS](https://tailscale.com/docs/install/mac) and open it.
+2. Allow the VPN configuration when asked. On macOS 15 and later, also turn on **Tailscale Network Extension** in **System Settings > General > Login Items & Extensions > Network Extensions**. For older macOS, see [Tailscale's extension steps](https://tailscale.com/docs/concepts/macos-sysext).
+3. Sign in from the menu bar icon, and approve the Mac if your tailnet asks.
+4. Note the Mac's Tailscale IP on the admin console's [Machines](https://login.tailscale.com/admin/machines) page.
 
 ## 3. Join the same tailnet from Heeler
 
-In **Settings → Overlay Networks → Add Network**, choose **Tailscale**:
+1. Go to **Settings > Overlay Networks > Add Network** and choose **Tailscale**.
+2. Fill in the form:
 
-| Field | Value |
-| --- | --- |
-| Name | A label such as `Home tailnet` |
-| Device name | How Heeler appears in the tailnet; defaults to `heeler` |
-| Advanced | Leave blank for browser sign-in |
+   | Field | Value |
+   | --- | --- |
+   | Name | Any label, such as `Home tailnet` |
+   | Device name | How Heeler appears in the tailnet (default `heeler`) |
+   | Advanced | Leave blank to sign in with the browser |
 
-<a href="images/overlay-networks/tailscale-form.png"><img src="images/overlay-networks/tailscale-form.png" width="300" alt="Tailscale form with Name, Device name, and an Advanced row"></a>
+   <a href="images/overlay-networks/tailscale-form.png"><img src="images/overlay-networks/tailscale-form.png" width="300" alt="Tailscale form with Name, Device name, and an Advanced row"></a>
 
-Tap **Continue to Sign In**. Heeler opens the network and starts browser sign-in. Sign in to the Mac's tailnet, then return to Heeler; it connects on its own. If the tailnet requires approval, the network shows **Waiting for approval** until an admin approves it. If you leave the browser without signing in, the network shows **Sign in to Tailscale**; tap **Sign In with Browser** to try again.
+3. Tap **Continue to Sign In** and sign in with the same account as the Mac.
+4. Return to Heeler. It connects on its own and the network shows **Connected**.
 
-To skip the browser, enter an auth key from your tailnet admin under **Advanced**; the button becomes **Add and Connect**, and Heeler keeps the key in the Keychain. For Headscale, enter its HTTPS URL as the **Coordination server**.
+If you see **Waiting for approval**, tap **Open Admin Console** and approve Heeler. If you left the browser early, tap **Sign In with Browser**.
 
-Heeler is its own device in the tailnet, separate from any Tailscale app on the phone. Once **Connected**, the network's screen shows Heeler's address and the machines it can see. The tailnet's grants or ACLs must still allow Heeler to reach the Mac's TCP port 22.
+To skip the browser, enter an auth key under **Advanced**, or tap **Use an Auth Key Instead** on the network's screen. For Headscale, enter its HTTPS URL as the **Coordination server**.
+
+If you've changed your tailnet's access rules, make sure Heeler can reach the Mac on port 22.
 
 ## 4. Add the Mac as a Host
 
-Follow [Connect from Heeler](overlay-networks.md#connect-from-heeler). Select the network under **Network**, then use **Choose from Tailnet…** and pick the Mac's **IP Address** (**Machine Name** also works). You can also tap **Add** beside the Mac on the network's screen.
+Add the Host with these values (details in [Connect from Heeler](overlay-networks.md#connect-from-heeler)):
 
-Use port `22`, the Mac's SSH account, the authentication you prepared, and no Jump Host. Save, verify the fingerprint, and let the checks finish.
+1. Under **Network**, select your Tailscale network.
+2. Tap **Choose from Tailnet…**, keep **Fill In** on **IP Address**, and tap the Mac. (Or tap **Add** beside the Mac on the network's screen.)
+3. Use port `22`, your Mac username, and the sign-in method you picked. Leave **Jump Host** blank.
+4. Save, and trust the fingerprint only if it matches the Mac's.
 
-## 5. Verify and maintain the connection
+## 5. Check that it works
 
-Complete [Verify the connection](overlay-networks.md#verify-the-connection), including a test over cellular. Keep the Mac awake and connected to Tailscale.
+Complete [Verify the connection](overlay-networks.md#verify-the-connection), including a test over cellular. Keep the Mac awake and signed in to Tailscale.
 
-| Symptom | Check |
+## Troubleshooting
+
+| Problem | Try this |
 | --- | --- |
-| The Mac is missing from the picker | Both devices are in the same tailnet, approved, and allowed to see each other. Try the Mac's Tailscale IPv4 directly. |
-| SSH times out | The Mac is awake and connected, and policy allows TCP 22 from Heeler. |
-| SSH authentication fails | Use the Mac's local account with its authorized key or password; Tailscale sign-in is not SSH authentication. |
-| SSH works, herdr checks fail | Recheck herdr's installation, PATH, and session in [Prepare the Host](overlay-networks.md#prepare-the-host). |
-| **Signed out** or **Sign in to Tailscale** | Open the network and tap **Sign In with Browser**. |
+| The Mac isn't in **Choose from Tailnet…** | Check that both are in the same tailnet and approved, or type the Mac's Tailscale IP into **Address**. |
+| SSH times out | Check that the Mac is awake and online, and your access rules allow port 22. |
+| SSH sign-in fails | Use the Mac account's key or password, not your Tailscale login. |
+| SSH works but herdr checks fail | Recheck herdr in [Prepare the Host](overlay-networks.md#prepare-the-host). |
+| **Not signed in** or **Signed out** | Tap **Sign In** on the network's row, or open the network and tap **Sign In with Browser**. |
 
-**Sign Out** in Heeler signs out only Heeler's node, never the Mac. A Host that is reconnecting can race with it, so to revoke access, remove Heeler's device in the admin console and retire its auth key, if any. Heeler stops its node after the Background Grace Period and rebuilds it when you return. Notifications use the Push Relay and do not depend on this connection.
+## Sign out or remove Heeler
 
-Official documentation and Heeler's form labels were checked on **2026-10-09**. See the [verification scope](../agents/overlay-network-guides.md#verification-scope).
+**Sign Out**, in the network screen's **…** menu, signs out only Heeler, never the Mac. Its Hosts stay disconnected until you sign in again.
+
+To remove Heeler's access, delete its device on the admin console's **Machines** page, and revoke any auth key you used on the **Keys** page.
+
+Checked against Tailscale's documentation on 2026-10-09.
+
+Maintainers: see the [guide maintenance record](../agents/overlay-network-guides.md).
