@@ -23,7 +23,7 @@ Entries reference the pull request that made the change.
   with the one in use marked, and when no route reaches the Host shows why
   each one failed. Edit Host lists routes as rows that each open their own
   page, and a new Host starts from Add Route. Run Checks Again moves beside
-  the Preflight heading.
+  the Preflight heading. (#438)
 - Reach a Host through Tailscale, ZeroTier, or EasyTier without turning on a
   VPN. Add a network in Settings › Overlay Networks, then choose it under
   Network when editing the Host. Heeler joins the network itself while it is
