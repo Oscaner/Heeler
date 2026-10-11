@@ -288,9 +288,9 @@ struct HostOnboardingView: View {
     }
 
     /// The card's quiet action at its end: Stop while the Console is
-    /// dialing, a round Reconnect while connected. A Reconnect press reads
-    /// as Connecting… with no action until the dial starts, and `retry()`
-    /// ignores a second press meanwhile.
+    /// dialing, a round Reconnect while connected. A Reconnect press keeps
+    /// the circle, spinning, until the dial starts, so the card holds its
+    /// size; `retry()` ignores a second press meanwhile.
     @ViewBuilder
     private func trailingConnectionAction(
         _ status: HostRouteStatusPresentation
@@ -307,11 +307,14 @@ struct HostOnboardingView: View {
             .accessibilityHint(
                 "Stops trying to connect without waiting for a timeout. "
                     + "The Host stays paused until you reconnect.")
+        } else if isManualReconnectInFlight {
+            HostReconnectCircle(isInFlight: true)
+                .accessibilityHidden(true)
         } else if status.tone == .connected, retryConnection != nil {
             Button {
                 retry()
             } label: {
-                HostReconnectCircle()
+                HostReconnectCircle(isInFlight: false)
             }
             .accessibilityLabel("Reconnect")
         }
@@ -618,13 +621,23 @@ private struct HostConnectionStatusCard<Trailing: View, Below: View>: View {
                         .frame(width: iconSize, height: iconSize)
                         .background(tint.opacity(0.14), in: .rect(cornerRadius: 10))
                         .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(presentation.title)
-                            .font(.headline)
-                        if let subtitle = presentation.subtitle {
-                            Text(subtitle)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                    ZStack(alignment: .leading) {
+                        // Every state is at least a title and a subtitle
+                        // tall, so a one-line Connecting… does not shrink
+                        // the card.
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(verbatim: " ").font(.headline)
+                            Text(verbatim: " ").font(.subheadline)
+                        }
+                        .hidden()
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(presentation.title)
+                                .font(.headline)
+                            if let subtitle = presentation.subtitle {
+                                Text(subtitle)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
@@ -675,17 +688,26 @@ private struct HostReconnectFill: ShapeStyle {
 }
 
 /// Reconnect while connected: a round tinted button that leaves the
-/// subtitle its width.
+/// subtitle its width, spinning once pressed.
 private struct HostReconnectCircle: View {
+    let isInFlight: Bool
+
     @ScaledMetric(relativeTo: .body) private var size = 36
 
     var body: some View {
-        Image(systemName: "arrow.clockwise")
-            .font(.subheadline.weight(.semibold))
-            .frame(width: size, height: size)
-            .background(HostReconnectFill(), in: .circle)
-            .frame(minWidth: 44, minHeight: 44)
-            .contentShape(.rect)
+        Group {
+            if isInFlight {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Image(systemName: "arrow.clockwise")
+                    .font(.subheadline.weight(.semibold))
+            }
+        }
+        .frame(width: size, height: size)
+        .background(HostReconnectFill(), in: .circle)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(.rect)
     }
 }
 
