@@ -634,10 +634,12 @@ private struct HostConnectionStatusCard<Action: View>: View {
     }
 }
 
-/// The status card's action: a small tinted capsule on the system fill,
-/// which suits both light and dark rows.
+/// The status card's action: a small tinted capsule. A light row takes a
+/// wash of the tint; on a dark one the system fill reads better.
 private struct HostConnectionActionLabel: View {
     let title: String
+
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Text(title)
@@ -645,7 +647,13 @@ private struct HostConnectionActionLabel: View {
             .lineLimit(1)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(Color(uiColor: .secondarySystemFill), in: .capsule)
+            .background(fill, in: .capsule)
+    }
+
+    private var fill: AnyShapeStyle {
+        colorScheme == .dark
+            ? AnyShapeStyle(Color(uiColor: .secondarySystemFill))
+            : AnyShapeStyle(.tint.opacity(0.12))
     }
 }
 
