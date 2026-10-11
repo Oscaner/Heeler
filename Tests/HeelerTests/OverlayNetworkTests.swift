@@ -187,7 +187,7 @@ struct HostOverlayNetworkTests {
 
         let host = try JSONDecoder().decode(Host.self, from: Data(legacy.utf8))
 
-        #expect(host.overlayNetworkID == nil)
+        #expect(host.primaryRoute.overlayNetworkID == nil)
     }
 
     @Test func overlayNetworkIDRoundTripsThroughCoding() throws {
@@ -197,7 +197,7 @@ struct HostOverlayNetworkTests {
         let decoded = try JSONDecoder().decode(Host.self, from: JSONEncoder().encode(host))
 
         #expect(decoded == host)
-        #expect(decoded.overlayNetworkID == host.overlayNetworkID)
+        #expect(decoded.primaryRoute.overlayNetworkID == host.primaryRoute.overlayNetworkID)
     }
 
     @Test func draftPrefillsAndRebuildsTheOverlayChoice() throws {
@@ -206,11 +206,11 @@ struct HostOverlayNetworkTests {
             overlayNetworkID: UUID())
 
         var draft = HostDraft(host: host)
-        #expect(draft.overlayNetworkID == host.overlayNetworkID)
+        #expect(draft.overlayNetworkID == host.primaryRoute.overlayNetworkID)
         #expect(try #require(draft.makeHost(id: host.id)) == host)
 
         draft.overlayNetworkID = nil
-        #expect(try #require(draft.makeHost(id: host.id)).overlayNetworkID == nil)
+        #expect(try #require(draft.makeHost(id: host.id)).primaryRoute.overlayNetworkID == nil)
     }
 
     @Test func transportSettingsRouteOnlyHostsThatNameANetwork() async throws {
@@ -222,12 +222,12 @@ struct HostOverlayNetworkTests {
         let direct = SSHTransportSettings(
             host: Host(address: "box", username: "dev"),
             credentials: .password("x"), hostKeyPolicy: policy, overlays: runtime)
-        #expect(direct.overlay == nil)
+        #expect(direct.routes.first?.overlay == nil)
 
         let routed = SSHTransportSettings(
             host: Host(address: "box", username: "dev", overlayNetworkID: tailnet.id),
             credentials: .password("x"), hostKeyPolicy: policy, overlays: runtime)
-        #expect(routed.overlay?.networkName == "Home")
+        #expect(routed.routes.first?.overlay?.networkName == "Home")
     }
 }
 

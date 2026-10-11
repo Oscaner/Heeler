@@ -173,6 +173,15 @@ struct PreflightReport: Equatable, Sendable {
             // contacted; the fix is the overlay, not the Host.
             check = .connection
             hint = Self.overlayHint(network: network, reason: reason)
+        case .noRouteReached(let failures):
+            // No route got as far as the Host, so the connection check is
+            // what failed; each route keeps the hint for its own failure.
+            check = .connection
+            hint = failures.map { failure in
+                let routeHint =
+                    Self.failure(failure.error, authMethod: authMethod).failure?.hint ?? ""
+                return "\(failure.route): \(routeHint)"
+            }.joined(separator: "\n")
         }
         return PreflightReport(failure: Failure(check: check, hint: hint))
     }

@@ -22,7 +22,9 @@ hop is dialled through a userspace node running inside the app.
   handshake attempt dials a fresh stream.
 - A Host stores an optional `overlayNetworkID`. When set, only the first hop
   uses the overlay: the Host itself, or its Jump Host when one is configured.
-  The Jump Host's onward `direct-tcpip` hop to the Host is unchanged.
+  The Jump Host's onward `direct-tcpip` hop to the Host is unchanged. ADR 0022
+  moves this choice, with the address and Jump Host, onto each of a Host's
+  Routes.
 - Overlay failures are `TransportError.overlayFailed(network:reason:)`. They
   are never wrapped in `jumpHostFailed`, because the overlay sits in front of
   the Jump Host and nothing past this device was contacted.
@@ -269,10 +271,10 @@ the Host chosen by the user, never a fallback after a direct dial fails.
   Agent Notifications still arrive through the Push Relay.
 - Peer discovery on the local network can trigger iOS's local-network
   prompt, so the app declares `NSLocalNetworkUsageDescription`.
-- Host-key trust is keyed by the address and port the user typed. An
-  overlay address (100.x, a MagicDNS name, a ZeroTier IP) is a different key
-  from the same machine's LAN or public address, so the first overlay
-  connection asks for fingerprint confirmation again.
+- Host-key trust was keyed by the address and port the user typed, so an
+  overlay address (100.x, a MagicDNS name, a ZeroTier IP) asked for
+  fingerprint confirmation again. ADR 0022 trusts a Host's key by Host, so
+  every Route, overlay or not, shares one confirmation.
 - Downgrade: Host records gain `overlayNetworkID`. A build without Overlay
   Networks decodes such a Host, connects it directly, and drops the field on
   its next save of that Host; the overlay choice must then be made again

@@ -201,14 +201,23 @@ final actor FakeTransportConnector: TransportConnector {
         }
     }
 
-    /// Mirrors `HeelerSSHHostKeyVerifier.verify` at the policy level.
+    /// Mirrors `HeelerSSHHostKeyVerifier.verify` at the policy level,
+    /// including a catalog Host adopting its endpoint's pre-Routes trust.
     private func evaluateHostKey(
         _ fingerprint: HostKeyFingerprint, settings: SSHTransportSettings
     ) async throws {
         let policy = settings.hostKeyPolicy
-        if let known = await policy.knownHosts.fingerprint(
-            host: settings.host, port: settings.port)
+        let key = settings.hostKeyTrust.storageKey(host: settings.host, port: settings.port)
+        if settings.hostKeyTrust != .endpoint,
+           await policy.knownHosts.fingerprints(host: key.host, port: key.port).isEmpty
         {
+            for adopted in await policy.knownHosts.fingerprints(
+                host: settings.host, port: settings.port)
+            {
+                await policy.knownHosts.setFingerprint(adopted, host: key.host, port: key.port)
+            }
+        }
+        if let known = await policy.knownHosts.fingerprint(host: key.host, port: key.port) {
             guard known == fingerprint else {
                 throw TransportError.hostKeyMismatch(known: known, presented: fingerprint)
             }
@@ -219,7 +228,14 @@ final actor FakeTransportConnector: TransportConnector {
         guard await policy.confirmFirstConnect(candidate) else {
             throw TransportError.hostKeyRejected(presented: fingerprint)
         }
-        await policy.knownHosts.setFingerprint(
-            fingerprint, host: settings.host, port: settings.port)
+        await policy.knownHosts.setFingerprint(fingerprint, host: key.host, port: key.port)
+    }
+}
+
+extension KnownHostsStore {
+    /// The fingerprint trusted for `host` itself, whichever route reached it.
+    func fingerprint(trustedFor host: Host) async -> HostKeyFingerprint? {
+        let key = HostKeyTrust.hostKey(host.id)
+        return await fingerprint(host: key.host, port: key.port)
     }
 }

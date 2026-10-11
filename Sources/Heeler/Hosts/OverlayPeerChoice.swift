@@ -166,15 +166,17 @@ enum OverlayPeerList {
         return "\(dotted)/\(prefix)"
     }
 
-    /// The Host already reached at `candidate` over `networkID`: one whose
-    /// first hop (its Jump Host when it has one) is one of the peer's
-    /// addresses or its machine name, bare or as a MagicDNS name.
+    /// The Host already reached at `candidate` over `networkID`: one with a
+    /// route whose first hop (its Jump Host when it has one) is one of the
+    /// peer's addresses or its machine name, bare or as a MagicDNS name.
     static func host(
         for candidate: OverlayPeerCandidate, networkID: UUID, among hosts: [Host]
     ) -> Host? {
         hosts.first { host in
-            host.overlayNetworkID == networkID
-                && style(dialing: host.usesJumpHost ? host.jumpAddress : host.address, candidate) != nil
+            host.routes.contains { route in
+                route.overlayNetworkID == networkID
+                    && style(dialing: route.firstHopAddress, candidate) != nil
+            }
         }
     }
 
@@ -222,8 +224,8 @@ enum OverlayPeerList {
     }
 }
 
-extension HostDraft {
-    /// Which address a peer chosen from the draft's Overlay Network fills:
+extension HostRouteDraft {
+    /// Which address a peer chosen from the route's Overlay Network fills:
     /// the network carries the first hop, which is the Jump Host when one
     /// is set (ADR 0021).
     var overlayPeerTarget: OverlayPeerTarget {
@@ -235,8 +237,7 @@ extension HostDraft {
         usesJumpHost ? jumpAddress : address
     }
 
-    /// Fills the first hop's address from `candidate`, and a blank Host
-    /// name with the peer's name when the peer is the Host itself.
+    /// Fills the first hop's address from `candidate`.
     mutating func applyOverlayPeer(
         _ candidate: OverlayPeerCandidate, style: OverlayPeerCandidate.AddressStyle = .ipAddress
     ) {
@@ -244,11 +245,44 @@ extension HostDraft {
         switch overlayPeerTarget {
         case .host:
             self.address = address
-            if name.trimmingCharacters(in: .whitespaces).isEmpty, let peerName = candidate.name {
-                name = peerName
-            }
         case .jumpHost:
             jumpAddress = address
+        }
+    }
+}
+
+extension HostDraft {
+    /// Which address a peer chosen from the primary route's Overlay Network
+    /// fills.
+    var overlayPeerTarget: OverlayPeerTarget {
+        primaryRoute.overlayPeerTarget
+    }
+
+    /// The address a peer chosen for the primary route fills.
+    var overlayPeerAddress: String {
+        primaryRoute.overlayPeerAddress
+    }
+
+    /// Fills the first hop's address of the route `routeID` (the primary
+    /// route by default) from `candidate`, and a blank Host name with the
+    /// peer's name when the peer is the Host itself.
+    mutating func applyOverlayPeer(
+        _ candidate: OverlayPeerCandidate, style: OverlayPeerCandidate.AddressStyle = .ipAddress,
+        toRoute routeID: HostRouteDraft.ID? = nil
+    ) {
+        let index =
+            if let routeID {
+                routes.firstIndex { $0.id == routeID }
+            } else {
+                routes.indices.first
+            }
+        guard let index else { return }
+        let target = routes[index].overlayPeerTarget
+        routes[index].applyOverlayPeer(candidate, style: style)
+        if target == .host, candidate.address(style) != nil,
+           name.trimmingCharacters(in: .whitespaces).isEmpty, let peerName = candidate.name
+        {
+            name = peerName
         }
     }
 

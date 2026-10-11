@@ -381,29 +381,99 @@ actor HeelerSSHTransport: Transport {
         [AttachmentStagingPhaseForTesting: @Sendable () async -> Void] = [:]
 #endif
 
+    /// How long a race gives the direct routes before it also starts the
+    /// routes through an Overlay Network or a Jump Host (ADR 0022).
+    static let routeRaceStagger: Duration = .milliseconds(400)
+
     /// Establishes the libssh2 Transport through the same app-owned
     /// credentials and TOFU policy as the production connection path.
+    ///
+    /// With several routes, they race only as far as a verified host key:
+    /// the first route whose Host presents the trusted key wins, the others
+    /// are cancelled, and only the winner authenticates against the Host.
+    /// A Jump Host is authenticated on its own route, since nothing past it
+    /// is reachable otherwise.
     static func connect(settings: SSHTransportSettings) async throws -> HeelerSSHTransport {
-        let targetEndpoint = try endpoint(host: settings.host, port: settings.port)
-        guard let jump = settings.jump else {
+        let gate = HostKeyVerificationGate()
+        let connection: SSHConnection
+        if settings.routes.count == 1, let route = settings.routes.first {
+            connection = try await reach(route, settings: settings, gate: gate)
+        } else {
+            connection = try await race(settings: settings, gate: gate)
+        }
+        do {
+            try await authenticate(
+                connection,
+                username: settings.username,
+                credentials: settings.credentials,
+                timeout: settings.requestTimeout)
+        } catch {
+            try? await connection.close(timeout: .seconds(2))
+            throw mapConnect(error)
+        }
+        return HeelerSSHTransport(connection: connection, settings: settings)
+    }
+
+    private static func race(
+        settings: SSHTransportSettings, gate: HostKeyVerificationGate
+    ) async throws -> SSHConnection {
+        let routes = settings.routes
+        let hasDirectRoute = routes.contains(where: \.isDirect)
+        do {
+            return try await RouteRace.first(
+                count: routes.count,
+                isDeferred: { hasDirectRoute && !routes[$0].isDirect },
+                stagger: routeRaceStagger,
+                attempt: { index in
+                    try await reach(routes[index], settings: settings, gate: gate)
+                },
+                discard: { connection in
+                    try? await connection.close(timeout: .seconds(2))
+                }
+            ).value
+        } catch let failure as RouteRace.Failure {
+            throw TransportError.noRouteReached(
+                zip(routes, failure.failures).map { route, error in
+                    RouteFailure(
+                        route: route.label, mayNameAnotherMachine: route.mayNameAnotherMachine,
+                        error: mapConnect(error))
+                })
+        } catch {
+            throw TransportError.cancelled
+        }
+    }
+
+    /// One route as far as the Host's verified key: an unauthenticated
+    /// connection to the Host, or a mapped `TransportError`.
+    private static func reach(
+        _ route: SSHRoute, settings: SSHTransportSettings, gate: HostKeyVerificationGate
+    ) async throws -> SSHConnection {
+        let targetEndpoint = try endpoint(host: route.host, port: route.port)
+        let verifier = HeelerSSHHostKeyVerifier(
+            host: route.host,
+            port: route.port,
+            trust: settings.hostKeyTrust,
+            policy: settings.hostKeyPolicy)
+        guard let jump = route.jump else {
             let connection: SSHConnection
             do {
-                connection = try await connectDirect(
-                    endpoint: targetEndpoint,
-                    username: settings.username,
-                    credentials: settings.credentials,
-                    policy: settings.hostKeyPolicy,
+                connection = try await openConnection(
+                    to: targetEndpoint,
                     timeout: settings.requestTimeout,
-                    overlay: settings.overlay)
+                    overlay: route.overlay)
             } catch {
                 // Every other hop maps before it throws; the direct hop must
                 // too, or a raw SSHError escapes the TransportError taxonomy
                 // the app and preflight classify against.
                 throw mapConnect(error)
             }
-            return HeelerSSHTransport(
-                connection: connection,
-                settings: settings)
+            do {
+                try await gate.withLock { try await verifier.verify(connection.hostKey) }
+                return connection
+            } catch {
+                try? await connection.close(timeout: .seconds(2))
+                throw mapConnect(error)
+            }
         }
 
         let jumpEndpoint = try endpoint(host: jump.host, port: jump.port)
@@ -414,8 +484,9 @@ actor HeelerSSHTransport: Transport {
                 username: jump.username,
                 credentials: jump.credentials,
                 policy: settings.hostKeyPolicy,
+                gate: gate,
                 timeout: settings.requestTimeout,
-                overlay: settings.overlay)
+                overlay: route.overlay)
         } catch {
             let mapped = mapConnect(error)
             // The overlay sits in front of the Jump Host: blaming the Jump
@@ -429,28 +500,22 @@ actor HeelerSSHTransport: Transport {
             targetConnection = try await jumpConnection.connectThrough(
                 to: targetEndpoint,
                 timeout: settings.requestTimeout)
-        } catch SSHError.forwardingDenied {
-            throw TransportError.jumpHostFailed(.tcpForwardingUnavailable)
-        } catch SSHError.targetUnreachable {
-            throw TransportError.sshUnreachable(detail: "The Host is unreachable from the Jump Host.")
         } catch {
-            throw mapConnect(error)
+            try? await jumpConnection.close(timeout: .seconds(2))
+            switch error {
+            case SSHError.forwardingDenied:
+                throw TransportError.jumpHostFailed(.tcpForwardingUnavailable)
+            case SSHError.targetUnreachable:
+                throw TransportError.sshUnreachable(
+                    detail: "The Host is unreachable from the Jump Host.")
+            default:
+                throw mapConnect(error)
+            }
         }
 
         do {
-            try await HeelerSSHHostKeyVerifier(
-                host: settings.host,
-                port: settings.port,
-                policy: settings.hostKeyPolicy)
-                .verify(targetConnection.hostKey)
-            try await authenticate(
-                targetConnection,
-                username: settings.username,
-                credentials: settings.credentials,
-                timeout: settings.requestTimeout)
-            return HeelerSSHTransport(
-                connection: targetConnection,
-                settings: settings)
+            try await gate.withLock { try await verifier.verify(targetConnection.hostKey) }
+            return targetConnection
         } catch {
             try? await targetConnection.close(timeout: .seconds(2))
             throw mapConnect(error)
@@ -505,17 +570,18 @@ actor HeelerSSHTransport: Transport {
         username: String,
         credentials: SSHCredentials,
         policy: HostKeyPolicy,
+        gate: HostKeyVerificationGate,
         timeout: Duration,
         overlay: OverlayRoute?
     ) async throws -> SSHConnection {
         let connection = try await openConnection(
             to: endpoint, timeout: timeout, overlay: overlay)
         do {
-            try await HeelerSSHHostKeyVerifier(
+            let verifier = HeelerSSHHostKeyVerifier(
                 host: endpoint.host,
                 port: Int(endpoint.port),
                 policy: policy)
-                .verify(connection.hostKey)
+            try await gate.withLock { try await verifier.verify(connection.hostKey) }
             try await authenticate(
                 connection,
                 username: username,

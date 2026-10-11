@@ -66,9 +66,16 @@ extension TransportError {
         }
     }
 
-    /// The sign-in URL an overlay failure is waiting on, if any.
+    /// The sign-in URL an overlay failure is waiting on, if any — including
+    /// one route's, when every route failed.
     var overlayLoginURL: URL? {
-        guard case .overlayFailed(_, .loginRequired(let url)) = self else { return nil }
-        return url
+        switch self {
+        case .overlayFailed(_, .loginRequired(let url)):
+            url
+        case .noRouteReached(let failures):
+            failures.lazy.compactMap(\.error.overlayLoginURL).first
+        default:
+            nil
+        }
     }
 }
