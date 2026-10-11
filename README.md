@@ -94,6 +94,8 @@ Unroutable machines can sit behind an SSH Jump Host:
 - [Set up remote access step by step](docs/guides/vps-jump-host-setup.md)
 - [Architecture, security boundaries, and the VPS runbook](docs/guides/vps-jump-host.md)
 
+A Host can have several routes, such as its LAN address at home and an overlay network or Jump Host elsewhere: [Reach a Host on several routes](docs/guides/host-routes.md).
+
 ## Installation
 
 Install Heeler from the [App Store](https://apps.apple.com/us/app/heeler-for-herdr/id6797263135)
