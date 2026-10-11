@@ -434,7 +434,8 @@ actor HeelerSSHTransport: Transport {
         } catch let failure as RouteRace.Failure {
             throw TransportError.noRouteReached(
                 zip(routes, failure.failures).map { route, error in
-                    RouteFailure(route: route.label, error: mapConnect(error))
+                    RouteFailure(
+                        route: route.label, isDirect: route.isDirect, error: mapConnect(error))
                 })
         } catch {
             throw TransportError.cancelled

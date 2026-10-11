@@ -335,11 +335,11 @@ struct HostOnboardingStoreTests {
             outcome: .connectFails(
                 .noRouteReached([
                     RouteFailure(
-                        route: "192.168.1.5",
+                        route: "192.168.1.5", isDirect: true,
                         error: .hostKeyMismatch(known: known, presented: presented)),
-                    RouteFailure(route: "100.64.0.5 over Home", error: .timedOut),
+                    RouteFailure(route: "100.64.0.5 over Home", isDirect: false, error: .timedOut),
                     RouteFailure(
-                        route: "box.example",
+                        route: "box.example", isDirect: true,
                         error: .hostKeyMismatch(known: known, presented: presented)),
                 ])))
 
@@ -356,12 +356,12 @@ struct HostOnboardingStoreTests {
             outcome: .connectFails(
                 .noRouteReached([
                     RouteFailure(
-                        route: "192.168.1.5",
+                        route: "192.168.1.5", isDirect: true,
                         error: .hostKeyMismatch(
                             known: known,
                             presented: HostKeyFingerprint(digest: Data(repeating: 2, count: 32)))),
                     RouteFailure(
-                        route: "box.example",
+                        route: "box.example", isDirect: true,
                         error: .hostKeyMismatch(
                             known: known,
                             presented: HostKeyFingerprint(digest: Data(repeating: 3, count: 32)))),
@@ -374,6 +374,31 @@ struct HostOnboardingStoreTests {
             Issue.record("connection check should fail")
             return
         }
+    }
+
+    /// A LAN address may be another machine wherever the device is now; an
+    /// overlay address is not. The overlay route's key is the one offered.
+    @Test func anOverlayRoutesChangedKeyIsOfferedOverALANAddress() async throws {
+        let known = HostKeyFingerprint(digest: Data(repeating: 1, count: 32))
+        let overlayKey = HostKeyFingerprint(digest: Data(repeating: 3, count: 32))
+        let (store, _) = try makeStore(
+            outcome: .connectFails(
+                .noRouteReached([
+                    RouteFailure(
+                        route: "192.168.1.5", isDirect: true,
+                        error: .hostKeyMismatch(
+                            known: known,
+                            presented: HostKeyFingerprint(digest: Data(repeating: 2, count: 32)))),
+                    RouteFailure(
+                        route: "100.64.0.5 over Home", isDirect: false,
+                        error: .hostKeyMismatch(known: known, presented: overlayKey)),
+                ])))
+
+        await store.runChecks()
+
+        #expect(
+            store.pendingHostKeyReplacement
+                == HostKeyReplacement(known: known, presented: overlayKey))
     }
 
     @Test func settingsCarryTheHostCoordinatesAndStoredPassword() async throws {

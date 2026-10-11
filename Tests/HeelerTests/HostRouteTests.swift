@@ -517,21 +517,58 @@ struct NoRouteReachedTests {
 
     @Test func retryableWhileAnyRouteMayComeBack() {
         let error = TransportError.noRouteReached([
-            RouteFailure(route: "192.168.1.5", error: mismatch),
+            RouteFailure(route: "192.168.1.5", isDirect: true, error: mismatch),
             RouteFailure(
-                route: "100.64.0.5 over Home", error: .overlayFailed(network: "Home", reason: .timedOut)),
+                route: "100.64.0.5 over Home", isDirect: false,
+                error: .overlayFailed(network: "Home", reason: .timedOut)),
         ])
 
         #expect(error.isRetryable)
         // A LAN address answered by another machine while the overlay is
         // down is not, by itself, a security stop.
         #expect(!error.isHostKeySecurityFailure)
+        #expect(error.presentation.summary == "No route reached the Host")
+    }
+
+    /// An Overlay Network address names the same machine wherever the device
+    /// is, so its changed key is a security stop even while the LAN address
+    /// only timed out, exactly as it is for a Host with one route.
+    @Test func aChangedKeyOnAnOverlayRouteStopsTheRace() {
+        let error = TransportError.noRouteReached([
+            RouteFailure(route: "192.168.1.5", isDirect: true, error: .timedOut),
+            RouteFailure(route: "100.64.0.5 over Home", isDirect: false, error: mismatch),
+        ])
+
+        #expect(error.isHostKeySecurityFailure)
+        #expect(!error.isRetryable)
+        #expect(error.presentation.summary == "The host key changed")
+        #expect(
+            error.presentation.detail
+                == "192.168.1.5: Connection timed out; 100.64.0.5 over Home: The host key changed")
+        #expect(
+            error.presentation.recoverySuggestion == mismatch.presentation.recoverySuggestion)
+    }
+
+    /// The address behind a Jump Host is resolved there, wherever the device
+    /// is, and the Jump Host's own key is trusted by its endpoint: either
+    /// changing is a security stop.
+    @Test func aChangedKeyBehindOrAtAJumpHostStopsTheRace() {
+        for failure in [mismatch, .jumpHostFailed(mismatch)] {
+            let error = TransportError.noRouteReached([
+                RouteFailure(route: "192.168.1.5", isDirect: true, error: .timedOut),
+                RouteFailure(
+                    route: "127.0.0.1:2222 via vps.example", isDirect: false, error: failure),
+            ])
+
+            #expect(error.isHostKeySecurityFailure)
+            #expect(!error.isRetryable)
+        }
     }
 
     @Test func stopsWhenNoRouteCanRecoverOnItsOwn() {
         let error = TransportError.noRouteReached([
-            RouteFailure(route: "192.168.1.5", error: mismatch),
-            RouteFailure(route: "100.64.0.5", error: mismatch),
+            RouteFailure(route: "192.168.1.5", isDirect: true, error: mismatch),
+            RouteFailure(route: "100.64.0.5", isDirect: true, error: mismatch),
         ])
 
         #expect(!error.isRetryable)
@@ -540,8 +577,10 @@ struct NoRouteReachedTests {
 
     @Test func presentationNamesEachRoute() {
         let error = TransportError.noRouteReached([
-            RouteFailure(route: "192.168.1.5", error: .timedOut),
-            RouteFailure(route: "127.0.0.1:2222 via vps.example", error: .authenticationFailed),
+            RouteFailure(route: "192.168.1.5", isDirect: true, error: .timedOut),
+            RouteFailure(
+                route: "127.0.0.1:2222 via vps.example", isDirect: false,
+                error: .authenticationFailed),
         ])
 
         #expect(error.presentation.summary == "No route reached the Host")
@@ -554,9 +593,9 @@ struct NoRouteReachedTests {
     @Test func preflightGivesEachRouteItsOwnHint() throws {
         let report = PreflightReport.failure(
             .noRouteReached([
-                RouteFailure(route: "192.168.1.5", error: .timedOut),
+                RouteFailure(route: "192.168.1.5", isDirect: true, error: .timedOut),
                 RouteFailure(
-                    route: "100.64.0.5 over Home",
+                    route: "100.64.0.5 over Home", isDirect: false,
                     error: .overlayFailed(network: "Home", reason: .signedOut)),
             ]),
             authMethod: .deviceKey)
@@ -576,9 +615,9 @@ struct NoRouteReachedTests {
     @Test func aRouteWaitingForSignInOffersIt() throws {
         let url = try #require(URL(string: "https://login.tailscale.com/a/1"))
         let error = TransportError.noRouteReached([
-            RouteFailure(route: "192.168.1.5", error: .timedOut),
+            RouteFailure(route: "192.168.1.5", isDirect: true, error: .timedOut),
             RouteFailure(
-                route: "devbox over Home",
+                route: "devbox over Home", isDirect: false,
                 error: .overlayFailed(network: "Home", reason: .loginRequired(url))),
         ])
 

@@ -1077,8 +1077,11 @@ indirect enum TransportError: Error, Sendable, Equatable {
             underlying.isRetryable
         // Any route that may come back on its own is worth another race: the
         // LAN address refused away from home must not stop the overlay route.
+        // A changed key on a route that cannot reach another machine stops
+        // the race, as it stops a single route, until the user decides.
         case .noRouteReached(let failures):
-            failures.contains { $0.error.isRetryable }
+            !failures.contains(where: \.isHostKeySecurityFailure)
+                && failures.contains { $0.error.isRetryable }
         // A peer that is asleep, a slow node, or a device awaiting approval
         // can recover on its own; a missing network, a sign-in, a malformed
         // setting, or a start failure that outlasted its retries needs the user.
@@ -1098,7 +1101,19 @@ indirect enum TransportError: Error, Sendable, Equatable {
 struct RouteFailure: Sendable, Equatable {
     /// The route as `SSHRoute.label` names it.
     let route: String
+    /// Whether the route dials the Host over the device's own network with
+    /// no Jump Host (`SSHRoute.isDirect`). Only such an address can name
+    /// another machine on another network.
+    let isDirect: Bool
     let error: TransportError
+
+    /// A changed host key on a route whose address names the same machine
+    /// wherever the device is: an Overlay Network address, or one resolved
+    /// by a Jump Host. A direct route's changed key can be a LAN address
+    /// answered by another machine away from home, so it is excused.
+    var isHostKeySecurityFailure: Bool {
+        !isDirect && error.isHostKeySecurityFailure
+    }
 }
 
 /// An error returned by the herdr server inside a response envelope.

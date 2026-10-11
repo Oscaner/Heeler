@@ -36,9 +36,14 @@ Notification Registration, Live Activities, and pins in two.
     single address, and the one older builds connect (below).
   - A Host with one Route connects exactly as before and reports its failure
     unchanged. When every one of several Routes fails, the failure is
-    `TransportError.noRouteReached`, listing each Route's own failure. It is
-    retryable when any Route's failure is, and a host-key security failure
-    only when every Route's is.
+    `TransportError.noRouteReached`, listing each Route's own failure. A
+    changed host key on a Route through an Overlay Network or a Jump Host
+    is a host-key security failure on its own: those addresses name the
+    same machine wherever the device is. It leads the presentation and
+    stops automatic retries, as it does for a Host with one Route. A direct
+    Route's changed key is excused, since its LAN address may be another
+    machine on another network; it counts only when every Route failed on
+    its key. Otherwise the failure is retryable when any Route's is.
 - The Host's key is trusted by Host, not by the endpoint dialled. Every
   Route must present the key the Host was first confirmed with, so a LAN
   address answered by another machine away from home fails as a host-key
@@ -51,8 +56,10 @@ Notification Registration, Live Activities, and pins in two.
   the trust it just stored rather than prompting again. A prompt whose Route
   loses the race is withdrawn.
 - When several Routes fail on a changed host key, the onboarding screen
-  offers to trust the new key only when every Route that reached a server
-  saw the same one.
+  offers to trust the new key only when the Routes that saw one agree on
+  it. If any Route through an Overlay Network or a Jump Host saw a changed
+  key, only those Routes are compared; a direct Route's disagreement is a
+  LAN address answered elsewhere.
 - Pairing makes the address that answered the first Route and every other
   candidate address in the Pairing Code a Route of its own.
 - Network changes do not switch Routes on a live connection. The next

@@ -147,6 +147,24 @@ struct HostOnboardingPresentationTests {
             (true, .failed(rejected), false, .retry),
             (true, .failed(mismatch), false, .retry),
             (true, .failed(.jumpHostFailed(rejected)), false, .retry),
+            // A route that cannot reach another machine failed on the key.
+            (
+                true,
+                .failed(
+                    .noRouteReached([
+                        RouteFailure(route: "192.168.1.5", isDirect: true, error: .timedOut),
+                        RouteFailure(route: "box over Home", isDirect: false, error: mismatch),
+                    ])), false, .retry
+            ),
+            // Only a LAN address failed on the key: another machine elsewhere.
+            (
+                true,
+                .failed(
+                    .noRouteReached([
+                        RouteFailure(route: "192.168.1.5", isDirect: true, error: mismatch),
+                        RouteFailure(route: "box over Home", isDirect: false, error: .timedOut),
+                    ])), false, .disarm
+            ),
             // A manual Reconnect is already retrying: decide after it.
             (true, .failed(rejected), true, .wait),
             // The Console has not settled yet.

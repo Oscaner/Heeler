@@ -46,11 +46,7 @@ extension TransportError {
         case .overlayFailed(let network, let reason):
             Self.overlayPresentation(network: network, reason: reason)
         case .noRouteReached(let failures):
-            TransportErrorPresentation(
-                summary: "No route reached the Host",
-                detail: failures.map { "\($0.route): \($0.error.presentation.summary)" }
-                    .joined(separator: "; "),
-                recoverySuggestion: "Check that the Host is awake, then review its routes.")
+            Self.noRouteReachedPresentation(failures)
         case .tcpForwardingUnavailable:
             TransportErrorPresentation(
                 summary: "SSH TCP forwarding is disabled",
@@ -165,12 +161,36 @@ extension TransportError {
         switch self {
         case .hostKeyMismatch: true
         case .jumpHostFailed(let underlying): underlying.isHostKeySecurityFailure
-        // Only when no route escaped it: a LAN address answered by another
-        // machine away from home is expected while another route is down.
+        // A LAN address answered by another machine away from home is
+        // expected while another route is down, so a direct route's changed
+        // key counts only when every route failed on its key. Any other
+        // route's changed key counts on its own.
         case .noRouteReached(let failures):
-            !failures.isEmpty && failures.allSatisfy(\.error.isHostKeySecurityFailure)
+            (!failures.isEmpty && failures.allSatisfy(\.error.isHostKeySecurityFailure))
+                || failures.contains(where: \.isHostKeySecurityFailure)
         default: false
         }
+    }
+
+    /// Every route's own failure, in order. A changed key that counts as a
+    /// security failure leads, as it would for a Host with one route, so it
+    /// does not read as an ordinary outage.
+    private static func noRouteReachedPresentation(
+        _ failures: [RouteFailure]
+    ) -> TransportErrorPresentation {
+        let detail = failures.map { "\($0.route): \($0.error.presentation.summary)" }
+            .joined(separator: "; ")
+        if let changed = failures.first(where: \.isHostKeySecurityFailure) {
+            let presentation = changed.error.presentation
+            return TransportErrorPresentation(
+                summary: presentation.summary,
+                detail: detail,
+                recoverySuggestion: presentation.recoverySuggestion)
+        }
+        return TransportErrorPresentation(
+            summary: "No route reached the Host",
+            detail: detail,
+            recoverySuggestion: "Check that the Host is awake, then review its routes.")
     }
 
     /// Overlay failures name the network, not the Host: the Host was never
