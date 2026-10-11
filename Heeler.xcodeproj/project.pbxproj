@@ -2837,6 +2837,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_OPTIMIZATION = space;
 				CODE_SIGN_ENTITLEMENTS = Sources/Heeler/Heeler.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 25;
@@ -3003,6 +3004,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_OPTIMIZATION = space;
 				CODE_SIGN_ENTITLEMENTS = Sources/Heeler/Heeler.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 25;
