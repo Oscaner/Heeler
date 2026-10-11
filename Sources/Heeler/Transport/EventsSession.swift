@@ -148,6 +148,10 @@ actor EventsSession {
     /// whatever moment either stream is actually consumed.
     nonisolated var currentLatency: Duration? { latencyBox.withLock { $0 } }
     private nonisolated let latencyBox = Mutex<Duration?>(nil)
+    /// The catalog route the current connection reached (ADR 0022). Ordered
+    /// against status updates exactly as `currentLatency` is.
+    nonisolated var currentRouteID: UUID? { routeIDBox.withLock { $0 } }
+    private nonisolated let routeIDBox = Mutex<UUID?>(nil)
     /// How many updates the bounded buffer has shed so far. Every shed
     /// update is covered by a marker (see `yieldUpdate`), so this is
     /// observability for diagnostics and tests, not a consumer signal.
@@ -542,6 +546,7 @@ actor EventsSession {
         // connection's measurement.
         if case .status(let status) = update, status != .connected {
             latencyBox.withLock { $0 = nil }
+            routeIDBox.withLock { $0 = nil }
         }
         guard case .dropped = updatesContinuation.yield(update) else { return }
         droppedUpdateCount += 1
@@ -728,6 +733,7 @@ actor EventsSession {
                 throw TransportError.cancelled
             }
             publishLatency(latency)
+            routeIDBox.withLock { $0 = transport.routeID }
         } catch {
             try? await transport.close()
             throw error

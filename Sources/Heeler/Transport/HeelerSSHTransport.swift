@@ -320,6 +320,7 @@ actor HeelerSSHTransport: Transport {
     static let maxConnectionChannels = SSHChannelAdmission.Limits.production.connection
 
     private let connection: SSHConnection
+    nonisolated let routeID: UUID?
     private let socketLocation: HerdrSocketLocation
     private let requestTimeout: Duration
     private let gitExecTimeout: Duration
@@ -396,10 +397,14 @@ actor HeelerSSHTransport: Transport {
     static func connect(settings: SSHTransportSettings) async throws -> HeelerSSHTransport {
         let gate = HostKeyVerificationGate()
         let connection: SSHConnection
+        let routeID: UUID?
         if settings.routes.count == 1, let route = settings.routes.first {
             connection = try await reach(route, settings: settings, gate: gate)
+            routeID = route.id
         } else {
-            connection = try await race(settings: settings, gate: gate)
+            let won = try await race(settings: settings, gate: gate)
+            connection = won.connection
+            routeID = settings.routes[won.index].id
         }
         do {
             try await authenticate(
@@ -411,16 +416,17 @@ actor HeelerSSHTransport: Transport {
             try? await connection.close(timeout: .seconds(2))
             throw mapConnect(error)
         }
-        return HeelerSSHTransport(connection: connection, settings: settings)
+        return HeelerSSHTransport(connection: connection, settings: settings, routeID: routeID)
     }
 
+    /// The winning route's index in `settings.routes` and its connection.
     private static func race(
         settings: SSHTransportSettings, gate: HostKeyVerificationGate
-    ) async throws -> SSHConnection {
+    ) async throws -> (index: Int, connection: SSHConnection) {
         let routes = settings.routes
         let hasDirectRoute = routes.contains(where: \.isDirect)
         do {
-            return try await RouteRace.first(
+            let won = try await RouteRace.first(
                 count: routes.count,
                 isDeferred: { hasDirectRoute && !routes[$0].isDirect },
                 stagger: routeRaceStagger,
@@ -429,14 +435,14 @@ actor HeelerSSHTransport: Transport {
                 },
                 discard: { connection in
                     try? await connection.close(timeout: .seconds(2))
-                }
-            ).value
+                })
+            return (won.index, won.value)
         } catch let failure as RouteRace.Failure {
             throw TransportError.noRouteReached(
                 zip(routes, failure.failures).map { route, error in
                     RouteFailure(
                         route: route.label, mayNameAnotherMachine: route.mayNameAnotherMachine,
-                        error: mapConnect(error))
+                        error: mapConnect(error), routeID: route.id)
                 })
         } catch {
             throw TransportError.cancelled
@@ -524,7 +530,7 @@ actor HeelerSSHTransport: Transport {
 
     /// Test and fixture entry that already holds an authenticated connection.
     /// Command defaults come from `SSHTransportSettings` statics so they cannot
-    /// drift from the production `init(connection:settings:)` path (#133).
+    /// drift from the production `init(connection:settings:routeID:)` path (#133).
     init(
         connection: SSHConnection,
         socketPath: String,
@@ -532,6 +538,7 @@ actor HeelerSSHTransport: Transport {
         gitExecTimeout: Duration = SSHTransportSettings.defaultGitExecTimeout
     ) {
         self.connection = connection
+        routeID = nil
         socketLocation = .absolutePath(socketPath)
         self.requestTimeout = requestTimeout
         self.gitExecTimeout = gitExecTimeout
@@ -548,8 +555,9 @@ actor HeelerSSHTransport: Transport {
         channelAdmission = SSHChannelAdmission()
     }
 
-    private init(connection: SSHConnection, settings: SSHTransportSettings) {
+    private init(connection: SSHConnection, settings: SSHTransportSettings, routeID: UUID?) {
         self.connection = connection
+        self.routeID = routeID
         socketLocation = settings.socket
         requestTimeout = settings.requestTimeout
         gitExecTimeout = settings.gitExecTimeout

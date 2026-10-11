@@ -47,7 +47,8 @@ extension SSHTransportSettings {
                         : nil,
                     overlay: route.overlayNetworkID.map { networkID in
                         overlays.route(for: networkID)
-                    })
+                    },
+                    id: route.id)
             },
             username: host.username,
             credentials: credentials,
