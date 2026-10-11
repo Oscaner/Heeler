@@ -77,6 +77,8 @@ struct HostListView: View {
     private let connectionStatuses: [Host.ID: EventsSessionStatus]
     private let standingFailures: [Host.ID: TransportError]
     private let latencies: [Host.ID: Duration]
+    /// The route each connected Host reached (ADR 0022).
+    private let routeIDs: [Host.ID: HostRoute.ID]
     /// Why a connected Host's Agents could not be synced, per Host.
     private let syncIssues: [Host.ID: String]
     /// Hosts whose Host-detail Reconnect request is in flight. Distinct from
@@ -119,6 +121,7 @@ struct HostListView: View {
         connectionStatuses: [Host.ID: EventsSessionStatus] = [:],
         standingFailures: [Host.ID: TransportError] = [:],
         latencies: [Host.ID: Duration] = [:],
+        routeIDs: [Host.ID: HostRoute.ID] = [:],
         syncIssues: [Host.ID: String] = [:],
         manualReconnectInFlightHostIDs: Set<Host.ID> = [],
         retryConnection: (@MainActor @Sendable (Host.ID) async -> Void)? = nil,
@@ -132,6 +135,7 @@ struct HostListView: View {
         self.connectionStatuses = connectionStatuses
         self.standingFailures = standingFailures
         self.latencies = latencies
+        self.routeIDs = routeIDs
         self.syncIssues = syncIssues
         self.manualReconnectInFlightHostIDs = manualReconnectInFlightHostIDs
         self.retryConnection = retryConnection
@@ -218,6 +222,7 @@ struct HostListView: View {
                         catalog: store,
                         connectionStatus: connectionStatuses[id],
                         standingFailure: standingFailures[id],
+                        connectedRouteID: routeIDs[id],
                         syncIssue: syncIssues[id],
                         isManualReconnectInFlight: manualReconnectInFlightHostIDs.contains(id),
                         retryConnection: retryAction(for: id),

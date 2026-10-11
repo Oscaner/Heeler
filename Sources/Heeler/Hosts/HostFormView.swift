@@ -23,7 +23,8 @@ struct HostFormView: View {
     @State private var rsaKeyReplacementError: String?
     /// The route page on screen: Add Route's, or a listed route's.
     @State private var routePath: [HostRoutePage] = []
-    @State private var isChoosingOverlayPeer = false
+    /// Reorder and delete controls for the Routes list, from its header.
+    @State private var isEditingRoutes = false
     @FocusState private var isUsernameFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -54,18 +55,18 @@ struct HostFormView: View {
             Form {
                 formSections
             }
-            .overlayPeerPicker(
-                isPresented: $isChoosingOverlayPeer, route: draft.primaryRoute,
-                otherHosts: otherHosts
-            ) { candidate, style in
-                draft.applyOverlayPeer(candidate, style: style)
+            .environment(\.editMode, .constant(isEditingRoutes ? .active : .inactive))
+            .onChange(of: draft.routes.count) { _, count in
+                if count < 2 { isEditingRoutes = false }
             }
             .navigationDestination(for: HostRoutePage.self) { page in
                 switch page {
                 case .route(let routeID):
                     HostRouteFormView(draft: $draft, routeID: routeID, otherHosts: otherHosts)
                 case .newRoute:
-                    NewHostRouteView(draft: $draft, otherHosts: otherHosts)
+                    NewHostRouteView(authMethod: draft.authMethod, otherHosts: otherHosts) {
+                        draft.routes.append($0)
+                    }
                 }
             }
             .navigationTitle(editing == nil ? "Add Host" : "Edit Host")
@@ -149,14 +150,7 @@ struct HostFormView: View {
                 .focused($isUsernameFocused)
         }
 
-        if draft.routes.count == 1 {
-            HostRouteFields(
-                route: $draft.primaryRoute,
-                authMethod: draft.authMethod,
-                isChoosingOverlayPeer: $isChoosingOverlayPeer)
-        } else {
-            routesSection
-        }
+        routesSection
 
         authenticationSection
 
@@ -169,36 +163,46 @@ struct HostFormView: View {
         } footer: {
             Text("Leave blank for the default herdr session.")
         }
+    }
 
-        if draft.routes.count == 1 {
-            Section {
+    /// Every route, one row each opening its own page, then Add Route.
+    private var routesSection: some View {
+        Section {
+            ForEach(draft.routes) { route in
+                NavigationLink(value: HostRoutePage.route(route.id)) {
+                    HostRouteRow(route: route)
+                }
+                .deleteDisabled(draft.routes.count < 2)
+            }
+            .onDelete { draft.removeRoutes(atOffsets: $0) }
+            .onMove { draft.moveRoutes(fromOffsets: $0, toOffset: $1) }
+            if !isEditingRoutes {
                 addRouteButton
-            } footer: {
+            }
+        } header: {
+            HStack {
+                Text("Routes")
+                Spacer()
+                if draft.routes.count > 1 {
+                    Button(isEditingRoutes ? "Done" : "Edit") {
+                        withAnimation { isEditingRoutes.toggle() }
+                    }
+                    .font(.subheadline)
+                    .textCase(nil)
+                    .accessibilityLabel(isEditingRoutes ? "Done Editing Routes" : "Edit Routes")
+                }
+            }
+        } footer: {
+            if draft.routes.count > 1 {
+                Text(
+                    "Heeler tries every route each time it connects and keeps the first that "
+                        + "reaches the Host. Routes over this device's own network start first; "
+                        + "the rest start a moment later.")
+            } else {
                 Text(
                     "Add another way to reach this Host, such as its LAN address at home and "
                         + "an overlay network or Jump Host elsewhere.")
             }
-        }
-    }
-
-    /// A Host with more than one route lists them; each opens its own page.
-    private var routesSection: some View {
-        Section {
-            ForEach(Array(draft.routes.enumerated()), id: \.element.id) { index, route in
-                NavigationLink(value: HostRoutePage.route(route.id)) {
-                    HostRouteRow(route: route, index: index)
-                }
-            }
-            .onDelete { draft.removeRoutes(atOffsets: $0) }
-            .onMove { draft.moveRoutes(fromOffsets: $0, toOffset: $1) }
-            addRouteButton
-        } header: {
-            Text("Routes")
-        } footer: {
-            Text(
-                "Heeler tries every route each time it connects and uses the first that "
-                    + "reaches the Host. Routes over this device's own network start first; "
-                    + "the rest start a moment later. Swipe to delete; hold and drag to reorder.")
         }
     }
 

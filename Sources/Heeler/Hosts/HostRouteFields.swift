@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// The sections that edit one route (ADR 0022): its Overlay Network, the
-/// Host's address and port, and an optional Jump Host. A Host with one route
-/// shows them inline in its form; with more, each route has its own page.
+/// Host's address and port, and an optional Jump Host. Each route has its own
+/// page, opened from the Host form's Routes list.
 struct HostRouteFields: View {
     @Binding var route: HostRouteDraft
     /// Steers the Jump Host footer's credential requirement.
@@ -232,18 +232,23 @@ enum HostRoutePage: Hashable {
 /// Add Route's page. The route is kept apart from the Host until Save, so
 /// going Back adds nothing.
 struct NewHostRouteView: View {
-    @Binding var draft: HostDraft
+    let authMethod: Host.AuthMethod
     let otherHosts: [Host]
+    /// Offers Cancel, where the page leads a sheet rather than a push.
+    var showsCancel = false
+    /// Keeps the new route; a throw keeps the page open and says so.
+    let onSave: (HostRouteDraft) throws -> Void
 
     @State private var route = HostRouteDraft()
     @State private var isChoosingOverlayPeer = false
+    @State private var saveFailed = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         Form {
             HostRouteFields(
                 route: $route,
-                authMethod: draft.authMethod,
+                authMethod: authMethod,
                 isChoosingOverlayPeer: $isChoosingOverlayPeer)
         }
         .overlayPeerPicker(
@@ -254,13 +259,25 @@ struct NewHostRouteView: View {
         .navigationTitle("New Route")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if showsCancel {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
-                    draft.routes.append(route)
-                    dismiss()
+                    do {
+                        try onSave(route)
+                        dismiss()
+                    } catch {
+                        saveFailed = true
+                    }
                 }
                 .disabled(!route.isValid)
             }
+        }
+        .alert("Could not save the route", isPresented: $saveFailed) {
+            Button("OK", role: .cancel) {}
         }
     }
 }
@@ -320,25 +337,35 @@ struct HostRouteFormView: View {
 /// A route's row in a Host form's Routes list.
 struct HostRouteRow: View {
     let route: HostRouteDraft
-    let index: Int
 
     @Environment(OverlayNetworkStore.self) private var overlayNetworks: OverlayNetworkStore?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .foregroundStyle(route.isValid ? Color.primary : Color.red)
+        HostRouteLabel(
+            kind: HostRouteKind(
+                usesOverlay: route.overlayNetworkID != nil, usesJumpHost: route.usesJumpHost)
+        ) {
+            if address.isEmpty {
+                // A new Host's first route, not yet filled in: an invitation,
+                // not an error.
+                Text("Set Address")
+                    .foregroundStyle(.tint)
+            } else {
+                Text(title)
+                    .font(.body.monospaced())
+                    .foregroundStyle(route.isValid ? Color.primary : Color.red)
+            }
+        } subtitle: {
             Text(subtitle)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
         }
-        .accessibilityElement(children: .combine)
+    }
+
+    private var address: String {
+        route.address.trimmingCharacters(in: .whitespaces)
     }
 
     private var title: String {
-        let address = route.address.trimmingCharacters(in: .whitespaces)
-        guard !address.isEmpty else { return "Route \(index + 1): no address" }
-        return route.port == "22" ? address : "\(address):\(route.port)"
+        route.port == "22" ? address : "\(address):\(route.port)"
     }
 
     private var subtitle: String {
@@ -351,5 +378,95 @@ struct HostRouteRow: View {
             parts.append("via \(route.jumpAddress.trimmingCharacters(in: .whitespaces))")
         }
         return parts.isEmpty ? "Direct" : parts.joined(separator: " · ")
+    }
+}
+
+/// How a route reaches its Host, as its row's icon shows it. An Overlay
+/// Network leads: it carries the first hop, Jump Host or not.
+enum HostRouteKind: Equatable {
+    case direct
+    case overlay
+    case jumpHost
+
+    init(usesOverlay: Bool, usesJumpHost: Bool) {
+        self = usesOverlay ? .overlay : usesJumpHost ? .jumpHost : .direct
+    }
+
+    init(_ route: HostRoute) {
+        self.init(usesOverlay: route.overlayNetworkID != nil, usesJumpHost: route.usesJumpHost)
+    }
+
+    var systemImage: String {
+        switch self {
+        case .direct: "wifi"
+        case .overlay: "point.3.connected.trianglepath.dotted"
+        case .jumpHost: "arrow.triangle.branch"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .direct: .blue
+        case .overlay: .indigo
+        case .jumpHost: .orange
+        }
+    }
+}
+
+/// A route's row content: its kind's icon, then the address over a
+/// subtitle, and an optional trailing tag.
+struct HostRouteLabel<Title: View, Subtitle: View, Trailing: View>: View {
+    let kind: HostRouteKind
+    @ViewBuilder let title: Title
+    @ViewBuilder let subtitle: Subtitle
+    @ViewBuilder let trailing: Trailing
+
+    @ScaledMetric(relativeTo: .body) private var iconSize = 30
+
+    init(
+        kind: HostRouteKind,
+        @ViewBuilder title: () -> Title,
+        @ViewBuilder subtitle: () -> Subtitle,
+        @ViewBuilder trailing: () -> Trailing = { EmptyView() }
+    ) {
+        self.kind = kind
+        self.title = title()
+        self.subtitle = subtitle()
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: kind.systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(kind.tint)
+                .frame(width: iconSize, height: iconSize)
+                .background(kind.tint.opacity(0.14), in: .rect(cornerRadius: 8))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                title
+                subtitle
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            trailing
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A short capsule beside a route: In Use, Failed.
+struct HostRouteTag: View {
+    let text: String
+    let tint: Color
+
+    var body: some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(tint.opacity(0.14), in: .capsule)
     }
 }

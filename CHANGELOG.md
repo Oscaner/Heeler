@@ -18,6 +18,11 @@ Entries reference the pull request that made the change.
   is trusted once for all of its routes: another machine answering one of
   its addresses is refused, and adding an overlay address no longer asks to
   confirm the key again. (#437)
+- See which route a Host is connected through. Its detail page opens with
+  the connection's status, lists every route with the one in use marked, and
+  when no route reaches the Host shows why each one failed. Add Route from
+  the detail page too; Edit Host lists routes as rows that each open their
+  own page.
 - Reach a Host through Tailscale, ZeroTier, or EasyTier without turning on a
   VPN. Add a network in Settings › Overlay Networks, then choose it under
   Network when editing the Host. Heeler joins the network itself while it is
