@@ -211,6 +211,55 @@ struct SSHRoute: Sendable {
         jump == nil && overlay == nil
     }
 
+    /// Whether the address may name another machine once the device is on
+    /// another network: a direct route to a loopback, private, link-local or
+    /// unique-local address, or to a name only a local network resolves. A
+    /// changed host key there can be that other machine, not an attack
+    /// (ADR 0022). Overlay, CGNAT, public addresses and DNS names name the
+    /// same machine wherever the device is.
+    var mayNameAnotherMachine: Bool {
+        isDirect && Self.isLocallyScoped(host)
+    }
+
+    private static let localNameSuffixes = [
+        ".local", ".lan", ".home", ".home.arpa", ".internal", ".localdomain",
+    ]
+
+    static func isLocallyScoped(_ address: String) -> Bool {
+        var host = address.trimmingCharacters(in: .whitespaces).lowercased()
+        if host.hasPrefix("["), host.hasSuffix("]") {
+            host = String(host.dropFirst().dropLast())
+        }
+        if let zone = host.firstIndex(of: "%") {
+            host = String(host[..<zone])
+        }
+        if host.hasSuffix(".") {
+            host.removeLast()
+        }
+
+        var ipv4 = in_addr()
+        if inet_pton(AF_INET, host, &ipv4) == 1 {
+            let value = UInt32(bigEndian: ipv4.s_addr)
+            let first = value >> 24
+            let second = (value >> 16) & 0xff
+            return first == 10 || first == 127
+                || (first == 172 && (16...31).contains(second))
+                || (first == 192 && second == 168)
+                || (first == 169 && second == 254)
+        }
+        var ipv6 = in6_addr()
+        if inet_pton(AF_INET6, host, &ipv6) == 1 {
+            let bytes = withUnsafeBytes(of: ipv6) { Array($0) }
+            let isLoopback = bytes.dropLast().allSatisfy { $0 == 0 } && bytes.last == 1
+            let isUniqueLocal = bytes[0] & 0xfe == 0xfc
+            let isLinkLocal = bytes[0] == 0xfe && bytes[1] & 0xc0 == 0x80
+            return isLoopback || isUniqueLocal || isLinkLocal
+        }
+        // A single label resolves through the local search domain or mDNS.
+        guard host.contains(".") else { return true }
+        return localNameSuffixes.contains { host.hasSuffix($0) }
+    }
+
     /// How a failure names this route: `10.0.0.5`, `100.64.0.5 over
     /// Tailscale`, `127.0.0.1:2222 via vps.example`, `127.0.0.1:2222 via
     /// vps.example:2022`.

@@ -229,18 +229,20 @@ final class HostOnboardingStore {
             pendingHostKeyReplacement = HostKeyReplacement(known: known, presented: presented)
         case TransportError.noRouteReached(let failures):
             // Every route reaches the same Host, so a changed key is offered
-            // only when the routes that saw one agree on it. A direct route's
-            // LAN address may be another machine elsewhere, so when any other
-            // route saw a changed key, only those routes are asked.
+            // only when the routes that saw one agree on it. A LAN address may
+            // be another machine elsewhere, so when any other route saw a
+            // changed key, only those routes are asked.
             let mismatches = failures.compactMap {
-                failure -> (isDirect: Bool, replacement: HostKeyReplacement)? in
+                failure -> (mayNameAnotherMachine: Bool, replacement: HostKeyReplacement)? in
                 guard case let .hostKeyMismatch(known, presented) = failure.error else {
                     return nil
                 }
-                return (failure.isDirect, HostKeyReplacement(known: known, presented: presented))
+                return (
+                    failure.mayNameAnotherMachine,
+                    HostKeyReplacement(known: known, presented: presented))
             }
-            let indirect = mismatches.filter { !$0.isDirect }
-            let candidates = (indirect.isEmpty ? mismatches : indirect).map(\.replacement)
+            let sameMachine = mismatches.filter { !$0.mayNameAnotherMachine }
+            let candidates = (sameMachine.isEmpty ? mismatches : sameMachine).map(\.replacement)
             guard let first = candidates.first, candidates.allSatisfy({ $0 == first }) else {
                 return
             }

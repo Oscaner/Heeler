@@ -531,9 +531,9 @@ struct NoRouteReachedTests {
 
     @Test func retryableWhileAnyRouteMayComeBack() {
         let error = TransportError.noRouteReached([
-            RouteFailure(route: "192.168.1.5", isDirect: true, error: mismatch),
+            RouteFailure(route: "192.168.1.5", mayNameAnotherMachine: true, error: mismatch),
             RouteFailure(
-                route: "100.64.0.5 over Home", isDirect: false,
+                route: "100.64.0.5 over Home", mayNameAnotherMachine: false,
                 error: .overlayFailed(network: "Home", reason: .timedOut)),
         ])
 
@@ -549,8 +549,8 @@ struct NoRouteReachedTests {
     /// only timed out, exactly as it is for a Host with one route.
     @Test func aChangedKeyOnAnOverlayRouteStopsTheRace() {
         let error = TransportError.noRouteReached([
-            RouteFailure(route: "192.168.1.5", isDirect: true, error: .timedOut),
-            RouteFailure(route: "100.64.0.5 over Home", isDirect: false, error: mismatch),
+            RouteFailure(route: "192.168.1.5", mayNameAnotherMachine: true, error: .timedOut),
+            RouteFailure(route: "100.64.0.5 over Home", mayNameAnotherMachine: false, error: mismatch),
         ])
 
         #expect(error.isHostKeySecurityFailure)
@@ -569,14 +569,53 @@ struct NoRouteReachedTests {
     @Test func aChangedKeyBehindOrAtAJumpHostStopsTheRace() {
         for failure in [mismatch, .jumpHostFailed(mismatch)] {
             let error = TransportError.noRouteReached([
-                RouteFailure(route: "192.168.1.5", isDirect: true, error: .timedOut),
+                RouteFailure(route: "192.168.1.5", mayNameAnotherMachine: true, error: .timedOut),
                 RouteFailure(
-                    route: "127.0.0.1:2222 via vps.example", isDirect: false, error: failure),
+                    route: "127.0.0.1:2222 via vps.example", mayNameAnotherMachine: false, error: failure),
             ])
 
             #expect(error.isHostKeySecurityFailure)
             #expect(!error.isRetryable)
         }
+    }
+
+    /// A public address or DNS name answers as the same machine wherever
+    /// the device is, so a direct route to one is held to its key.
+    @Test func aChangedKeyAtAPublicDirectAddressStopsTheRace() {
+        let error = TransportError.noRouteReached([
+            RouteFailure(route: "192.168.1.5", mayNameAnotherMachine: true, error: .timedOut),
+            RouteFailure(route: "box.example", mayNameAnotherMachine: false, error: mismatch),
+        ])
+
+        #expect(error.isHostKeySecurityFailure)
+        #expect(!error.isRetryable)
+        #expect(error.presentation.summary == "The host key changed")
+    }
+
+    @Test func onlyADirectRouteToALocalAddressMayNameAnotherMachine() {
+        let local = [
+            "192.168.1.5", "10.0.0.5", "172.16.0.1", "172.31.255.1", "127.0.0.1",
+            "169.254.10.1", "::1", "fd12:3456::1", "fe80::1%en0", "[fe80::1]", "nas",
+            "localhost", "nas.local", "nas.local.", "box.home.arpa", "box.lan", "box.internal",
+        ]
+        let sameMachine = [
+            "172.32.0.1", "100.64.0.5", "203.0.113.5", "2001:db8::1", "box.example",
+            "vps.example.com",
+        ]
+        for address in local {
+            #expect(SSHRoute(host: address, port: 22).mayNameAnotherMachine, "\(address)")
+        }
+        for address in sameMachine {
+            #expect(!SSHRoute(host: address, port: 22).mayNameAnotherMachine, "\(address)")
+        }
+
+        let jump = SSHJumpSettings(
+            host: "vps.example", port: 22, username: "dev", credentials: .password("x"))
+        let overlay = OverlayRoute(networkName: "Home") { _, _, _ in
+            throw TransportError.timedOut
+        }
+        #expect(!SSHRoute(host: "192.168.1.5", port: 22, jump: jump).mayNameAnotherMachine)
+        #expect(!SSHRoute(host: "192.168.1.5", port: 22, overlay: overlay).mayNameAnotherMachine)
     }
 
     @Test func aRouteNamesItsJumpHostPort() {
@@ -590,8 +629,8 @@ struct NoRouteReachedTests {
 
     @Test func stopsWhenNoRouteCanRecoverOnItsOwn() {
         let error = TransportError.noRouteReached([
-            RouteFailure(route: "192.168.1.5", isDirect: true, error: mismatch),
-            RouteFailure(route: "100.64.0.5", isDirect: true, error: mismatch),
+            RouteFailure(route: "192.168.1.5", mayNameAnotherMachine: true, error: mismatch),
+            RouteFailure(route: "100.64.0.5", mayNameAnotherMachine: false, error: mismatch),
         ])
 
         #expect(!error.isRetryable)
@@ -600,9 +639,9 @@ struct NoRouteReachedTests {
 
     @Test func presentationNamesEachRoute() {
         let error = TransportError.noRouteReached([
-            RouteFailure(route: "192.168.1.5", isDirect: true, error: .timedOut),
+            RouteFailure(route: "192.168.1.5", mayNameAnotherMachine: true, error: .timedOut),
             RouteFailure(
-                route: "127.0.0.1:2222 via vps.example", isDirect: false,
+                route: "127.0.0.1:2222 via vps.example", mayNameAnotherMachine: false,
                 error: .authenticationFailed),
         ])
 
@@ -616,9 +655,9 @@ struct NoRouteReachedTests {
     @Test func preflightGivesEachRouteItsOwnHint() throws {
         let report = PreflightReport.failure(
             .noRouteReached([
-                RouteFailure(route: "192.168.1.5", isDirect: true, error: .timedOut),
+                RouteFailure(route: "192.168.1.5", mayNameAnotherMachine: true, error: .timedOut),
                 RouteFailure(
-                    route: "100.64.0.5 over Home", isDirect: false,
+                    route: "100.64.0.5 over Home", mayNameAnotherMachine: false,
                     error: .overlayFailed(network: "Home", reason: .signedOut)),
             ]),
             authMethod: .deviceKey)
@@ -638,9 +677,9 @@ struct NoRouteReachedTests {
     @Test func aRouteWaitingForSignInOffersIt() throws {
         let url = try #require(URL(string: "https://login.tailscale.com/a/1"))
         let error = TransportError.noRouteReached([
-            RouteFailure(route: "192.168.1.5", isDirect: true, error: .timedOut),
+            RouteFailure(route: "192.168.1.5", mayNameAnotherMachine: true, error: .timedOut),
             RouteFailure(
-                route: "devbox over Home", isDirect: false,
+                route: "devbox over Home", mayNameAnotherMachine: false,
                 error: .overlayFailed(network: "Home", reason: .loginRequired(url))),
         ])
 

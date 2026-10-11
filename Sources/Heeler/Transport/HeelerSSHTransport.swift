@@ -435,7 +435,8 @@ actor HeelerSSHTransport: Transport {
             throw TransportError.noRouteReached(
                 zip(routes, failure.failures).map { route, error in
                     RouteFailure(
-                        route: route.label, isDirect: route.isDirect, error: mapConnect(error))
+                        route: route.label, mayNameAnotherMachine: route.mayNameAnotherMachine,
+                        error: mapConnect(error))
                 })
         } catch {
             throw TransportError.cancelled

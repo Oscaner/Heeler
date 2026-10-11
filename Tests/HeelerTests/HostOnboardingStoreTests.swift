@@ -335,11 +335,11 @@ struct HostOnboardingStoreTests {
             outcome: .connectFails(
                 .noRouteReached([
                     RouteFailure(
-                        route: "192.168.1.5", isDirect: true,
+                        route: "192.168.1.5", mayNameAnotherMachine: true,
                         error: .hostKeyMismatch(known: known, presented: presented)),
-                    RouteFailure(route: "100.64.0.5 over Home", isDirect: false, error: .timedOut),
+                    RouteFailure(route: "100.64.0.5 over Home", mayNameAnotherMachine: false, error: .timedOut),
                     RouteFailure(
-                        route: "box.example", isDirect: true,
+                        route: "box.example", mayNameAnotherMachine: false,
                         error: .hostKeyMismatch(known: known, presented: presented)),
                 ])))
 
@@ -356,12 +356,12 @@ struct HostOnboardingStoreTests {
             outcome: .connectFails(
                 .noRouteReached([
                     RouteFailure(
-                        route: "192.168.1.5", isDirect: true,
+                        route: "100.64.0.5 over Home", mayNameAnotherMachine: false,
                         error: .hostKeyMismatch(
                             known: known,
                             presented: HostKeyFingerprint(digest: Data(repeating: 2, count: 32)))),
                     RouteFailure(
-                        route: "box.example", isDirect: true,
+                        route: "box.example", mayNameAnotherMachine: false,
                         error: .hostKeyMismatch(
                             known: known,
                             presented: HostKeyFingerprint(digest: Data(repeating: 3, count: 32)))),
@@ -385,12 +385,12 @@ struct HostOnboardingStoreTests {
             outcome: .connectFails(
                 .noRouteReached([
                     RouteFailure(
-                        route: "192.168.1.5", isDirect: true,
+                        route: "192.168.1.5", mayNameAnotherMachine: true,
                         error: .hostKeyMismatch(
                             known: known,
                             presented: HostKeyFingerprint(digest: Data(repeating: 2, count: 32)))),
                     RouteFailure(
-                        route: "100.64.0.5 over Home", isDirect: false,
+                        route: "100.64.0.5 over Home", mayNameAnotherMachine: false,
                         error: .hostKeyMismatch(known: known, presented: overlayKey)),
                 ])))
 

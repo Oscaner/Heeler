@@ -162,9 +162,9 @@ extension TransportError {
         case .hostKeyMismatch: true
         case .jumpHostFailed(let underlying): underlying.isHostKeySecurityFailure
         // A LAN address answered by another machine away from home is
-        // expected while another route is down, so a direct route's changed
-        // key counts only when every route failed on its key. Any other
-        // route's changed key counts on its own.
+        // expected while another route is down, so its changed key counts
+        // only when every route failed on its key. Any other route's changed
+        // key counts on its own.
         case .noRouteReached(let failures):
             (!failures.isEmpty && failures.allSatisfy(\.error.isHostKeySecurityFailure))
                 || failures.contains(where: \.isHostKeySecurityFailure)

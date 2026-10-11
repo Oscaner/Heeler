@@ -1101,18 +1101,18 @@ indirect enum TransportError: Error, Sendable, Equatable {
 struct RouteFailure: Sendable, Equatable {
     /// The route as `SSHRoute.label` names it.
     let route: String
-    /// Whether the route dials the Host over the device's own network with
-    /// no Jump Host (`SSHRoute.isDirect`). Only such an address can name
-    /// another machine on another network.
-    let isDirect: Bool
+    /// Whether the route's address may name another machine on the
+    /// device's current network (`SSHRoute.mayNameAnotherMachine`).
+    let mayNameAnotherMachine: Bool
     let error: TransportError
 
     /// A changed host key on a route whose address names the same machine
-    /// wherever the device is: an Overlay Network address, or one resolved
-    /// by a Jump Host. A direct route's changed key can be a LAN address
-    /// answered by another machine away from home, so it is excused.
+    /// wherever the device is: an Overlay Network address, one resolved by a
+    /// Jump Host, or a public address or DNS name. A LAN address can be
+    /// answered by another machine away from home, so its changed key is
+    /// excused.
     var isHostKeySecurityFailure: Bool {
-        !isDirect && error.isHostKeySecurityFailure
+        !mayNameAnotherMachine && error.isHostKeySecurityFailure
     }
 }
 

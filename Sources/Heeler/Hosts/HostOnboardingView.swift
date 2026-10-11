@@ -534,7 +534,9 @@ enum HostOnboardingConsoleRecovery {
         // cannot reach another machine.
         case .noRouteReached(let failures):
             (!failures.isEmpty && failures.allSatisfy { isHostKeyTrustFailure($0.error) })
-                || failures.contains { !$0.isDirect && isHostKeyTrustFailure($0.error) }
+                || failures.contains {
+                    !$0.mayNameAnotherMachine && isHostKeyTrustFailure($0.error)
+                }
         default:
             false
         }

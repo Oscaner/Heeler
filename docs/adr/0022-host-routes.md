@@ -37,12 +37,15 @@ Notification Registration, Live Activities, and pins in two.
   - A Host with one Route connects exactly as before and reports its failure
     unchanged. When every one of several Routes fails, the failure is
     `TransportError.noRouteReached`, listing each Route's own failure. A
-    changed host key on a Route through an Overlay Network or a Jump Host
-    is a host-key security failure on its own: those addresses name the
-    same machine wherever the device is. It leads the presentation and
+    changed host key is a host-key security failure on its own when the
+    Route's address names the same machine wherever the device is: a Route
+    through an Overlay Network or a Jump Host, or a direct Route to a
+    public or CGNAT address or a DNS name. It leads the presentation and
     stops automatic retries, as it does for a Host with one Route. A direct
-    Route's changed key is excused, since its LAN address may be another
-    machine on another network; it counts only when every Route failed on
+    Route to a local address (loopback, private, link-local or unique-local,
+    or a single-label, `.local`, `.lan`, `.home`, `.home.arpa`, `.internal`
+    or `.localdomain` name) may be another machine on another network, so
+    its changed key is excused; it counts only when every Route failed on
     its key. Otherwise the failure is retryable when any Route's is.
 - The Host's key is trusted by Host, not by the endpoint dialled. Every
   Route must present the key the Host was first confirmed with, so a LAN
@@ -57,9 +60,9 @@ Notification Registration, Live Activities, and pins in two.
   loses the race is withdrawn.
 - When several Routes fail on a changed host key, the onboarding screen
   offers to trust the new key only when the Routes that saw one agree on
-  it. If any Route through an Overlay Network or a Jump Host saw a changed
-  key, only those Routes are compared; a direct Route's disagreement is a
-  LAN address answered elsewhere.
+  it. If any Route whose address names the same machine everywhere saw a
+  changed key, only those Routes are compared; a local address's
+  disagreement is another machine answering elsewhere.
 - Pairing makes the address that answered the first Route and every other
   candidate address in the Pairing Code a Route of its own.
 - Network changes do not switch Routes on a live connection. The next
