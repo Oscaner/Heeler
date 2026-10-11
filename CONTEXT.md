@@ -5,20 +5,31 @@ A native iOS agent console for herdr. One context: the app. Terms owned by herdr
 ## Language
 
 **Host**:
-A remote machine reachable over SSH that runs a herdr server. The unit a user adds, names, and authenticates against. Its first hop goes over the device's own network unless the Host names an Overlay Network.
+A remote machine reachable over SSH that runs a herdr server. The unit a user adds, names, and authenticates against. It is reached on one or more Routes, and its host key is trusted once for all of them.
 _Avoid_: server, machine, connection
+
+**Route**:
+One way to reach a Host: an address and port, optionally resolved from a Jump
+Host, with the first hop optionally carried by an Overlay Network. A Host lists
+its Routes in order; the first is its primary Route, the address shown for it.
+Every connection races the Host's Routes and keeps the first that reaches the
+Host, Routes over the device's own network a moment ahead of the rest — no
+rule picks a Route by Wi-Fi name or location (ADR 0022). A Route that reaches a
+machine presenting another key fails; it is not the Host.
+_Avoid_: path, connection, profile
 
 **Jump Host**:
 An SSH endpoint that forwards a Host connection when the Host is not directly
 reachable from the device. The Host's address and port are resolved from the
 Jump Host, normally through a loopback-only reverse tunnel. The app authenticates
-and verifies host keys independently at both hops.
+and verifies host keys independently at both hops. A Jump Host belongs to one
+Route; other Routes of the same Host may reach it without one.
 _Avoid_: bastion, proxy server
 
 **Overlay Network**:
 A Tailscale, ZeroTier, or EasyTier network the user configures in Settings,
 which Heeler joins with a node running inside the app. It is not a system VPN
-and carries nothing but Heeler's own connections. A Host that names one dials
+and carries nothing but Heeler's own connections. A Route that names one dials
 its first hop through it: the Host itself, or its Jump Host when one is set,
 addressed by its overlay IP or name. Only the byte stream changes; SSH
 authentication, host-key trust, and every channel are the same as a direct
