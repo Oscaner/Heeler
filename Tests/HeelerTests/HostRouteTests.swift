@@ -188,34 +188,6 @@ struct HostDraftRouteTests {
         #expect(draft.isValid)
     }
 
-    @Test func addingARouteAppendsABlankOne() {
-        var draft = draft(addresses: ["192.168.1.5"])
-
-        let id = draft.addRoute()
-
-        #expect(draft.routes.map(\.id).last == id)
-        #expect(draft.routes.last?.address == "")
-        #expect(draft.routes.last?.port == "22")
-    }
-
-    @Test func leavingAnUntouchedNewRouteDiscardsIt() {
-        var draft = draft(addresses: ["192.168.1.5"])
-
-        let untouched = draft.addRoute()
-        draft.discardRouteIfBlank(id: untouched)
-        #expect(draft.routes.map(\.address) == ["192.168.1.5"])
-
-        let edited = draft.addRoute()
-        draft.routes[1].jumpAddress = "bastion.example"
-        draft.discardRouteIfBlank(id: edited)
-        #expect(draft.routes.map(\.id).last == edited)
-
-        var onlyRoute = HostDraft()
-        let id = onlyRoute.routes[0].id
-        onlyRoute.discardRouteIfBlank(id: id)
-        #expect(onlyRoute.routes.map(\.id) == [id])
-    }
-
     @Test func removingNeverLeavesAHostWithoutARoute() {
         var draft = draft(addresses: ["a", "b", "c"])
 

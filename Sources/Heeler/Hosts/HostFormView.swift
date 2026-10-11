@@ -21,8 +21,8 @@ struct HostFormView: View {
     @State private var isConfirmingRSAKeyReplacement = false
     @State private var deviceKeyReplacementError: String?
     @State private var rsaKeyReplacementError: String?
-    /// The route page on screen, for a Host with more than one route.
-    @State private var routePath: [HostRouteDraft.ID] = []
+    /// The route page on screen: Add Route's, or a listed route's.
+    @State private var routePath: [HostRoutePage] = []
     @State private var isChoosingOverlayPeer = false
     @FocusState private var isUsernameFocused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -60,8 +60,13 @@ struct HostFormView: View {
             ) { candidate, style in
                 draft.applyOverlayPeer(candidate, style: style)
             }
-            .navigationDestination(for: HostRouteDraft.ID.self) { routeID in
-                HostRouteFormView(draft: $draft, routeID: routeID, otherHosts: otherHosts)
+            .navigationDestination(for: HostRoutePage.self) { page in
+                switch page {
+                case .route(let routeID):
+                    HostRouteFormView(draft: $draft, routeID: routeID, otherHosts: otherHosts)
+                case .newRoute:
+                    NewHostRouteView(draft: $draft, otherHosts: otherHosts)
+                }
             }
             .navigationTitle(editing == nil ? "Add Host" : "Edit Host")
             .navigationBarTitleDisplayMode(.inline)
@@ -129,11 +134,6 @@ struct HostFormView: View {
                 }
             }
         }
-        .onChange(of: routePath) { previous, current in
-            for id in previous where !current.contains(id) {
-                draft.discardRouteIfBlank(id: id)
-            }
-        }
     }
 
     /// Split out of `body` so the type checker sees two smaller
@@ -185,7 +185,7 @@ struct HostFormView: View {
     private var routesSection: some View {
         Section {
             ForEach(Array(draft.routes.enumerated()), id: \.element.id) { index, route in
-                NavigationLink(value: route.id) {
+                NavigationLink(value: HostRoutePage.route(route.id)) {
                     HostRouteRow(route: route, index: index)
                 }
             }
@@ -204,7 +204,7 @@ struct HostFormView: View {
 
     private var addRouteButton: some View {
         Button {
-            routePath.append(draft.addRoute())
+            routePath.append(.newRoute)
         } label: {
             Label("Add Route", systemImage: "plus")
         }

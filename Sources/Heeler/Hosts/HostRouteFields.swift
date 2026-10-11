@@ -221,7 +221,51 @@ extension View {
     }
 }
 
-/// One route's own page, for a Host with more than one.
+/// A page pushed from a Host form.
+enum HostRoutePage: Hashable {
+    /// A listed route, edited in place like the rest of the form.
+    case route(HostRouteDraft.ID)
+    /// Add Route's page, whose route joins the Host only on Save.
+    case newRoute
+}
+
+/// Add Route's page. The route is kept apart from the Host until Save, so
+/// going Back adds nothing.
+struct NewHostRouteView: View {
+    @Binding var draft: HostDraft
+    let otherHosts: [Host]
+
+    @State private var route = HostRouteDraft()
+    @State private var isChoosingOverlayPeer = false
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Form {
+            HostRouteFields(
+                route: $route,
+                authMethod: draft.authMethod,
+                isChoosingOverlayPeer: $isChoosingOverlayPeer)
+        }
+        .overlayPeerPicker(
+            isPresented: $isChoosingOverlayPeer, route: route, otherHosts: otherHosts
+        ) { candidate, style in
+            route.applyOverlayPeer(candidate, style: style)
+        }
+        .navigationTitle("New Route")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    draft.routes.append(route)
+                    dismiss()
+                }
+                .disabled(!route.isValid)
+            }
+        }
+    }
+}
+
+/// One listed route's own page, for a Host with more than one.
 struct HostRouteFormView: View {
     @Binding var draft: HostDraft
     let routeID: HostRouteDraft.ID
