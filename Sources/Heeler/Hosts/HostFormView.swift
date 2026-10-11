@@ -275,9 +275,13 @@ struct HostFormView: View {
                 UIPasteboard.general.string = authorizedKeysLine
                 didCopyKeyLine = true
             } label: {
-                Label(
-                    didCopyKeyLine ? "Copied" : "Copy authorized_keys Line",
-                    systemImage: didCopyKeyLine ? "checkmark" : "doc.on.doc")
+                Label {
+                    Text(didCopyKeyLine ? "Copied" : "Copy authorized_keys Line")
+                } icon: {
+                    // The tall two-page glyph otherwise outgrows the text.
+                    Image(systemName: didCopyKeyLine ? "checkmark" : "doc.on.doc")
+                        .font(.footnote)
+                }
             }
         } else {
             Label(
@@ -306,9 +310,13 @@ struct HostFormView: View {
                 UIPasteboard.general.string = rsaPublicKeyLine
                 didCopyKeyLine = true
             } label: {
-                Label(
-                    didCopyKeyLine ? "Copied" : "Copy RSA Public Key",
-                    systemImage: didCopyKeyLine ? "checkmark" : "doc.on.doc")
+                Label {
+                    Text(didCopyKeyLine ? "Copied" : "Copy RSA Public Key")
+                } icon: {
+                    // The tall two-page glyph otherwise outgrows the text.
+                    Image(systemName: didCopyKeyLine ? "checkmark" : "doc.on.doc")
+                        .font(.footnote)
+                }
             }
         } else {
             Label(
