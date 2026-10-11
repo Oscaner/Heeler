@@ -43,12 +43,15 @@ struct OverlayNetworksSettingsView: View {
                             onOpen: { opened = OpenedNetwork(id: network.id) },
                             onSignIn: { opened = OpenedNetwork(id: network.id, startsOnAppear: true) }
                         )
+                        // No `.destructive` role: List would animate the row
+                        // out while the confirmation is still up.
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
+                            Button {
                                 pendingDeletion = network
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
+                            .tint(.red)
                         }
                     }
                 } footer: {
