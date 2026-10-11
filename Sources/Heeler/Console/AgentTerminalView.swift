@@ -956,7 +956,13 @@ struct AgentTerminalView: View {
                 } : nil,
             renameAgent: { isRenamingAgent = true },
             renameWorkspace: { isRenamingWorkspace = true },
-            closeAgent: { isConfirmingClose = true })
+            closeAgent: { isConfirmingClose = true },
+            backToConsole: { backToConsole() })
+    }
+
+    /// The edge swipe's destination, shared with the More menu's entry.
+    private func backToConsole() {
+        if let revealDetailSidebar { revealDetailSidebar() } else { dismiss() }
     }
 
     private func makeWorktreeStore(checkout: RepositoryCheckout) -> WorktreeDetailStore {
@@ -1025,9 +1031,7 @@ struct AgentTerminalView: View {
         // system's own swipe instead, which follows the finger.
         .overlay(alignment: .leading) {
             if !showsBackButton {
-                AgentEdgeBackGesture {
-                    if let revealDetailSidebar { revealDetailSidebar() } else { dismiss() }
-                }
+                AgentEdgeBackGesture { backToConsole() }
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {

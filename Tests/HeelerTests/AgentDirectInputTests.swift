@@ -98,10 +98,12 @@ struct AgentDirectInputTests {
             AgentActionMenuPolicy.composerAddSections == [.addAttachments])
         #expect(
             AgentActionMenuPolicy.composerMoreSections
-                == [.sessionTools, .agentLifecycle])
+                == [.navigation, .sessionTools, .agentLifecycle])
         #expect(
             AgentActionMenuPolicy.directInputMoreSections
-                == [.addAttachments, .sessionTools, .agentLifecycle])
+                == [.navigation, .addAttachments, .sessionTools, .agentLifecycle])
+        #expect(
+            AgentActionMenuSection.navigation.items == [.backToConsole])
         #expect(
             AgentActionMenuSection.addAttachments.items
                 == [.addImage, .addFile])
@@ -116,6 +118,7 @@ struct AgentDirectInputTests {
                 == AgentActionMenuSection.allCases.flatMap(\.items))
 
         let metadata: [(AgentActionMenuItem, String, String, Bool, Bool)] = [
+            (.backToConsole, "Back to Console", "chevron.left", false, false),
             (.addImage, "Add Image", "photo", false, true),
             (.addFile, "Add File", "doc", false, true),
             (.openTerminal, "Open Terminal", "apple.terminal", false, false),
@@ -138,7 +141,7 @@ struct AgentDirectInputTests {
 
     @Test func sharedActionMenuAvailabilityAndDispatchCoverAllGates() {
         enum Event: Equatable {
-            case addImage, addFile, openTerminal, changes, startAgent, skills, snippets
+            case back, addImage, addFile, openTerminal, changes, startAgent, skills, snippets
             case worktree, renameAgent, renameWorkspace, closeAgent
         }
         var events: [Event] = []
@@ -157,7 +160,8 @@ struct AgentDirectInputTests {
             showWorktreeDetails: nil,
             renameAgent: { events.append(.renameAgent) },
             renameWorkspace: { events.append(.renameWorkspace) },
-            closeAgent: { events.append(.closeAgent) })
+            closeAgent: { events.append(.closeAgent) },
+            backToConsole: { events.append(.back) })
         let busy = AgentComposerActions(
             canBegin: true,
             attachLinkCount: 0,
@@ -173,7 +177,8 @@ struct AgentDirectInputTests {
             showWorktreeDetails: { events.append(.worktree) },
             renameAgent: { events.append(.renameAgent) },
             renameWorkspace: { events.append(.renameWorkspace) },
-            closeAgent: { events.append(.closeAgent) })
+            closeAgent: { events.append(.closeAgent) },
+            backToConsole: { events.append(.back) })
         let ready = AgentComposerActions(
             canBegin: true,
             attachLinkCount: 0,
@@ -189,7 +194,8 @@ struct AgentDirectInputTests {
             showWorktreeDetails: { events.append(.worktree) },
             renameAgent: { events.append(.renameAgent) },
             renameWorkspace: { events.append(.renameWorkspace) },
-            closeAgent: { events.append(.closeAgent) })
+            closeAgent: { events.append(.closeAgent) },
+            backToConsole: { events.append(.back) })
 
         let availability: [(AgentActionMenuItem, AgentComposerActions, Bool, Bool)] = [
             (.addImage, gated, true, false),
@@ -211,6 +217,7 @@ struct AgentDirectInputTests {
             (.renameAgent, ready, true, true),
             (.renameWorkspace, ready, true, true),
             (.closeAgent, ready, true, true),
+            (.backToConsole, gated, true, true),
         ]
         for (item, actions, visible, enabled) in availability {
             #expect(AgentActionMenuPolicy.isVisible(item, actions: actions) == visible)
@@ -222,7 +229,7 @@ struct AgentDirectInputTests {
         }
         #expect(
             events == [
-                .addImage, .addFile, .openTerminal, .changes, .startAgent, .skills, .snippets,
+                .back, .addImage, .addFile, .openTerminal, .changes, .startAgent, .skills, .snippets,
                 .worktree, .renameAgent, .renameWorkspace, .closeAgent,
             ])
     }
@@ -248,7 +255,8 @@ struct AgentDirectInputTests {
             showWorktreeDetails: { steps.append(.action(.worktreeDetails)) },
             renameAgent: { steps.append(.action(.renameAgent)) },
             renameWorkspace: { steps.append(.action(.renameWorkspace)) },
-            closeAgent: { steps.append(.action(.closeAgent)) })
+            closeAgent: { steps.append(.action(.closeAgent)) },
+            backToConsole: { steps.append(.action(.backToConsole)) })
         let restoreComposerThen: (@escaping () -> Void) -> Void = { action in
             steps.append(.restore)
             action()
@@ -263,6 +271,7 @@ struct AgentDirectInputTests {
 
         #expect(
             steps == [
+                .action(.backToConsole),
                 .restore, .action(.addImage),
                 .restore, .action(.addFile),
                 .action(.openTerminal),
