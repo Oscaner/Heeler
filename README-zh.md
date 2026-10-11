@@ -78,6 +78,10 @@ herdr —— 不改服务器、不装额外软件包。SSH 服务器需允许 st
 
 Windows 原生 Host（herdr >= 0.9.3）通过 SSH 连接，需手动添加。
 
+如需通过 Tailscale、ZeroTier 或 EasyTier 访问机器，请参阅 [Overlay Network 设置教程](docs/guides/overlay-networks.md)。教程涵盖 macOS 安装、Mac 上不装 VPN 的 Tailscale 方案、Heeler 配置和连接验证。Heeler 在应用内加入这些网络，无需配置 iOS 系统 VPN；需要带有 **Settings > Overlay Networks** 的 Heeler 版本。
+
+[查看 Heeler 配置截图](docs/guides/overlay-networks.md#heeler-setup-screenshots)，包括 Tailscale、ZeroTier 以及 EasyTier 两种模式（Network 与 Config Server）的设置界面。
+
 不可直连的机器可以放在 SSH 跳板机之后：
 
 - [逐步搭建远程访问](docs/guides/vps-jump-host-setup.md)
