@@ -230,8 +230,9 @@ struct ShellTerminalView: View {
                         isReturning: isReturning,
                         isClosingTerminal: isClosingTerminal,
                         onBack: { Task { await goBack() } },
+                        isConfirmingClose: $isConfirmingClose,
                         onCloseTerminal: onCloseTerminal == nil
-                            ? nil : { isConfirmingClose = true }))
+                            ? nil : { closeTerminal() }))
             }
             .padding(.bottom, keyboardLayout.contentInset)
             // This dock is always present at the system keyboard's last
@@ -308,21 +309,6 @@ struct ShellTerminalView: View {
             .toolbarBackground(Color.clear, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar(.visible, for: .navigationBar)
-            .confirmationDialog(
-                "Close Terminal?", isPresented: $isConfirmingClose, titleVisibility: .visible
-            ) {
-                Button("Close Terminal", role: .destructive) {
-                    if backReturnsToAgent {
-                        armAgentKeyboardHandoffIfKeyboardIsUp(for: agentID)
-                    }
-                    onCloseTerminal?()
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text(
-                    "This closes the pane on the Host, ending anything running in it. "
-                        + "Going Back instead leaves it for desktop handoff.")
-            }
             .sheet(
                 isPresented: Binding(
                     get: { store.pendingPaste != nil },
@@ -460,6 +446,15 @@ struct ShellTerminalView: View {
         }
     }
 
+    /// Confirmed Close Terminal: the keyboard state goes back to the Agent
+    /// as it does on Back.
+    private func closeTerminal() {
+        if backReturnsToAgent {
+            armAgentKeyboardHandoffIfKeyboardIsUp(for: agentID)
+        }
+        onCloseTerminal?()
+    }
+
     /// Back leaves for the Agent (or the Console): the keyboard state goes
     /// with it, captured before the screen is torn down.
     private func goBack() async {
@@ -592,7 +587,12 @@ struct ShellTerminalMoreMenu: View {
     let isReturning: Bool
     let isClosingTerminal: Bool
     let onBack: () -> Void
-    /// Nil hides Close Terminal entirely (previews, tests).
+    /// The confirmation hangs off this button, so on iOS 26, where it is a
+    /// popover, its arrow points at the menu it came from rather than at
+    /// the middle of the screen.
+    @Binding var isConfirmingClose: Bool
+    /// Runs once Close Terminal is confirmed. Nil hides the entry entirely
+    /// (previews, tests).
     let onCloseTerminal: (() -> Void)?
 
     var body: some View {
@@ -602,8 +602,8 @@ struct ShellTerminalMoreMenu: View {
                     Label(backTitle, systemImage: "chevron.left")
                 }
                 .disabled(isReturning)
-                if let onCloseTerminal {
-                    Button(role: .destructive, action: onCloseTerminal) {
+                if onCloseTerminal != nil {
+                    Button(role: .destructive) { isConfirmingClose = true } label: {
                         Label("Close Terminal", systemImage: "trash")
                     }
                     .disabled(isClosingTerminal || isReturning)
@@ -620,6 +620,16 @@ struct ShellTerminalMoreMenu: View {
         }
         .accessibilityLabel("More")
         .accessibilityHint("Opens terminal actions")
+        .confirmationDialog(
+            "Close Terminal?", isPresented: $isConfirmingClose, titleVisibility: .visible
+        ) {
+            Button("Close Terminal", role: .destructive) { onCloseTerminal?() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "This closes the pane on the Host, ending anything running in it. "
+                    + "Going Back instead leaves it for desktop handoff.")
+        }
     }
 }
 
