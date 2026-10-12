@@ -473,7 +473,8 @@ struct HostStoreTests {
         #expect(message.contains("Notification Key") == state.deletesKey)
         #expect(
             message.contains(
-                "Heeler can't reach this Host to stop its notifications to this device.")
+                "Heeler can't reach this Host, so it may keep sending notifications to this "
+                    + "device. Connect to it first to stop them.")
                 == state.warns)
     }
 

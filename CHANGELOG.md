@@ -76,11 +76,12 @@ Entries reference the pull request that made the change.
 - Removing a Host now ends its Live Activity and forgets its Live Activity
   setting, and Heeler no longer keeps retrying Live Activity updates for the
   removed Host. (#444)
-- Removing a Host now stops its notifications to this device. While the
-  Host is connected, Heeler first takes this device off the Host's
-  notification list, then deletes the Host's Notification Key along with its
-  saved password. When the Host can't be reached, the confirmation says so,
-  and the Host is removed anyway. (#414)
+- Removing a connected Host now also stops its notifications to this
+  device: Heeler first takes this device off the Host's notification list,
+  then deletes the Host's Notification Key along with its saved password. If
+  the Host isn't connected, the confirmation says so and suggests connecting
+  first; a Host removed without being reached may keep sending this device
+  generic "Agent update" notifications. (#414)
 - Close Agent and Close Terminal now ask from the More button you tapped,
   instead of a bubble floating in the middle of the terminal. (#440)
 - Start Tailscale browser authorization with one Sign In button and reconnect automatically after returning from the browser. (#426)

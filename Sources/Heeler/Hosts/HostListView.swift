@@ -31,9 +31,11 @@ struct HostRemovalRequest: Equatable {
         if leavesNotificationsBehind {
             sentences.append(
                 hosts.count == 1
-                    ? "Heeler can't reach this Host to stop its notifications to this device."
-                    : "Heeler can't reach some of these Hosts to stop their notifications "
-                        + "to this device.")
+                    ? "Heeler can't reach this Host, so it may keep sending notifications "
+                        + "to this device. Connect to it first to stop them."
+                    : "Heeler can't reach some of these Hosts, so they may keep sending "
+                        + "notifications to this device. Connect to them first to stop "
+                        + "those notifications.")
         }
         sentences.append("This cannot be undone.")
         return sentences.joined(separator: " ")
