@@ -5,7 +5,13 @@ import { source } from '@/lib/source.ts';
 ---
 
 <Layout title="Page not found" description="This page does not exist on Heeler Docs." noindex>
-  <Docs tree={source.getPageTree()} pathname={Astro.url.pathname} params={{}} client:load>
+  <Docs
+    tree={source.getPageTree()}
+    pathname={Astro.url.pathname}
+    params={{}}
+    client:load
+    transition:persist="docs-shell"
+  >
     <main class="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-4 px-6 py-16">
       <h1 class="text-3xl font-semibold">Page not found</h1>
       <p class="text-fd-muted-foreground">

@@ -50,18 +50,17 @@ const ogImage = new URL('/logo.png', Astro.site);
         if (style === null) next.removeAttribute('style');
         else next.setAttribute('style', style);
       });
+      // Astro updates persisted island props, but not its static Astro slot.
+      // Refresh the article before the island reads its slots during the swap.
+      document.addEventListener('astro:before-swap', (event) => {
+        const selector = 'astro-island[data-astro-transition-persist="docs-shell"] astro-slot';
+        const current = document.querySelector(selector);
+        const next = event.newDocument.querySelector(selector);
+        if (current && next) current.innerHTML = next.innerHTML;
+      });
     </script>
   </head>
-  <!-- Persisting the body keeps the React shell (sidebar, nav, scroll
-       positions) mounted across navigations; Astro passes the new page's props
-       and content to the persisted island. A full reload would re-render the
-       sidebar and re-rasterize its text on every click. -->
-  <body
-    class="flex min-h-screen flex-col"
-    transition:persist
-    transition:animate="none"
-    transition:name="page-layout"
-  >
+  <body class="flex min-h-screen flex-col" transition:animate="none">
     <slot />
   </body>
 </html>

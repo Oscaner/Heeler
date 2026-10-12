@@ -9,6 +9,9 @@ Entries reference the pull request that made the change.
 
 ### Added
 
+- Read and search Heeler's connection guides on the new documentation site,
+  with navigation for overlay networks, Jump Hosts, Host Routes, and Windows
+  setup. (#442)
 - Give a Host more than one route — its LAN address for home, say, and an
   overlay network or Jump Host for everywhere else. Add Route in Edit Host;
   Heeler tries every route each time it connects and keeps the first that

@@ -47,7 +47,7 @@ export function Docs({ tree, pathname, params, page, children }: DocsProps) {
         githubUrl={githubRepo}
       >
         {page ? (
-          <DocsPage toc={page.toc}>
+          <DocsPage key={pathname} toc={page.toc}>
             <DocsTitle>{page.title}</DocsTitle>
             <DocsDescription>{page.description}</DocsDescription>
             <DocsBody>{children}</DocsBody>

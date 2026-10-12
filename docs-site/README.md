@@ -28,6 +28,19 @@ when a guide or `astro.config.mjs` changes. After editing the plugins in
 `src/lib/markdown.ts`, run `rm -rf node_modules/.astro` before building. CI
 always starts from a clean checkout.
 
+The `Docs` React island persists across client-side navigation, including the
+404 page. Astro refreshes its page props; `layout.astro` refreshes its static
+article slot before the swap, since persisted island slots are not updated by
+Astro. Keep persistence on the island, not on `<body>` or a wrapper.
+Only the page content is keyed by pathname, so page-specific TOC observers and
+state reset without remounting the sidebar, search, or theme provider.
+
+After changing navigation, serve the production build and check home → guide →
+another guide → Back, search-result navigation, and 404 → home. The sidebar DOM
+node must stay the same while the title, article, table of contents, active
+sidebar link, and "Edit on GitHub" destination update. Also check code copying,
+theme retention, and the mobile navigation drawer.
+
 ## Layout
 
 | Path | What it holds |
