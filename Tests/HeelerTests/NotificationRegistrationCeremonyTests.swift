@@ -99,6 +99,22 @@ struct NotificationRegistrationCeremonyTests {
         #expect(try keys.record(forHost: hostID) == nil)
     }
 
+    @Test func revokeDeletesOnlyOurEntryAndKeepsTheLocalKey() async throws {
+        let transport = ScriptedTransport()
+        await transport.setNotificationRegistration(
+            Data(#"{"v":1,"devices":[{"token":"ffff","key":"kk","env":"production"}]}"#.utf8))
+        let record = try await ceremony.register(
+            host: host, deviceToken: token, over: transport)
+
+        try await ceremony.revoke(host: host, deviceToken: token, over: transport)
+
+        let written = try #require(await transport.notificationRegistration)
+        let file = try NotificationRegistrationFile.decode(written)
+        #expect(!hasDevice(token.hex, in: file))
+        #expect(hasDevice("ffff", in: file))
+        #expect(try keys.record(forHost: hostID) == record)
+    }
+
     @Test func removeWithNoHostFileStillClearsTheLocalKeyWithoutWriting() async throws {
         let transport = ScriptedTransport()
         try keys.save(

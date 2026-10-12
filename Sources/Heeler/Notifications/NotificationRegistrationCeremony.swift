@@ -103,6 +103,20 @@ struct NotificationRegistrationCeremony: Sendable {
         deviceToken: APNSDeviceToken,
         over transport: any Transport
     ) async throws {
+        try await revoke(host: host, deviceToken: deviceToken, over: transport)
+        try keys.removeRecord(forHost: host.id)
+    }
+
+    /// The remote half of `remove`: drops the Host's entries for this device
+    /// from the registration file and keeps the local Notification Key
+    /// record. The file is replaced only when an entry left it, so a Host
+    /// whose entry another Host of the same session already took over
+    /// (#412) sees no write.
+    func revoke(
+        host: Host,
+        deviceToken: APNSDeviceToken,
+        over transport: any Transport
+    ) async throws {
         let owner = try registrationOwner(for: host, deviceToken: deviceToken)
         try await exclusively {
             guard let data = try await transport.readNotificationRegistration(), let owner
@@ -113,7 +127,6 @@ struct NotificationRegistrationCeremony: Sendable {
                 try await transport.replaceNotificationRegistration(try updated.encoded())
             }
         }
-        try keys.removeRecord(forHost: host.id)
     }
 
     /// Writes the normalized registration file (see
