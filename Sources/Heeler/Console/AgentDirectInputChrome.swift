@@ -233,6 +233,7 @@ struct AgentDirectInputChrome: View {
         .buttonStyle(TerminalKeyboardButtonStyle())
         .accessibilityLabel("More")
         .accessibilityHint("Opens Agent actions")
+        .agentCloseConfirmation(interactions.actions.closeConfirmation)
     }
 }
 
