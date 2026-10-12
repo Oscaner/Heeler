@@ -402,6 +402,50 @@ struct HostStoreTests {
         #expect(store.hosts.isEmpty)
     }
 
+    /// Two windows raised a confirmation for the same Host before either
+    /// confirmed: the second confirmation, while the first still waits on
+    /// the Host, neither repeats the removal nor ends it early.
+    @Test(.timeLimit(.minutes(1)))
+    func aSecondConfirmationOfAHostBeingRemovedDoesNothing() async throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        let store = HostStore(defaults: defaults, secrets: InMemorySecretStore())
+        let host = Host.fixture()
+        try store.add(host)
+        let first = HostRemovalStore(store: store)
+        let second = HostRemovalStore(store: store)
+        let steps = RemovalStepLog()
+        let hold = FirstRevokeHold()
+        let dependencies = HostRemovalDependencies(
+            revokeNotifications: { _ in
+                steps.append("revoke")
+                await hold.holdFirst()
+            },
+            didRemoveHost: { _ in steps.append("didRemove") })
+        first.requestRemoval([host.id], dependencies: dependencies)
+        second.requestRemoval([host.id], dependencies: dependencies)
+        let firstRequest = try #require(first.pendingRequest)
+        let secondRequest = try #require(second.pendingRequest)
+
+        let firstRemoval = Task {
+            await first.confirmRemoval(firstRequest, dependencies: dependencies)
+        }
+        await hold.untilHeld()
+        await second.confirmRemoval(secondRequest, dependencies: dependencies)
+
+        #expect(steps.entries == ["revoke"])
+        #expect(dependencies.inFlight.contains(host.id))
+        #expect(store.hosts == [host])
+
+        hold.release()
+        await firstRemoval.value
+
+        #expect(steps.entries == ["revoke", "didRemove"])
+        #expect(!dependencies.inFlight.contains(host.id))
+        #expect(store.hosts.isEmpty)
+        #expect(first.errorMessage == nil && second.errorMessage == nil)
+    }
+
     @Test(arguments: [
         (connected: false, keyed: true, deletesKey: true, warns: true),
         (connected: true, keyed: true, deletesKey: true, warns: false),
@@ -536,6 +580,33 @@ private final class RemovalStepLog {
 
     func append(_ entry: String) {
         entries.append(entry)
+    }
+}
+
+/// Suspends the first revoke until released; later ones return at once,
+/// so a repeated removal shows up as a second step instead of a hang.
+@MainActor
+private final class FirstRevokeHold {
+    private var isHolding = false
+    private var held: CheckedContinuation<Void, Never>?
+    private var heldWaiter: CheckedContinuation<Void, Never>?
+
+    func holdFirst() async {
+        guard !isHolding else { return }
+        isHolding = true
+        heldWaiter?.resume()
+        heldWaiter = nil
+        await withCheckedContinuation { held = $0 }
+    }
+
+    func untilHeld() async {
+        guard !isHolding else { return }
+        await withCheckedContinuation { heldWaiter = $0 }
+    }
+
+    func release() {
+        held?.resume()
+        held = nil
     }
 }
 
