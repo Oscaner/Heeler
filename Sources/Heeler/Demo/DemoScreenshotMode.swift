@@ -52,6 +52,7 @@
         @State private var bannerStore: AgentNotificationBannerStore
         @State private var liveActivities: HostLiveActivityCoordinator
         @State private var activity: AppActivityCoordinator
+        @State private var hostRemoval: HostRemovalDependencies
         @State private var diffLayout = DiffLayoutSettings(defaults: DemoScreenshotFixture.makeDefaults(), offersSideBySide: UIDevice.current.userInterfaceIdiom == .pad)
 
         init() {
@@ -71,6 +72,7 @@
             _bannerStore = State(initialValue: composition.bannerStore)
             _liveActivities = State(initialValue: composition.liveActivities)
             _activity = State(initialValue: composition.activity)
+            _hostRemoval = State(initialValue: composition.hostRemoval)
         }
 
         private var terminal: TerminalSettings {
@@ -97,11 +99,7 @@
             .preferredColorScheme(appearance.preferredColorScheme)
             .environment(\.diffLayoutSettings, diffLayout)
             .environment(\.hostOnboardingDependencies, DemoScreenshotFixture.onboardingDependencies)
-            .environment(
-                \.hostRemovalDependencies,
-                HostRemovalDependencies(didRemoveHost: { [liveActivities] id in
-                    liveActivities.forgetHost(id)
-                }))
+            .environment(\.hostRemovalDependencies, hostRemoval)
             .task {
                 console.setHosts(hosts.hosts)
                 notificationPreferences.setHosts(hosts.hosts)
@@ -133,6 +131,9 @@
         let bannerStore: AgentNotificationBannerStore
         let liveActivities: HostLiveActivityCoordinator
         let activity: AppActivityCoordinator
+        /// The app's removal over the demo stores: its Notification Keys are
+        /// volatile, so removing a demo Host never touches the Keychain.
+        let hostRemoval: HostRemovalDependencies
 
         static func make() -> DemoScreenshotComposition {
             let defaults = DemoScreenshotFixture.makeDefaults()
@@ -158,6 +159,19 @@
                 liveActivityPreferences.setEnabled(true, for: id)
             }
             let hosts = HostStore(volatileHosts: DemoScreenshotFixture.hosts)
+            let liveActivities = HostLiveActivityCoordinator(
+                controller: ActivityKitLiveActivityController(),
+                preferences: liveActivityPreferences,
+                transports: console,
+                deviceToken: { nil },
+                // The live catalog, so a demo removal leaves it before
+                // forgetHost runs, as in the app.
+                knownHostIDs: { [weak hosts] in Set(hosts?.hosts.map(\.id) ?? []) },
+                hostDisplayName: { [weak hosts] id in
+                    hosts?.hosts.first(where: { $0.id == id })?.displayName ?? ""
+                },
+                isAwaitingSnapshot: { _ in false },
+                connectionStatus: { _ in .connected })
             return DemoScreenshotComposition(
                 hosts: hosts,
                 console: console,
@@ -175,20 +189,11 @@
                     presentedAgent: { notificationRouter.path.last },
                     triggers: { _ in nil },
                     playSound: {}),
-                liveActivities: HostLiveActivityCoordinator(
-                    controller: ActivityKitLiveActivityController(),
-                    preferences: liveActivityPreferences,
-                    transports: console,
-                    deviceToken: { nil },
-                    // The live catalog, so a demo removal leaves it before
-                    // forgetHost runs, as in the app.
-                    knownHostIDs: { [weak hosts] in Set(hosts?.hosts.map(\.id) ?? []) },
-                    hostDisplayName: { [weak hosts] id in
-                        hosts?.hosts.first(where: { $0.id == id })?.displayName ?? ""
-                    },
-                    isAwaitingSnapshot: { _ in false },
-                    connectionStatus: { _ in .connected }),
-                activity: AppActivityCoordinator())
+                liveActivities: liveActivities,
+                activity: AppActivityCoordinator(),
+                hostRemoval: HostRemovalDependencies.app(
+                    console: console, notificationPreferences: notificationPreferences,
+                    liveActivities: liveActivities))
         }
     }
 

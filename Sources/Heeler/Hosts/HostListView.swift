@@ -3,6 +3,11 @@ import SwiftUI
 
 struct HostRemovalRequest: Equatable {
     let hosts: [Host]
+    /// Whether this device holds a Notification Key for any of the Hosts.
+    var deletesNotificationKey = false
+    /// Whether a Host with a Notification Key is not connected, so its
+    /// registration of this device cannot be revoked (#414).
+    var leavesNotificationsBehind = false
 
     var title: String {
         if hosts.count == 1, let host = hosts.first {
@@ -15,18 +20,102 @@ struct HostRemovalRequest: Equatable {
         hosts.count == 1 ? "Remove Host" : "Remove Hosts"
     }
 
-    let message =
-        "This permanently deletes the Host configuration and any saved password "
-        + "from the Keychain. This cannot be undone."
+    var message: String {
+        var sentences = [
+            deletesNotificationKey
+                ? "This permanently deletes the Host configuration, any saved password, "
+                    + "and the Notification Key from the Keychain."
+                : "This permanently deletes the Host configuration and any saved password "
+                    + "from the Keychain."
+        ]
+        if leavesNotificationsBehind {
+            sentences.append(
+                hosts.count == 1
+                    ? "Heeler can't reach this Host, so it may keep sending notifications "
+                        + "to this device. Connect to it first to stop them."
+                    : "Heeler can't reach some of these Hosts, so they may keep sending "
+                        + "notifications to this device. Connect to them first to stop "
+                        + "those notifications.")
+        }
+        sentences.append("This cannot be undone.")
+        return sentences.joined(separator: " ")
+    }
 }
 
 /// What a confirmed Host removal cleans up beyond the catalog entry and
 /// saved password `HostStore.remove` deletes (#414). The app wires it to its
-/// app-wide stores; previews and tests keep the no-op default.
+/// app-wide stores; previews and tests keep the no-op defaults.
 struct HostRemovalDependencies: Sendable {
+    /// The removals under way. App-owned, so a Hosts list rebuilt mid-removal
+    /// still shows them and another window cannot start the same one.
+    var inFlight = HostRemovalsInFlight()
+    /// Whether the Host's connection is up, for the confirmation's copy.
+    var isConnected: @MainActor @Sendable (Host.ID) -> Bool = { _ in false }
+    /// Whether this device holds a Notification Key for the Host.
+    var hasNotificationKey: @MainActor @Sendable (Host.ID) -> Bool = { _ in false }
+    /// Best effort and bounded: asks the Host to stop notifying this device.
+    /// Runs first, while the Host is still in the catalog and its connection
+    /// can still be borrowed; never throws.
+    var revokeNotifications: @MainActor @Sendable (Host) async -> Void = { _ in }
+    /// Deletes the Host's Notification Key. Runs before the catalog removal;
+    /// a throw keeps the Host.
+    var forgetNotificationKey: @MainActor @Sendable (Host.ID) throws -> Void = { _ in }
     /// Runs once per Host after its catalog removal succeeds, so the Host
     /// is already gone from `HostStore.hosts`. Not called when it fails.
     var didRemoveHost: @MainActor @Sendable (Host.ID) -> Void = { _ in }
+}
+
+extension HostRemovalDependencies {
+    /// The app's removal: the Host's own notification registration is
+    /// revoked over its live Console connection, its Notification Key goes
+    /// through the preferences store's key store (volatile in demo mode),
+    /// and once it leaves the catalog its Live Activity ends and its opt-in
+    /// goes with it.
+    @MainActor
+    static func app(
+        console: ConsoleStore,
+        notificationPreferences: NotificationPreferencesStore,
+        liveActivities: HostLiveActivityCoordinator,
+        revokeTimeout: Duration = .seconds(6)
+    ) -> HostRemovalDependencies {
+        HostRemovalDependencies(
+            isConnected: { [weak console] id in console?.hostStatuses[id] == .connected },
+            hasNotificationKey: { [weak notificationPreferences] id in
+                notificationPreferences?.hasNotificationKey(for: id) ?? false
+            },
+            revokeNotifications: { [weak console, weak notificationPreferences] host in
+                await notificationPreferences?.revokeRegistration(
+                    for: host, isConnected: console?.hostStatuses[host.id] == .connected,
+                    timeout: revokeTimeout)
+            },
+            forgetNotificationKey: { [weak notificationPreferences] id in
+                try notificationPreferences?.forgetNotificationKey(for: id)
+            },
+            didRemoveHost: { [weak liveActivities] id in
+                liveActivities?.forgetHost(id)
+            })
+    }
+}
+
+/// The Hosts whose confirmed removal has not finished yet.
+@MainActor
+@Observable
+final class HostRemovalsInFlight {
+    private(set) var hostIDs: Set<Host.ID> = []
+
+    nonisolated init() {}
+
+    func contains(_ id: Host.ID) -> Bool {
+        hostIDs.contains(id)
+    }
+
+    fileprivate func begin(_ ids: [Host.ID]) {
+        hostIDs.formUnion(ids)
+    }
+
+    fileprivate func end(_ ids: [Host.ID]) {
+        hostIDs.subtract(ids)
+    }
 }
 
 extension EnvironmentValues {
@@ -54,25 +143,46 @@ final class HostRemovalStore {
         self.store = store
     }
 
-    func requestRemoval(_ ids: [Host.ID]) {
+    func requestRemoval(
+        _ ids: [Host.ID],
+        dependencies: HostRemovalDependencies = HostRemovalDependencies()
+    ) {
         let requestedIDs = Set(ids)
-        let hosts = store.hosts.filter { requestedIDs.contains($0.id) }
+        let hosts = store.hosts.filter {
+            requestedIDs.contains($0.id) && !dependencies.inFlight.contains($0.id)
+        }
         guard !hosts.isEmpty else { return }
-        pendingRequest = HostRemovalRequest(hosts: hosts)
+        let keyed = hosts.filter { dependencies.hasNotificationKey($0.id) }
+        pendingRequest = HostRemovalRequest(
+            hosts: hosts,
+            deletesNotificationKey: !keyed.isEmpty,
+            leavesNotificationsBehind: keyed.contains { !dependencies.isConnected($0.id) })
     }
 
     func cancelRemoval() {
         pendingRequest = nil
     }
 
+    /// Removes each Host in turn: revoke its notifications while it can
+    /// still be reached, delete its Notification Key, then its catalog entry
+    /// and password, then whatever else it left behind. A failure stops
+    /// there and keeps that Host and the ones after it.
     func confirmRemoval(
         _ request: HostRemovalRequest,
         dependencies: HostRemovalDependencies = HostRemovalDependencies()
-    ) {
+    ) async {
         pendingRequest = nil
-        for host in request.hosts {
+        let inFlight = dependencies.inFlight
+        let hosts = request.hosts.filter { !inFlight.contains($0.id) }
+        inFlight.begin(hosts.map(\.id))
+        defer { inFlight.end(hosts.map(\.id)) }
+        for host in hosts {
+            await dependencies.revokeNotifications(host)
             do {
+                try dependencies.forgetNotificationKey(host.id)
                 try store.remove(host.id)
+            } catch HostStoreError.unknownHost {
+                // Already gone from the catalog: nothing left to keep.
             } catch {
                 errorMessage = "The Host could not be removed. Its saved credentials may still be in the Keychain."
                 return
@@ -326,7 +436,8 @@ struct HostListView: View {
                 presenting: removal.pendingRequest
             ) { request in
                 Button(request.actionTitle, role: .destructive) {
-                    removal.confirmRemoval(request, dependencies: removalDependencies)
+                    let dependencies = removalDependencies
+                    Task { await removal.confirmRemoval(request, dependencies: dependencies) }
                 }
                 Button("Cancel", role: .cancel) {
                     removal.cancelRemoval()
@@ -405,37 +516,50 @@ struct HostListView: View {
         let isRetrying =
             entry.presentation.offersRetry
             && (entry.presentation.isDialing || manualReconnectInFlightHostIDs.contains(host.id))
+        // Removal can wait on the Host for a few seconds; the row stays put
+        // but inert meanwhile.
+        let isRemoving = removalDependencies.inFlight.contains(host.id)
         // Every row is a link, so each one gets the chevron, press highlight
         // and pointer hover; a borderless Retry keeps its own target in it,
         // and VoiceOver offers it as one of the row's actions.
         NavigationLink(value: HostDetailDestination(hostID: host.id)) {
             HStack(spacing: 12) {
                 HostRowLabel(host: host, presentation: entry.presentation)
-                if entry.presentation.offersRetry {
+                if isRemoving {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityHidden(true)
+                } else if entry.presentation.offersRetry {
                     HostRetryButton(isBusy: isRetrying) {
                         if let retry = retryAction(for: host.id) { Task { await retry() } }
                     }
                 }
             }
         }
-        .accessibilityValue(isRetrying ? "Connecting" : "")
+        .disabled(isRemoving)
+        .accessibilityValue(isRemoving ? "Removing" : isRetrying ? "Connecting" : "")
         .listRowBackground(ListCard.fill)
         // Every removal asks first. No `.destructive` role: List would
         // animate the row out while the confirmation is still up.
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button {
-                removal.requestRemoval([host.id])
-            } label: {
-                Label("Remove", systemImage: "trash")
+            if !isRemoving {
+                Button {
+                    removal.requestRemoval([host.id], dependencies: removalDependencies)
+                } label: {
+                    Label("Remove", systemImage: "trash")
+                }
+                .tint(.red)
             }
-            .tint(.red)
         }
         .contextMenu {
-            Button("Edit", systemImage: "pencil") { editingHost = host }
-            Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(host) }
-            Button("Remove Host", systemImage: "trash", role: .destructive) {
-                removal.requestRemoval([host.id])
+            Group {
+                Button("Edit", systemImage: "pencil") { editingHost = host }
+                Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(host) }
+                Button("Remove Host", systemImage: "trash", role: .destructive) {
+                    removal.requestRemoval([host.id], dependencies: removalDependencies)
+                }
             }
+            .disabled(isRemoving)
         }
     }
 

@@ -127,10 +127,9 @@ final class HeelerAppModel {
             },
             rowLayout: { [weak console] id in console?.rowLayout(for: id) })
         self.liveActivities = liveActivities
-        // A removed Host's activity ends and its opt-in goes with it.
-        hostRemoval = HostRemovalDependencies(didRemoveHost: { [weak liveActivities] id in
-            liveActivities?.forgetHost(id)
-        })
+        hostRemoval = HostRemovalDependencies.app(
+            console: console, notificationPreferences: notificationPreferences,
+            liveActivities: liveActivities)
         // A Live Activity write that found no entry stays dirty; a fresh
         // registration is its cue to retry.
         notificationPreferences.onRegistered = { [weak liveActivities] _ in

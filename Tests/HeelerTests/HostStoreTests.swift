@@ -247,7 +247,7 @@ struct HostStoreTests {
         #expect(try store.password(for: host) == nil)
     }
 
-    @Test func removalRequestRequiresExplicitConfirmation() throws {
+    @Test func removalRequestRequiresExplicitConfirmation() async throws {
         let (defaults, cleanup) = try makeDefaults()
         defer { cleanup() }
         let secrets = InMemorySecretStore()
@@ -270,14 +270,14 @@ struct HostStoreTests {
         #expect(store.hosts == [host])
 
         removal.requestRemoval([host.id])
-        removal.confirmRemoval(try #require(removal.pendingRequest))
+        await removal.confirmRemoval(try #require(removal.pendingRequest))
 
         #expect(removal.pendingRequest == nil)
         #expect(store.hosts.isEmpty)
         #expect(try store.password(for: host) == nil)
     }
 
-    @Test func confirmedRemovalReportsEachHostOnceItLeavesTheCatalog() throws {
+    @Test func confirmedRemovalReportsEachHostOnceItLeavesTheCatalog() async throws {
         let (defaults, cleanup) = try makeDefaults()
         defer { cleanup() }
         let store = HostStore(defaults: defaults, secrets: InMemorySecretStore())
@@ -292,11 +292,190 @@ struct HostStoreTests {
         })
 
         removal.requestRemoval([first.id, second.id])
-        removal.confirmRemoval(try #require(removal.pendingRequest), dependencies: dependencies)
+        await removal.confirmRemoval(try #require(removal.pendingRequest), dependencies: dependencies)
 
         #expect(log.entries.map(\.id) == [first.id, second.id])
         #expect(log.entries.allSatisfy { !$0.wasStillInCatalog })
         #expect(store.hosts == [kept])
+    }
+
+    /// #414: the Host is revoked while it is still in the catalog (its
+    /// Console connection ends with it), and its key goes before the catalog
+    /// entry, so a key that cannot be deleted keeps the Host.
+    @Test func confirmedRemovalRevokesThenForgetsTheKeyThenLeavesTheCatalog() async throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        let store = HostStore(defaults: defaults, secrets: InMemorySecretStore())
+        let host = Host.fixture(name: "Workbox")
+        try store.add(host)
+        let removal = HostRemovalStore(store: store)
+        let steps = RemovalStepLog()
+        let inFlight = HostRemovalsInFlight()
+        let dependencies = HostRemovalDependencies(
+            inFlight: inFlight,
+            revokeNotifications: { host in
+                let inCatalog = store.hosts.contains(host)
+                steps.append("revoke inCatalog=\(inCatalog) inFlight=\(inFlight.contains(host.id))")
+            },
+            forgetNotificationKey: { id in
+                steps.append("forgetKey inCatalog=\(store.hosts.contains { $0.id == id })")
+            },
+            didRemoveHost: { id in
+                steps.append("didRemove inCatalog=\(store.hosts.contains { $0.id == id })")
+            })
+
+        removal.requestRemoval([host.id], dependencies: dependencies)
+        await removal.confirmRemoval(try #require(removal.pendingRequest), dependencies: dependencies)
+
+        #expect(
+            steps.entries == [
+                "revoke inCatalog=true inFlight=true",
+                "forgetKey inCatalog=true",
+                "didRemove inCatalog=false",
+            ])
+        #expect(store.hosts.isEmpty)
+        #expect(!inFlight.contains(host.id))
+        #expect(removal.errorMessage == nil)
+    }
+
+    @Test func aKeyThatCannotBeDeletedKeepsTheHost() async throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        let store = HostStore(defaults: defaults, secrets: InMemorySecretStore())
+        let host = Host.fixture(authMethod: .password)
+        try store.add(host, password: "hunter2")
+        let removal = HostRemovalStore(store: store)
+        let log = RemovedHostLog()
+        let dependencies = HostRemovalDependencies(
+            forgetNotificationKey: { _ in throw KeychainError.unexpectedStatus(-1) },
+            didRemoveHost: { id in log.entries.append((id, true)) })
+
+        removal.requestRemoval([host.id], dependencies: dependencies)
+        await removal.confirmRemoval(try #require(removal.pendingRequest), dependencies: dependencies)
+
+        #expect(store.hosts == [host])
+        #expect(try store.password(for: host) == "hunter2")
+        #expect(log.entries.isEmpty)
+        #expect(removal.errorMessage != nil)
+        #expect(!dependencies.inFlight.contains(host.id))
+    }
+
+    /// Another window finished removing the Host while this removal waited
+    /// on the Host: it is gone, which is what was asked for.
+    @Test func aHostAlreadyGoneFromTheCatalogCountsAsRemoved() async throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        let store = HostStore(defaults: defaults, secrets: InMemorySecretStore())
+        let host = Host.fixture()
+        try store.add(host)
+        let removal = HostRemovalStore(store: store)
+        let log = RemovedHostLog()
+        let dependencies = HostRemovalDependencies(
+            revokeNotifications: { host in try? store.remove(host.id) },
+            didRemoveHost: { id in log.entries.append((id, false)) })
+
+        removal.requestRemoval([host.id], dependencies: dependencies)
+        await removal.confirmRemoval(try #require(removal.pendingRequest), dependencies: dependencies)
+
+        #expect(store.hosts.isEmpty)
+        #expect(removal.errorMessage == nil)
+        #expect(log.entries.map(\.id) == [host.id])
+    }
+
+    @Test func aHostBeingRemovedCannotBeRequestedAgain() async throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        let store = HostStore(defaults: defaults, secrets: InMemorySecretStore())
+        let host = Host.fixture()
+        try store.add(host)
+        let removal = HostRemovalStore(store: store)
+        let other = HostRemovalStore(store: store)
+        var dependencies = HostRemovalDependencies()
+        dependencies.revokeNotifications = { [dependencies] host in
+            other.requestRemoval([host.id], dependencies: dependencies)
+        }
+
+        removal.requestRemoval([host.id], dependencies: dependencies)
+        await removal.confirmRemoval(try #require(removal.pendingRequest), dependencies: dependencies)
+
+        #expect(other.pendingRequest == nil)
+        #expect(store.hosts.isEmpty)
+    }
+
+    /// Two windows raised a confirmation for the same Host before either
+    /// confirmed: the second confirmation, while the first still waits on
+    /// the Host, neither repeats the removal nor ends it early.
+    @Test(.timeLimit(.minutes(1)))
+    func aSecondConfirmationOfAHostBeingRemovedDoesNothing() async throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        let store = HostStore(defaults: defaults, secrets: InMemorySecretStore())
+        let host = Host.fixture()
+        try store.add(host)
+        let first = HostRemovalStore(store: store)
+        let second = HostRemovalStore(store: store)
+        let steps = RemovalStepLog()
+        let hold = FirstRevokeHold()
+        let dependencies = HostRemovalDependencies(
+            revokeNotifications: { _ in
+                steps.append("revoke")
+                await hold.holdFirst()
+            },
+            didRemoveHost: { _ in steps.append("didRemove") })
+        first.requestRemoval([host.id], dependencies: dependencies)
+        second.requestRemoval([host.id], dependencies: dependencies)
+        let firstRequest = try #require(first.pendingRequest)
+        let secondRequest = try #require(second.pendingRequest)
+
+        let firstRemoval = Task {
+            await first.confirmRemoval(firstRequest, dependencies: dependencies)
+        }
+        await hold.untilHeld()
+        await second.confirmRemoval(secondRequest, dependencies: dependencies)
+
+        #expect(steps.entries == ["revoke"])
+        #expect(dependencies.inFlight.contains(host.id))
+        #expect(store.hosts == [host])
+
+        hold.release()
+        await firstRemoval.value
+
+        #expect(steps.entries == ["revoke", "didRemove"])
+        #expect(!dependencies.inFlight.contains(host.id))
+        #expect(store.hosts.isEmpty)
+        #expect(first.errorMessage == nil && second.errorMessage == nil)
+    }
+
+    @Test(arguments: [
+        (connected: false, keyed: true, deletesKey: true, warns: true),
+        (connected: true, keyed: true, deletesKey: true, warns: false),
+        (connected: false, keyed: false, deletesKey: false, warns: false),
+        (connected: true, keyed: false, deletesKey: false, warns: false),
+    ])
+    func removalCopyNamesTheNotificationKeyAndAnUnreachableHost(
+        _ state: (connected: Bool, keyed: Bool, deletesKey: Bool, warns: Bool)
+    ) throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        let store = HostStore(defaults: defaults, secrets: InMemorySecretStore())
+        let host = Host.fixture(name: "Workbox")
+        try store.add(host)
+        let removal = HostRemovalStore(store: store)
+        let dependencies = HostRemovalDependencies(
+            isConnected: { _ in state.connected },
+            hasNotificationKey: { _ in state.keyed })
+
+        removal.requestRemoval([host.id], dependencies: dependencies)
+
+        let message = try #require(removal.pendingRequest).message
+        #expect(message.contains("Keychain"))
+        #expect(message.hasSuffix("This cannot be undone."))
+        #expect(message.contains("Notification Key") == state.deletesKey)
+        #expect(
+            message.contains(
+                "Heeler can't reach this Host, so it may keep sending notifications to this "
+                    + "device. Connect to it first to stop them.")
+                == state.warns)
     }
 
     @Test func passwordRoundTripsThroughTheSecretStore() throws {
@@ -370,7 +549,7 @@ struct HostStoreTests {
         #expect(try store.password(for: host) == nil)
     }
 
-    @Test func removalFailureStaysVisibleAndKeepsTheHost() throws {
+    @Test func removalFailureStaysVisibleAndKeepsTheHost() async throws {
         let (defaults, cleanup) = try makeDefaults()
         defer { cleanup() }
         let secrets = RemovalFailingSecretStore()
@@ -385,13 +564,50 @@ struct HostStoreTests {
         })
 
         removal.requestRemoval([host.id])
-        removal.confirmRemoval(try #require(removal.pendingRequest), dependencies: dependencies)
+        await removal.confirmRemoval(try #require(removal.pendingRequest), dependencies: dependencies)
 
         #expect(store.hosts == [host])
         #expect(log.entries.isEmpty, "a Host that is still saved keeps its other state")
         #expect(removal.errorMessage != nil)
         removal.dismissError()
         #expect(removal.errorMessage == nil)
+    }
+}
+
+/// What a confirmed removal did, in order.
+@MainActor
+private final class RemovalStepLog {
+    private(set) var entries: [String] = []
+
+    func append(_ entry: String) {
+        entries.append(entry)
+    }
+}
+
+/// Suspends the first revoke until released; later ones return at once,
+/// so a repeated removal shows up as a second step instead of a hang.
+@MainActor
+private final class FirstRevokeHold {
+    private var isHolding = false
+    private var held: CheckedContinuation<Void, Never>?
+    private var heldWaiter: CheckedContinuation<Void, Never>?
+
+    func holdFirst() async {
+        guard !isHolding else { return }
+        isHolding = true
+        heldWaiter?.resume()
+        heldWaiter = nil
+        await withCheckedContinuation { held = $0 }
+    }
+
+    func untilHeld() async {
+        guard !isHolding else { return }
+        await withCheckedContinuation { heldWaiter = $0 }
+    }
+
+    func release() {
+        held?.resume()
+        held = nil
     }
 }
 
