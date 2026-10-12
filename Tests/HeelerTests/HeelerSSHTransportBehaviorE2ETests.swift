@@ -396,7 +396,7 @@ struct HeelerSSHTransportBehaviorE2ETests {
         await replacement.end()
     }
 
-    @Test("nonzero Attach exit reports the primary channel failure and wakes input")
+    @Test("nonzero Attach exit reports herdr's exit and last line and wakes input")
     func failedAttachExitFreesChannel() async throws {
         let environment = try #require(HeelerSSHTransportBehaviorEnvironment.current)
         let transport = try await HeelerSSHTransport.connect(settings: environment.directSettings())
@@ -408,9 +408,10 @@ struct HeelerSSHTransportBehaviorE2ETests {
         var output = ""
         try await expectAttachOutput(&iterator, accumulated: &output, contains: "TTY-OK")
         failed.send(Data("__fail__\n".utf8))
+        // The fixture's last line rides along with the status (#431).
         await #expect(
-            throws: TransportError.channelFailed(
-                detail: "attach channel: remote exit status 23")
+            throws: TransportError.attachExited(
+                status: 23, output: "herdr: fixture attach failed")
         ) {
             while try await iterator.next() != nil {}
         }
