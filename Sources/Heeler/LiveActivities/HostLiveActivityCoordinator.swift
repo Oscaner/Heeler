@@ -548,8 +548,7 @@ final class HostLiveActivityCoordinator {
             // The Host left the catalog while this write was in flight: its
             // pipe stays gone instead of coming back dirty.
             guard self.knownHostIDs().contains(hostID) else {
-                self.pipes[hostID] = nil
-                self.writtenLiveActivityTokens[hostID] = nil
+                self.dropTransientState(for: hostID)
                 return
             }
             var pipe = self.pipes[hostID] ?? TokenPipe()
@@ -599,7 +598,9 @@ final class HostLiveActivityCoordinator {
                         writtenToken, hostID: hostID, deviceToken: token, over: transport)
                 }
             }
-            // A write that lands after its Host was removed records nothing.
+            // A write that lands after its Host left the catalog records
+            // nothing, even when its writer was cancelled and so never
+            // reaches the writer's own catalog check.
             guard knownHostIDs().contains(hostID) else { return true }
             switch job {
             case .set(let hex, _): writtenLiveActivityTokens[hostID] = hex
