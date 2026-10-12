@@ -3223,7 +3223,8 @@ struct TerminalAttachTests {
     }
 
     /// SSH failures take the Transport's operation mapping, not their case
-    /// name; only an unclassified channel failure keeps the side that failed.
+    /// name; one the mapping leaves unclassified names only the side that
+    /// failed.
     @Test func attachIOFailuresTakeTheTransportsSSHMapping() {
         let command = "herdr agent attach"
         #expect(
@@ -3240,7 +3241,12 @@ struct TerminalAttachTests {
             HeelerSSHTransport.attachFailure(
                 HeelerSSHAttachPumpError.output(SSHError.channelFailed),
                 attachCommand: command)
-                == .channelFailed(detail: "attach channel: channelFailed"))
+                == .channelFailed(detail: "attach channel failed"))
+        #expect(
+            HeelerSSHTransport.attachFailure(
+                HeelerSSHAttachPumpError.input(SSHError.connectionFailed),
+                attachCommand: command)
+                == .channelFailed(detail: "attach input failed"))
         #expect(
             HeelerSSHTransport.attachFailure(
                 HeelerSSHAttachPumpError.input(FakeAttachChannelError.rejectedWrite),

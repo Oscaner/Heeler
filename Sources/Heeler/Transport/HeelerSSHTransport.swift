@@ -2898,8 +2898,9 @@ actor HeelerSSHTransport: Transport {
     /// Classifies a failed `runAttachPumps`. A remote exit keeps its status
     /// and output. An I/O failure that is already a `TransportError` (the
     /// Windows controller's own reason, say) passes through unchanged; an
-    /// `SSHError` takes the Transport's operation mapping. Only an
-    /// unclassified channel failure is prefixed with the side that failed.
+    /// `SSHError` takes the Transport's operation mapping. An SSH failure
+    /// that mapping leaves unclassified names only the side that failed: its
+    /// case name is no explanation, and the detail reaches the user.
     static func attachFailure(_ error: any Error, attachCommand: String) -> TransportError {
         let underlying: any Error
         let prefix: String
@@ -2919,8 +2920,8 @@ actor HeelerSSHTransport: Transport {
             return .channelFailed(detail: "\(prefix): \(String(describing: underlying))")
         }
         let mapped = map(underlying)
-        if case .channelFailed(let detail) = mapped {
-            return .channelFailed(detail: "\(prefix): \(detail)")
+        if case .channelFailed = mapped {
+            return .channelFailed(detail: "\(prefix) failed")
         }
         return mapped
     }

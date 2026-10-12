@@ -1,4 +1,5 @@
 import Foundation
+import HeelerSSH
 import Testing
 
 @testable import Heeler
@@ -83,6 +84,13 @@ struct RequestFailurePresentationTests {
         #expect(
             AttachTerminalStore.message(for: dropped)
                 == "Connection dropped: terminal controller: gone.")
+        // An unclassified SSH read failure names the side, not its case.
+        let readFailure = HeelerSSHTransport.attachFailure(
+            HeelerSSHAttachPumpError.output(SSHError.channelFailed),
+            attachCommand: "herdr agent attach")
+        #expect(
+            AttachTerminalStore.message(for: readFailure)
+                == "Connection dropped: attach channel failed.")
     }
 
     /// An old herdr earlier on the SSH PATH exits 1 after losing the server;
