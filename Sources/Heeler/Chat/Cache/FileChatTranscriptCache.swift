@@ -19,17 +19,22 @@ actor FileChatTranscriptCache: ChatTranscriptCache {
     private let root: URL
     private let policy: ChatCachePolicy
     private let now: @Sendable () -> Date
+    /// Where the Host's trusted key is read, which names the machine a saved
+    /// Agent directory belongs to.
+    private let knownHosts: any KnownHostsStore
     private var allowedHosts: Set<UUID>?
     private var knownTotalBytes: Int64?
 
     init(
         root: URL = FileChatTranscriptCache.defaultRoot,
         policy: ChatCachePolicy = ChatCachePolicy(),
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        knownHosts: any KnownHostsStore = UserDefaultsKnownHostsStore.shared
     ) {
         self.root = root
         self.policy = policy
         self.now = now
+        self.knownHosts = knownHosts
     }
 
     private var fileManager: FileManager { .default }
@@ -83,31 +88,21 @@ actor FileChatTranscriptCache: ChatTranscriptCache {
     }
 
     func loadAgentDirectory(for host: Host) async -> [ChatCachedAgent] {
-        let url = agentDirectoryURL(host.id)
-        let data: Data
-        do {
-            data = try Data(contentsOf: url)
-        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
-            return []
-        } catch {
-            Self.logFailure("read", error)
-            return []
-        }
-        guard let directory = try? Self.decoder.decode(ChatAgentDirectory.self, from: data) else {
-            removeFile(url)
-            return []
-        }
-        let entries = directory.entries(for: host)
+        let hostKeys = await ChatAgentDirectory.trustedHostKeys(for: host.id, in: knownHosts)
+        guard let directory = readAgentDirectory(host.id) else { return [] }
+        let entries = directory.entries(for: host, hostKeys: hostKeys)
         if !entries.isEmpty {
+            let url = agentDirectoryURL(host.id)
             try? fileManager.setAttributes([.modificationDate: now()], ofItemAtPath: url.path)
         }
         return entries
     }
 
     func saveAgentDirectory(_ agents: [ChatCachedAgent], for host: Host) async {
+        let hostKeys = await ChatAgentDirectory.trustedHostKeys(for: host.id, in: knownHosts)
         if let allowedHosts, !allowedHosts.contains(host.id) { return }
         let url = agentDirectoryURL(host.id)
-        let directory = ChatAgentDirectory(agents, for: host)
+        let directory = ChatAgentDirectory(agents, for: host, hostKeys: hostKeys)
         guard !directory.agents.isEmpty,
             let data = try? Self.encoder.encode(directory), data.count <= policy.maxDocumentBytes
         else {
@@ -115,6 +110,32 @@ actor FileChatTranscriptCache: ChatTranscriptCache {
             return
         }
         write(data, to: url, hostID: host.id)
+    }
+
+    func agentDirectoryBelongs(to host: Host) async -> Bool {
+        let hostKeys = await ChatAgentDirectory.trustedHostKeys(for: host.id, in: knownHosts)
+        // Unreadable, such as while the device is locked, proves nothing.
+        return readAgentDirectory(host.id)?.belongs(to: host, hostKeys: hostKeys) ?? true
+    }
+
+    /// The saved directory, nil when there is none or it cannot be read now;
+    /// one that cannot be decoded is deleted.
+    private func readAgentDirectory(_ hostID: UUID) -> ChatAgentDirectory? {
+        let url = agentDirectoryURL(hostID)
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return nil
+        } catch {
+            Self.logFailure("read", error)
+            return nil
+        }
+        guard let directory = try? Self.decoder.decode(ChatAgentDirectory.self, from: data) else {
+            removeFile(url)
+            return nil
+        }
+        return directory
     }
 
     private func write(_ data: Data, to url: URL, hostID: UUID) {

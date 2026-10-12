@@ -209,6 +209,64 @@ struct ConsoleStoreTests {
         store.setHosts([])
     }
 
+    /// The user can trust a replaced host key without editing the Host; the
+    /// reconnect that follows must not hand the old machine's saved Chat
+    /// binding to a live Agent that has not reported its session.
+    @Test func reconnectingAfterAReplacedHostKeyDropsSavedChatBindings() async throws {
+        let host = Host.fixture()
+        let info = AgentInfo(
+            agentStatus: .idle, focused: false, paneID: "w1:p1", revision: 1,
+            tabID: "t1", terminalID: "term-1", workspaceID: "w1", agent: "claude",
+            agentSession: nil, cwd: "/home/dev/proj")
+        let savedSession = AgentSessionInfo(
+            agent: "claude", kind: .id, source: "herdr:claude",
+            value: "e951205e-24af-4a5e-baa7-3ccbebd2de2c")
+        let saved = Agent(AgentInfo(
+            agentStatus: .idle, focused: false, paneID: "w1:p1", revision: 1,
+            tabID: "t1", terminalID: "term-1", workspaceID: "w1", agent: "claude",
+            agentSession: savedSession, cwd: "/home/dev/proj"))
+        let knownHosts = InMemoryKnownHostsStore()
+        let trust = HostKeyTrust.hostKey(host.id)
+        func trustKey(_ byte: UInt8) async {
+            await knownHosts.setFingerprint(
+                HostKeyFingerprint(digest: Data(repeating: byte, count: 32), algorithm: "ssh-ed25519"),
+                host: trust.host, port: trust.port)
+        }
+        await trustKey(1)
+        let cache = VolatileChatTranscriptCache(knownHosts: knownHosts)
+        await cache.saveAgentDirectory(
+            [ChatCachedAgent(ConsoleAgent(
+                hostID: host.id, hostName: host.displayName, agent: saved,
+                workspaceLabel: nil, repositoryCheckout: nil))],
+            for: host)
+        let transport = ScriptedTransport(snapshot: .fixture(agents: [info]))
+        let store = ConsoleStore(
+            snapshotRetryDelay: .milliseconds(10), chatCache: cache,
+            makeSession: { _, subscriptions in
+                EventsSession(
+                    subscriptions: subscriptions, connect: { transport },
+                    reconnectPolicy: Self.fastPolicy, keepalive: nil)
+            })
+        defer { store.setHosts([]) }
+        let live = Agent(info)
+
+        store.setHosts([host])
+        await store.resume()
+        try await waitUntil("the first connection should keep the saved binding") {
+            await store.cachedChats.settled()
+            return await store.cachedChats.cachedSession(for: live, on: host) == savedSession
+        }
+
+        await trustKey(2)
+        await transport.failEventStream(.channelFailed(detail: "scripted reconnect"))
+        try await waitUntil("the reconnect should drop the other machine's binding") {
+            await store.cachedChats.settled()
+            guard store.hostStatuses[host.id] == .connected else { return false }
+            return await store.cachedChats.cachedSession(for: live, on: host) == nil
+        }
+        #expect(await cache.loadAgentDirectory(for: host).isEmpty)
+    }
+
     @Test func sortBucketsRankBlockedThenDoneThenWorkingThenIdle() {
         #expect(AgentStatus.blocked.consoleSortBucket < AgentStatus.done.consoleSortBucket)
         #expect(AgentStatus.done.consoleSortBucket < AgentStatus.working.consoleSortBucket)

@@ -15,13 +15,15 @@ struct ChatTranscriptCacheTests {
     private struct Fixture {
         let root: URL
         let clock = Clock()
+        let knownHosts = InMemoryKnownHostsStore()
         let cache: FileChatTranscriptCache
 
         init(policy: ChatCachePolicy = ChatCachePolicy()) {
             root = FileManager.default.temporaryDirectory
                 .appending(path: "ChatCacheTests-\(UUID().uuidString)", directoryHint: .isDirectory)
             let clock = clock
-            cache = FileChatTranscriptCache(root: root, policy: policy, now: { clock.now })
+            cache = FileChatTranscriptCache(
+                root: root, policy: policy, now: { clock.now }, knownHosts: knownHosts)
         }
 
         func fileURL(_ key: ChatCacheKey) -> URL {
@@ -274,7 +276,7 @@ struct ChatTranscriptCacheTests {
         let cached = Self.cachedAgent(for: host)
         await fixture.cache.saveAgentDirectory([cached], for: host)
 
-        let reopened = FileChatTranscriptCache(root: fixture.root)
+        let reopened = FileChatTranscriptCache(root: fixture.root, knownHosts: fixture.knownHosts)
         let entries = await reopened.loadAgentDirectory(for: host)
         #expect(entries == [cached])
         let restored = try #require(entries.first).consoleAgent(for: host)
@@ -293,8 +295,10 @@ struct ChatTranscriptCacheTests {
         #expect(restored.tabPosition == 2)
     }
 
+    /// A Host the device holds no key for yet compares the primary route,
+    /// as every directory did before Routes.
     @Test(arguments: [false, true])
-    func agentDirectoryRejectsChangedConnectionCoordinates(volatile: Bool) async {
+    func agentDirectoryWithoutAHostKeyRejectsAChangedPrimaryRoute(volatile: Bool) async {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         let cache: any ChatTranscriptCache = volatile ? VolatileChatTranscriptCache() : fixture.cache
@@ -328,6 +332,77 @@ struct ChatTranscriptCacheTests {
         let renamed = await cache.loadAgentDirectory(for: changed)
         #expect(renamed == [cached])
         #expect(renamed.first?.consoleAgent(for: changed).hostName == "Renamed Host")
+    }
+
+    private static func trust(
+        _ byte: UInt8, algorithm: String = "ssh-ed25519", for hostID: UUID,
+        in knownHosts: InMemoryKnownHostsStore
+    ) async {
+        let key = HostKeyTrust.hostKey(hostID)
+        await knownHosts.setFingerprint(
+            HostKeyFingerprint(digest: Data(repeating: byte, count: 32), algorithm: algorithm),
+            host: key.host, port: key.port)
+    }
+
+    @Test(arguments: [false, true])
+    func agentDirectoryFollowsTheHostKeyRatherThanItsRoutes(volatile: Bool) async {
+        let fixture = Fixture()
+        defer { fixture.cleanUp() }
+        let cache: any ChatTranscriptCache =
+            volatile ? VolatileChatTranscriptCache(knownHosts: fixture.knownHosts) : fixture.cache
+        let host = Host(id: Self.hostA, address: "host.example", username: "dev")
+        await Self.trust(1, for: host.id, in: fixture.knownHosts)
+        let cached = Self.cachedAgent(for: host)
+        await cache.saveAgentDirectory([cached], for: host)
+
+        // The same machine on other routes: a new primary, then edited ones.
+        var rerouted = host
+        rerouted.routes.insert(HostRoute(address: "10.0.0.2"), at: 0)
+        #expect(await cache.loadAgentDirectory(for: rerouted) == [cached])
+        rerouted.routes[0].jumpAddress = "jump.example"
+        rerouted.routes[1].address = "elsewhere.example"
+        #expect(await cache.loadAgentDirectory(for: rerouted) == [cached])
+        // The herdr session and account still name other bindings.
+        var changed = rerouted
+        changed.sessionName = "other"
+        #expect(await cache.loadAgentDirectory(for: changed).isEmpty)
+        changed = rerouted
+        changed.username = "other"
+        #expect(await cache.loadAgentDirectory(for: changed).isEmpty)
+        // Trusting the machine's key for another algorithm keeps them.
+        await Self.trust(2, algorithm: "rsa-sha2-512", for: host.id, in: fixture.knownHosts)
+        #expect(await cache.loadAgentDirectory(for: rerouted) == [cached])
+        #expect(await cache.agentDirectoryBelongs(to: rerouted))
+
+        // A replaced key is another machine, whatever the routes say.
+        await Self.trust(3, for: host.id, in: fixture.knownHosts)
+        #expect(await cache.loadAgentDirectory(for: host).isEmpty)
+        #expect(!(await cache.agentDirectoryBelongs(to: host)))
+        #expect(await cache.agentDirectoryBelongs(to: Host(id: Self.hostB, address: "b", username: "dev")))
+    }
+
+    /// Directories saved before Routes, or before the Host's key was copied
+    /// to it on its first connection, still compare the primary route until
+    /// the next save records the key.
+    @Test(arguments: [false, true])
+    func agentDirectoryWithoutAKeyMigratesOnItsPrimaryRoute(volatile: Bool) async {
+        let fixture = Fixture()
+        defer { fixture.cleanUp() }
+        let cache: any ChatTranscriptCache =
+            volatile ? VolatileChatTranscriptCache(knownHosts: fixture.knownHosts) : fixture.cache
+        let host = Host(id: Self.hostA, address: "host.example", username: "dev")
+        let cached = Self.cachedAgent(for: host)
+        await cache.saveAgentDirectory([cached], for: host)
+        await Self.trust(1, for: host.id, in: fixture.knownHosts)
+        var rerouted = host
+        rerouted.routes[0].address = "other.example"
+
+        #expect(await cache.loadAgentDirectory(for: host) == [cached])
+        #expect(await cache.loadAgentDirectory(for: rerouted).isEmpty)
+        #expect(!(await cache.agentDirectoryBelongs(to: rerouted)))
+
+        await cache.saveAgentDirectory([cached], for: host)
+        #expect(await cache.loadAgentDirectory(for: rerouted) == [cached])
     }
 
     @Test(arguments: [false, true])

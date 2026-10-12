@@ -54,14 +54,40 @@ final class ConsoleChatCache {
                     revisions[host.id, default: 0] == revision else { return }
                 records[host.id] = saved
                 loads[host.id] = nil
-                // Apply everything that arrived during the disk read before
-                // another task can use the restored entries.
-                for update in pendingUpdates.removeValue(forKey: host.id) ?? [] {
-                    switch update {
-                    case .snapshot(let agents): observe(agents, on: host)
-                    case .confirmation(let fresh, let snapshot): confirm(fresh, for: snapshot, on: host)
-                    }
-                }
+                applyPendingUpdates(on: host)
+            }
+        }
+    }
+
+    /// Re-proves the saved bindings on a new connection. Trusting a replaced
+    /// host key leaves the Host record unchanged, so the same Host may now
+    /// reach another machine; until the cache confirms the saved directory
+    /// still belongs to the Host, live updates queue as during the initial
+    /// restore. A load already in flight reads the current trust itself.
+    func revalidate(on host: Host) {
+        guard hosts[host.id] == host, loads[host.id] == nil else { return }
+        let revision = revisions[host.id, default: 0]
+        loads[host.id] = Task { [weak self, cache, write = writes[host.id]] in
+            await write?.value
+            let belongs = await cache.agentDirectoryBelongs(to: host)
+            guard !Task.isCancelled, let self, hosts[host.id] == host,
+                revisions[host.id, default: 0] == revision else { return }
+            loads[host.id] = nil
+            if !belongs {
+                records[host.id] = nil
+                confirmed = confirmed.filter { $0.key.hostID != host.id }
+            }
+            applyPendingUpdates(on: host)
+        }
+    }
+
+    /// Applies everything that arrived during a disk read before another
+    /// task can use the restored entries.
+    private func applyPendingUpdates(on host: Host) {
+        for update in pendingUpdates.removeValue(forKey: host.id) ?? [] {
+            switch update {
+            case .snapshot(let agents): observe(agents, on: host)
+            case .confirmation(let fresh, let snapshot): confirm(fresh, for: snapshot, on: host)
             }
         }
     }

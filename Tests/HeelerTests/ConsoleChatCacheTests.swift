@@ -193,6 +193,39 @@ struct ConsoleChatCacheTests {
         #expect(await cache.loadAgentDirectory(for: host).isEmpty)
     }
 
+    /// Trusting a replaced host key leaves the Host record as it was, so
+    /// only the next connection's revalidation can tell another machine.
+    @Test func aReplacedHostKeyDropsSavedBindingsOnRevalidation() async {
+        let host = Host(address: "host", username: "reader")
+        let knownHosts = InMemoryKnownHostsStore()
+        let trust = HostKeyTrust.hostKey(host.id)
+        func trustKey(_ byte: UInt8) async {
+            await knownHosts.setFingerprint(
+                HostKeyFingerprint(digest: Data(repeating: byte, count: 32), algorithm: "ssh-ed25519"),
+                host: trust.host, port: trust.port)
+        }
+        await trustKey(1)
+        let cache = VolatileChatTranscriptCache(knownHosts: knownHosts)
+        await cache.saveAgentDirectory([ChatCachedAgent(Self.agent(host: host, session: Self.sessionA))], for: host)
+        let directory = ConsoleChatCache(cache: cache)
+        directory.setHosts([host])
+        await directory.settled()
+        let live = Self.agent(host: host, session: nil)
+
+        directory.revalidate(on: host)
+        directory.observe([live], on: host)
+        await directory.settled()
+        #expect(await directory.cachedSession(for: live.agent, on: host)?.value == Self.sessionA)
+
+        await trustKey(2)
+        directory.revalidate(on: host)
+        directory.observe([live], on: host)
+        await directory.settled()
+        #expect(await directory.cachedSession(for: live.agent, on: host) == nil)
+        #expect(directory.agents(on: host).isEmpty)
+        #expect(await cache.loadAgentDirectory(for: host).isEmpty)
+    }
+
     @Test func editingHostCannotRestoreAnotherServersEntryPoints() async {
         var host = Host(address: "first", username: "reader")
         let cache = VolatileChatTranscriptCache()

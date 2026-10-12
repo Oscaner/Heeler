@@ -66,9 +66,12 @@ struct ChatCachedAgent: Codable, Equatable, Sendable {
     }
 }
 
-/// A Host id alone is insufficient: editing its primary route or herdr
-/// session must not revive another server's saved pane-to-conversation
-/// bindings.
+/// A Host id alone is insufficient: a Host whose herdr session, account, or
+/// machine changed must not revive another server's saved pane-to-
+/// conversation bindings. The machine is the host key the device trusts for
+/// the Host (ADR 0022), since every Route must present it; a directory or
+/// Host without one falls back to the primary route, as directories were
+/// compared before Routes.
 struct ChatAgentDirectory: Codable, Equatable, Sendable {
     var formatVersion = 1
     let host: HostIdentity
@@ -83,8 +86,12 @@ struct ChatAgentDirectory: Codable, Equatable, Sendable {
         let jumpAddress: String
         let jumpPort: Int
         let jumpUsername: String
+        /// SHA-256 digests of the host keys trusted for the Host when saved,
+        /// sorted. Nil in directories saved before Routes or before the Host
+        /// had a key of its own.
+        let hostKeys: [Data]?
 
-        init(_ host: Host) {
+        init(_ host: Host, hostKeys: Set<Data>) {
             let route = host.primaryRoute
             id = host.id
             address = route.address
@@ -94,16 +101,42 @@ struct ChatAgentDirectory: Codable, Equatable, Sendable {
             jumpAddress = route.jumpAddress
             jumpPort = route.jumpPort
             jumpUsername = host.jumpUsername(on: route)
+            self.hostKeys = hostKeys.isEmpty ? nil : hostKeys.sorted { $0.lexicographicallyPrecedes($1) }
+        }
+
+        /// Whether a directory saved under this identity belongs to `current`.
+        /// Routes may change freely while a trusted key is shared: a Host
+        /// can trust a key per algorithm, and adding one keeps the others.
+        func admits(_ current: HostIdentity) -> Bool {
+            guard id == current.id, username == current.username,
+                sessionName == current.sessionName else { return false }
+            if let saved = hostKeys, let trusted = current.hostKeys {
+                return !Set(saved).isDisjoint(with: trusted)
+            }
+            return address == current.address && port == current.port
+                && jumpAddress == current.jumpAddress && jumpPort == current.jumpPort
+                && jumpUsername == current.jumpUsername
         }
     }
 
-    init(_ agents: [ChatCachedAgent], for host: Host) {
-        self.host = HostIdentity(host)
+    init(_ agents: [ChatCachedAgent], for host: Host, hostKeys: Set<Data>) {
+        self.host = HostIdentity(host, hostKeys: hostKeys)
         self.agents = agents.filter { $0.isValid(for: host) }
     }
 
-    func entries(for host: Host) -> [ChatCachedAgent] {
-        guard formatVersion == 1, self.host == HostIdentity(host) else { return [] }
+    func belongs(to host: Host, hostKeys: Set<Data>) -> Bool {
+        formatVersion == 1 && self.host.admits(HostIdentity(host, hostKeys: hostKeys))
+    }
+
+    func entries(for host: Host, hostKeys: Set<Data>) -> [ChatCachedAgent] {
+        guard belongs(to: host, hostKeys: hostKeys) else { return [] }
         return agents.filter { $0.isValid(for: host) }
+    }
+
+    /// The digests of the host keys the device trusts for `hostID`, read
+    /// from this device's TOFU store; nothing is asked of the Host.
+    static func trustedHostKeys(for hostID: UUID, in knownHosts: any KnownHostsStore) async -> Set<Data> {
+        let key = HostKeyTrust.hostKey(hostID)
+        return Set(await knownHosts.fingerprints(host: key.host, port: key.port).map(\.digest))
     }
 }

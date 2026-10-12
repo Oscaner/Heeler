@@ -82,6 +82,17 @@ drops documents unused for 30 days, forgets a Host's documents when the Host
 is deleted, and can be cleared in Settings. A cached conversation opens at
 once, stays readable offline, and survives the remote file's removal.
 
+Each Host also keeps its Chat entry points: the Agents last seen and the
+conversation each was bound to, so an offline Console still lists them and a
+live Agent that has not reported its session reopens the right one. Those
+bindings belong to one machine and herdr session. The machine is the host
+key the device trusts for the Host (ADR 0022), not a route: routes may be
+added, reordered, or edited freely, but a replaced key, a changed account, or
+another herdr session drops them. Because trusting a replaced key leaves the
+Host record unchanged, every new connection re-proves the saved bindings
+before live Agents can use them. A Host the device holds no key for yet, and
+directories saved before the Host had one, compare the primary route instead.
+
 Image tool rows with a recorded Host file path offer a native long-press preview. Tapping the preview opens a zoomable sheet. Paths come from transcript metadata, resolving relative paths only against the recorded working directory; display titles are never treated as paths. Reads use the existing read-only SFTP connection on demand, stop at 20 MiB, and decode off the main actor to at most 4,096 pixels on the long edge. Image bytes are not cached with transcripts. Missing, changed, unsupported or disconnected files show a retryable explanation.
 
 ## Sending

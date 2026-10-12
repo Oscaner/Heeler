@@ -109,6 +109,8 @@ final class ConsoleStore {
     let cachedChats: ConsoleChatCache
     @ObservationIgnored private var chatPrefetchTasks: [Host.ID: Task<Void, Never>] = [:]
     @ObservationIgnored private var chatPrefetched: [ConsoleAgent.ID: String] = [:]
+    /// The connection whose saved Chat bindings were last re-proved, per Host.
+    @ObservationIgnored private var chatCacheValidatedGenerations: [Host.ID: UInt64] = [:]
     @ObservationIgnored private var chatCacheRetention: Task<Void, Never>?
     /// How Chat reads each program's transcripts; nil leaves the program
     /// without Chat.
@@ -158,6 +160,7 @@ final class ConsoleStore {
             chatPrefetchTasks[id]?.cancel()
             chatPrefetchTasks[id] = nil
             chatPrefetched = chatPrefetched.filter { $0.key.hostID != id }
+            chatCacheValidatedGenerations[id] = nil
         }
         for (id, session) in composerSessions where incoming[id.hostID] == nil {
             session.leaveStaging()
@@ -1181,6 +1184,10 @@ final class ConsoleStore {
                 continue
             }
             guard hostPlatforms[host.id] == .posix else { continue }
+            if chatCacheValidatedGenerations[host.id] != projection.transportGeneration {
+                chatCacheValidatedGenerations[host.id] = projection.transportGeneration
+                cachedChats.revalidate(on: host)
+            }
             cachedChats.observe(Array(projection.agentsByPane.values), on: host)
             guard chatPrefetchTasks[host.id] == nil else { continue }
             let generation = projection.transportGeneration
