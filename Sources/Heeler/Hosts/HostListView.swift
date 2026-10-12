@@ -20,6 +20,20 @@ struct HostRemovalRequest: Equatable {
         + "from the Keychain. This cannot be undone."
 }
 
+/// What a confirmed Host removal cleans up beyond the catalog entry and
+/// saved password `HostStore.remove` deletes (#414). The app wires it to its
+/// app-wide stores; previews and tests keep the no-op default.
+struct HostRemovalDependencies: Sendable {
+    /// Runs once per Host after its catalog removal succeeds, so the Host
+    /// is already gone from `HostStore.hosts`. Not called when it fails.
+    var didRemoveHost: @MainActor @Sendable (Host.ID) -> Void = { _ in }
+}
+
+extension EnvironmentValues {
+    /// What removing a Host cleans up; see `HostRemovalDependencies`.
+    @Entry var hostRemovalDependencies = HostRemovalDependencies()
+}
+
 /// One Duplicate form presentation, identified per request so duplicating
 /// the same Host again presents a fresh, renumbered draft.
 private struct HostDuplicateRequest: Identifiable {
@@ -51,7 +65,10 @@ final class HostRemovalStore {
         pendingRequest = nil
     }
 
-    func confirmRemoval(_ request: HostRemovalRequest) {
+    func confirmRemoval(
+        _ request: HostRemovalRequest,
+        dependencies: HostRemovalDependencies = HostRemovalDependencies()
+    ) {
         pendingRequest = nil
         for host in request.hosts {
             do {
@@ -60,6 +77,7 @@ final class HostRemovalStore {
                 errorMessage = "The Host could not be removed. Its saved credentials may still be in the Keychain."
                 return
             }
+            dependencies.didRemoveHost(host.id)
         }
     }
 
@@ -95,6 +113,7 @@ struct HostListView: View {
     private let onDone: (@MainActor () -> Void)?
     @State private var removal: HostRemovalStore
     @Environment(\.hostOnboardingDependencies) private var onboardingDependencies
+    @Environment(\.hostRemovalDependencies) private var removalDependencies
     @State private var isAddingHost = false
     @State private var editingHost: Host?
     @State private var duplicateRequest: HostDuplicateRequest?
@@ -307,7 +326,7 @@ struct HostListView: View {
                 presenting: removal.pendingRequest
             ) { request in
                 Button(request.actionTitle, role: .destructive) {
-                    removal.confirmRemoval(request)
+                    removal.confirmRemoval(request, dependencies: removalDependencies)
                 }
                 Button("Cancel", role: .cancel) {
                     removal.cancelRemoval()

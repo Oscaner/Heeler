@@ -97,6 +97,11 @@
             .preferredColorScheme(appearance.preferredColorScheme)
             .environment(\.diffLayoutSettings, diffLayout)
             .environment(\.hostOnboardingDependencies, DemoScreenshotFixture.onboardingDependencies)
+            .environment(
+                \.hostRemovalDependencies,
+                HostRemovalDependencies(didRemoveHost: { [liveActivities] id in
+                    liveActivities.forgetHost(id)
+                }))
             .task {
                 console.setHosts(hosts.hosts)
                 notificationPreferences.setHosts(hosts.hosts)
