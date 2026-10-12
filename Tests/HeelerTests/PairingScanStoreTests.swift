@@ -185,6 +185,32 @@ struct PairingScanStoreTests {
 
     // MARK: Ceremony success
 
+    /// Every candidate the code offered becomes a route, the one that
+    /// answered first, so the Host stays reachable from the networks the
+    /// user picked each address for (ADR 0022).
+    @Test func everyCandidateAddressBecomesARouteLedByTheOneThatAnswered() async throws {
+        let multiple = PairingCodeVectorFile.shared.valid[1]
+        let answered = PairingResult(
+            address: "100.101.102.103", port: 2222, username: "grace",
+            hostKeyFingerprint: HostKeyFingerprint(publicKeyBlob: Data("host-public-key".utf8)))
+        let env = try makeEnv(outcomes: [.succeeds(answered)])
+        defer { env.cleanup() }
+        env.store.submit(scannedCode: multiple.code)
+
+        await env.store.pair()
+
+        let paired = try #require(env.store.pairedHost)
+        #expect(
+            paired.routes.map(\.address)
+                == ["100.101.102.103", "192.168.1.42", "fd7a:115c:a1e0::1"])
+        #expect(paired.routes.allSatisfy { $0.port == 2222 && !$0.usesJumpHost })
+        #expect(paired.primaryRoute.id == paired.id)
+        #expect(Set(paired.routes.map(\.id)).count == 3)
+        #expect(
+            await env.knownHosts.fingerprint(trustedFor: paired)
+                == answered.hostKeyFingerprint)
+    }
+
     @Test func successfulCeremonyPersistsTheHostAndPinsTheFingerprint() async throws {
         let secrets = InMemorySecretStore()
         let credentials = HostCredentialsProvider(
@@ -210,7 +236,7 @@ struct PairingScanStoreTests {
         #expect(paired.displayName == "lin@10.0.0.7")
         // The pinned fingerprint means preflight never TOFU-prompts.
         #expect(
-            await env.knownHosts.fingerprint(host: "10.0.0.7", port: 22)
+            await env.knownHosts.fingerprint(trustedFor: paired)
                 == Self.pairedResult.hostKeyFingerprint)
         #expect(env.store.failure == nil)
         #expect(env.store.isPairing == false)

@@ -77,12 +77,16 @@ struct HostListView: View {
     private let connectionStatuses: [Host.ID: EventsSessionStatus]
     private let standingFailures: [Host.ID: TransportError]
     private let latencies: [Host.ID: Duration]
+    /// The route each connected Host reached (ADR 0022).
+    private let routeIDs: [Host.ID: HostRoute.ID]
     /// Why a connected Host's Agents could not be synced, per Host.
     private let syncIssues: [Host.ID: String]
     /// Hosts whose Host-detail Reconnect request is in flight. Distinct from
     /// `EventsSessionStatus.reconnecting`.
     private let manualReconnectInFlightHostIDs: Set<Host.ID>
     private let retryConnection: (@MainActor @Sendable (Host.ID) async -> Void)?
+    /// Stops a Host's connection attempt instead of waiting for its timeout.
+    private let stopConnecting: (@MainActor @Sendable (Host.ID) async -> Void)?
     /// Where `initialHostID` was opened from. Its detail's back button goes
     /// back there instead of to this list.
     private let origin: HostListOrigin?
@@ -107,7 +111,7 @@ struct HostListView: View {
     /// waits for `onDismiss` so the TOFU alert is not suppressed mid-transition
     /// (#359).
     @State private var pendingOnboardingHostID: Host.ID?
-    @State private var path: [HostRoute]
+    @State private var path: [HostDetailDestination]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
@@ -117,9 +121,11 @@ struct HostListView: View {
         connectionStatuses: [Host.ID: EventsSessionStatus] = [:],
         standingFailures: [Host.ID: TransportError] = [:],
         latencies: [Host.ID: Duration] = [:],
+        routeIDs: [Host.ID: HostRoute.ID] = [:],
         syncIssues: [Host.ID: String] = [:],
         manualReconnectInFlightHostIDs: Set<Host.ID> = [],
         retryConnection: (@MainActor @Sendable (Host.ID) async -> Void)? = nil,
+        stopConnecting: (@MainActor @Sendable (Host.ID) async -> Void)? = nil,
         origin: HostListOrigin? = nil,
         onDone: (@MainActor () -> Void)? = nil
     ) {
@@ -129,9 +135,11 @@ struct HostListView: View {
         self.connectionStatuses = connectionStatuses
         self.standingFailures = standingFailures
         self.latencies = latencies
+        self.routeIDs = routeIDs
         self.syncIssues = syncIssues
         self.manualReconnectInFlightHostIDs = manualReconnectInFlightHostIDs
         self.retryConnection = retryConnection
+        self.stopConnecting = stopConnecting
         self.origin = origin
         self.onDone = onDone
         // On the stack from the first frame, so the requested detail never
@@ -204,7 +212,7 @@ struct HostListView: View {
                         .disabled(store.catalogLoadError != nil)
                 }
             }
-            .navigationDestination(for: HostRoute.self) { route in
+            .navigationDestination(for: HostDetailDestination.self) { route in
                 let id = route.hostID
                 if let host = store.hosts.first(where: { $0.id == id }) {
                     // Keyed by the Host value: editing recreates the
@@ -214,9 +222,11 @@ struct HostListView: View {
                         catalog: store,
                         connectionStatus: connectionStatuses[id],
                         standingFailure: standingFailures[id],
+                        connectedRouteID: routeIDs[id],
                         syncIssue: syncIssues[id],
                         isManualReconnectInFlight: manualReconnectInFlightHostIDs.contains(id),
                         retryConnection: retryAction(for: id),
+                        stopConnecting: stopAction(for: id),
                         dependencies: onboardingDependencies)
                         .id(host)
                         .modifier(ReturnToOrigin(origin: route.isRequested ? origin : nil))
@@ -332,9 +342,11 @@ struct HostListView: View {
         .readableColumn()
     }
 
-    private static func requestedRoute(_ id: Host.ID?, in store: HostStore) -> HostRoute? {
+    private static func requestedRoute(
+        _ id: Host.ID?, in store: HostStore
+    ) -> HostDetailDestination? {
         guard let id, store.hosts.contains(where: { $0.id == id }) else { return nil }
-        return HostRoute(hostID: id, isRequested: true)
+        return HostDetailDestination(hostID: id, isRequested: true)
     }
 
     private var removalConfirmationPresented: Binding<Bool> {
@@ -377,7 +389,7 @@ struct HostListView: View {
         // Every row is a link, so each one gets the chevron, press highlight
         // and pointer hover; a borderless Retry keeps its own target in it,
         // and VoiceOver offers it as one of the row's actions.
-        NavigationLink(value: HostRoute(hostID: host.id)) {
+        NavigationLink(value: HostDetailDestination(hostID: host.id)) {
             HStack(spacing: 12) {
                 HostRowLabel(host: host, presentation: entry.presentation)
                 if entry.presentation.offersRetry {
@@ -422,7 +434,7 @@ struct HostListView: View {
     private func navigateToPendingOnboardingHostIfNeeded() {
         guard let id = pendingOnboardingHostID else { return }
         pendingOnboardingHostID = nil
-        path.append(HostRoute(hostID: id))
+        path.append(HostDetailDestination(hostID: id))
     }
 
     private func retryAction(
@@ -431,12 +443,19 @@ struct HostListView: View {
         guard let retryConnection else { return nil }
         return { await retryConnection(id) }
     }
+
+    private func stopAction(
+        for id: Host.ID
+    ) -> (@MainActor @Sendable () async -> Void)? {
+        guard let stopConnecting else { return nil }
+        return { await stopConnecting(id) }
+    }
 }
 
 /// One pushed Host detail. The one opened on request is marked in the route
 /// itself, not inferred from where it sits on the stack, so its detail knows
 /// where Back goes from its first render.
-private struct HostRoute: Hashable {
+private struct HostDetailDestination: Hashable {
     let hostID: Host.ID
     var isRequested = false
 }
@@ -624,8 +643,7 @@ struct HostRowPresentation: Equatable {
             offersRetry = false
         case .connected:
             group = .connected
-            var address = "\(host.username)@\(host.address)"
-            if host.port != 22 { address += ":\(host.port)" }
+            var address = host.connectionSummary
             if case .namedSession(let session) = host.socketLocation {
                 address += " · session \(session)"
             }

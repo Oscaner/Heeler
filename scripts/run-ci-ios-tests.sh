@@ -2187,13 +2187,13 @@ run_app_fixture_suites() {
             run_suite HeelerSSHDirectStreamLocalE2ETests 9 1 0 \
                 HeelerSSHDirectStreamLocalE2ETests || return $?
             if [[ "$ci_app_shard" == all ]]; then
-                run_suite SharedFixtureE2ETests 116 7 0 \
+                run_suite SharedFixtureE2ETests 118 7 0 \
                     HeelerSSHPTYE2ETests HeelerSSHJumpHostGateE2ETests \
                     HeelerSSHTransportBehaviorE2ETests ChangesFieldHostE2ETests \
                     ImageStagingE2ETests WeakNetworkE2ETests PairingCeremonyE2ETests || return $?
                 ln -s SharedFixtureE2ETests.log "$fixture_dir/WeakNetworkE2ETests.log"
             else
-                run_suite SharedFixtureE2ETests 106 6 0 \
+                run_suite SharedFixtureE2ETests 108 6 0 \
                     HeelerSSHPTYE2ETests HeelerSSHJumpHostGateE2ETests \
                     HeelerSSHTransportBehaviorE2ETests ChangesFieldHostE2ETests \
                     ImageStagingE2ETests PairingCeremonyE2ETests || return $?
@@ -2573,7 +2573,7 @@ clear_simulator_environment
 
 if grep -q 'Suite "Session driver resource e2e" skipped' "$package_e2e_log" \
     || grep -q 'skipped:' "$package_e2e_log" \
-    || ! grep -q 'Test run with 76 tests in 5 suites passed' "$package_e2e_log" \
+    || ! grep -q 'Test run with 80 tests in 5 suites passed' "$package_e2e_log" \
     || ! grep -q \
         'Test "one-shot exec resumes owned reads before other exchange operations" with 2 test cases passed' \
         "$package_e2e_log" \
@@ -2597,6 +2597,9 @@ if grep -q 'Suite "Session driver resource e2e" skipped' "$package_e2e_log" \
         "$package_e2e_log" \
     || ! grep -q \
         'Test "a key exchange failure is redialled once and then reported" passed' \
+        "$package_e2e_log" \
+    || ! grep -q \
+        'Test "an externally dialled stream carries a full session and is released on close" passed' \
         "$package_e2e_log" \
     || ! grep -q \
         'Test "handshake negotiates post-quantum key exchange" passed' \
@@ -2688,7 +2691,7 @@ if grep -q 'Suite "Session driver resource e2e" skipped' "$package_e2e_log" \
     || ! grep -q \
         'Test "a bridge write to a closed peer reports peerClosed" passed' \
         "$package_e2e_log"; then
-    echo "The mandatory HeelerSSH package suites did not execute all 76 tests" >&2
+    echo "The mandatory HeelerSSH package suites did not execute all 80 tests" >&2
     exit 1
 fi
 exit 0

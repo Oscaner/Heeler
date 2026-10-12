@@ -148,6 +148,10 @@ actor EventsSession {
     /// whatever moment either stream is actually consumed.
     nonisolated var currentLatency: Duration? { latencyBox.withLock { $0 } }
     private nonisolated let latencyBox = Mutex<Duration?>(nil)
+    /// The catalog route the current connection reached (ADR 0022). Ordered
+    /// against status updates exactly as `currentLatency` is.
+    nonisolated var currentRouteID: UUID? { routeIDBox.withLock { $0 } }
+    private nonisolated let routeIDBox = Mutex<UUID?>(nil)
     /// How many updates the bounded buffer has shed so far. Every shed
     /// update is covered by a marker (see `yieldUpdate`), so this is
     /// observability for diagnostics and tests, not a consumer signal.
@@ -301,6 +305,20 @@ actor EventsSession {
     /// activity. Returns once everything is down. No-op unless active.
     func suspend() async {
         await enqueueLifecycleTransition { await self.deactivate() }
+    }
+
+    /// The user stopped waiting for this Host to connect: the attempt in
+    /// flight (an SSH dial, or an Overlay Network still coming up) or the
+    /// backoff before the next one ends at once, and the session rests on
+    /// `.suspended` — no failure, no timeout — until `retry()` or the next
+    /// `resume()`. A session whose events channel is live is left alone.
+    func cancelConnecting() async {
+        await enqueueLifecycleTransition { await self.stopConnecting() }
+    }
+
+    private func stopConnecting() async {
+        guard liveStream == nil else { return }
+        await deactivate()
     }
 
     /// Terminal teardown: like `suspend()`, then finishes `updates` for
@@ -528,6 +546,7 @@ actor EventsSession {
         // connection's measurement.
         if case .status(let status) = update, status != .connected {
             latencyBox.withLock { $0 = nil }
+            routeIDBox.withLock { $0 = nil }
         }
         guard case .dropped = updatesContinuation.yield(update) else { return }
         droppedUpdateCount += 1
@@ -714,6 +733,7 @@ actor EventsSession {
                 throw TransportError.cancelled
             }
             publishLatency(latency)
+            routeIDBox.withLock { $0 = transport.routeID }
         } catch {
             try? await transport.close()
             throw error

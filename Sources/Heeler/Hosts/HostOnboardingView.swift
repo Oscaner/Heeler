@@ -8,6 +8,8 @@ struct HostOnboardingView: View {
     let catalog: HostStore
     let connectionStatus: EventsSessionStatus?
     let standingFailure: TransportError?
+    /// The route the Console's connection reached (ADR 0022).
+    let connectedRouteID: HostRoute.ID?
     /// Why this connected Host's Agents could not be synced.
     let syncIssue: String?
     /// True while Console is serving a Host-detail Reconnect press (the
@@ -15,6 +17,9 @@ struct HostOnboardingView: View {
     /// `EventsSessionStatus.reconnecting`.
     let isManualReconnectInFlight: Bool
     let retryConnection: (@MainActor @Sendable () async -> Void)?
+    /// Stops the Console's attempt to connect this Host; nil where the
+    /// Host detail does not offer it.
+    let stopConnecting: (@MainActor @Sendable () async -> Void)?
     @State private var store: HostOnboardingStore
     @State private var isEditing = false
     @State private var isConfirmingHostKeyReplacement = false
@@ -23,23 +28,28 @@ struct HostOnboardingView: View {
     /// connection once (see `HostOnboardingConsoleRecovery`).
     @State private var isConsoleRecoveryArmed = false
     @State private var isShowingPluginNotice = false
+    @Environment(OverlayNetworkStore.self) private var overlayNetworks: OverlayNetworkStore?
 
     init(
         host: Host,
         catalog: HostStore,
         connectionStatus: EventsSessionStatus? = nil,
         standingFailure: TransportError? = nil,
+        connectedRouteID: HostRoute.ID? = nil,
         syncIssue: String? = nil,
         isManualReconnectInFlight: Bool = false,
         retryConnection: (@MainActor @Sendable () async -> Void)? = nil,
+        stopConnecting: (@MainActor @Sendable () async -> Void)? = nil,
         dependencies: HostOnboardingDependencies = HostOnboardingDependencies()
     ) {
         self.catalog = catalog
         self.connectionStatus = connectionStatus
         self.standingFailure = standingFailure
+        self.connectedRouteID = connectedRouteID
         self.syncIssue = syncIssue
         self.isManualReconnectInFlight = isManualReconnectInFlight
         self.retryConnection = retryConnection
+        self.stopConnecting = stopConnecting
         _store = State(
             initialValue: HostOnboardingStore(
                 host: host,
@@ -50,8 +60,12 @@ struct HostOnboardingView: View {
 
     var body: some View {
         List {
-            Section {
-                LabeledContent("Address", value: addressLine)
+            connectionSection
+
+            routesSection
+
+            Section("Host") {
+                LabeledContent("Account", value: store.host.username)
                 LabeledContent("Session", value: sessionLine)
                 LabeledContent(
                     "Auth",
@@ -59,60 +73,12 @@ struct HostOnboardingView: View {
                 pluginRow
             }
 
-            if retryConnection != nil {
-                Section {
-                    Button {
-                        retry()
-                    } label: {
-                        ZStack(alignment: .leading) {
-                            Label("Reconnect", systemImage: "arrow.clockwise")
-                                .opacity(isManualReconnectInFlight ? 0 : 1)
-                            HStack {
-                                ProgressView()
-                                Text("Connecting…")
-                            }
-                            .opacity(isManualReconnectInFlight ? 1 : 0)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .animation(.smooth(duration: 0.25), value: isManualReconnectInFlight)
-                    }
-                    .disabled(isManualReconnectInFlight)
-                } footer: {
-                    if let footerMessage = connectionPresentation.footerMessage {
-                        Group {
-                            if connectionPresentation.isSyncIssue {
-                                // Still connected: the Console's orange, not
-                                // a failure's red.
-                                let glyph = Text(Image(systemName: "arrow.trianglehead.2.clockwise"))
-                                    .foregroundStyle(HostConnectionTone.warning.tint)
-                                Text("\(glyph) \(footerMessage)")
-                                    .accessibilityLabel(footerMessage)
-                            } else {
-                                Text(footerMessage)
-                                    .foregroundStyle(.red)
-                            }
-                        }
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-                }
-                .animation(
-                    .smooth(duration: 0.25),
-                    value: connectionPresentation.connectionErrorMessage)
-            }
-
             Section {
                 ForEach(PreflightCheck.allCases, id: \.self) { check in
                     PreflightCheckRow(check: check, status: status(for: check))
                 }
             } header: {
-                HStack {
-                    Text("Preflight")
-                    if store.phase == .running {
-                        ProgressView()
-                            .controlSize(.mini)
-                            .padding(.leading, 4)
-                    }
-                }
+                preflightHeader
             } footer: {
                 if let info = store.serverInfo {
                     // The notice is advisory and the checks still pass: a Host
@@ -129,14 +95,7 @@ struct HostOnboardingView: View {
 
             availableSessionsSection
 
-            Section {
-                Button {
-                    Task { await store.runChecks() }
-                } label: {
-                    Label("Run Checks Again", systemImage: "arrow.clockwise")
-                }
-                .disabled(store.phase == .running)
-            }
+            overlaySignInSection
 
             if store.pendingHostKeyReplacement != nil {
                 Section {
@@ -159,6 +118,7 @@ struct HostOnboardingView: View {
         .sheet(isPresented: $isEditing) {
             HostFormView(store: catalog, editing: store.host)
         }
+
         .pluginNoticeSheet(pluginPresentation.notice, isPresented: $isShowingPluginNotice) {
             Task { await store.runChecks() }
         }
@@ -255,8 +215,8 @@ struct HostOnboardingView: View {
             })
     }
 
-    private var addressLine: String {
-        "\(store.host.username)@\(store.host.address):\(String(store.host.port))"
+    private func networkName(_ id: UUID) -> String {
+        overlayNetworks?.network(id: id)?.displayName ?? "Unavailable overlay network"
     }
 
     private var sessionLine: String {
@@ -266,10 +226,161 @@ struct HostOnboardingView: View {
         return "default"
     }
 
+    /// The Console is dialing this Host, or between automatic retries.
+    private var isAttemptingConnection: Bool {
+        switch connectionStatus {
+        case .connecting, .reconnecting: true
+        default: false
+        }
+    }
+
     private func retry() {
         guard !isManualReconnectInFlight, let retryConnection else { return }
         Task { @MainActor in
             await retryConnection()
+        }
+    }
+
+    private var routeStatus: HostRouteStatusPresentation {
+        HostRouteStatusPresentation(
+            status: connectionStatus,
+            standingFailure: standingFailure,
+            connectedRouteID: connectedRouteID,
+            isManualReconnectInFlight: isManualReconnectInFlight,
+            routes: store.host.routes,
+            describe: routeDescription)
+    }
+
+    /// How a route reaches the Host, under its address: `Direct`, its
+    /// Overlay Network, or `via` its Jump Host.
+    private func routeDescription(_ route: HostRoute) -> String {
+        var parts: [String] = []
+        if let networkID = route.overlayNetworkID {
+            parts.append(networkName(networkID))
+        }
+        if route.usesJumpHost {
+            let jump = route.jumpAddress.trimmingCharacters(in: .whitespaces)
+            parts.append("via \(route.jumpPort == 22 ? jump : "\(jump):\(route.jumpPort)")")
+        }
+        return parts.isEmpty ? "Direct" : parts.joined(separator: " · ")
+    }
+
+    /// The status card with its one action, and the failure's whole message
+    /// as footer.
+    @ViewBuilder
+    private var connectionSection: some View {
+        if connectionStatus != nil || retryConnection != nil {
+            let status = routeStatus
+            Section {
+                HostConnectionStatusCard(presentation: status) {
+                    trailingConnectionAction(status)
+                } below: {
+                    prominentReconnect(status)
+                }
+                .animation(.smooth(duration: 0.25), value: status.tone)
+            } footer: {
+                connectionFooter
+            }
+            .animation(
+                .smooth(duration: 0.25),
+                value: connectionPresentation.connectionErrorMessage)
+        }
+    }
+
+    /// The card's quiet action at its end, always a round button: Stop
+    /// while the Console is dialing, Reconnect while connected. A Reconnect
+    /// press keeps the circle, spinning, until the dial starts, so the card
+    /// holds its size; `retry()` ignores a second press meanwhile.
+    @ViewBuilder
+    private func trailingConnectionAction(
+        _ status: HostRouteStatusPresentation
+    ) -> some View {
+        if isAttemptingConnection, let stopConnecting {
+            Button(role: .cancel) {
+                Task { await stopConnecting() }
+            } label: {
+                // A filled square reads heavier than the outlined arrow.
+                HostCircleActionLabel(systemImage: "stop.fill")
+                    .imageScale(.small)
+            }
+            .accessibilityLabel("Stop Connecting")
+            .accessibilityHint(
+                "Stops trying to connect without waiting for a timeout. "
+                    + "The Host stays paused until you reconnect.")
+        } else if isManualReconnectInFlight {
+            HostCircleActionLabel(systemImage: nil)
+                .accessibilityHidden(true)
+        } else if status.tone == .connected, retryConnection != nil {
+            Button {
+                retry()
+            } label: {
+                HostCircleActionLabel(systemImage: "arrow.clockwise")
+            }
+            .accessibilityLabel("Reconnect")
+        }
+    }
+
+    /// Reconnect as the card's main action once nothing is dialing: the
+    /// Host can't connect or was stopped.
+    @ViewBuilder
+    private func prominentReconnect(_ status: HostRouteStatusPresentation) -> some View {
+        if status.tone == .failed || status.tone == .idle, retryConnection != nil {
+            Button {
+                retry()
+            } label: {
+                HostProminentReconnectLabel()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var connectionFooter: some View {
+        if let footerMessage = connectionPresentation.footerMessage {
+            Group {
+                if connectionPresentation.isSyncIssue {
+                    // Still connected: the Console's orange, not a
+                    // failure's red.
+                    let glyph = Text(Image(systemName: "arrow.trianglehead.2.clockwise"))
+                        .foregroundStyle(HostConnectionTone.warning.tint)
+                    Text("\(glyph) \(footerMessage)")
+                        .accessibilityLabel(footerMessage)
+                } else {
+                    Text(footerMessage)
+                        .foregroundStyle(.red)
+                }
+            }
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
+    /// Every route, marking the one in use, or each route's own failure
+    /// when none reached the Host. Routes are added and edited in Edit.
+    private var routesSection: some View {
+        let status = routeStatus
+        return Section {
+            ForEach(store.host.routes) { route in
+                let failure = status.routeFailures[route.id]
+                HostRouteLabel(kind: HostRouteKind(route)) {
+                    Text(route.endpointDescription)
+                        .font(.body.monospaced())
+                } subtitle: {
+                    Text(failure ?? routeDescription(route))
+                } trailing: {
+                    if route.id == status.inUseRouteID {
+                        HostRouteTag(text: "In Use", tint: .green)
+                    } else if failure != nil {
+                        HostRouteTag(text: "Failed", tint: .red)
+                    }
+                }
+            }
+        } header: {
+            Text("Routes")
+        } footer: {
+            if store.host.routes.count > 1 {
+                Text(
+                    "Heeler tries every route each time it connects and keeps the first that "
+                        + "reaches the Host.")
+            }
         }
     }
 
@@ -278,11 +389,56 @@ struct HostOnboardingView: View {
             status: connectionStatus,
             standingFailure: standingFailure,
             syncIssue: syncIssue,
-            isManualReconnectInFlight: isManualReconnectInFlight)
+            isManualReconnectInFlight: isManualReconnectInFlight,
+            itemizesRoutes: !routeStatus.routeFailures.isEmpty)
     }
 
     private func status(for check: PreflightCheck) -> PreflightCheckStatus? {
         store.report?[check]
+    }
+
+    /// Preflight, with Run Checks Again (Cancel Checks while running) at
+    /// its end: within reach, unlike a button below every check on a tall
+    /// screen. Out of `body`, which stays under Xcode 26.6's type-checking
+    /// limit.
+    private var preflightHeader: some View {
+        HStack {
+            Text("Preflight")
+            if store.phase == .running {
+                ProgressView()
+                    .controlSize(.mini)
+                    .padding(.leading, 4)
+            }
+            Spacer()
+            Group {
+                if store.phase == .running {
+                    Button("Cancel Checks", role: .cancel) {
+                        store.cancelChecks()
+                    }
+                    .accessibilityHint("Stops connecting without waiting for the timeout")
+                } else {
+                    Button("Run Checks Again") {
+                        Task { await store.runChecks() }
+                    }
+                }
+            }
+            .font(.subheadline)
+            .textCase(nil)
+        }
+    }
+
+    /// The overlay sign-in link, while a check is waiting on it.
+    @ViewBuilder
+    private var overlaySignInSection: some View {
+        if let loginURL = store.overlayLoginURL {
+            Section {
+                Link(destination: loginURL) {
+                    Label("Open Sign-In Link", systemImage: "person.badge.key")
+                }
+            } footer: {
+                Text("Sign in to the overlay network in the browser, then run the checks again.")
+            }
+        }
     }
 
     private var pluginPresentation: HeelerPluginPresentation {
@@ -368,6 +524,210 @@ struct HostOnboardingView: View {
     }
 }
 
+/// The Host detail's status card and route tags (ADR 0022): which route a
+/// connected Host reached, or each route's own failure when none did.
+struct HostRouteStatusPresentation: Equatable {
+    enum Tone: Equatable {
+        case connected
+        case connecting
+        case retrying
+        case failed
+        case idle
+    }
+
+    let tone: Tone
+    let title: String
+    let subtitle: String?
+    /// The route the connection reached, while connected.
+    let inUseRouteID: HostRoute.ID?
+    /// Each route's own failure Summary, from a `noRouteReached` failure.
+    let routeFailures: [HostRoute.ID: String]
+
+    /// A manual Reconnect in flight reads as Connecting… at once, whatever
+    /// the status still says, and drops the outcome it is replacing.
+    init(
+        status: EventsSessionStatus?,
+        standingFailure: TransportError? = nil,
+        connectedRouteID: HostRoute.ID?,
+        isManualReconnectInFlight: Bool = false,
+        routes: [HostRoute],
+        describe: (HostRoute) -> String
+    ) {
+        let failure: TransportError?
+        switch status {
+        case _ where isManualReconnectInFlight:
+            tone = .connecting
+            title = "Connecting…"
+            subtitle = nil
+            inUseRouteID = nil
+            failure = nil
+        case .connected:
+            tone = .connected
+            title = "Connected"
+            let route = routes.first { $0.id == connectedRouteID }
+            subtitle = route.map { "\($0.endpointDescription) · \(describe($0))" }
+            inUseRouteID = route?.id
+            failure = nil
+        case .connecting:
+            tone = .connecting
+            title = "Connecting…"
+            subtitle = standingFailure?.presentation.summary
+            inUseRouteID = nil
+            failure = standingFailure
+        case .reconnecting(_, _, let reconnectFailure):
+            tone = .retrying
+            title = "Reconnecting…"
+            subtitle = reconnectFailure.presentation.summary
+            inUseRouteID = nil
+            failure = reconnectFailure
+        case .failed(let stopFailure):
+            tone = .failed
+            title = "Can't Connect"
+            subtitle = stopFailure.presentation.summary
+            inUseRouteID = nil
+            failure = stopFailure
+        case .suspended, .ended, nil:
+            tone = .idle
+            title = "Not Connected"
+            subtitle = nil
+            inUseRouteID = nil
+            failure = nil
+        }
+        var routeFailures: [HostRoute.ID: String] = [:]
+        if case .noRouteReached(let failures) = failure {
+            for routeFailure in failures {
+                guard let id = routeFailure.routeID else { continue }
+                routeFailures[id] = routeFailure.error.presentation.summary
+            }
+        }
+        self.routeFailures = routeFailures
+    }
+}
+
+/// The status card leading the Host detail: an action at its end, or one
+/// across its foot when it is the page's main action.
+private struct HostConnectionStatusCard<Trailing: View, Below: View>: View {
+    let presentation: HostRouteStatusPresentation
+    @ViewBuilder let trailing: Trailing
+    @ViewBuilder let below: Below
+
+    @ScaledMetric(relativeTo: .headline) private var iconSize = 40
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 14) {
+                HStack(spacing: 14) {
+                    icon
+                        .frame(width: iconSize, height: iconSize)
+                        .background(tint.opacity(0.14), in: .rect(cornerRadius: 10))
+                        .accessibilityHidden(true)
+                    ZStack(alignment: .leading) {
+                        // Every state is at least a title and a subtitle
+                        // tall, so a one-line Connecting… does not shrink
+                        // the card.
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(verbatim: " ").font(.headline)
+                            Text(verbatim: " ").font(.subheadline)
+                        }
+                        .hidden()
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(presentation.title)
+                                .font(.headline)
+                            if let subtitle = presentation.subtitle {
+                                Text(subtitle)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("hosts.detail.connectionStatus")
+                Spacer(minLength: 0)
+                trailing
+            }
+            below
+        }
+        // The row stays inert; only the actions take taps.
+        .buttonStyle(.borderless)
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        switch presentation.tone {
+        case .connecting:
+            ProgressView()
+        case .connected:
+            Image(systemName: "checkmark").font(.headline).foregroundStyle(tint)
+        case .retrying:
+            Image(systemName: "arrow.clockwise").font(.headline).foregroundStyle(tint)
+        case .failed:
+            Image(systemName: "xmark").font(.headline).foregroundStyle(tint)
+        case .idle:
+            Image(systemName: "pause").font(.headline).foregroundStyle(tint)
+        }
+    }
+
+    private var tint: Color {
+        switch presentation.tone {
+        case .connected: .green
+        case .connecting, .idle: .secondary
+        case .retrying: .orange
+        case .failed: .red
+        }
+    }
+}
+
+/// A wash of the tint behind the card's Reconnect, a little stronger on a
+/// dark row so it still reads as a button.
+private struct HostReconnectFill: ShapeStyle {
+    func resolve(in environment: EnvironmentValues) -> some ShapeStyle {
+        TintShapeStyle().opacity(environment.colorScheme == .dark ? 0.22 : 0.12)
+    }
+}
+
+/// The card's quiet action: a round tinted button that leaves the
+/// subtitle its width. No symbol spins in its place.
+private struct HostCircleActionLabel: View {
+    let systemImage: String?
+
+    @ScaledMetric(relativeTo: .body) private var size = 36
+
+    var body: some View {
+        Group {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.subheadline.weight(.semibold))
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+        .frame(width: size, height: size)
+        .background(HostReconnectFill(), in: .circle)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(.rect)
+    }
+}
+
+/// Reconnect as the card's main action, across its foot.
+private struct HostProminentReconnectLabel: View {
+    var body: some View {
+        // Not a Label: a List gives a Label's icon a wide fixed slot.
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.clockwise")
+                .font(.footnote.weight(.bold))
+                .accessibilityHidden(true)
+            Text("Reconnect")
+                .font(.body.weight(.semibold))
+        }
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(HostReconnectFill(), in: .rect(cornerRadius: 12))
+            .contentShape(.rect)
+    }
+}
+
 /// Host detail footer copy, derived from Host Connection Status, or while
 /// connected from why the Host's Agents could not be synced.
 ///
@@ -389,19 +749,33 @@ struct HostOnboardingConnectionPresentation: Equatable {
     /// connection.
     let isSyncIssue: Bool
 
+    /// `itemizesRoutes`: the Routes list shows each route's own failure and
+    /// the status card the Summary, so a `noRouteReached` footer keeps only
+    /// what neither says, the Recovery Suggestion.
     init(
         status: EventsSessionStatus?,
         standingFailure: TransportError? = nil,
         syncIssue: String? = nil,
-        isManualReconnectInFlight: Bool
+        isManualReconnectInFlight: Bool,
+        itemizesRoutes: Bool = false
     ) {
+        func whole(_ failure: TransportError) -> String? {
+            if itemizesRoutes, case .noRouteReached = failure {
+                return failure.presentation.recoverySuggestion
+            }
+            return failure.presentation.message
+        }
+        func explanation(_ failure: TransportError) -> String? {
+            if itemizesRoutes, case .noRouteReached = failure { return nil }
+            return failure.presentation.explanation
+        }
         switch status {
         case .connecting:
-            connectionErrorMessage = standingFailure?.presentation.message
+            connectionErrorMessage = standingFailure.flatMap(whole)
         case .reconnecting(_, _, let failure):
-            connectionErrorMessage = failure.presentation.explanation
+            connectionErrorMessage = explanation(failure)
         case .failed(let failure):
-            connectionErrorMessage = failure.presentation.message
+            connectionErrorMessage = whole(failure)
         case .connected:
             connectionErrorMessage = syncIssue
         case .suspended, .ended, nil:
@@ -450,6 +824,13 @@ enum HostOnboardingConsoleRecovery {
             true
         case .jumpHostFailed(let underlying):
             isHostKeyTrustFailure(underlying)
+        // As `isHostKeySecurityFailure` reads it: every route, or one that
+        // cannot reach another machine.
+        case .noRouteReached(let failures):
+            (!failures.isEmpty && failures.allSatisfy { isHostKeyTrustFailure($0.error) })
+                || failures.contains {
+                    !$0.mayNameAnotherMachine && isHostKeyTrustFailure($0.error)
+                }
         default:
             false
         }

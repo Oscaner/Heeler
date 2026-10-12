@@ -670,18 +670,6 @@ struct AgentTerminalView: View {
         ) {
             pasteReviewSheet
         }
-        .confirmationDialog(
-            "Close \(title)?", isPresented: $isConfirmingClose, titleVisibility: .visible
-        ) {
-            Button("Close Agent", role: .destructive) {
-                Task { await performClose() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "This closes the pane on the Host and removes the agent everywhere. "
-                    + "This can't be undone.")
-        }
     }
 
     private var alertSurface: some View {
@@ -939,7 +927,9 @@ struct AgentTerminalView: View {
             softwareKeyboardDismissed: keyboardInset.isSoftwareKeyboardDismissed)
     }
 
-    private var composerActions: AgentComposerActions {
+    /// `anchorsClose` is true for the one input chrome on screen; during the
+    /// Direct-to-Composer handoff both are mounted and Direct Input shows.
+    private func composerActions(anchorsClose: Bool) -> AgentComposerActions {
         AgentComposerActions(
             canBegin: session.staging.canBegin,
             attachLinkCount: attach.attachLinks.count,
@@ -966,6 +956,7 @@ struct AgentTerminalView: View {
             renameAgent: { isRenamingAgent = true },
             renameWorkspace: { isRenamingWorkspace = true },
             closeAgent: { isConfirmingClose = true },
+            backToConsole: { backToConsole() },
             showChat: showChat.map { showChat in
                 {
                     // Chat takes over in place, so a raised keyboard moves
@@ -973,7 +964,18 @@ struct AgentTerminalView: View {
                     armSameAgentKeyboardHandoffIfKeyboardIsUp()
                     showChat()
                 }
-            })
+            },
+            closeConfirmation: anchorsClose
+                ? AgentCloseConfirmation(
+                    title: title,
+                    isPresented: $isConfirmingClose,
+                    close: { Task { await performClose() } })
+                : nil)
+    }
+
+    /// The edge swipe's destination, shared with the More menu's entry.
+    private func backToConsole() {
+        if let revealDetailSidebar { revealDetailSidebar() } else { dismiss() }
     }
 
     private func makeWorktreeStore(checkout: RepositoryCheckout) -> WorktreeDetailStore {
@@ -1042,9 +1044,7 @@ struct AgentTerminalView: View {
         // system's own swipe instead, which follows the finger.
         .overlay(alignment: .leading) {
             if !showsBackButton {
-                AgentEdgeBackGesture {
-                    if let revealDetailSidebar { revealDetailSidebar() } else { dismiss() }
-                }
+                AgentEdgeBackGesture { backToConsole() }
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -1225,7 +1225,7 @@ struct AgentTerminalView: View {
                     isToolsKeyboardPresented: usesDirectToolsKeyboard),
                 interactions: .init(
                     switcher: agentSwitcher,
-                    actions: composerActions,
+                    actions: composerActions(anchorsClose: true),
                     toggleKeyboard: toggleDirectKeyboard,
                     switchKeyboard: directKeyboardSwitchAction,
                     sendQuickKey: sendAgentQuickKey,
@@ -1262,7 +1262,7 @@ struct AgentTerminalView: View {
             keyboardHandoff: keyboardHandoff,
             inheritsKeyboardHandoff: inheritsKeyboardHandoff,
             keyboardHeight: composerKeyboardLayout.availableToolsHeight,
-            actions: composerActions,
+            actions: composerActions(anchorsClose: directToComposerHandoffID == nil),
             attachLinksPopover: attachLinksPopover(from: .composerChip),
             skills: skills,
             keyboardPresentation: $composerKeyboardPresentation,
@@ -1293,7 +1293,7 @@ struct AgentTerminalView: View {
     }
 
     private var chatSurfaceControl: TerminalAgentSwitcherModeControl? {
-        composerActions.showChat.map { showChat in
+        composerActions(anchorsClose: false).showChat.map { showChat in
             .button(
                 systemImage: AgentDetailSurface.chat.showSystemImage,
                 accessibilityLabel: AgentDetailSurface.chat.showTitle,

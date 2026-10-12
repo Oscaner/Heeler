@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Agent detail's Chat surface (ADR 0021): the Agent's conversation, read
+/// Agent detail's Chat surface (ADR 0023): the Agent's conversation, read
 /// from the transcript its own program writes, in place of the terminal.
 /// It never types into the Agent's PTY; the terminal stays retained per
 /// ADR 0017 while Chat shows. The geometry, top chrome and Composer copy the
@@ -245,18 +245,6 @@ struct AgentChatSurfaceView: View {
             .modifier(ConsoleSheetPresentationModifier(
                 presentation: ConsoleSheetPresentation(horizontalSizeClass: horizontalSizeClass)))
         }
-        .confirmationDialog(
-            "Close \(title)?", isPresented: $isConfirmingClose, titleVisibility: .visible
-        ) {
-            Button("Close Agent", role: .destructive) {
-                Task { await performClose() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "This closes the pane on the Host and removes the agent everywhere. "
-                    + "This can't be undone.")
-        }
         .alert(
             "Couldn't Close Agent",
             isPresented: Binding(
@@ -360,9 +348,7 @@ struct AgentChatSurfaceView: View {
         // region never covers the Composer's leading controls.
         .overlay(alignment: .leading) {
             if !showsBackButton {
-                AgentEdgeBackGesture {
-                    if let revealDetailSidebar { revealDetailSidebar() } else { dismiss() }
-                }
+                AgentEdgeBackGesture { backToConsole() }
             }
         }
         // Above the staging bar, which stays next to the Composer it feeds.
@@ -772,7 +758,17 @@ struct AgentChatSurfaceView: View {
             renameAgent: { isRenamingAgent = true },
             renameWorkspace: { isRenamingWorkspace = true },
             closeAgent: { isConfirmingClose = true },
-            showAgentTerminal: { showAgentTerminal() })
+            backToConsole: { backToConsole() },
+            showAgentTerminal: { showAgentTerminal() },
+            closeConfirmation: AgentCloseConfirmation(
+                title: title,
+                isPresented: $isConfirmingClose,
+                close: { Task { await performClose() } }))
+    }
+
+    /// The edge swipe's destination, shared with the More menu's entry.
+    private func backToConsole() {
+        if let revealDetailSidebar { revealDetailSidebar() } else { dismiss() }
     }
 
     private var agentSwitcher: TerminalAgentSwitcher {

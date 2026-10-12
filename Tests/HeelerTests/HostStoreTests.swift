@@ -104,8 +104,8 @@ struct HostStoreTests {
         let host = try #require(store.hosts.first)
         #expect(host.sessionName == "")
         // Hosts saved before jump-host support must keep connecting directly.
-        #expect(!host.usesJumpHost)
-        #expect(host.jumpPort == 22)
+        #expect(!host.primaryRoute.usesJumpHost)
+        #expect(host.primaryRoute.jumpPort == 22)
     }
 
     @Test func legacyCatalogMigrationPreservesAnUnknownAuthHost() throws {
@@ -217,7 +217,7 @@ struct HostStoreTests {
         var host = Host.fixture()
         try store.add(host)
 
-        host.address = "renamed.example"
+        host.routes[0].address = "renamed.example"
         try store.update(host)
 
         #expect(store.hosts == [host])
@@ -316,7 +316,7 @@ struct HostStoreTests {
         var host = Host.fixture(authMethod: .password)
         try store.add(host, password: "hunter2")
 
-        host.port = 2222
+        host.routes[0].port = 2222
         try store.update(host, password: nil)
 
         #expect(try store.password(for: host) == "hunter2")

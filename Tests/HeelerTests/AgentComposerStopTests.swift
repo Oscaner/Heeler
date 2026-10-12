@@ -594,7 +594,8 @@ private struct ComposerHost: View {
                 showWorktreeDetails: nil,
                 renameAgent: {},
                 renameWorkspace: {},
-                closeAgent: {}),
+                closeAgent: {},
+                backToConsole: {}),
             attachLinksPopover: AttachLinksPopover(
                 origin: .composerChip, presentedOrigin: .constant(nil), links: [],
                 open: { _ in }, copy: { _ in }),

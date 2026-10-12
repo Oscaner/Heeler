@@ -303,25 +303,25 @@ struct ChatTranscriptCacheTests {
         await cache.saveAgentDirectory([cached], for: host)
 
         var changed = host
-        changed.address = "other.example"
+        changed.routes[0].address = "other.example"
         #expect(await cache.loadAgentDirectory(for: changed).isEmpty)
         changed = host
         changed.sessionName = "other"
         #expect(await cache.loadAgentDirectory(for: changed).isEmpty)
         changed = host
-        changed.port = 2222
+        changed.routes[0].port = 2222
         #expect(await cache.loadAgentDirectory(for: changed).isEmpty)
         changed = host
         changed.username = "other"
         #expect(await cache.loadAgentDirectory(for: changed).isEmpty)
         changed = host
-        changed.jumpAddress = "jump.example"
+        changed.routes[0].jumpAddress = "jump.example"
         #expect(await cache.loadAgentDirectory(for: changed).isEmpty)
         changed = host
-        changed.jumpPort = 2222
+        changed.routes[0].jumpPort = 2222
         #expect(await cache.loadAgentDirectory(for: changed).isEmpty)
         changed = host
-        changed.jumpUsername = "jump-user"
+        changed.routes[0].jumpUsername = "jump-user"
         #expect(await cache.loadAgentDirectory(for: changed).isEmpty)
         changed = host
         changed.name = "Renamed Host"

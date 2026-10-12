@@ -313,7 +313,8 @@
             guard let profile = profiles[host.id] else {
                 throw TransportError.sshUnreachable(detail: "No demo profile for Host.")
             }
-            return DemoScreenshotTransport(profile: profile, hostID: host.id)
+            return DemoScreenshotTransport(
+                profile: profile, hostID: host.id, routeID: host.routes.last?.id)
         }
 
         /// Only with `DemoScreenshotMode.hostProblemsArgument`.
@@ -321,8 +322,8 @@
             Host(
                 id: stagingHostID,
                 name: "Staging VPS",
-                address: "staging.demo.invalid",
-                username: "deploy"),
+                username: "deploy",
+                routes: stagingRoutes),
             Host(
                 id: piHostID,
                 name: "Raspberry Pi",
@@ -331,14 +332,32 @@
             Host(
                 id: miniHostID,
                 name: "Mac mini",
-                address: "mini.demo.invalid",
-                username: "developer"),
+                username: "developer",
+                routes: [
+                    HostRoute(address: "192.168.1.30"),
+                    HostRoute(
+                        address: "127.0.0.1", port: 2222, jumpAddress: "mini.demo.invalid"),
+                ]),
+        ]
+
+        /// Staging's routes, each failing in its own way.
+        private static let stagingRoutes = [
+            HostRoute(address: "10.0.0.8"),
+            HostRoute(address: "staging.demo.invalid", port: 2222),
         ]
 
         /// How each problem Host fails to connect: Staging keeps retrying,
         /// the Pi stops until the user acts.
         static let connectFailures: [Host.ID: TransportError] = [
-            stagingHostID: .sshUnreachable(detail: "Connection refused."),
+            stagingHostID: .noRouteReached([
+                RouteFailure(
+                    route: "10.0.0.8", mayNameAnotherMachine: true, error: .timedOut,
+                    routeID: stagingRoutes[0].id),
+                RouteFailure(
+                    route: "staging.demo.invalid:2222", mayNameAnotherMachine: false,
+                    error: .sshUnreachable(detail: "Connection refused."),
+                    routeID: stagingRoutes[1].id),
+            ]),
             piHostID: .authenticationFailed,
         ]
 
@@ -614,7 +633,7 @@
         func connect(settings: SSHTransportSettings) async throws -> any Transport {
             guard
                 let host = DemoScreenshotFixture.hosts.first(where: {
-                    $0.address == settings.host
+                    $0.answers(toAddress: settings.host)
                 })
             else {
                 throw TransportError.sshUnreachable(detail: "No demo Host at this address.")
@@ -1176,6 +1195,9 @@
     private actor DemoScreenshotTransport: Transport {
         private let profile: DemoHostProfile
         private let hostID: Host.ID
+        /// The demo always reaches a Host over its last route, so a Host
+        /// with several shows a route other than the primary in use.
+        nonisolated let routeID: UUID?
         private var isClosed = false
         private var eventContinuation: AsyncThrowingStream<HerdrEvent, any Error>.Continuation?
         /// Like the SSH transport, each target admits one live channel.
@@ -1183,9 +1205,10 @@
             TerminalAttachTarget: AsyncThrowingStream<Data, any Error>.Continuation
         ] = [:]
 
-        init(profile: DemoHostProfile, hostID: Host.ID) {
+        init(profile: DemoHostProfile, hostID: Host.ID, routeID: UUID?) {
             self.profile = profile
             self.hostID = hostID
+            self.routeID = routeID
         }
 
         func ping() async throws -> ServerInfo {

@@ -102,6 +102,36 @@ struct HostOnboardingStoreTests {
         #expect(await transport.pluginReadsWhileOpen.isEmpty)
     }
 
+    @Test func cancellingChecksEndsThemAtOnceWithoutATimeout() async throws {
+        let (store, _) = try makeStore(outcome: .hangs(.seconds(1)))
+
+        let running = Task { await store.runChecks() }
+        try await waitUntil("checks running") { store.phase == .running }
+        store.cancelChecks()
+        #expect(store.phase == .finished)
+        #expect(store.report == .failure(TransportError.cancelled, authMethod: store.host.authMethod))
+        #expect(store.pluginStatus == .unavailable)
+
+        // The abandoned connect times out later; that is never shown.
+        await running.value
+        try await Task.sleep(for: .milliseconds(1_200))
+        #expect(store.report == .failure(TransportError.cancelled, authMethod: store.host.authMethod))
+        #expect(store.phase == .finished)
+    }
+
+    @Test func checksRunAgainAfterACancel() async throws {
+        let (store, _) = try makeStore(outcome: .hangs(.milliseconds(300)))
+        let running = Task { await store.runChecks() }
+        try await waitUntil("checks running") { store.phase == .running }
+        store.cancelChecks()
+        await running.value
+        #expect(store.phase == .finished)
+
+        // A new run proceeds (and its own outcome, here the timeout, shows).
+        await store.runChecks()
+        #expect(store.report == .failure(TransportError.timedOut, authMethod: store.host.authMethod))
+    }
+
     @Test func sessionDiscoveryPublishesDefaultAndNamedSessions() async throws {
         let sessions = [
             HerdrSession(name: "default", isDefault: true, isRunning: true),
@@ -222,9 +252,11 @@ struct HostOnboardingStoreTests {
 
         #expect(store.pendingFingerprint == nil)
         #expect(store.report?.isFullyPassed == true)
+        // Trusted for the Host, not its address, so every route shares it.
         #expect(
-            await knownHosts.fingerprint(host: "box.example", port: 22)
+            await knownHosts.fingerprint(trustedFor: host)
                 == HostKeyFingerprint(publicKeyBlob: keyBlob))
+        #expect(await knownHosts.fingerprint(host: "box.example", port: 22) == nil)
     }
 
     @Test func decliningTheFingerprintFailsTheRunAndPersistsNothing() async throws {
@@ -284,18 +316,94 @@ struct HostOnboardingStoreTests {
         #expect(
             store.pendingHostKeyReplacement
                 == HostKeyReplacement(known: trusted, presented: presented))
-        #expect(await knownHosts.fingerprint(host: "host.example", port: 22) == trusted)
+        // The trust saved before Routes was adopted by the Host, unchanged.
+        #expect(await knownHosts.fingerprint(trustedFor: store.host) == trusted)
 
         await store.trustPresentedHostKey()
 
         #expect(store.pendingHostKeyReplacement == nil)
         #expect(store.report?.isFullyPassed == true)
-        #expect(await knownHosts.fingerprint(host: "host.example", port: 22) == presented)
+        #expect(await knownHosts.fingerprint(trustedFor: store.host) == presented)
+    }
+
+    /// Every route reaches the same Host, so a changed key is offered for
+    /// replacement only when the routes that reached a server agree on it.
+    @Test func aKeyChangedOnEveryRouteThatAnsweredIsOfferedForReplacement() async throws {
+        let known = HostKeyFingerprint(digest: Data(repeating: 1, count: 32))
+        let presented = HostKeyFingerprint(digest: Data(repeating: 2, count: 32))
+        let (store, _) = try makeStore(
+            outcome: .connectFails(
+                .noRouteReached([
+                    RouteFailure(
+                        route: "192.168.1.5", mayNameAnotherMachine: true,
+                        error: .hostKeyMismatch(known: known, presented: presented)),
+                    RouteFailure(route: "100.64.0.5 over Home", mayNameAnotherMachine: false, error: .timedOut),
+                    RouteFailure(
+                        route: "box.example", mayNameAnotherMachine: false,
+                        error: .hostKeyMismatch(known: known, presented: presented)),
+                ])))
+
+        await store.runChecks()
+
+        #expect(
+            store.pendingHostKeyReplacement
+                == HostKeyReplacement(known: known, presented: presented))
+    }
+
+    @Test func routesThatSawDifferentKeysOfferNoReplacement() async throws {
+        let known = HostKeyFingerprint(digest: Data(repeating: 1, count: 32))
+        let (store, _) = try makeStore(
+            outcome: .connectFails(
+                .noRouteReached([
+                    RouteFailure(
+                        route: "100.64.0.5 over Home", mayNameAnotherMachine: false,
+                        error: .hostKeyMismatch(
+                            known: known,
+                            presented: HostKeyFingerprint(digest: Data(repeating: 2, count: 32)))),
+                    RouteFailure(
+                        route: "box.example", mayNameAnotherMachine: false,
+                        error: .hostKeyMismatch(
+                            known: known,
+                            presented: HostKeyFingerprint(digest: Data(repeating: 3, count: 32)))),
+                ])))
+
+        await store.runChecks()
+
+        #expect(store.pendingHostKeyReplacement == nil)
+        guard case .failed = try #require(store.report)[.connection] else {
+            Issue.record("connection check should fail")
+            return
+        }
+    }
+
+    /// A LAN address may be another machine wherever the device is now; an
+    /// overlay address is not. The overlay route's key is the one offered.
+    @Test func anOverlayRoutesChangedKeyIsOfferedOverALANAddress() async throws {
+        let known = HostKeyFingerprint(digest: Data(repeating: 1, count: 32))
+        let overlayKey = HostKeyFingerprint(digest: Data(repeating: 3, count: 32))
+        let (store, _) = try makeStore(
+            outcome: .connectFails(
+                .noRouteReached([
+                    RouteFailure(
+                        route: "192.168.1.5", mayNameAnotherMachine: true,
+                        error: .hostKeyMismatch(
+                            known: known,
+                            presented: HostKeyFingerprint(digest: Data(repeating: 2, count: 32)))),
+                    RouteFailure(
+                        route: "100.64.0.5 over Home", mayNameAnotherMachine: false,
+                        error: .hostKeyMismatch(known: known, presented: overlayKey)),
+                ])))
+
+        await store.runChecks()
+
+        #expect(
+            store.pendingHostKeyReplacement
+                == HostKeyReplacement(known: known, presented: overlayKey))
     }
 
     @Test func settingsCarryTheHostCoordinatesAndStoredPassword() async throws {
         var host = Host.fixture(address: "box.example", username: "dev", authMethod: .password)
-        host.port = 2222
+        host.routes[0].port = 2222
         host.sessionName = " work "
         let (store, connector) = try makeStore(host: host, password: "hunter2")
 

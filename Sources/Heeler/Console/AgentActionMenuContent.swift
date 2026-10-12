@@ -4,6 +4,7 @@ import SwiftUI
 /// sectioning stay identical across both surfaces; Direct Input only adds a
 /// restore-Composer hop for draft-owned actions.
 enum AgentActionMenuItem: Equatable, Hashable, Sendable, CaseIterable {
+    case backToConsole
     case addImage
     case addFile
     case showChat
@@ -20,6 +21,7 @@ enum AgentActionMenuItem: Equatable, Hashable, Sendable, CaseIterable {
 
     var title: String {
         switch self {
+        case .backToConsole: "Back to Console"
         case .addImage: "Add Image"
         case .addFile: "Add File"
         case .showChat: AgentDetailSurface.chat.showTitle
@@ -38,6 +40,7 @@ enum AgentActionMenuItem: Equatable, Hashable, Sendable, CaseIterable {
 
     var systemImage: String {
         switch self {
+        case .backToConsole: "chevron.left"
         case .addImage: "photo"
         case .addFile: "doc"
         case .showChat: AgentDetailSurface.chat.showSystemImage
@@ -67,7 +70,7 @@ enum AgentActionMenuItem: Equatable, Hashable, Sendable, CaseIterable {
         switch self {
         case .addImage, .addFile, .skills, .snippets:
             true
-        case .showChat, .showAgentTerminal, .openTerminal, .changes, .newAgent,
+        case .backToConsole, .showChat, .showAgentTerminal, .openTerminal, .changes, .newAgent,
             .worktreeDetails, .renameAgent, .renameWorkspace, .closeAgent:
             false
         }
@@ -75,6 +78,9 @@ enum AgentActionMenuItem: Equatable, Hashable, Sendable, CaseIterable {
 }
 
 enum AgentActionMenuSection: Equatable, Hashable, Sendable, CaseIterable {
+    /// Leaving the Agent, which the edge swipe also does; spelled out so the
+    /// way back is discoverable without knowing the gesture.
+    case navigation
     /// Attachments for the draft.
     case addAttachments
     /// Session tools: the Chat/terminal switch first, then the rest; Skills
@@ -85,6 +91,8 @@ enum AgentActionMenuSection: Equatable, Hashable, Sendable, CaseIterable {
 
     var items: [AgentActionMenuItem] {
         switch self {
+        case .navigation:
+            [.backToConsole]
         case .addAttachments:
             [.addImage, .addFile]
         case .sessionTools:
@@ -100,10 +108,10 @@ enum AgentActionMenuSection: Equatable, Hashable, Sendable, CaseIterable {
 enum AgentActionMenuPolicy {
     static let composerAddSections: [AgentActionMenuSection] = [.addAttachments]
     static let composerMoreSections: [AgentActionMenuSection] = [
-        .sessionTools, .agentLifecycle,
+        .navigation, .sessionTools, .agentLifecycle,
     ]
     static let directInputMoreSections: [AgentActionMenuSection] = [
-        .addAttachments, .sessionTools, .agentLifecycle,
+        .navigation, .addAttachments, .sessionTools, .agentLifecycle,
     ]
 
     /// Optional entries hide entirely when their action is absent.
@@ -146,6 +154,8 @@ enum AgentActionMenuPolicy {
         actions: AgentComposerActions
     ) {
         switch item {
+        case .backToConsole:
+            actions.backToConsole()
         case .addImage:
             actions.addImage()
         case .addFile:

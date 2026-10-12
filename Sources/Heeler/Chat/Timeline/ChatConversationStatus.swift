@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// How Chat explains a conversation it cannot show (ADR 0021). Each reason
+/// How Chat explains a conversation it cannot show (ADR 0023). Each reason
 /// leaves the terminal one tap away; none is something Heeler fixes on the
 /// Host by itself.
 extension ChatUnavailableReason {

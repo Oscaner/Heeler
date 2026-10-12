@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// What an Agent detail shows in its body: the live Agent terminal, or Chat,
-/// the native conversation read from the Agent's own transcript (ADR 0021).
+/// the native conversation read from the Agent's own transcript (ADR 0023).
 enum AgentDetailSurface: String, CaseIterable, Sendable {
     case terminal
     case chat

@@ -66,8 +66,9 @@ struct ChatCachedAgent: Codable, Equatable, Sendable {
     }
 }
 
-/// A Host id alone is insufficient: editing its endpoint or herdr session
-/// must not revive another server's saved pane-to-conversation bindings.
+/// A Host id alone is insufficient: editing its primary route or herdr
+/// session must not revive another server's saved pane-to-conversation
+/// bindings.
 struct ChatAgentDirectory: Codable, Equatable, Sendable {
     var formatVersion = 1
     let host: HostIdentity
@@ -84,14 +85,15 @@ struct ChatAgentDirectory: Codable, Equatable, Sendable {
         let jumpUsername: String
 
         init(_ host: Host) {
+            let route = host.primaryRoute
             id = host.id
-            address = host.address
-            port = host.port
+            address = route.address
+            port = route.port
             username = host.username
             sessionName = host.sessionName
-            jumpAddress = host.jumpAddress
-            jumpPort = host.jumpPort
-            jumpUsername = host.resolvedJumpUsername
+            jumpAddress = route.jumpAddress
+            jumpPort = route.jumpPort
+            jumpUsername = host.jumpUsername(on: route)
         }
     }
 

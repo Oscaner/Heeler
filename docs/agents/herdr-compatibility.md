@@ -21,7 +21,7 @@ versions. They are historical evidence, not fresh tests on the installed herdr.
 - For native Windows setup or runtime acceptance, use the
   [setup guide](../guides/windows-setup.md) or
   [acceptance checklist](../guides/native-windows-testing.md).
-- Chat ([ADR 0021](../adr/0021-native-chat-from-agent-transcripts.md)) reads
+- Chat ([ADR 0023](../adr/0023-native-chat-from-agent-transcripts.md)) reads
   transcripts over SFTP, never through herdr. herdr supplies the session id,
   Agent Status, screen reads, `agent.prompt`, `agent.send_keys` and
   `pane.send_input`.

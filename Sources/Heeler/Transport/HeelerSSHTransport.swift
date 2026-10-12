@@ -1,5 +1,6 @@
 import Foundation
 import Synchronization
+import HeelerOverlay
 import HeelerSSH
 
 private struct HeelerSSHSessionListResponse: Decodable {
@@ -319,6 +320,7 @@ actor HeelerSSHTransport: Transport {
     static let maxConnectionChannels = SSHChannelAdmission.Limits.production.connection
 
     private let connection: SSHConnection
+    nonisolated let routeID: UUID?
     private let socketLocation: HerdrSocketLocation
     private let requestTimeout: Duration
     private let gitExecTimeout: Duration
@@ -383,28 +385,104 @@ actor HeelerSSHTransport: Transport {
         [AttachmentStagingPhaseForTesting: @Sendable () async -> Void] = [:]
 #endif
 
+    /// How long a race gives the direct routes before it also starts the
+    /// routes through an Overlay Network or a Jump Host (ADR 0022).
+    static let routeRaceStagger: Duration = .milliseconds(400)
+
     /// Establishes the libssh2 Transport through the same app-owned
     /// credentials and TOFU policy as the production connection path.
+    ///
+    /// With several routes, they race only as far as a verified host key:
+    /// the first route whose Host presents the trusted key wins, the others
+    /// are cancelled, and only the winner authenticates against the Host.
+    /// A Jump Host is authenticated on its own route, since nothing past it
+    /// is reachable otherwise.
     static func connect(settings: SSHTransportSettings) async throws -> HeelerSSHTransport {
-        let targetEndpoint = try endpoint(host: settings.host, port: settings.port)
-        guard let jump = settings.jump else {
+        let gate = HostKeyVerificationGate()
+        let connection: SSHConnection
+        let routeID: UUID?
+        if settings.routes.count == 1, let route = settings.routes.first {
+            connection = try await reach(route, settings: settings, gate: gate)
+            routeID = route.id
+        } else {
+            let won = try await race(settings: settings, gate: gate)
+            connection = won.connection
+            routeID = settings.routes[won.index].id
+        }
+        do {
+            try await authenticate(
+                connection,
+                username: settings.username,
+                credentials: settings.credentials,
+                timeout: settings.requestTimeout)
+        } catch {
+            try? await connection.close(timeout: .seconds(2))
+            throw mapConnect(error)
+        }
+        return HeelerSSHTransport(connection: connection, settings: settings, routeID: routeID)
+    }
+
+    /// The winning route's index in `settings.routes` and its connection.
+    private static func race(
+        settings: SSHTransportSettings, gate: HostKeyVerificationGate
+    ) async throws -> (index: Int, connection: SSHConnection) {
+        let routes = settings.routes
+        let hasDirectRoute = routes.contains(where: \.isDirect)
+        do {
+            let won = try await RouteRace.first(
+                count: routes.count,
+                isDeferred: { hasDirectRoute && !routes[$0].isDirect },
+                stagger: routeRaceStagger,
+                attempt: { index in
+                    try await reach(routes[index], settings: settings, gate: gate)
+                },
+                discard: { connection in
+                    try? await connection.close(timeout: .seconds(2))
+                })
+            return (won.index, won.value)
+        } catch let failure as RouteRace.Failure {
+            throw TransportError.noRouteReached(
+                zip(routes, failure.failures).map { route, error in
+                    RouteFailure(
+                        route: route.label, mayNameAnotherMachine: route.mayNameAnotherMachine,
+                        error: mapConnect(error), routeID: route.id)
+                })
+        } catch {
+            throw TransportError.cancelled
+        }
+    }
+
+    /// One route as far as the Host's verified key: an unauthenticated
+    /// connection to the Host, or a mapped `TransportError`.
+    private static func reach(
+        _ route: SSHRoute, settings: SSHTransportSettings, gate: HostKeyVerificationGate
+    ) async throws -> SSHConnection {
+        let targetEndpoint = try endpoint(host: route.host, port: route.port)
+        let verifier = HeelerSSHHostKeyVerifier(
+            host: route.host,
+            port: route.port,
+            trust: settings.hostKeyTrust,
+            policy: settings.hostKeyPolicy)
+        guard let jump = route.jump else {
             let connection: SSHConnection
             do {
-                connection = try await connectDirect(
-                    endpoint: targetEndpoint,
-                    username: settings.username,
-                    credentials: settings.credentials,
-                    policy: settings.hostKeyPolicy,
-                    timeout: settings.requestTimeout)
+                connection = try await openConnection(
+                    to: targetEndpoint,
+                    timeout: settings.requestTimeout,
+                    overlay: route.overlay)
             } catch {
                 // Every other hop maps before it throws; the direct hop must
                 // too, or a raw SSHError escapes the TransportError taxonomy
                 // the app and preflight classify against.
                 throw mapConnect(error)
             }
-            return HeelerSSHTransport(
-                connection: connection,
-                settings: settings)
+            do {
+                try await gate.withLock { try await verifier.verify(connection.hostKey) }
+                return connection
+            } catch {
+                try? await connection.close(timeout: .seconds(2))
+                throw mapConnect(error)
+            }
         }
 
         let jumpEndpoint = try endpoint(host: jump.host, port: jump.port)
@@ -415,9 +493,15 @@ actor HeelerSSHTransport: Transport {
                 username: jump.username,
                 credentials: jump.credentials,
                 policy: settings.hostKeyPolicy,
-                timeout: settings.requestTimeout)
+                gate: gate,
+                timeout: settings.requestTimeout,
+                overlay: route.overlay)
         } catch {
-            throw TransportError.jumpHostFailed(mapConnect(error))
+            let mapped = mapConnect(error)
+            // The overlay sits in front of the Jump Host: blaming the Jump
+            // Host for it would send the user to the wrong machine.
+            if case .overlayFailed = mapped { throw mapped }
+            throw TransportError.jumpHostFailed(mapped)
         }
 
         let targetConnection: SSHConnection
@@ -425,28 +509,22 @@ actor HeelerSSHTransport: Transport {
             targetConnection = try await jumpConnection.connectThrough(
                 to: targetEndpoint,
                 timeout: settings.requestTimeout)
-        } catch SSHError.forwardingDenied {
-            throw TransportError.jumpHostFailed(.tcpForwardingUnavailable)
-        } catch SSHError.targetUnreachable {
-            throw TransportError.sshUnreachable(detail: "The Host is unreachable from the Jump Host.")
         } catch {
-            throw mapConnect(error)
+            try? await jumpConnection.close(timeout: .seconds(2))
+            switch error {
+            case SSHError.forwardingDenied:
+                throw TransportError.jumpHostFailed(.tcpForwardingUnavailable)
+            case SSHError.targetUnreachable:
+                throw TransportError.sshUnreachable(
+                    detail: "The Host is unreachable from the Jump Host.")
+            default:
+                throw mapConnect(error)
+            }
         }
 
         do {
-            try await HeelerSSHHostKeyVerifier(
-                host: settings.host,
-                port: settings.port,
-                policy: settings.hostKeyPolicy)
-                .verify(targetConnection.hostKey)
-            try await authenticate(
-                targetConnection,
-                username: settings.username,
-                credentials: settings.credentials,
-                timeout: settings.requestTimeout)
-            return HeelerSSHTransport(
-                connection: targetConnection,
-                settings: settings)
+            try await gate.withLock { try await verifier.verify(targetConnection.hostKey) }
+            return targetConnection
         } catch {
             try? await targetConnection.close(timeout: .seconds(2))
             throw mapConnect(error)
@@ -455,7 +533,7 @@ actor HeelerSSHTransport: Transport {
 
     /// Test and fixture entry that already holds an authenticated connection.
     /// Command defaults come from `SSHTransportSettings` statics so they cannot
-    /// drift from the production `init(connection:settings:)` path (#133).
+    /// drift from the production `init(connection:settings:routeID:)` path (#133).
     init(
         connection: SSHConnection,
         socketPath: String,
@@ -463,6 +541,7 @@ actor HeelerSSHTransport: Transport {
         gitExecTimeout: Duration = SSHTransportSettings.defaultGitExecTimeout
     ) {
         self.connection = connection
+        routeID = nil
         socketLocation = .absolutePath(socketPath)
         self.requestTimeout = requestTimeout
         self.gitExecTimeout = gitExecTimeout
@@ -479,8 +558,9 @@ actor HeelerSSHTransport: Transport {
         channelAdmission = SSHChannelAdmission()
     }
 
-    private init(connection: SSHConnection, settings: SSHTransportSettings) {
+    private init(connection: SSHConnection, settings: SSHTransportSettings, routeID: UUID?) {
         self.connection = connection
+        self.routeID = routeID
         socketLocation = settings.socket
         requestTimeout = settings.requestTimeout
         gitExecTimeout = settings.gitExecTimeout
@@ -501,15 +581,18 @@ actor HeelerSSHTransport: Transport {
         username: String,
         credentials: SSHCredentials,
         policy: HostKeyPolicy,
-        timeout: Duration
+        gate: HostKeyVerificationGate,
+        timeout: Duration,
+        overlay: OverlayRoute?
     ) async throws -> SSHConnection {
-        let connection = try await SSHConnection.connect(to: endpoint, timeout: timeout)
+        let connection = try await openConnection(
+            to: endpoint, timeout: timeout, overlay: overlay)
         do {
-            try await HeelerSSHHostKeyVerifier(
+            let verifier = HeelerSSHHostKeyVerifier(
                 host: endpoint.host,
                 port: Int(endpoint.port),
                 policy: policy)
-                .verify(connection.hostKey)
+            try await gate.withLock { try await verifier.verify(connection.hostKey) }
             try await authenticate(
                 connection,
                 username: username,
@@ -519,6 +602,29 @@ actor HeelerSSHTransport: Transport {
         } catch {
             try? await connection.close(timeout: .seconds(2))
             throw error
+        }
+    }
+
+    /// The SSH handshake over this device's own network, or over the
+    /// Overlay Network when one carries this hop (ADR 0021). Only the byte
+    /// stream differs: the caller verifies and authenticates either alike.
+    private static func openConnection(
+        to endpoint: SSHEndpoint,
+        timeout: Duration,
+        overlay: OverlayRoute?
+    ) async throws -> SSHConnection {
+        guard let overlay else {
+            return try await SSHConnection.connect(to: endpoint, timeout: timeout)
+        }
+        return try await SSHConnection.connect(
+            to: endpoint,
+            timeout: timeout,
+            transportLabel: "overlay \(overlay.networkName)"
+        ) { remaining in
+            // Each handshake attempt dials a fresh stream; the package hands
+            // the descriptor to libssh2 and calls `release` once it is done.
+            let dialed = try await overlay.dial(endpoint.host, endpoint.port, remaining)
+            return try SSHExternalStream(descriptor: dialed.descriptor, release: dialed.release)
         }
     }
 

@@ -187,12 +187,17 @@ final actor ScriptedTransport: Transport {
     private var filePatchReadOutcomes: [Result<FilePatch, any Error>] = []
     private var nextFilePatchReadGate: ScriptedTransportCallGate?
 
+    /// The catalog route this fake reports reaching (ADR 0022).
+    nonisolated let routeID: UUID?
+
     init(
         snapshot: SessionSnapshot = .fixture(),
-        serverInfo: ServerInfo = ServerInfo(version: "0.7.5-fake", protocolVersion: 17)
+        serverInfo: ServerInfo = ServerInfo(version: "0.7.5-fake", protocolVersion: 17),
+        routeID: UUID? = nil
     ) {
         self.snapshot = snapshot
         self.serverInfo = serverInfo
+        self.routeID = routeID
     }
 
     // MARK: Scripting

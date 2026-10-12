@@ -110,7 +110,7 @@ struct ConsoleChatCacheTests {
         await cache.saveAgentDirectory([ChatCachedAgent(saved)], for: host)
         _ = try await Self.saveTranscript(for: saved, on: host, in: cache)
         var activeHost = host
-        if changed == "host" { activeHost.address = "replacement.invalid" }
+        if changed == "host" { activeHost.routes[0].address = "replacement.invalid" }
         let live = Self.agent(
             host: activeHost, session: nil, terminalID: changed == "terminal" ? "t2" : "t1",
             workspaceID: changed == "workspace" ? "w2" : "w1",
@@ -199,7 +199,7 @@ struct ConsoleChatCacheTests {
         await cache.saveAgentDirectory([ChatCachedAgent(Self.agent(host: host, session: Self.sessionA))], for: host)
         let directory = ConsoleChatCache(cache: cache)
         directory.setHosts([host])
-        host.address = "second"
+        host.routes[0].address = "second"
         directory.setHosts([host])
         await directory.settled()
         #expect(directory.agents(on: host).isEmpty)
