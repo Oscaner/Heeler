@@ -81,7 +81,7 @@ Entries reference the pull request that made the change.
   then deletes the Host's Notification Key along with its saved password. If
   the Host isn't connected, the confirmation says so and suggests connecting
   first; a Host removed without being reached may keep sending this device
-  generic "Agent update" notifications. (#414)
+  generic "Agent update" notifications. (#445)
 - Close Agent and Close Terminal now ask from the More button you tapped,
   instead of a bubble floating in the middle of the terminal. (#440)
 - Start Tailscale browser authorization with one Sign In button and reconnect automatically after returning from the browser. (#426)
