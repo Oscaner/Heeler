@@ -3254,6 +3254,29 @@ struct TerminalAttachTests {
                 == .channelFailed(detail: "attach input: rejectedWrite"))
     }
 
+    /// A dead SSH connection under a live terminal marks the Transport
+    /// disconnected, as any other operation's failure does; a remote exit or
+    /// an ordinary channel failure leaves the connection alone.
+    @Test func attachIOFailuresOnADeadConnectionInvalidateIt() {
+        #expect(
+            HeelerSSHTransport.invalidatesConnection(
+                HeelerSSHAttachPumpError.output(SSHError.connectionInvalidated)))
+        #expect(
+            HeelerSSHTransport.invalidatesConnection(
+                HeelerSSHAttachPumpError.input(SSHError.connectionInvalidated)))
+        #expect(HeelerSSHTransport.invalidatesConnection(SSHError.connectionInvalidated))
+        #expect(
+            !HeelerSSHTransport.invalidatesConnection(
+                HeelerSSHAttachPumpError.output(SSHError.channelFailed)))
+        #expect(
+            !HeelerSSHTransport.invalidatesConnection(
+                HeelerSSHAttachPumpError.remoteExit(1, output: nil)))
+        #expect(
+            !HeelerSSHTransport.invalidatesConnection(
+                HeelerSSHAttachPumpError.output(
+                    TransportError.channelFailed(detail: "terminal controller: gone"))))
+    }
+
     @Test func diagnosticQuotesHerdrsLineAfterItLeavesTheAlternateScreen() {
         var diagnostic = AttachExitDiagnostic()
         diagnostic.record(Data("chatter before the TUI\r\n".utf8))

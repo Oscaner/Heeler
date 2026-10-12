@@ -2395,8 +2395,23 @@ actor HeelerSSHTransport: Transport {
     /// A post-connect failure's effect on the connection itself, apart from
     /// how the failure is classified.
     private func noteOperationFailure(_ error: any Error) {
-        if error as? SSHError == .connectionInvalidated {
+        if Self.invalidatesConnection(error) {
             connected = false
+        }
+    }
+
+    /// Whether a post-connect failure means the SSH connection is gone. An
+    /// Attach pump I/O failure is judged by the error it wraps, so a dead
+    /// connection under a live terminal marks the Transport disconnected
+    /// like any other operation; a remote exit never does.
+    static func invalidatesConnection(_ error: any Error) -> Bool {
+        switch error as? HeelerSSHAttachPumpError {
+        case .input(let underlying), .output(let underlying):
+            invalidatesConnection(underlying)
+        case .remoteExit:
+            false
+        case nil:
+            error as? SSHError == .connectionInvalidated
         }
     }
 
@@ -2951,12 +2966,7 @@ actor HeelerSSHTransport: Transport {
             if Task.isCancelled || sawCleanEnd {
                 failure = nil
             } else {
-                switch error as? HeelerSSHAttachPumpError {
-                case .input(let underlying), .output(let underlying):
-                    noteOperationFailure(underlying)
-                case .remoteExit, nil:
-                    noteOperationFailure(error)
-                }
+                noteOperationFailure(error)
                 failure = Self.attachFailure(error, attachCommand: attachCommand)
             }
         }
