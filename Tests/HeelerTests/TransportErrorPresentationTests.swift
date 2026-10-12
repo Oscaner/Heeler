@@ -98,7 +98,7 @@ struct TransportErrorPresentationTests {
 
     // MARK: Retryable set
 
-    @Test func retryableSummariesAndSuggestions() {
+    @Test func retryableSummariesAndSuggestions() throws {
         let unreachable = TransportError.sshUnreachable(detail: "connection refused")
         #expect(unreachable.presentation.summary == "SSH unavailable")
         #expect(unreachable.presentation.detail == "connection refused")
@@ -133,6 +133,13 @@ struct TransportErrorPresentationTests {
         #expect(
             TransportError.attachExited(status: 1, output: nil).presentation.message
                 == "herdr exited with status 1.")
+        // A line cut short at its ellipsis gets no period after it.
+        let cut = try #require(
+            AttachExitDiagnostic.line(
+                fromOutput: "herdr: \(String(repeating: "x", count: 300))\n"))
+        #expect(
+            TransportError.attachExited(status: 1, output: cut).presentation.message
+                == "herdr exited with status 1: \(cut)")
 
         let rejected = TransportError.apiRejected(
             code: "pane_not_found", message: "pane w11:p9 not found")

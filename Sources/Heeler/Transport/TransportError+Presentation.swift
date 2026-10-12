@@ -12,9 +12,10 @@ struct TransportErrorPresentation: Equatable, Sendable {
     let recoverySuggestion: String?
 
     /// `summary` [+ ": " + `detail`] + "." — what happened, no instruction.
+    /// A detail cut short with an ellipsis already ends the sentence.
     var explanation: String {
         if let detail {
-            return "\(summary): \(detail)."
+            return detail.hasSuffix("…") ? "\(summary): \(detail)" : "\(summary): \(detail)."
         }
         return "\(summary)."
     }
