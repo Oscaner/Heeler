@@ -799,6 +799,10 @@ final class HeelerTerminalView: UITerminalView, TerminalByteSink {
     // shrinking selection and continue its native key repeat.
     private var textInputStorage = ""
     private var textInputSelection = NSRange(location: 0, length: 0)
+    private var koreanResyllabification = HangulInput.ResyllabificationTransaction()
+    /// Korean commits recorded into the document up front, awaiting their
+    /// asynchronous echo from the byte sink (which must then be skipped).
+    private var preRecordedKoreanInput: [Data] = []
     private var terminalGridSize = (columns: 80, rows: 24)
     private var hasTerminalGridMetrics = false
     private var terminalCellSize = CGSize(width: 8, height: 16)
@@ -1365,6 +1369,13 @@ final class HeelerTerminalView: UITerminalView, TerminalByteSink {
         if applyArmedModifiers(toInsertedText: text) {
             return
         }
+        if applyKoreanComposition(text) {
+            return
+        }
+        if text != "\n", isKoreanTextInput, isCaretAtEndOfTextInput {
+            sendKoreanCommit(text)
+            return
+        }
         if text == "\n" {
             super.insertText("\r")
             return
@@ -1387,14 +1398,24 @@ final class HeelerTerminalView: UITerminalView, TerminalByteSink {
         }
 
         guard let deletionRange = textInputDeletionRange() else {
+            koreanResyllabification.reset()
             super.deleteBackward()
             return
         }
+        trackKoreanDeletion(in: deletionRange)
 
+        // The Korean keyboard composes by selecting the trailing syllables it
+        // is rebuilding and deleting them in one call ("지ㅇ" + ㅜ → select 2,
+        // delete, insert "지", "우"). The PTY holds one cell per character, so
+        // it needs one Backspace per deleted character, not one per call.
+        let deletedCharacters = (textInputStorage as NSString)
+            .substring(with: deletionRange).count
         inputDelegate?.textWillChange(self)
         inputDelegate?.selectionWillChange(self)
         deleteFromTextInputStorage(in: deletionRange)
-        super.deleteBackward()
+        for _ in 0..<max(deletedCharacters, 1) {
+            super.deleteBackward()
+        }
         inputDelegate?.selectionDidChange(self)
         inputDelegate?.textDidChange(self)
     }
@@ -1404,6 +1425,13 @@ final class HeelerTerminalView: UITerminalView, TerminalByteSink {
               !data.contains(where: { $0 < 0x20 && $0 != 0x0A && $0 != 0x0D }),
               let text = String(data: data, encoding: .utf8)
         else { return }
+        if let expected = preRecordedKoreanInput.first {
+            preRecordedKoreanInput.removeFirst()
+            if expected == data { return }
+            // The sent bytes differ from the commit (e.g. a keyboard
+            // protocol re-encoded them): stop matching and record normally.
+            preRecordedKoreanInput.removeAll()
+        }
         recordCommittedText(text)
     }
 
@@ -1420,6 +1448,101 @@ final class HeelerTerminalView: UITerminalView, TerminalByteSink {
         textInputSelection = NSRange(
             location: textInputStorage.utf16.count,
             length: 0)
+    }
+
+    // MARK: Korean composition
+
+    private var isKoreanTextInput: Bool {
+        textInputMode?.primaryLanguage?.hasPrefix("ko") == true
+    }
+
+    private var isCaretAtEndOfTextInput: Bool {
+        markedTextRange == nil
+            && textInputSelection.length == 0
+            && textInputSelection.location == textInputStorage.utf16.count
+    }
+
+    /// Rewrites a Korean keyboard commit the way a text view would compose it
+    /// ("하" + "ㄴ" → "한", "핫" + "ㅔ" → "하세"), replacing the trailing
+    /// syllable on the PTY. Returns true when the commit was handled.
+    private func applyKoreanComposition(_ text: String) -> Bool {
+        guard isKoreanTextInput, isCaretAtEndOfTextInput else {
+            koreanResyllabification.reset()
+            return false
+        }
+
+        switch koreanResyllabification.consumeInsertion(text) {
+        case .prefixReinserted:
+            return false
+        case let .replacement(edit):
+            let replaced = String(textInputStorage.suffix(edit.charactersToDelete))
+            guard edit.charactersToDelete <= textInputStorage.count,
+                  edit.textToInsert.hasPrefix(replaced)
+            else { return false }
+            replaceTrailingTextInput(edit.charactersToDelete, with: edit.textToInsert)
+            return true
+        case .noMatch:
+            break
+        }
+
+        guard text.count == 1, let jamo = text.first,
+              let previous = textInputStorage.last
+        else { return false }
+        if HangulInput.vowelIndexByJamo[jamo] != nil,
+           let edit = HangulInput.resyllabificationEdit(base: previous, followingVowel: jamo)
+        {
+            replaceTrailingTextInput(edit.charactersToDelete, with: edit.textToInsert)
+            return true
+        }
+        if let composed = HangulInput.composeCompoundVowel(base: previous, followingVowel: jamo)
+            ?? HangulInput.finalIndexByJamo[jamo].flatMap({
+                HangulInput.composeSyllable(base: previous, finalIndex: $0)
+            })
+            ?? HangulInput.composeDoubleFinal(base: previous, consonant: jamo)
+        {
+            replaceTrailingTextInput(1, with: String(composed))
+            return true
+        }
+        return false
+    }
+
+    /// Records a selection delete that may open the keyboard's
+    /// resyllabification sequence (delete → prefix reinsert → syllable).
+    private func trackKoreanDeletion(in range: NSRange) {
+        guard isKoreanTextInput, markedTextRange == nil,
+              range.length > 0,
+              NSMaxRange(range) == textInputStorage.utf16.count
+        else {
+            koreanResyllabification.reset()
+            return
+        }
+        koreanResyllabification.begin(
+            deletedText: (textInputStorage as NSString).substring(with: range))
+    }
+
+    /// Deletes `count` trailing characters (one Backspace each) and sends
+    /// `text` in their place, keeping the document in step with the PTY.
+    private func replaceTrailingTextInput(_ count: Int, with text: String) {
+        inputDelegate?.textWillChange(self)
+        inputDelegate?.selectionWillChange(self)
+        for _ in 0..<count {
+            guard let range = textInputDeletionRange() else { break }
+            deleteFromTextInputStorage(in: range)
+            super.deleteBackward()
+        }
+        sendKoreanCommit(text)
+        inputDelegate?.selectionDidChange(self)
+        inputDelegate?.textDidChange(self)
+    }
+
+    /// Sends a Korean commit and records it into the document now. The byte
+    /// sink records sent input asynchronously, but the keyboard issues its
+    /// delete → reinsert → syllable edits back to back and reads the document
+    /// in between, so the document must already hold each commit.
+    private func sendKoreanCommit(_ text: String) {
+        recordCommittedText(text)
+        preRecordedKoreanInput.append(Data(text.utf8))
+        super.insertText(text)
     }
 
     private func textInputDeletionRange() -> NSRange? {
@@ -1957,7 +2080,26 @@ final class HeelerTerminalView: UITerminalView, TerminalByteSink {
             next?.pressesBegan(sceneCommands, with: event)
         }
         guard !forwarded.isEmpty else { return }
+        for press in forwarded where press.key?.keyCode == .keyboardDeleteOrBackspace
+            && press.key?.modifierFlags.isDisjoint(with: [.command, .control, .alternate]) == true
+        {
+            deleteBackwardFromTextInputForHardwareKey()
+        }
         super.pressesBegan(forwarded, with: event)
+    }
+
+    /// A hardware Backspace reaches the PTY through Ghostty's key path, not
+    /// `deleteBackward`, so the document would keep the deleted character —
+    /// and the Korean keyboard, which rebuilds syllables from that document,
+    /// would bring it back on the next keystroke ("지원" ⌫ "안" → "원안").
+    private func deleteBackwardFromTextInputForHardwareKey() {
+        guard markedTextRange == nil, let range = textInputDeletionRange() else { return }
+        koreanResyllabification.reset()
+        inputDelegate?.textWillChange(self)
+        inputDelegate?.selectionWillChange(self)
+        deleteFromTextInputStorage(in: range)
+        inputDelegate?.selectionDidChange(self)
+        inputDelegate?.textDidChange(self)
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
