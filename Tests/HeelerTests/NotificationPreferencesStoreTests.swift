@@ -614,21 +614,37 @@ struct NotificationPreferencesStoreTests {
         #expect(try keys.record(forHost: duplicate.id) == duplicateKey)
     }
 
-    @Test(arguments: ["not connected", "no key", "no device token"])
+    @Test(arguments: ["not connected", "no key"])
     func revokingWithoutAReachableOwnEntryTouchesNoTransport(_ missing: String) async throws {
         let transport = ScriptedTransport()
         if missing != "no key" {
             await transport.setNotificationRegistration(
                 try ownEntryFile(notify: #"{"blocked":true,"done":true}"#))
         }
-        let store = makeStore(
-            provider: ScriptedTransportProvider(transports: [host.id: transport]),
-            deviceToken: missing == "no device token" ? nil : token)
+        let store = makeStore(transport: transport)
 
         await store.revokeRegistration(for: host, isConnected: missing != "not connected")
 
         #expect(await transport.notificationRegistrationReads == 0)
         #expect(await transport.replacedNotificationRegistrations.isEmpty)
+    }
+
+    /// Before APNs answers, or with notification permission withdrawn,
+    /// there is no device token; the key alone still finds the entry.
+    @Test func revokingWithoutADeviceTokenStillDropsTheOwnEntry() async throws {
+        let transport = ScriptedTransport()
+        await transport.setNotificationRegistration(
+            try ownEntryFile(notify: #"{"blocked":true,"done":true}"#))
+        let store = makeStore(
+            provider: ScriptedTransportProvider(transports: [host.id: transport]),
+            deviceToken: nil)
+
+        await store.revokeRegistration(for: host, isConnected: true)
+
+        let file = try NotificationRegistrationFile.decode(
+            await transport.notificationRegistration)
+        #expect(file.devices.isEmpty)
+        #expect(try keys.record(forHost: host.id) != nil, "the removal deletes it next")
     }
 
     @Test func aRevokeThatNeverFinishesIsAbandonedAtTheDeadline() async throws {

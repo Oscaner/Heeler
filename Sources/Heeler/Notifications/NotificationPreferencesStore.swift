@@ -147,25 +147,24 @@ final class NotificationPreferencesStore {
         }
     }
 
-    /// Best effort, before a Host is removed: drops this device's own entry
+    /// Best effort, before a Host is removed: drops this device's own entries
     /// from the Host's registration file so its plugin stops pushing here,
     /// keeping the Notification Key (`forgetNotificationKey` deletes it).
-    /// Only a connected Host with a device token and a stored key is asked;
-    /// anything else touches no network. The whole revoke, gate wait
-    /// included, is abandoned after `timeout`: a dead link waits out its
-    /// own request deadline and redial, and removal must not. Failures are
-    /// swallowed; the removal goes ahead either way.
+    /// Entries are matched by the key alone, so no device token is needed.
+    /// Only a connected Host with a stored key is asked; anything else
+    /// touches no network. The whole revoke, gate wait included, is
+    /// abandoned after `timeout`: a dead link waits out its own request
+    /// deadline and redial, and removal must not. Failures are swallowed;
+    /// the removal goes ahead either way.
     func revokeRegistration(
         for host: Host, isConnected: Bool, timeout: Duration = .seconds(6)
     ) async {
-        guard isConnected, let token = deviceToken(),
-            (try? ceremony.registrationOwner(for: host, deviceToken: token)) != nil
-        else { return }
+        guard isConnected, (try? ceremony.keys.record(forHost: host.id)) != nil else { return }
         let ceremony = ceremony
         let transports = transports
         _ = try? await AsyncDeadline.run(for: timeout) {
             try await transports.withNotificationTransport(for: host.id) { transport in
-                try await ceremony.revoke(host: host, deviceToken: token, over: transport)
+                try await ceremony.revoke(host: host, over: transport)
             }
         }
     }

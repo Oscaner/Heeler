@@ -103,26 +103,32 @@ struct NotificationRegistrationCeremony: Sendable {
         deviceToken: APNSDeviceToken,
         over transport: any Transport
     ) async throws {
-        try await revoke(host: host, deviceToken: deviceToken, over: transport)
+        let owner = try registrationOwner(for: host, deviceToken: deviceToken)
+        try await dropEntries(over: transport) { file in owner.map { file.removing($0) } ?? file }
         try keys.removeRecord(forHost: host.id)
     }
 
-    /// The remote half of `remove`: drops the Host's entries for this device
-    /// from the registration file and keeps the local Notification Key
-    /// record. The file is replaced only when an entry left it, so a Host
-    /// whose entry another Host of the same session already took over
-    /// (#412) sees no write.
-    func revoke(
-        host: Host,
-        deviceToken: APNSDeviceToken,
-        over transport: any Transport
+    /// Revokes this device on a Host about to be removed (#414): drops every
+    /// entry carrying the Host's Notification Key and keeps the local record.
+    /// It needs no device token, so it works before APNs has answered or
+    /// after notification permission was withdrawn. A Host whose entry
+    /// another Host of the same session already took over (#412) sees no
+    /// write; without a stored key nothing is read.
+    func revoke(host: Host, over transport: any Transport) async throws {
+        guard let key = try keys.record(forHost: host.id)?.key else { return }
+        try await dropEntries(over: transport) { $0.removing(key: key) }
+    }
+
+    /// Replaces the registration file with `drop` applied, under the gate,
+    /// only when an entry left it.
+    private func dropEntries(
+        over transport: any Transport,
+        _ drop: @Sendable (NotificationRegistrationFile) -> NotificationRegistrationFile
     ) async throws {
-        let owner = try registrationOwner(for: host, deviceToken: deviceToken)
         try await exclusively {
-            guard let data = try await transport.readNotificationRegistration(), let owner
-            else { return }
+            guard let data = try await transport.readNotificationRegistration() else { return }
             let file = try NotificationRegistrationFile.decode(data)
-            let updated = file.removing(owner)
+            let updated = drop(file)
             if updated != file {
                 try await transport.replaceNotificationRegistration(try updated.encoded())
             }
