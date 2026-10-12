@@ -1053,6 +1053,10 @@ indirect enum TransportError: Error, Sendable, Equatable {
     /// The channel failed outside the known failure shapes; carries the
     /// underlying description for diagnostics.
     case channelFailed(detail: String)
+    /// The remote attach command exited nonzero. Carries the line herdr last
+    /// printed outside its alternate screen, when there was one, because the
+    /// status alone cannot say which herdr failed or why (#431).
+    case attachExited(status: Int32, output: String?)
     case hostFeatureUnavailable(feature: String)
 
     /// Whether reconnecting without user intervention can plausibly recover.
@@ -1066,7 +1070,7 @@ indirect enum TransportError: Error, Sendable, Equatable {
         // A rejection is retryable because herdr's error codes are open-ended
         // and most of them describe a target that moved, not a broken setup.
         case .sshUnreachable, .timedOut, .cancelled, .channelFailed,
-            .apiRejected:
+            .attachExited, .apiRejected:
             true
         case .authenticationFailed, .tcpForwardingUnavailable,
             .deviceKeyCorrupt, .rsaKeyCorrupt, .rsaSignatureUnsupported,

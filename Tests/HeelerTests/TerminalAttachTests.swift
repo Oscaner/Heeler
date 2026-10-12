@@ -1,5 +1,6 @@
 import Foundation
 import GhosttyTerminal
+import HeelerSSH
 import SwiftUI
 import Synchronization
 import Testing
@@ -3066,26 +3067,41 @@ struct TerminalAttachTests {
                 == .herdrBinaryNotFound)
     }
 
-    @Test func attachExit127OnAnInjectableCommandStaysAChannelFailure() {
+    @Test func attachExit127OnAnInjectableCommandStaysAnAttachExit() {
         #expect(
             HeelerSSHTransport.attachChannelFailure(
                 exitStatus: 127, attachCommand: "/bin/sh /tmp/fake-attach.sh")
-                == .channelFailed(detail: "attach channel: remote exit status 127"))
+                == .attachExited(status: 127, output: nil))
     }
 
-    @Test func attachExit127OnAnAbsoluteHerdrStaysAChannelFailure() {
+    @Test func attachExit127OnAnAbsoluteHerdrStaysAnAttachExit() {
         #expect(
             HeelerSSHTransport.attachChannelFailure(
                 exitStatus: 127,
                 attachCommand: "/nonexistent/herdr agent attach")
-                == .channelFailed(detail: "attach channel: remote exit status 127"))
+                == .attachExited(status: 127, output: nil))
     }
 
-    @Test func attachNonzeroExitBesides127StaysAChannelFailure() {
+    @Test func attachNonzeroExitBesides127IsAnAttachExitWithItsOutput() {
         #expect(
             HeelerSSHTransport.attachChannelFailure(
-                exitStatus: 23, attachCommand: "herdr agent attach")
-                == .channelFailed(detail: "attach channel: remote exit status 23"))
+                exitStatus: 1,
+                output: "herdr: lost connection to server: server closed connection",
+                attachCommand: "herdr agent attach")
+                == .attachExited(
+                    status: 1,
+                    output: "herdr: lost connection to server: server closed connection"))
+    }
+
+    /// A bare `herdr` that is missing stays the PATH problem even when the
+    /// shell said so on the way out (#206).
+    @Test func attachExit127OnBareHerdrIgnoresTheShellsOutput() {
+        #expect(
+            HeelerSSHTransport.attachChannelFailure(
+                exitStatus: 127,
+                output: "sh: 1: exec: herdr: not found",
+                attachCommand: "herdr agent attach")
+                == .herdrBinaryNotFound)
     }
 
     @Test func attachPumpsReportARemoteExitStatus() async throws {
@@ -3100,9 +3116,231 @@ struct TerminalAttachTests {
                 output: source.gate,
                 requestTimeout: .seconds(1))
             Issue.record("exit 127 should fail the attach pumps")
-        } catch {
-            #expect(String(describing: error) == "remoteExit(127)")
+        } catch HeelerSSHAttachPumpError.remoteExit(let status, let output) {
+            #expect(status == 127)
+            #expect(output == nil)
         }
+    }
+
+    /// An old herdr earlier on the SSH PATH draws its frame, leaves the
+    /// alternate screen, prints why it lost the server, and exits 1. The
+    /// failure quotes that line, and the terminal still got every byte (#431).
+    @Test func attachPumpsQuoteHerdrsLastLineOnANonzeroExit() async throws {
+        let frame = Data("\u{1B}[?1049h\u{1B}[2Jsecret frame".utf8)
+        let farewell = Data(
+            "\u{1B}[?1049l\u{1B}[31mherdr: lost connection to server: server closed connection\u{1B}[0m\r\n"
+                .utf8)
+        let channel = FakeAttachPTYChannel(
+            reads: [AttachBootstrapHandshake.marker + frame, farewell, nil],
+            remoteExitStatus: 1)
+        let input = TerminalAttachInputQueue()
+        let source = HeelerSSHAttachOutputGate.makeStream()
+
+        var thrown: (any Error)?
+        do {
+            _ = try await HeelerSSHTransport.runAttachPumps(
+                channel: channel,
+                input: input,
+                output: source.gate,
+                requestTimeout: .seconds(1))
+            Issue.record("exit 1 should fail the attach pumps")
+        } catch {
+            thrown = error
+        }
+        source.gate.finish()
+
+        let error = try #require(thrown)
+        let expected = "herdr: lost connection to server: server closed connection"
+        guard case .remoteExit(1, let output)? = error as? HeelerSSHAttachPumpError else {
+            Issue.record("unexpected pump failure: \(error)")
+            return
+        }
+        #expect(output == expected)
+        #expect(
+            HeelerSSHTransport.attachFailure(error, attachCommand: "herdr agent attach")
+                == .attachExited(status: 1, output: expected))
+        var iterator = source.output.makeAsyncIterator()
+        #expect(try await iterator.next() == frame)
+        #expect(try await iterator.next() == farewell)
+        #expect(try await iterator.next() == nil)
+    }
+
+    /// A command that dies before the handshake is quoted from the startup
+    /// diagnostic the gate hands back.
+    @Test func attachPumpsQuoteAStartupFailureBeforeTheHandshake() async throws {
+        let diagnostic = Data("bash: /etc/profile.d/x.sh: Permission denied\r\n".utf8)
+        let channel = FakeAttachPTYChannel(reads: [diagnostic, nil], remoteExitStatus: 2)
+        let input = TerminalAttachInputQueue()
+        let source = HeelerSSHAttachOutputGate.makeStream()
+
+        do {
+            _ = try await HeelerSSHTransport.runAttachPumps(
+                channel: channel,
+                input: input,
+                output: source.gate,
+                requestTimeout: .seconds(1))
+            Issue.record("exit 2 should fail the attach pumps")
+        } catch HeelerSSHAttachPumpError.remoteExit(let status, let output) {
+            #expect(status == 2)
+            #expect(output == "bash: /etc/profile.d/x.sh: Permission denied")
+        }
+        source.gate.finish()
+
+        var iterator = source.output.makeAsyncIterator()
+        #expect(try await iterator.next() == diagnostic)
+        #expect(try await iterator.next() == nil)
+    }
+
+    /// The Windows controller reports its own reason as a `TransportError`;
+    /// Attach hands it on as is instead of nesting its debug description in
+    /// another channel failure.
+    @Test func aTransportErrorFromTheChannelReachesTheCallerUnwrapped() async throws {
+        let reason = TransportError.channelFailed(detail: "terminal controller: gone")
+        let channel = FakeAttachPTYChannel(reads: [], readError: reason)
+        let input = TerminalAttachInputQueue()
+        let source = HeelerSSHAttachOutputGate.makeStream()
+
+        var thrown: (any Error)?
+        do {
+            _ = try await HeelerSSHTransport.runAttachPumps(
+                channel: channel,
+                input: input,
+                output: source.gate,
+                requestTimeout: .seconds(1))
+            Issue.record("a read failure should fail the attach pumps")
+        } catch {
+            thrown = error
+        }
+        source.gate.finish()
+
+        let error = try #require(thrown)
+        #expect(
+            HeelerSSHTransport.attachFailure(error, attachCommand: "herdr agent attach")
+                == reason)
+        #expect(
+            HeelerSSHTransport.attachFailure(reason, attachCommand: "herdr agent attach")
+                == reason)
+    }
+
+    /// SSH failures take the Transport's operation mapping, not their case
+    /// name; only an unclassified channel failure keeps the side that failed.
+    @Test func attachIOFailuresTakeTheTransportsSSHMapping() {
+        let command = "herdr agent attach"
+        #expect(
+            HeelerSSHTransport.attachFailure(
+                HeelerSSHAttachPumpError.output(SSHError.connectionInvalidated),
+                attachCommand: command)
+                == .sshUnreachable(detail: "The SSH connection is no longer reusable."))
+        #expect(
+            HeelerSSHTransport.attachFailure(
+                HeelerSSHAttachPumpError.input(SSHError.timedOut),
+                attachCommand: command)
+                == .timedOut)
+        #expect(
+            HeelerSSHTransport.attachFailure(
+                HeelerSSHAttachPumpError.output(SSHError.channelFailed),
+                attachCommand: command)
+                == .channelFailed(detail: "attach channel: channelFailed"))
+        #expect(
+            HeelerSSHTransport.attachFailure(
+                HeelerSSHAttachPumpError.input(FakeAttachChannelError.rejectedWrite),
+                attachCommand: command)
+                == .channelFailed(detail: "attach input: rejectedWrite"))
+    }
+
+    @Test func diagnosticQuotesHerdrsLineAfterItLeavesTheAlternateScreen() {
+        var diagnostic = AttachExitDiagnostic()
+        diagnostic.record(Data("chatter before the TUI\r\n".utf8))
+        diagnostic.record(Data("\u{1B}[?1049h\u{1B}[Hpassword: hunter2\r\n".utf8))
+        diagnostic.record(Data("\u{1B}[?1049l".utf8))
+        diagnostic.record(
+            Data("herdr: lost connection to server: server closed connection\r\n".utf8))
+        #expect(diagnostic.line == "herdr: lost connection to server: server closed connection")
+    }
+
+    @Test func diagnosticPrefersClapsErrorLineOverItsHelpHint() {
+        var diagnostic = AttachExitDiagnostic()
+        diagnostic.record(
+            Data(
+                ("\u{1B}[1m\u{1B}[31merror:\u{1B}[0m unrecognized subcommand 'terminal'\n\n"
+                    + "Usage: herdr [OPTIONS] [COMMAND]\n\n"
+                    + "For more information, try '--help'.\n").utf8))
+        #expect(diagnostic.line == "error: unrecognized subcommand 'terminal'")
+    }
+
+    @Test func diagnosticSkipsTheRustBacktraceNote() {
+        var diagnostic = AttachExitDiagnostic()
+        diagnostic.record(
+            Data(
+                ("thread 'main' panicked at src/client.rs:42:9:\n"
+                    + "called `Result::unwrap()` on an `Err` value: BrokenPipe\n"
+                    + "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n")
+                    .utf8))
+        #expect(diagnostic.line == "called `Result::unwrap()` on an `Err` value: BrokenPipe")
+    }
+
+    @Test func diagnosticQuotesNothingFromInsideTheAlternateScreen() {
+        for mode in ["1049", "1047", "47", "1006;1049"] {
+            var diagnostic = AttachExitDiagnostic()
+            diagnostic.record(Data("error: before the screen\r\n".utf8))
+            diagnostic.record(Data("\u{1B}[?\(mode)h".utf8))
+            diagnostic.record(Data("error: token sk-live-123 on screen\r\n".utf8))
+            #expect(diagnostic.line == nil, "mode \(mode)")
+        }
+    }
+
+    @Test func diagnosticQuotesTheLastLineWhenTheScreenWasNeverEntered() {
+        var diagnostic = AttachExitDiagnostic()
+        diagnostic.record(Data("first line\r\nsecond line\r\n\r\n".utf8))
+        #expect(diagnostic.line == "second line")
+    }
+
+    @Test func diagnosticFollowsAModeSwitchSplitAcrossChunks() {
+        let output = Data(
+            "\u{1B}[?1049hscreen\u{1B}[?1049lherdr: server went away\n".utf8)
+        for split in 1..<output.count {
+            var diagnostic = AttachExitDiagnostic()
+            diagnostic.record(Data(output.prefix(split)))
+            diagnostic.record(Data(output.suffix(from: split)))
+            #expect(diagnostic.line == "herdr: server went away", "split at \(split)")
+        }
+        var stillInside = AttachExitDiagnostic()
+        stillInside.record(Data("before\n\u{1B}[?10".utf8))
+        stillInside.record(Data("49hsecret".utf8))
+        #expect(stillInside.line == nil)
+    }
+
+    @Test func diagnosticStripsEscapesControlsAndBidiFormatting() {
+        let output =
+            "\u{1B}]0;title\u{07}\u{1B}]8;;https://x\u{1B}\\herdr:\u{1B}[1m boom\u{1B}[0m"
+            + "\u{1B}P1$r0m\u{1B}\\\u{1B}_apc\u{1B}\\\u{1B}(B\u{08}\u{9B}\u{85}"
+            + " \u{202E}evil\u{202C}\u{2066}\u{200F}\u{061C}done\n"
+        #expect(AttachExitDiagnostic.line(fromOutput: output) == "herdr: boom evildone")
+    }
+
+    @Test func diagnosticKeepsOnlyTheTailOfALongStream() {
+        var diagnostic = AttachExitDiagnostic()
+        diagnostic.record(Data("error: an early line that scrolls away\n".utf8))
+        let filler = Data(String(repeating: "progress line\n", count: 1_000).utf8)
+        #expect(filler.count > 2 * AttachExitDiagnostic.maximumRetainedBytes)
+        diagnostic.record(filler)
+        diagnostic.record(Data("final words\n".utf8))
+        #expect(diagnostic.line == "final words")
+    }
+
+    @Test func diagnosticTruncatesALongLineWithAnEllipsis() {
+        let long = String(repeating: "x", count: 300)
+        let line = AttachExitDiagnostic.line(fromOutput: "herdr: \(long)\n")
+        #expect(line?.count == AttachExitDiagnostic.maximumLineLength)
+        #expect(line?.hasPrefix("herdr: xxx") == true)
+        #expect(line?.hasSuffix("x…") == true)
+    }
+
+    @Test func diagnosticHasNoLineForWhitespaceOnlyOutput() {
+        var diagnostic = AttachExitDiagnostic()
+        diagnostic.record(Data(" \t\r\n\u{1B}[0m\r\n  ".utf8))
+        #expect(diagnostic.line == nil)
+        #expect(AttachExitDiagnostic().line == nil)
     }
 
     @Test func gateWithholdsStartupChatterUntilTheHandshake() {
@@ -3178,6 +3416,7 @@ struct TerminalAttachTests {
 private actor FakeAttachPTYChannel: HeelerSSHAttachChannel {
     private var reads: [Data?]
     private let writeError: (any Error & Sendable)?
+    private let readError: (any Error & Sendable)?
     private let blockAfterReads: Bool
     private let remoteExitStatus: Int32
     private var didReadFirst = false
@@ -3186,11 +3425,13 @@ private actor FakeAttachPTYChannel: HeelerSSHAttachChannel {
     init(
         reads: [Data?],
         writeError: (any Error & Sendable)? = nil,
+        readError: (any Error & Sendable)? = nil,
         blockAfterReads: Bool = false,
         remoteExitStatus: Int32 = 0
     ) {
         self.reads = reads
         self.writeError = writeError
+        self.readError = readError
         self.blockAfterReads = blockAfterReads
         self.remoteExitStatus = remoteExitStatus
     }
@@ -3201,6 +3442,7 @@ private actor FakeAttachPTYChannel: HeelerSSHAttachChannel {
 
     func read(maximumBytes _: Int, timeout _: Duration) async throws -> Data? {
         guard !reads.isEmpty else {
+            if let readError { throw readError }
             if blockAfterReads {
                 try await Task.sleep(for: .seconds(60))
             }

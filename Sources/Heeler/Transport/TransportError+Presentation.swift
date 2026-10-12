@@ -151,7 +151,22 @@ extension TransportError {
                 summary: "Connection dropped",
                 detail: detail,
                 recoverySuggestion: nil)
+        case .attachExited(let status, let output):
+            TransportErrorPresentation(
+                summary: "herdr exited with status \(status)",
+                detail: output.map(Self.droppingTrailingPeriods).flatMap {
+                    $0.isEmpty ? nil : $0
+                },
+                recoverySuggestion: nil)
         }
+    }
+
+    /// herdr's own sentence may already end in a period; `explanation`
+    /// supplies the closing one.
+    private static func droppingTrailingPeriods(_ text: String) -> String {
+        var text = Substring(text)
+        while text.last == "." { text = text.dropLast() }
+        return String(text)
     }
 
     /// A changed host key is a security refusal, not an ordinary outage.

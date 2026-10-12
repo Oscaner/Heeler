@@ -408,9 +408,10 @@ struct HeelerSSHTransportBehaviorE2ETests {
         var output = ""
         try await expectAttachOutput(&iterator, accumulated: &output, contains: "TTY-OK")
         failed.send(Data("__fail__\n".utf8))
+        // The fixture's last line rides along with the status (#431).
         await #expect(
-            throws: TransportError.channelFailed(
-                detail: "attach channel: remote exit status 23")
+            throws: TransportError.attachExited(
+                status: 23, output: "herdr: fixture attach failed")
         ) {
             while try await iterator.next() != nil {}
         }

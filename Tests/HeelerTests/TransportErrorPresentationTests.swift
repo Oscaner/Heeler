@@ -118,6 +118,22 @@ struct TransportErrorPresentationTests {
         #expect(dropped.presentation.detail == "connection reset")
         #expect(dropped.presentation.recoverySuggestion == nil)
 
+        let exited = TransportError.attachExited(
+            status: 1, output: "herdr: lost connection to server: server closed connection")
+        #expect(exited.isRetryable)
+        #expect(exited.presentation.summary == "herdr exited with status 1")
+        #expect(
+            exited.presentation.detail
+                == "herdr: lost connection to server: server closed connection")
+        #expect(exited.presentation.recoverySuggestion == nil)
+        // herdr's own closing period is not doubled.
+        #expect(
+            TransportError.attachExited(status: 3, output: "Error: no such pane.")
+                .presentation.message == "herdr exited with status 3: Error: no such pane.")
+        #expect(
+            TransportError.attachExited(status: 1, output: nil).presentation.message
+                == "herdr exited with status 1.")
+
         let rejected = TransportError.apiRejected(
             code: "pane_not_found", message: "pane w11:p9 not found")
         #expect(rejected.presentation.summary == "herdr rejected the request")
@@ -131,6 +147,7 @@ struct TransportErrorPresentationTests {
             .timedOut,
             .cancelled,
             .channelFailed(detail: "reset"),
+            .attachExited(status: 1, output: "herdr: lost connection to server"),
             .apiRejected(code: "busy", message: "try later"),
             .jumpHostFailed(.sshUnreachable(detail: "down")),
             .jumpHostFailed(.timedOut),
