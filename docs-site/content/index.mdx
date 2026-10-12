@@ -1,0 +1,49 @@
+---
+title: Heeler Docs
+description: Guides for connecting Heeler, the iOS companion for herdr, to the machines that run your coding agents.
+---
+
+Heeler is the native iPhone and iPad companion for [herdr](https://herdr.dev). These guides cover
+reaching the machine that runs herdr when you are away from it, and setting up the Hosts Heeler connects to.
+
+## Overlay networks
+
+<Cards>
+  <Card title="Overview" href="/overlay-networks">
+    Prepare the Host, pick a provider, and connect from Heeler.
+  </Card>
+  <Card title="Tailscale" href="/tailscale">
+    Heeler joins your tailnet itself; the Mac runs the Tailscale app.
+  </Card>
+  <Card title="Tailscale without a VPN" href="/tailscale-userspace">
+    Advanced: run Tailscale from Terminal so the Mac gets no VPN.
+  </Card>
+  <Card title="ZeroTier" href="/zerotier">
+    Reach the Mac through a private ZeroTier network.
+  </Card>
+  <Card title="EasyTier" href="/easytier">
+    No account needed; bring your own relay for access from outside.
+  </Card>
+</Cards>
+
+## Jump host
+
+<Cards>
+  <Card title="Set up remote access through a VPS" href="/vps-jump-host-setup">
+    A copy-and-check walkthrough for a Mac behind NAT.
+  </Card>
+  <Card title="VPS jump host and reverse tunnel" href="/vps-jump-host">
+    The trust model, operations, and migration runbook.
+  </Card>
+</Cards>
+
+## Hosts
+
+<Cards>
+  <Card title="Reach a Host on several routes" href="/host-routes">
+    Let Heeler try the LAN, an overlay network, or a jump host in turn.
+  </Card>
+  <Card title="Windows setup" href="/windows-setup">
+    SSH login and automatic startup for a native Windows Host.
+  </Card>
+</Cards>

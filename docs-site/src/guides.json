@@ -1,0 +1,27 @@
+{
+  "$comment": "The guides published from docs/guides/, in sidebar order. Each slug is a basename (without .md) and becomes the route /<slug>. Read by src/lib/guides.ts and scripts/check-links.mjs. sidebarTitles overrides a page's sidebar label (its H1 title otherwise); keep it in sentence case and in step with the Card titles in content/index.mdx.",
+  "sections": [
+    {
+      "title": "Overlay networks",
+      "guides": ["overlay-networks", "tailscale", "tailscale-userspace", "zerotier", "easytier"]
+    },
+    {
+      "title": "Jump host",
+      "guides": ["vps-jump-host-setup", "vps-jump-host"]
+    },
+    {
+      "title": "Hosts",
+      "guides": ["host-routes", "windows-setup"]
+    }
+  ],
+  "sidebarTitles": {
+    "index": "Introduction",
+    "overlay-networks": "Overview",
+    "tailscale": "Tailscale",
+    "tailscale-userspace": "Tailscale without a VPN",
+    "zerotier": "ZeroTier",
+    "easytier": "EasyTier",
+    "vps-jump-host-setup": "Set up remote access through a VPS",
+    "vps-jump-host": "VPS jump host and reverse tunnel"
+  }
+}
