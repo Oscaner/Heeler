@@ -129,6 +129,11 @@ struct AttachBootstrapGate {
 /// alternate-screen entry, or after the last leave, is ordinary command
 /// output. A command that exits while still inside the alternate screen has
 /// no line to quote.
+///
+/// One flag is enough because the only alternate-screen switches in an attach
+/// stream are herdr's own: `herdr terminal attach` draws the pane through its
+/// cell-diff renderer (`RenderEncoding::TerminalAnsi` in herdr 0.8.2 and
+/// later), which never forwards the inner application's mode switches.
 struct AttachExitDiagnostic {
     /// The retained tail. herdr's failure is its last line or two.
     static let maximumRetainedBytes = 4 * 1024

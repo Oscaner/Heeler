@@ -3357,6 +3357,27 @@ struct TerminalAttachTests {
         #expect(diagnostic.line == "final words")
     }
 
+    /// Output from before the TUI is not "since the last leave": a stale
+    /// error line printed before the screen loses to herdr's later farewell,
+    /// even one without an error prefix.
+    @Test func diagnosticForgetsOutputFromBeforeTheScreen() {
+        var diagnostic = AttachExitDiagnostic()
+        diagnostic.record(Data("error: stale warning\r\n".utf8))
+        diagnostic.record(Data("\u{1B}[?1049hscreen".utf8))
+        diagnostic.record(Data("\u{1B}[?1049l".utf8))
+        diagnostic.record(Data("Connection closed\r\n".utf8))
+        #expect(diagnostic.line == "Connection closed")
+    }
+
+    /// Once the tail is trimmed, its first line is a fragment cut mid-way and
+    /// is never quoted, even when it is the only line left.
+    @Test func diagnosticNeverQuotesTheFragmentLeftByTrimming() {
+        var diagnostic = AttachExitDiagnostic()
+        diagnostic.record(Data(String(repeating: "x", count: 9_000).utf8))
+        diagnostic.record(Data("\n".utf8))
+        #expect(diagnostic.line == nil)
+    }
+
     @Test func diagnosticTruncatesALongLineWithAnEllipsis() {
         let long = String(repeating: "x", count: 300)
         let line = AttachExitDiagnostic.line(fromOutput: "herdr: \(long)\n")

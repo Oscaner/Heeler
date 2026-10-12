@@ -396,7 +396,7 @@ struct HeelerSSHTransportBehaviorE2ETests {
         await replacement.end()
     }
 
-    @Test("nonzero Attach exit reports the primary channel failure and wakes input")
+    @Test("nonzero Attach exit reports herdr's exit and last line and wakes input")
     func failedAttachExitFreesChannel() async throws {
         let environment = try #require(HeelerSSHTransportBehaviorEnvironment.current)
         let transport = try await HeelerSSHTransport.connect(settings: environment.directSettings())
