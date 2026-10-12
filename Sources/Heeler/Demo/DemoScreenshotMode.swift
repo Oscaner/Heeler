@@ -157,8 +157,9 @@
             for id in DemoScreenshotFixture.pluginStateLiveActivityHostIDs {
                 liveActivityPreferences.setEnabled(true, for: id)
             }
+            let hosts = HostStore(volatileHosts: DemoScreenshotFixture.hosts)
             return DemoScreenshotComposition(
-                hosts: HostStore(volatileHosts: DemoScreenshotFixture.hosts),
+                hosts: hosts,
                 console: console,
                 terminalThemes: TerminalThemeSettings(defaults: defaults),
                 terminalZoom: TerminalZoomSettings(defaults: defaults),
@@ -179,10 +180,11 @@
                     preferences: liveActivityPreferences,
                     transports: console,
                     deviceToken: { nil },
-                    knownHostIDs: { Set(DemoScreenshotFixture.hosts.map(\.id)) },
-                    hostDisplayName: { id in
-                        DemoScreenshotFixture.hosts.first(where: { $0.id == id })?.displayName
-                            ?? ""
+                    // The live catalog, so a demo removal leaves it before
+                    // forgetHost runs, as in the app.
+                    knownHostIDs: { [weak hosts] in Set(hosts?.hosts.map(\.id) ?? []) },
+                    hostDisplayName: { [weak hosts] id in
+                        hosts?.hosts.first(where: { $0.id == id })?.displayName ?? ""
                     },
                     isAwaitingSnapshot: { _ in false },
                     connectionStatus: { _ in .connected }),
