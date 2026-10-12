@@ -1,4 +1,5 @@
 ---
+import { ClientRouter } from 'astro:transitions';
 import '@/styles/global.css';
 
 interface Props {
@@ -36,8 +37,31 @@ const ogImage = new URL('/logo.png', Astro.site);
     <meta property="og:image" content={ogImage} />
     <meta name="twitter:card" content="summary" />
     <meta name="generator" content={Astro.generator} />
+    <ClientRouter />
+    <script>
+      // The theme script sets `dark`/`light` and color-scheme on <html>, but a
+      // client-side navigation swaps in the next page's bare <html> attributes.
+      // Carry them over so the theme does not flash back to the default.
+      document.addEventListener('astro:before-swap', (event) => {
+        const current = document.documentElement;
+        const next = event.newDocument.documentElement;
+        next.className = current.className;
+        const style = current.getAttribute('style');
+        if (style === null) next.removeAttribute('style');
+        else next.setAttribute('style', style);
+      });
+    </script>
   </head>
-  <body class="flex min-h-screen flex-col">
+  <!-- Persisting the body keeps the React shell (sidebar, nav, scroll
+       positions) mounted across navigations; Astro passes the new page's props
+       and content to the persisted island. A full reload would re-render the
+       sidebar and re-rasterize its text on every click. -->
+  <body
+    class="flex min-h-screen flex-col"
+    transition:persist
+    transition:animate="none"
+    transition:name="page-layout"
+  >
     <slot />
   </body>
 </html>

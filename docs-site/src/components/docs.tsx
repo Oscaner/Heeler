@@ -5,6 +5,7 @@ import { DocsLayout } from 'fumadocs-ui/layouts/docs';
 import { DocsBody, DocsDescription, DocsPage, DocsTitle, EditOnGitHub } from 'fumadocs-ui/layouts/docs/page';
 import { RootProvider } from 'fumadocs-ui/provider/astro';
 import type { ReactNode } from 'react';
+import { navigate } from 'astro:transitions/client';
 import { githubRepo } from '@/lib/guides.ts';
 import StaticSearchDialog from './search';
 
@@ -26,7 +27,12 @@ export interface DocsProps {
 /** The Fumadocs shell (sidebar, nav, search, theme) around one page's rendered HTML. */
 export function Docs({ tree, pathname, params, page, children }: DocsProps) {
   return (
-    <RootProvider pathname={pathname} params={params} search={{ SearchDialog: StaticSearchDialog }}>
+    <RootProvider
+      pathname={pathname}
+      params={params}
+      navigate={navigate}
+      search={{ SearchDialog: StaticSearchDialog }}
+    >
       <DocsLayout
         tree={tree}
         nav={{
