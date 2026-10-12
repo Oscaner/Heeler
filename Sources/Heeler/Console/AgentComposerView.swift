@@ -77,6 +77,9 @@ struct AgentComposerActions {
     let renameAgent: () -> Void
     let renameWorkspace: () -> Void
     let closeAgent: () -> Void
+    /// Leaves the Agent the way its edge swipe does: back to the Console
+    /// list, or out to the sidebar beside an iPad's detail column.
+    let backToConsole: () -> Void
     /// Close Agent's confirmation, set only on the More menu that is on
     /// screen so the dialog has a single anchor.
     var closeConfirmation: AgentCloseConfirmation? = nil

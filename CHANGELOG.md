@@ -9,6 +9,9 @@ Entries reference the pull request that made the change.
 
 ### Added
 
+- Return to the Console from an Agent's More menu. Back to Console does
+  what swiping in from the left edge does, so the way back no longer
+  depends on knowing the gesture; the Agent keeps running on the Host. (#439)
 - Give a Host more than one route — its LAN address for home, say, and an
   overlay network or Jump Host for everywhere else. Add Route in Edit Host;
   Heeler tries every route each time it connects and keeps the first that
