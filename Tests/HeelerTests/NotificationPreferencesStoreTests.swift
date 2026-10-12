@@ -647,6 +647,25 @@ struct NotificationPreferencesStoreTests {
         #expect(try keys.record(forHost: host.id) != nil, "the removal deletes it next")
     }
 
+    /// The Host no longer holds this device's entry, so its toggle and the
+    /// in-app banner gate read off before the key is deleted: a removal that
+    /// fails at the Keychain keeps the Host with notifications off.
+    @Test func aConfirmedRevokeReadsUnregisteredWhileTheKeyRemains() async throws {
+        let transport = ScriptedTransport()
+        let store = makeStore(transport: transport)
+        await store.refresh()
+        await store.setNotificationsEnabled(true, for: host)
+        #expect(store.confirmedTriggers(for: host.id) != nil)
+
+        await store.revokeRegistration(for: host, isConnected: true)
+
+        #expect(
+            store.states[host.id]
+                == .idle(.init(isRegistered: false, notify: NotificationTriggerPreferences())))
+        #expect(store.confirmedTriggers(for: host.id) == nil)
+        #expect(store.hasNotificationKey(for: host.id))
+    }
+
     @Test func aRevokeThatNeverFinishesIsAbandonedAtTheDeadline() async throws {
         _ = try ownEntryFile(notify: #"{"blocked":true,"done":true}"#)
         let store = NotificationPreferencesStore(

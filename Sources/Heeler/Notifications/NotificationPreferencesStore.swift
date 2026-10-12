@@ -155,18 +155,25 @@ final class NotificationPreferencesStore {
     /// touches no network. The whole revoke, gate wait included, is
     /// abandoned after `timeout`: a dead link waits out its own request
     /// deadline and redial, and removal must not. Failures are swallowed;
-    /// the removal goes ahead either way.
+    /// the removal goes ahead either way. A revoke the Host confirmed reads
+    /// unregistered at once, so a removal that then fails keeps the Host
+    /// with notifications off.
     func revokeRegistration(
         for host: Host, isConnected: Bool, timeout: Duration = .seconds(6)
     ) async {
         guard isConnected, (try? ceremony.keys.record(forHost: host.id)) != nil else { return }
         let ceremony = ceremony
         let transports = transports
-        _ = try? await AsyncDeadline.run(for: timeout) {
-            try await transports.withNotificationTransport(for: host.id) { transport in
-                try await ceremony.revoke(host: host, over: transport)
+        do {
+            try await AsyncDeadline.run(for: timeout) {
+                try await transports.withNotificationTransport(for: host.id) { transport in
+                    try await ceremony.revoke(host: host, over: transport)
+                }
             }
+        } catch {
+            return
         }
+        markUnregistered(host.id)
     }
 
     /// Deletes the Host's Notification Key record (Keychain and app-group
@@ -175,10 +182,15 @@ final class NotificationPreferencesStore {
     /// removal that fails after this keeps the Host with notifications off.
     func forgetNotificationKey(for hostID: Host.ID) throws {
         try ceremony.keys.removeRecord(forHost: hostID)
-        if confirmedSettings(for: hostID) != nil {
-            states[hostID] = .idle(
-                HostSettings(isRegistered: false, notify: NotificationTriggerPreferences()))
-        }
+        markUnregistered(hostID)
+    }
+
+    /// Settles a confirmed state on unregistered; one still loading or
+    /// updating is left for its own read or write to settle.
+    private func markUnregistered(_ hostID: Host.ID) {
+        guard confirmedSettings(for: hostID) != nil else { return }
+        states[hostID] = .idle(
+            HostSettings(isRegistered: false, notify: NotificationTriggerPreferences()))
     }
 
     private func load(_ host: Host) async {
