@@ -75,7 +75,7 @@ Entries reference the pull request that made the change.
 
 - Removing a Host now ends its Live Activity and forgets its Live Activity
   setting, and Heeler no longer keeps retrying Live Activity updates for the
-  removed Host. (#414)
+  removed Host. (#444)
 - Close Agent and Close Terminal now ask from the More button you tapped,
   instead of a bubble floating in the middle of the terminal. (#440)
 - Start Tailscale browser authorization with one Sign In button and reconnect automatically after returning from the browser. (#426)
