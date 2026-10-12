@@ -1055,7 +1055,9 @@ indirect enum TransportError: Error, Sendable, Equatable {
     case channelFailed(detail: String)
     /// The remote attach command exited nonzero. Carries the line herdr last
     /// printed outside its alternate screen, when there was one, because the
-    /// status alone cannot say which herdr failed or why (#431).
+    /// status alone cannot say which herdr failed or why (#431). A native
+    /// Windows terminal controller's exit carries no line: its stderr is not
+    /// kept, and its stdout is JSON records, not terminal output.
     case attachExited(status: Int32, output: String?)
     case hostFeatureUnavailable(feature: String)
 

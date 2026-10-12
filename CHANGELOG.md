@@ -75,10 +75,10 @@ Entries reference the pull request that made the change.
 
 - Close Agent and Close Terminal now ask from the More button you tapped,
   instead of a bubble floating in the middle of the terminal. (#440)
-- When attaching to an Agent or terminal fails because herdr exits, the
-  message now quotes herdr's own error, such as an older herdr earlier on
-  the SSH PATH losing its connection to the server, instead of only an exit
-  status. (#431)
+- When attaching to an Agent or terminal on a macOS or Linux Host fails
+  because herdr exits, the message now quotes herdr's own error, such as an
+  older herdr earlier on the SSH PATH losing its connection to the server,
+  instead of only an exit status. (#431)
 - Start Tailscale browser authorization with one Sign In button and reconnect automatically after returning from the browser. (#426)
 - Show Connected and remove the sign-in prompt when Tailscale browser authorization completes, without requiring another Connect. (#426)
 - Open a Host's connection checks after adding it from an overlay network's peer list, so its SSH host key can be trusted on the first connection. (#426)
