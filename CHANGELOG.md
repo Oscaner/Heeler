@@ -73,6 +73,9 @@ Entries reference the pull request that made the change.
 
 ### Fixed
 
+- Removing a Host now ends its Live Activity and forgets its Live Activity
+  setting, and Heeler no longer keeps retrying Live Activity updates for the
+  removed Host. (#444)
 - Close Agent and Close Terminal now ask from the More button you tapped,
   instead of a bubble floating in the middle of the terminal. (#440)
 - When attaching to an Agent or terminal on a macOS or Linux Host fails

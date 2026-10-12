@@ -277,6 +277,28 @@ struct HostStoreTests {
         #expect(try store.password(for: host) == nil)
     }
 
+    @Test func confirmedRemovalReportsEachHostOnceItLeavesTheCatalog() throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        let store = HostStore(defaults: defaults, secrets: InMemorySecretStore())
+        let first = Host.fixture(name: "One")
+        let second = Host.fixture(name: "Two")
+        let kept = Host.fixture(name: "Kept")
+        for host in [first, second, kept] { try store.add(host) }
+        let removal = HostRemovalStore(store: store)
+        let log = RemovedHostLog()
+        let dependencies = HostRemovalDependencies(didRemoveHost: { id in
+            log.entries.append((id, store.hosts.contains { $0.id == id }))
+        })
+
+        removal.requestRemoval([first.id, second.id])
+        removal.confirmRemoval(try #require(removal.pendingRequest), dependencies: dependencies)
+
+        #expect(log.entries.map(\.id) == [first.id, second.id])
+        #expect(log.entries.allSatisfy { !$0.wasStillInCatalog })
+        #expect(store.hosts == [kept])
+    }
+
     @Test func passwordRoundTripsThroughTheSecretStore() throws {
         let (defaults, cleanup) = try makeDefaults()
         defer { cleanup() }
@@ -357,15 +379,27 @@ struct HostStoreTests {
         try store.add(host, password: "hunter2")
         secrets.failRemovals()
         let removal = HostRemovalStore(store: store)
+        let log = RemovedHostLog()
+        let dependencies = HostRemovalDependencies(didRemoveHost: { id in
+            log.entries.append((id, true))
+        })
 
         removal.requestRemoval([host.id])
-        removal.confirmRemoval(try #require(removal.pendingRequest))
+        removal.confirmRemoval(try #require(removal.pendingRequest), dependencies: dependencies)
 
         #expect(store.hosts == [host])
+        #expect(log.entries.isEmpty, "a Host that is still saved keeps its other state")
         #expect(removal.errorMessage != nil)
         removal.dismissError()
         #expect(removal.errorMessage == nil)
     }
+}
+
+/// The Hosts a confirmed removal reported, and whether each was still in
+/// the catalog when it was reported.
+@MainActor
+private final class RemovedHostLog {
+    var entries: [(id: Host.ID, wasStillInCatalog: Bool)] = []
 }
 
 private final class RemovalFailingSecretStore: SecretStore {
