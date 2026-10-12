@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import Heeler
@@ -666,10 +667,14 @@ struct NotificationPreferencesStoreTests {
         #expect(store.hasNotificationKey(for: host.id))
     }
 
-    @Test func aRevokeThatNeverFinishesIsAbandonedAtTheDeadline() async throws {
+    /// The time limit turns a missing deadline into a failure rather than
+    /// an hour-long stall.
+    @Test(.timeLimit(.minutes(1)))
+    func aRevokeThatNeverFinishesIsAbandonedAtTheDeadline() async throws {
         _ = try ownEntryFile(notify: #"{"blocked":true,"done":true}"#)
+        let provider = StallingTransportProvider()
         let store = NotificationPreferencesStore(
-            transports: StallingTransportProvider(),
+            transports: provider,
             deviceToken: { self.token },
             ceremony: NotificationRegistrationCeremony(keys: keys))
         store.setHosts([host])
@@ -681,6 +686,13 @@ struct NotificationPreferencesStoreTests {
         }
 
         #expect(elapsed < .seconds(5))
+        // The deadline does not wait for the borrow to begin; give it a
+        // bounded moment, so a guard that skipped the revoke still fails.
+        let waitStart = clock.now
+        while provider.borrows == 0, clock.now - waitStart < .seconds(5) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(provider.borrows == 1, "the revoke reached the stalled connection")
     }
 
     @Test func forgettingTheKeyReadsAsUnregistered() async throws {
@@ -723,13 +735,18 @@ struct NotificationPreferencesStoreTests {
     }
 }
 
-/// A Host whose connection reads as up but never answers: every borrow
-/// waits until it is cancelled.
-private struct StallingTransportProvider: NotificationTransportProvider {
+/// A Host whose connection reads as up but never answers: every borrow is
+/// counted, then waits until it is cancelled.
+private final class StallingTransportProvider: NotificationTransportProvider {
+    private let borrowCount = Mutex(0)
+
+    var borrows: Int { borrowCount.withLock { $0 } }
+
     func withNotificationTransport<Value: Sendable>(
         for hostID: Host.ID,
         _ operation: @escaping @Sendable (any Transport) async throws -> Value
     ) async throws -> Value {
+        borrowCount.withLock { $0 += 1 }
         try await Task.sleep(for: .seconds(3600))
         throw CancellationError()
     }
