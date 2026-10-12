@@ -134,6 +134,54 @@ final class NotificationPreferencesStore {
         }
     }
 
+    // MARK: Host removal (#414)
+
+    /// Whether this device holds a Notification Key for the Host, i.e.
+    /// removing the Host deletes one. A Keychain that cannot be read counts
+    /// as holding one: the removal will try to delete it.
+    func hasNotificationKey(for hostID: Host.ID) -> Bool {
+        do {
+            return try ceremony.keys.record(forHost: hostID) != nil
+        } catch {
+            return true
+        }
+    }
+
+    /// Best effort, before a Host is removed: drops this device's own entry
+    /// from the Host's registration file so its plugin stops pushing here,
+    /// keeping the Notification Key (`forgetNotificationKey` deletes it).
+    /// Only a connected Host with a device token and a stored key is asked;
+    /// anything else touches no network. The whole revoke, gate wait
+    /// included, is abandoned after `timeout`: a dead link waits out its
+    /// own request deadline and redial, and removal must not. Failures are
+    /// swallowed; the removal goes ahead either way.
+    func revokeRegistration(
+        for host: Host, isConnected: Bool, timeout: Duration = .seconds(6)
+    ) async {
+        guard isConnected, let token = deviceToken(),
+            (try? ceremony.registrationOwner(for: host, deviceToken: token)) != nil
+        else { return }
+        let ceremony = ceremony
+        let transports = transports
+        _ = try? await AsyncDeadline.run(for: timeout) {
+            try await transports.withNotificationTransport(for: host.id) { transport in
+                try await ceremony.revoke(host: host, deviceToken: token, over: transport)
+            }
+        }
+    }
+
+    /// Deletes the Host's Notification Key record (Keychain and app-group
+    /// mirror) as part of its removal. Without a key no entry on the Host is
+    /// this device's own, so a confirmed state now reads unregistered: a
+    /// removal that fails after this keeps the Host with notifications off.
+    func forgetNotificationKey(for hostID: Host.ID) throws {
+        try ceremony.keys.removeRecord(forHost: hostID)
+        if confirmedSettings(for: hostID) != nil {
+            states[hostID] = .idle(
+                HostSettings(isRegistered: false, notify: NotificationTriggerPreferences()))
+        }
+    }
+
     private func load(_ host: Host) async {
         if case .updating = states[host.id] { return }
         guard let token = deviceToken() else {
