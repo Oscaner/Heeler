@@ -19,14 +19,12 @@ name: Docs site
 on:
   pull_request:
     paths:
-      - Makefile
       - docs-site/**
       - docs/guides/**
       - .github/workflows/docs-site.yml
   push:
     branches: [main]
     paths:
-      - Makefile
       - docs-site/**
       - docs/guides/**
       - .github/workflows/docs-site.yml
@@ -58,8 +56,7 @@ jobs:
           cache-dependency-path: docs-site/pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: .
-        run: make docs-install
+        run: pnpm install --frozen-lockfile
 
       - name: Unit tests
         run: pnpm test

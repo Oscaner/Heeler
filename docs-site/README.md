@@ -7,21 +7,24 @@ assets-only Cloudflare Worker, the same way as `landing/`.
 
 It is self-contained: nothing outside this directory imports from it, and it
 imports nothing from `landing/` (the fonts and logo are copies).
-`.github/workflows/docs-site.yml` runs for `docs-site/**`, `docs/guides/**`, and the root `Makefile`;
-`ci.yml` and `ci-node.yml` include neither path.
+`.github/workflows/docs-site.yml` runs for `docs-site/**`, `docs/guides/**`,
+and its own file. The app workflows (`ci.yml`, `ci-node.yml`) include none of
+these paths, so a docs change never starts the iOS test lanes; for the same
+reason the docs site has no `make` targets, as `ci.yml` runs for any change to
+the root `Makefile`.
 
 ## Commands
 
 Use Node 22.18 or newer and pnpm 11.11.0 (pinned in `package.json`). From the repository root:
 
 ```bash
-make docs-install     # install locked dependencies when needed
 cd docs-site
-pnpm run dev          # start the dev server
+pnpm install --frozen-lockfile  # install locked dependencies when needed
+pnpm run dev                    # start the dev server
 # Optional: pnpm run dev --host 0.0.0.0 --port 4322
 ```
 
-Open the local URL printed by Astro (normally <http://localhost:4321>). `make docs-install` installs dependencies without starting the server. Install pnpm using [its installation guide](https://pnpm.io/installation) if it is not on your PATH.
+Open the local URL printed by Astro (normally <http://localhost:4321>). Install pnpm using [its installation guide](https://pnpm.io/installation) if it is not on your PATH.
 
 For individual commands, run these in `docs-site/`:
 
@@ -252,6 +255,6 @@ The fonts come from the `geist` npm package (SIL Open Font License 1.1,
 (`build.format: 'file'`), which Workers serves at `/<slug>`, and
 `dist/404.html` answers unmatched paths.
 
-A push to `main` that touches `docs-site/**`, `docs/guides/**`, the root `Makefile`, or the docs site workflow deploys automatically, using the same `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets as the landing page.
+A push to `main` that touches `docs-site/**`, `docs/guides/**`, or the docs site workflow deploys automatically, using the same `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets as the landing page.
 
 For a manual deploy, `pnpm exec wrangler login` once, then `pnpm run build && pnpm run deploy`.

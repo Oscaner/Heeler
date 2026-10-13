@@ -50,7 +50,7 @@ preparation and can miss SwiftUI labels on a clean Simulator (#339).
 | CI suite/count/skip guard changes | `make test-ci-guards` | Guard behavior through supplied log fixtures; no native SSH or iOS acceptance |
 | Agent documentation | `make check-agent-docs` | Document pointers and repository navigation invariants |
 | Plugin or relay | `npm test` in its directory | Node behavior; no install step, Node >= 20 |
-| Docs site | `make docs-install`, then the pnpm commands in [its README](../../docs-site/README.md#commands) | Markdown pipeline tests, Astro checks, static build, and internal links |
+| Docs site | `pnpm install --frozen-lockfile` and the other pnpm commands in [its README](../../docs-site/README.md#commands), from `docs-site/` | Markdown pipeline tests, Astro checks, static build, and internal links |
 | Landing | Its `package.json` `check` and `build` scripts | Astro checks and static build |
 
 App `-only-testing:HeelerTests/...` selectors do not select the HeelerSSH package
