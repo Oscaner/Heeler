@@ -130,6 +130,29 @@ html {
   cursor: pointer;
 }
 
+/* Client-side navigation keeps the sidebar (a persisted island) and swaps the
+   article without animation (transition:animate="none" on <body>), but the
+   browser still animates the page's root for 250 ms. The view transition
+   lasts as long, and while it runs nothing is hovered (see above), so the
+   clicked sidebar item dropped its hover colour, faded to the active one, and
+   regained the hover at the end: a visible flicker. With no root animation the
+   transition ends as soon as the page is swapped. Astro marks <html> with
+   data-astro-transition during navigation only, so the theme switch keeps its
+   cross-fade. */
+html[data-astro-transition]::view-transition-group(root),
+html[data-astro-transition]::view-transition-old(root),
+html[data-astro-transition]::view-transition-new(root) {
+  animation: none;
+}
+
+/* Astro moves the persisted sidebar into the next page's <body>, and a moved
+   element starts from fresh styles: the clicked item, unhovered for that
+   moment, would show its muted colour and then fade to the active one. Swap
+   the colours at once instead; the sidebar's hover fade is back afterwards. */
+html[data-astro-transition] :is(#nd-sidebar, #nd-sidebar-mobile) a {
+  transition: none;
+}
+
 html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;
