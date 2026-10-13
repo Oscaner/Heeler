@@ -29,6 +29,8 @@ export interface DocsProps {
     title: string;
     /** Plain-text line under the title (the site's own pages). */
     description?: string;
+    /** A guide's lead paragraph as HTML, shown under the title instead of in the body. */
+    lead?: string;
     toc: TOCItemType[];
     sourceUrl: string;
     /** The page's Markdown (guides only), for the Copy Markdown and Open actions. */
@@ -77,7 +79,16 @@ export function Docs({ tree, pathname, params, page, children }: DocsProps) {
             }}
           >
             <DocsTitle>{page.title}</DocsTitle>
-            {page.description !== undefined && <DocsDescription>{page.description}</DocsDescription>}
+            {page.lead !== undefined ? (
+              <p
+                className="mb-2 text-lg text-fd-muted-foreground [&_a]:font-medium [&_a]:text-fd-foreground [&_a]:underline [&_a]:decoration-fd-primary [&_a]:decoration-[1.5px] [&_a]:underline-offset-[3.5px] [&_code]:rounded-md [&_code]:bg-fd-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.875em] [&_strong]:font-medium [&_strong]:text-fd-foreground"
+                dangerouslySetInnerHTML={{ __html: page.lead }}
+              />
+            ) : (
+              page.description !== undefined && (
+                <DocsDescription>{page.description}</DocsDescription>
+              )
+            )}
             {page.markdownUrl && (
               // Page actions under the title, as on fumadocs.dev.
               <div className="mb-4 flex flex-row flex-wrap items-center gap-2 border-b pb-6">

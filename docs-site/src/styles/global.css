@@ -3,6 +3,8 @@
 /* The Spacious layout's styles are not part of the preset. */
 @import '@fumadocs/base-ui/css/generated/spacious.css';
 @import '@fumadocs/base-ui/css/preset.css';
+/* Styles for the guide markup from src/lib/markdown.ts; unlayered, see its header. */
+@import './content.css';
 
 /* Geist Sans / Geist Mono, SIL Open Font License 1.1 (fonts/LICENSE.txt).
  * Same files as landing/, copied rather than imported so the sites stay
@@ -34,9 +36,10 @@
  * The dark neutrals come from the landing page's Substrate tokens
  * (landing/src/styles/substrate/tokens/colors.css, values noted below); the
  * light ones are plain greys in the same roles. The one brand hue is teal
- * (primary): active sidebar and TOC items, link underlines, focus rings, and
- * selection. Callouts keep the Substrate status hues. Every text pair clears
- * 4.5:1, focus rings and callout icons 3:1. */
+ * (primary): active sidebar and TOC items, step numbers, checklist and "Run on"
+ * icons, link underlines, focus rings, and selection. Callouts keep the
+ * Substrate status hues. Every text pair clears 4.5:1 (step numbers on their
+ * tinted circles included), focus rings and callout icons 3:1. */
 :root {
   --color-fd-background: #ffffff; /* page panel */
   --color-fd-foreground: #0a0a0a;

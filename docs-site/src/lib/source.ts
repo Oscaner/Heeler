@@ -7,7 +7,7 @@ import { icons } from 'lucide-react';
 import remarkMdx from 'remark-mdx';
 import { githubRepo, guideSections, guidesDir, pageIcons, sidebarTitles } from './guides.ts';
 import type { Root as MdastRoot } from 'mdast';
-import { extractTitle, htmlNodes } from './markdown.ts';
+import { extractTitle, hiddenForSearch, htmlNodes } from './markdown.ts';
 
 type Entry = CollectionEntry<'guides'> | CollectionEntry<'pages'>;
 
@@ -64,16 +64,19 @@ export function sectionOf(slug: string): string | undefined {
 
 /**
  * Search records for a page. A guide's H1 is dropped as it is on the page, and
- * so is raw HTML (the screenshots), which results would otherwise render.
- * Records are sliced from the source text, so HTML is blanked through
- * Fumadocs' source replacements rather than removed from the tree. MDX pages
- * are parsed as MDX, so imports stay out and card text gets in.
+ * so is raw HTML (the screenshots), which results would otherwise render, and
+ * a guide's trailing review note and maintainer pointer (the page shows the
+ * one as a footer line and drops the other). Records are sliced from the
+ * source text, so these are blanked through Fumadocs' source replacements
+ * rather than removed from the tree. MDX pages are parsed as MDX, so imports
+ * stay out and card text gets in.
  */
 export function getStructuredData(entry: Entry): StructuredData {
   const isMdx = entry.filePath?.endsWith('.mdx') ?? false;
   const searchTransform = () => (tree: MdastRoot, file: Parameters<typeof replaceSource>[0]) => {
     extractTitle(tree);
-    for (const node of htmlNodes(tree)) replaceSource(file, node, '', 'search');
+    const hidden = [...htmlNodes(tree), ...(isMdx ? [] : hiddenForSearch(tree))];
+    for (const node of hidden) replaceSource(file, node, '', 'search');
   };
   return structure(entry.body ?? '', isMdx ? [remarkMdx, searchTransform] : [searchTransform]);
 }

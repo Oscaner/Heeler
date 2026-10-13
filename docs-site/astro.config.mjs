@@ -8,7 +8,14 @@ import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'astro/config';
 import { rehypeCode, remarkHeading } from 'fumadocs-core/mdx-plugins';
-import { rehypeFumadocsElements, rehypeGithubAlerts, remarkGuideLinks, remarkGuideTitle } from './src/lib/markdown.ts';
+import {
+  rehypeFumadocsElements,
+  rehypeGithubAlerts,
+  rehypeGuideComponents,
+  remarkGuideCode,
+  remarkGuideLinks,
+  remarkGuideTitle,
+} from './src/lib/markdown.ts';
 
 // The guides live outside this project, in the repository's docs/guides/.
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -29,6 +36,8 @@ const remarkPlugins = [
   [remarkGuideLinks, { repoRoot, isDirectory }],
   remarkHeading,
   [remarkGuideTitle, { repoRoot }],
+  // Code block titles and the `sshconfig` -> Shiki `ssh-config` fence name.
+  remarkGuideCode,
 ];
 
 // Static output only: Fumadocs renders as a React island, and a Cloudflare
@@ -46,8 +55,11 @@ export default defineConfig({
       remarkPlugins,
       rehypePlugins: [
         rehypeGithubAlerts,
-        // Fence languages Shiki does not bundle (the guides' `sshconfig`)
-        // render as plain text instead of failing the build.
+        // Steps, callouts, and the lead; before rehypeCode, while code blocks
+        // are still plain <pre> elements.
+        rehypeGuideComponents,
+        // Fence languages Shiki does not bundle render as plain text instead
+        // of failing the build.
         [rehypeCode, { fallbackLanguage: 'text' }],
         rehypeFumadocsElements,
       ],
