@@ -1,5 +1,7 @@
 import { useSidebar } from '@fumadocs/base-ui/components/sidebar/base';
 import { buttonVariants } from '@fumadocs/base-ui/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@fumadocs/base-ui/components/ui/popover';
+import { useI18n } from '@fumadocs/base-ui/contexts/i18n';
 import { LinkItem } from '@fumadocs/base-ui/layouts/shared';
 import { type DocsLayoutProps, useSpaciousLayout } from '@fumadocs/base-ui/layouts/spacious';
 import {
@@ -9,40 +11,52 @@ import {
   SidebarProvider,
 } from '@fumadocs/base-ui/layouts/spacious/slots/sidebar';
 import { useTheme } from '@fumadocs/base-ui/provider/base';
-import { type LucideIcon, MonitorIcon, MoonIcon, SunIcon, SunMoonIcon } from 'lucide-react';
+import {
+  CheckIcon,
+  ChevronsUpDownIcon,
+  LanguagesIcon,
+  type LucideIcon,
+  MonitorIcon,
+  MoonIcon,
+  SunIcon,
+  SunMoonIcon,
+} from 'lucide-react';
 import { type ComponentProps, useEffect, useId, useState } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 
 /**
- * Spacious slots that move the theme switch to the bottom of the sidebar and
- * of the phone drawer. Spacious keeps it in the page header's options menu (in
- * the drawer's top row on phones), which suits fumadocs.dev's long sidebar;
- * this site's sidebar is short and leaves room below. Pass to DocsLayout along
- * with `themeSwitch={{ enabled: false }}`, which removes the built-in switches.
+ * Spacious slots that put the language and theme switches at the bottom of the
+ * sidebar and of the phone drawer. Spacious puts them in the page header (the
+ * theme in its options menu) and in the drawer's top row, which suits
+ * fumadocs.dev's long sidebar; this site's sidebar is short and leaves room
+ * below. Pass to DocsLayout along with `themeSwitch={{ enabled: false }}`, which
+ * removes the built-in theme switches; `languageSelect: false` here removes the
+ * built-in language selects.
  */
 export const layoutSlots: DocsLayoutProps['slots'] = {
-  sidebar: { provider: SidebarProvider, main: SidebarWithTheme, drawer: DrawerWithTheme },
+  sidebar: { provider: SidebarProvider, main: SidebarWithFooter, drawer: DrawerWithFooter },
   actions: HeaderActions,
+  languageSelect: false,
 };
 
-// Neither sidebar has a footer slot, so the switch is portalled to the end of
+// Neither sidebar has a footer slot, so the footer is portalled to the end of
 // each one's flex column once it has mounted. Being inside the sidebar, it
 // fades out and goes inert with it when collapsed and takes the sidebar's
 // colour overrides.
 
-function SidebarWithTheme(props: SidebarProps) {
+function SidebarWithFooter(props: SidebarProps) {
   // Sidebar passes its props, ref included, to its <aside>, whose one child is the column.
   const [aside, setAside] = useState<HTMLElement | null>(null);
   const column = aside?.firstElementChild;
   return (
     <>
       <Sidebar {...props} ref={setAside} />
-      {column && createPortal(<ThemeSwitch />, column)}
+      {column && createPortal(<SidebarFooter />, column)}
     </>
   );
 }
 
-function DrawerWithTheme() {
+function DrawerWithFooter() {
   const { mode } = useSidebar();
   const [drawer, setDrawer] = useState<HTMLElement | null>(null);
   // SidebarDrawer takes no props, so its <aside> (the column) is found by id.
@@ -54,7 +68,7 @@ function DrawerWithTheme() {
   return (
     <>
       <SidebarDrawer />
-      {mode === 'drawer' && drawer && createPortal(<ThemeSwitch />, drawer)}
+      {mode === 'drawer' && drawer && createPortal(<SidebarFooter />, drawer)}
     </>
   );
 }
@@ -82,6 +96,61 @@ function HeaderActions({ className, ...props }: ComponentProps<'div'>) {
           ),
       )}
     </div>
+  );
+}
+
+function SidebarFooter() {
+  return (
+    // The rule keeps the rows from reading as more page links when the list
+    // above runs down to them.
+    <div className="mx-3 flex shrink-0 flex-col gap-0.5 border-t pt-2 pb-2.5 text-fd-muted-foreground">
+      <LanguageSwitch />
+      <ThemeSwitch />
+    </div>
+  );
+}
+
+/**
+ * The language row of Spacious' options menu: the current language, opening
+ * a list to pick another. Names carry their `lang`, so screen readers say
+ * 简体中文 in Chinese. The choice goes to Fumadocs' I18nProvider (see
+ * language.ts, which says what it changes so far).
+ */
+function LanguageSwitch() {
+  const { locale, locales = [], onChange } = useI18n();
+  const [open, setOpen] = useState(false);
+  const current = locales.find((item) => item.locale === locale);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger className="flex h-9 w-full items-center gap-3 rounded-lg px-2.5 text-start transition-colors hover:bg-fd-accent/60 hover:text-fd-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring data-popup-open:bg-fd-accent/60 data-popup-open:text-fd-accent-foreground">
+        <LanguagesIcon className="size-4 shrink-0" />
+        <span className="flex-1">Language</span>
+        {current && (
+          <span lang={current.locale} className="truncate">
+            {current.name}
+          </span>
+        )}
+        <ChevronsUpDownIcon className="size-3.5 shrink-0" />
+      </PopoverTrigger>
+      <PopoverContent aria-label="Language" className="flex flex-col gap-0.5 p-1">
+        {locales.map((item) => (
+          <button
+            key={item.locale}
+            type="button"
+            lang={item.locale}
+            aria-current={item.locale === locale}
+            className="flex min-h-9 w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-start transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring"
+            onClick={() => {
+              onChange?.(item.locale);
+              setOpen(false);
+            }}
+          >
+            <span className="flex-1">{item.name}</span>
+            {item.locale === locale && <CheckIcon className="size-4 shrink-0 text-fd-primary" />}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -116,9 +185,7 @@ function ThemeSwitch() {
   }
 
   return (
-    // The rule keeps the row from reading as one more page link when the list
-    // above runs down to it.
-    <div className="mx-3 flex shrink-0 items-center gap-3 border-t py-3 ps-2.5 text-fd-muted-foreground">
+    <div className="flex h-9 items-center gap-3 ps-2.5">
       <SunMoonIcon className="size-4 shrink-0" />
       <span id={`${id}-label`} className="flex-1">
         Theme

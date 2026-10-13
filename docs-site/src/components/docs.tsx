@@ -16,6 +16,7 @@ import { RootProvider } from '@fumadocs/base-ui/provider/astro';
 import { type ReactNode, useEffect, useMemo } from 'react';
 import { navigate } from 'astro:transitions/client';
 import { githubRepo } from '@/lib/guides.ts';
+import { useLanguage } from './language';
 import { layoutSlots } from './layout-slots';
 import { usePanelScroll } from './panel-scroll';
 import StaticSearchDialog from './search';
@@ -46,6 +47,7 @@ export function Docs({ tree, pathname, params, page, children }: DocsProps) {
   // every page renders the same serialized tree, so it gets a copy.
   const pageTree = useMemo(() => deserializePageTree(structuredClone(tree)), [tree]);
   usePanelScroll(pathname);
+  const language = useLanguage();
 
   return (
     <RootProvider
@@ -53,6 +55,7 @@ export function Docs({ tree, pathname, params, page, children }: DocsProps) {
       params={params}
       navigate={navigate}
       search={{ SearchDialog: StaticSearchDialog }}
+      i18n={language}
     >
       <DocsLayout
         tree={pageTree}

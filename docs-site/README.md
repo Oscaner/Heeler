@@ -77,7 +77,8 @@ navigation drawer (it takes focus when it opens and keeps it until it closes).
 | `src/lib/toc.ts` | The table of contents, with numbered circles for step headings. |
 | `src/lib/raw-markdown.ts` | A guide's Markdown with absolute links, for the page actions. |
 | `src/components/docs.tsx` | The Fumadocs shell: nav, sidebar, search, page header with "Copy Markdown" and "Open", "Edit on GitHub". |
-| `src/components/layout-slots.tsx` | Spacious slot overrides: the theme switch at the bottom of the sidebar and the navigation drawer, and the GitHub link always in the page header. |
+| `src/components/layout-slots.tsx` | Spacious slot overrides: the language and theme switches at the bottom of the sidebar and the navigation drawer, and the GitHub link always in the page header. |
+| `src/components/language.ts` | The languages the language switch offers and the reader's remembered choice (no translations yet; see Design). |
 | `src/components/panel-scroll.ts` | Saves and restores the article's scroll position (see above). |
 | `src/components/guide-card.tsx` | `<GuideCard>` for `content/index.mdx`: a card with a guide's sidebar label and icon. |
 | `src/components/layout.astro` | `<head>` metadata and the global stylesheet. |
@@ -209,7 +210,11 @@ When changing the palette, check text contrast (4.5:1) on the panel, on the
 hover accent (a selected search result), on the sidebar's active tint, on the
 step circles' tint, and on the 404 button. The theme follows the system
 setting; readers can switch it at the bottom of the sidebar (of the navigation
-drawer on phones).
+drawer on phones). The language switch above it offers English and 简体中文,
+but every page is in English so far: the choice is only remembered
+(`localStorage` key `language`) and changes neither the content nor the URL.
+Translations will need locale routes, and the switch's state should then come
+from the URL (`src/components/language.ts`).
 
 The Geist and Geist Mono variable fonts in `src/styles/fonts/` and
 `public/logo.png` / `public/favicon.png` are copies of the files in `landing/`.
