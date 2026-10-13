@@ -28,10 +28,10 @@ For individual commands, run these in `docs-site/`:
 ```bash
 pnpm install --frozen-lockfile # install the committed dependency versions
 pnpm run dev                  # local dev server with hot reload
-pnpm test                     # unit tests for the Markdown pipeline (node:test)
+pnpm test                     # unit tests for src/lib (node:test)
 pnpm run check                # astro check (typechecks .astro and .ts files)
 pnpm run build                # static build into dist/
-pnpm run check:links          # after build: internal links, #anchors, published page set
+pnpm run check:links          # after build: internal links, #anchors, published pages and Markdown
 pnpm run preview              # serve dist/ locally
 pnpm run deploy               # wrangler deploy (needs Cloudflare credentials)
 ```
@@ -62,8 +62,8 @@ node must stay the same while the title, article, table of contents, active
 sidebar link, and "Edit on GitHub" destination update. On a wide window, also
 check Back after a table-of-contents click (also after then clicking the same
 page in the sidebar) and Page Down right after a page loads. Also check code
-copying, theme retention, and the mobile navigation drawer (it takes focus when
-it opens and keeps it until it closes).
+copying, "Copy Markdown" and "Open", theme retention, and the mobile navigation
+drawer (it takes focus when it opens and keeps it until it closes).
 
 ## Layout
 
@@ -73,11 +73,13 @@ it opens and keeps it until it closes).
 | `src/content.config.ts` | Content collections: `guides` (read from `../docs/guides`) and `pages` (`content/`). |
 | `src/lib/markdown.ts` | Remark/rehype plugins that adapt the GitHub-flavoured guides (see below). Tests in `markdown.test.ts`. |
 | `src/lib/source.ts` | Fumadocs page source and page tree built from both collections. |
-| `src/components/docs.tsx` | The Fumadocs shell: nav, sidebar, search, theme switch, page header, "Edit on GitHub". |
+| `src/lib/raw-markdown.ts` | A guide's Markdown with absolute links, for the page actions. |
+| `src/components/docs.tsx` | The Fumadocs shell: nav, sidebar, search, theme switch, page header with "Copy Markdown" and "Open", "Edit on GitHub". |
 | `src/components/panel-scroll.ts` | Saves and restores the article's scroll position (see above). |
 | `src/components/guide-card.tsx` | `<GuideCard>` for `content/index.mdx`: a card with a guide's sidebar label and icon. |
 | `src/components/layout.astro` | `<head>` metadata and the global stylesheet. |
 | `src/pages/[...slug].astro` | Every page, at `/<slug>`. `404.astro` is the not-found page. |
+| `src/pages/[...slug].md.ts` | Each guide's Markdown at `/<slug>.md`. |
 | `src/pages/api/search.json.ts` | Static search index, emitted as `dist/api/search.json`. |
 | `src/pages/images/[...path].ts` | Copies `docs/guides/images/**` to `/images/**`. |
 | `src/styles/global.css` | Tailwind and Fumadocs CSS, Geist fonts, and the brand palette. |
@@ -107,6 +109,9 @@ site-specific syntax. The build adapts them instead (`src/lib/markdown.ts`):
 - **Code blocks.** Highlighted by Fumadocs' `rehypeCode` and wrapped in the
   `<CodeBlock>` frame with a copy button. Languages Shiki does not ship (such as
   `sshconfig`) render as plain text.
+- **Markdown copy.** Each guide is also served at `/<slug>.md` for the "Copy
+  Markdown" and "Open" page actions: the file as written, with only its link
+  and image destinations made absolute (`src/lib/raw-markdown.ts`).
 
 The `guides` collection's glob loader uses `base: '../docs/guides'`, which
 Astro resolves against the project root, so it reads outside `docs-site/`
@@ -131,17 +136,18 @@ GitHub-only; links to them point at GitHub.
    case. Labels should fit on one sidebar line.
 3. Add `<GuideCard slug="<slug>">One sentence.</GuideCard>` to its section in
    `content/index.mdx`. The card takes its title and icon from `src/guides.json`.
-4. Run `pnpm run build && pnpm run check:links`. The checker fails if a page is
-   missing, an unlisted page is emitted, or a link or anchor does not resolve.
+4. Run `pnpm run build && pnpm run check:links`. The checker fails if a page or
+   its Markdown is missing, an unlisted page is emitted, or a link or anchor
+   does not resolve.
 
 ## Design
 
-The layout follows <https://fumadocs.dev/docs>: the Spacious layout, a block
-table of contents, and Lucide icons in the sidebar. The palette in
-`src/styles/global.css` sets Fumadocs' `--color-fd-*` variables: the dark
-neutrals come from the landing page's Substrate tokens
-(`landing/src/styles/substrate/tokens/colors.css`), and the light ones are
-plain greys in the same roles. The one brand hue is teal, set by
+The layout follows <https://fumadocs.dev/docs>: the Spacious layout, a page
+header with "Copy Markdown" and "Open", a block table of contents, and Lucide
+icons in the sidebar. The palette in `src/styles/global.css` sets Fumadocs'
+`--color-fd-*` variables: the dark neutrals come from the landing page's
+Substrate tokens (`landing/src/styles/substrate/tokens/colors.css`), and the
+light ones are plain greys in the same roles. The one brand hue is teal, set by
 `--color-fd-primary` in `:root` (light) and `.dark`; it marks the active
 sidebar and table-of-contents items, link underlines, focus rings, and
 selection. Teal is about as light as the muted grey of the other items, so the

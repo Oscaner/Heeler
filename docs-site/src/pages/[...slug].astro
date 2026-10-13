@@ -18,6 +18,7 @@ type Props = ReturnType<typeof getStaticPaths>[number]['props'];
 const { page } = Astro.props;
 const { entry, title, description, sourceUrl } = page.data;
 const { Content, headings } = await render(entry);
+const isGuide = entry.collection === 'guides';
 
 // The rendered headings already carry GitHub-style ids (remarkHeading); the H1
 // was removed from guides, so the TOC lists only the sections.
@@ -33,9 +34,10 @@ const toc: TOCItemType[] = headings
     params={Astro.params}
     page={{
       title,
-      description: entry.collection === 'pages' ? description : undefined,
+      description: isGuide ? undefined : description,
       toc,
       sourceUrl,
+      markdownUrl: isGuide ? `${page.url}.md` : undefined,
     }}
     client:load
     transition:persist="docs-shell"

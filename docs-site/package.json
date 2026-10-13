@@ -14,7 +14,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
-    "test": "node --test src/lib/markdown.test.ts",
+    "test": "node --test src/lib/*.test.ts",
     "check:links": "node scripts/check-links.mjs",
     "deploy": "wrangler deploy"
   },
@@ -29,8 +29,11 @@
     "lucide-react": "^1.55.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "remark-gfm": "^4.0.1",
     "remark-mdx": "^3.1.1",
-    "tailwindcss": "^4.3.3"
+    "remark-parse": "^11.0.0",
+    "tailwindcss": "^4.3.3",
+    "unified": "^11.0.5"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",

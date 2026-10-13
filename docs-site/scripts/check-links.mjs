@@ -5,6 +5,8 @@
 //   #fragment exists as an id on the target page;
 // - the emitted pages are exactly the index plus the guides in src/guides.json,
 //   so unpublished docs (releasing, native-windows-testing, ...) never ship;
+// - each guide's Markdown (/<slug>.md, for the page actions) exists, and no
+//   other Markdown ships;
 // - the 404 page and the search index exist.
 //
 // Node built-ins only. Exits 1 and lists every failure with its source page.
@@ -132,9 +134,22 @@ for (const route of ['/releasing', '/native-windows-testing']) {
 }
 if (!existsSync(join(dist, 'api', 'search.json'))) failures.push('missing search index /api/search.json');
 
+// 3. Guide Markdown for "Copy Markdown" and "Open" (src/pages/[...slug].md.ts).
+const markdownFiles = new Set(
+  walk(dist)
+    .filter((file) => file.endsWith('.md'))
+    .map((file) => relative(dist, file).split(sep).join('/')),
+);
+for (const slug of guides) {
+  if (!markdownFiles.has(`${slug}.md`)) failures.push(`missing Markdown /${slug}.md`);
+}
+for (const file of markdownFiles) {
+  if (!guides.includes(file.replace(/\.md$/, ''))) failures.push(`unexpected Markdown /${file} (not a published guide)`);
+}
+
 if (failures.length > 0) {
   console.error(`check-links: ${failures.length} problem(s)\n`);
   for (const failure of failures) console.error(`  ${failure}`);
   process.exit(1);
 }
-console.log(`check-links: ${pages.size} pages, all internal links and fragments resolve.`);
+console.log(`check-links: ${pages.size} pages and ${markdownFiles.size} guide Markdown files; all internal links and fragments resolve.`);

@@ -70,7 +70,8 @@ jobs:
       - name: Build
         run: pnpm run build
 
-      # Internal links, heading anchors, and the published page set.
+      # Internal links, heading anchors, the published page set, and each
+      # guide's Markdown copy.
       - name: Check links
         run: pnpm run check:links
 

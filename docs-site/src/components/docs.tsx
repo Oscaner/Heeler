@@ -9,6 +9,8 @@ import {
   DocsPage,
   DocsTitle,
   EditOnGitHub,
+  MarkdownCopyButton,
+  ViewOptionsPopover,
 } from '@fumadocs/base-ui/layouts/spacious/page';
 import { RootProvider } from '@fumadocs/base-ui/provider/astro';
 import { type ReactNode, useEffect, useMemo } from 'react';
@@ -29,6 +31,8 @@ export interface DocsProps {
     description?: string;
     toc: TOCItemType[];
     sourceUrl: string;
+    /** The page's Markdown (guides only), for the Copy Markdown and Open actions. */
+    markdownUrl?: string;
   };
   children: ReactNode;
 }
@@ -74,6 +78,13 @@ export function Docs({ tree, pathname, params, page, children }: DocsProps) {
           >
             <DocsTitle>{page.title}</DocsTitle>
             {page.description !== undefined && <DocsDescription>{page.description}</DocsDescription>}
+            {page.markdownUrl && (
+              // Page actions under the title, as on fumadocs.dev.
+              <div className="mb-4 flex flex-row flex-wrap items-center gap-2 border-b pb-6">
+                <MarkdownCopyButton markdownUrl={page.markdownUrl} />
+                <ViewOptionsPopover markdownUrl={page.markdownUrl} githubUrl={page.sourceUrl} />
+              </div>
+            )}
             <DocsBody className="text-fd-foreground/90">{children}</DocsBody>
             <EditOnGitHub href={page.sourceUrl} className="mt-6 self-start" />
           </DocsPage>
