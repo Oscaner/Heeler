@@ -33,13 +33,15 @@
 /* Palette on Fumadocs' colour variables, layered like fumadocs.dev: the
  * layout ground and sidebar use card, the page sits on an inset panel
  * (background), and code blocks, callouts, and cards inside it use card again.
- * The dark neutrals come from the landing page's Substrate tokens
+ * Most of the dark neutrals come from the landing page's Substrate tokens
  * (landing/src/styles/substrate/tokens/colors.css, values noted below); the
  * light ones are plain greys in the same roles. The one brand hue is teal
  * (primary): active sidebar and TOC items, step numbers, checklist and "Run on"
- * icons, link underlines, focus rings, and selection. Callouts keep the
- * Substrate status hues. Every text pair clears 4.5:1 (step numbers on their
- * tinted circles included), focus rings and callout icons 3:1. */
+ * icons, task-list checkboxes, the 404 page's home button, link underlines,
+ * focus rings, and selection (Fumadocs also tints key caps and search matches).
+ * Callouts keep the Substrate status hues. Every text pair clears 4.5:1 (step
+ * numbers on their tinted circles and muted text on accent included), focus
+ * rings and callout icons 3:1. */
 :root {
   --color-fd-background: #ffffff; /* page panel */
   --color-fd-foreground: #0a0a0a;

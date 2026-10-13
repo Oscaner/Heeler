@@ -1,5 +1,5 @@
 {
-  "$comment": "The guides published from docs/guides/, in sidebar order. Each slug is a basename (without .md) and becomes the route /<slug>. Read by src/lib/guides.ts and scripts/check-links.mjs. sidebarTitles overrides a page's sidebar label (its H1 title otherwise); keep it short enough for one sidebar line, in sentence case except for domain terms such as Host. The GuideCard links in content/index.mdx take their titles and icons from here. icons names the Lucide icon (https://lucide.dev/icons, PascalCase) shown beside each page in the sidebar; every page needs one.",
+  "$comment": "The guides published from docs/guides/, in sidebar order. Each slug is a basename (without .md) and becomes the route /<slug>. Read by src/lib/guides.ts and scripts/check-links.mjs. sidebarTitles overrides a page's sidebar label (its H1 title otherwise); keep it short enough for one sidebar line, in sentence case except for domain terms such as Host. The GuideCard links in content/index.mdx show the same sidebar label and icon. icons names the Lucide icon (https://lucide.dev/icons, PascalCase) shown beside each page in the sidebar; every page needs one.",
   "sections": [
     {
       "title": "Overlay networks",

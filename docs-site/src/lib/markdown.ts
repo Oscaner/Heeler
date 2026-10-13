@@ -267,8 +267,9 @@ const maintainersPattern = /^Maintainers: /;
 
 /**
  * Classifies a guide's closing paragraph: `metadata` for "Last checked on …",
- * "Checked against …", or "Commands … were checked …"; `maintainers` for
- * "Maintainers: …"; otherwise `undefined`.
+ * "Checked against …", "Commands were checked …", or "Commands and console
+ * labels were checked …"; `maintainers` for "Maintainers: …"; otherwise
+ * `undefined`.
  */
 export function trailerKind(text: string): 'metadata' | 'maintainers' | undefined {
   const flat = text.replace(/\s+/g, ' ').trim();
@@ -308,9 +309,10 @@ const plistPathPattern = /^\S+\.plist$/;
  * Title for a guide code block, from its language and the blocks before it
  * (`previous`, nearest first): shells get "Terminal", PowerShell "PowerShell",
  * SSH config the file named in the lead-in paragraph, XML the `.plist` file
- * named just before it, and text after "Expected:" or "must show:" is
- * "Expected output" (after "must not show:", "Must not appear") with no copy
- * button. A fence with its own meta keeps it.
+ * named just before it, and text after "Expected:", "Expected state:", "must
+ * show:", or "The required result is:" is "Expected output" (after "must not
+ * show:", "Must not appear") with no copy button. A fence with its own meta
+ * keeps it.
  */
 export function codeBlockTitle(code: Code, previous: readonly (MdastNodes | undefined)[]): CodeBlockTitle | undefined {
   if (code.meta) return undefined;

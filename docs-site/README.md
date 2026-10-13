@@ -85,7 +85,7 @@ navigation drawer (it takes focus when it opens and keeps it until it closes).
 | `src/pages/api/search.json.ts` | Static search index, emitted as `dist/api/search.json`. |
 | `src/pages/images/[...path].ts` | Copies `docs/guides/images/**` to `/images/**`. |
 | `src/styles/global.css` | Tailwind and Fumadocs CSS, Geist fonts, and the brand palette. |
-| `src/styles/content.css` | Styles for the guide markup from `markdown.ts` (steps, checklists, tables, screenshots, `<details>`) and the screenshot lightbox. |
+| `src/styles/content.css` | Styles for the guide markup from `markdown.ts` (steps, task lists, tables, screenshots, `<details>`, heading buttons) and the screenshot lightbox. |
 | `src/scripts/content.ts` | Article behaviour, as delegated listeners (the article is never hydrated): copying code and heading links, and the screenshot lightbox. |
 | `content/index.mdx` | The home page (site-owned). |
 | `scripts/check-links.mjs` | Post-build link and route checker (Node built-ins only). |
@@ -99,9 +99,11 @@ with tests in `markdown.test.ts`):
 
 - **Title, lead, and description.** The leading `# Title` becomes the page
   title and is removed from the body; the first paragraph after it becomes the
-  meta description (plain text, about 160 characters). When that paragraph is
-  plain text of at most 320 characters and does not end in a colon, it also
-  moves out of the body into the page header, under the title.
+  meta description (plain text, about 160 characters). If the body opens with
+  that paragraph, and it is at most 320 characters of inline text (links,
+  emphasis, and code are fine; images and raw HTML are not) that does not end
+  in a colon, it also moves into the page header under the title, keeping its
+  links and formatting.
 - **Links.** Relative links are resolved against the guide's path in the
   repository. A published guide becomes `/<slug>` (keeping `#fragment`);
   `docs/guides/images/**` becomes `/images/**`; anything else in the repository
@@ -119,9 +121,10 @@ with tests in `markdown.test.ts`):
   language and the sentence before the block: "Terminal" for shells,
   "PowerShell", the file that sentence names for `sshconfig` (highlighted as
   Shiki's `ssh-config`), and the `.plist` named just before an XML block. A
-  text block after "Expected:" or "must show:" is "Expected output", after
-  "must not show:" "Must not appear", and neither gets a copy button. A fence
-  with its own meta keeps it.
+  text block after a sentence ending in "Expected:", "Expected state:", "must
+  show:", or "The required result is:" is "Expected output", after "must not
+  show:" "Must not appear", and neither gets a copy button. A fence with its
+  own meta keeps it.
 - **Markdown copy.** Each guide is also served at `/<slug>.md` for the "Copy
   Markdown" and "Open" page actions: the file as written, with only its link
   and image destinations made absolute (`src/lib/raw-markdown.ts`).
@@ -137,20 +140,23 @@ following them in new guides:
   callout. "**It worked if** …" becomes a success callout, and so does a
   "Checkpoint:" paragraph with the blocks after it (a command and what it must
   print, say).
-- **Checklists.** The list right after a "Before you start" or "Prerequisites"
-  heading gets check marks.
-- **Inline.** A paragraph holding only "**Run on: Mac**" (or "Then run on: …")
-  becomes a badge, key combinations in bold or code (**Control-C**) become
-  `<kbd>`, and bold menu paths such as **Settings > General** get chevrons.
+- **Checklists.** A bulleted list (not a task list) under a `##` "Before you
+  start" or "Prerequisites" heading gets check marks. It must come right after
+  the heading or after one lead-in paragraph such as "You need:".
+- **Inline.** A paragraph holding only a bold "Run on: …" label (or "Run first
+  on:", "Run in another session on:", or "Then run on:") becomes a badge, key
+  combinations in bold or code (**Control-C**) become `<kbd>`, and bold menu
+  paths such as **Settings > General** get chevrons.
 - **Tables.** "Field | Value" tables (and the other header rows listed in
-  `tableKind`) get a form-values layout; a table of screenshots becomes a
+  `fieldTables`) get a form-values layout; a table of screenshots becomes a
   gallery.
 - **Screenshots and `<details>`.** A screenshot link opens the image in a
   lightbox instead of leaving the page, and `<details>` looks like
   `<Accordion>`.
 - **Trailers.** Among the last three blocks, review metadata ("Last checked on
-  …", "Checked against …", "Commands … were checked …") becomes a muted footer
-  line and a "Maintainers: …" note is dropped; search leaves out both.
+  …", "Checked against …", "Commands were checked …", or "Commands and console
+  labels were checked …") becomes a muted footer line and a "Maintainers: …"
+  note is dropped; search leaves out both.
 
 The `guides` collection's glob loader uses `base: '../docs/guides'`, which
 Astro resolves against the project root, so it reads outside `docs-site/`
@@ -175,7 +181,8 @@ GitHub-only; links to them point at GitHub.
    sentence-case sidebar label under `sidebarTitles` if the H1 is long or title
    case. Labels should fit on one sidebar line.
 3. Add `<GuideCard slug="<slug>">One sentence.</GuideCard>` to its section in
-   `content/index.mdx`. The card takes its title and icon from `src/guides.json`.
+   `content/index.mdx`. The card shows the guide's sidebar label (its H1 unless
+   `sidebarTitles` overrides it) and its icon from `src/guides.json`.
 4. Run `pnpm run build && pnpm run check:links`. The checker fails if a page or
    its Markdown is missing, an unlisted page is emitted, or a link or anchor
    does not resolve.
@@ -185,19 +192,21 @@ GitHub-only; links to them point at GitHub.
 The layout follows <https://fumadocs.dev/docs>: the Spacious layout, a page
 header with "Copy Markdown" and "Open", a block table of contents, and Lucide
 icons in the sidebar. The palette in `src/styles/global.css` sets Fumadocs'
-`--color-fd-*` variables: the dark neutrals come from the landing page's
-Substrate tokens (`landing/src/styles/substrate/tokens/colors.css`), and the
-light ones are plain greys in the same roles. The one brand hue is teal, set by
-`--color-fd-primary` in `:root` (light) and `.dark`; it marks the active
+`--color-fd-*` variables: most of the dark neutrals come from the landing
+page's Substrate tokens (`landing/src/styles/substrate/tokens/colors.css`), and
+the light ones are plain greys in the same roles. The one brand hue is teal,
+set by `--color-fd-primary` in `:root` (light) and `.dark`; it marks the active
 sidebar and table-of-contents items, step numbers, checklist and "Run on"
-icons, link underlines, focus rings, and selection. Teal is about as light as
-the muted grey of the other items, so the active ones also get a cue that
-needs no colour (medium weight in the sidebar, a bar beside the table of
-contents); keep it when changing the palette. Callouts keep the Substrate
-status hues. Check text contrast (4.5:1) on the panel, on the sidebar's active
-tint, and on the step circles' tint when changing it. The theme follows the
-system setting; readers can switch it in the header's options menu (in the
-sidebar drawer on phones).
+icons, task-list checkboxes, the 404 page's "Back to home" button, link
+underlines, focus rings, and selection, and Fumadocs also uses it for key caps
+and search matches. Teal is about as light as the muted grey of the other
+items, so the active ones also get a cue that needs no colour (medium weight in
+the sidebar, a bar beside the table of contents); keep it when changing the
+palette. Callouts keep the Substrate status hues. When changing the palette,
+check text contrast (4.5:1) on the panel, on the hover accent (a selected
+search result), on the sidebar's active tint, on the step circles' tint, and on
+the 404 button. The theme follows the system setting; readers can switch it in
+the header's options menu (in the sidebar drawer on phones).
 
 The Geist and Geist Mono variable fonts in `src/styles/fonts/` and
 `public/logo.png` / `public/favicon.png` are copies of the files in `landing/`.
