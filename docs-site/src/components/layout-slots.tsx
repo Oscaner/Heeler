@@ -19,7 +19,6 @@ import {
   MonitorIcon,
   MoonIcon,
   SunIcon,
-  SunMoonIcon,
 } from 'lucide-react';
 import { type ComponentProps, useEffect, useId, useState } from 'react';
 import { createPortal, flushSync } from 'react-dom';
@@ -101,9 +100,9 @@ function HeaderActions({ className, ...props }: ComponentProps<'div'>) {
 
 function SidebarFooter() {
   return (
-    // The rule keeps the rows from reading as more page links when the list
-    // above runs down to them.
-    <div className="mx-3 flex shrink-0 flex-col gap-0.5 border-t pt-2 pb-2.5 text-fd-muted-foreground">
+    // The rule keeps the row from reading as one more page link when the list
+    // above runs down to it.
+    <div className="mx-3 flex shrink-0 items-center gap-2 border-t py-2.5 text-fd-muted-foreground">
       <LanguageSwitch />
       <ThemeSwitch />
     </div>
@@ -111,9 +110,9 @@ function SidebarFooter() {
 }
 
 /**
- * The language row of Spacious' options menu: the current language, opening
- * a list to pick another. Names carry their `lang`, so screen readers say
- * 简体中文 in Chinese. The choice goes to Fumadocs' I18nProvider (see
+ * Spacious' language select (its icon, the current language, and a chevron),
+ * opening a list to pick another. Names carry their `lang`, so screen readers
+ * say 简体中文 in Chinese. The choice goes to Fumadocs' I18nProvider (see
  * language.ts, which says what it changes so far).
  */
 function LanguageSwitch() {
@@ -122,9 +121,10 @@ function LanguageSwitch() {
   const current = locales.find((item) => item.locale === locale);
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger className="flex h-9 w-full items-center gap-3 rounded-lg px-2.5 text-start transition-colors hover:bg-fd-accent/60 hover:text-fd-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring data-popup-open:bg-fd-accent/60 data-popup-open:text-fd-accent-foreground">
-        <LanguagesIcon className="size-4 shrink-0" />
-        <span className="flex-1">Language</span>
+      <PopoverTrigger className="flex h-9 min-w-0 items-center gap-1.5 rounded-lg px-2.5 transition-colors hover:bg-fd-accent/60 hover:text-fd-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring data-popup-open:bg-fd-accent/60 data-popup-open:text-fd-accent-foreground">
+        {/* The extra margin lines the name up with the page titles above. */}
+        <LanguagesIcon className="me-1.5 size-4 shrink-0" />
+        <span className="sr-only">Language: </span>
         {current && (
           <span lang={current.locale} className="truncate">
             {current.name}
@@ -132,7 +132,13 @@ function LanguageSwitch() {
         )}
         <ChevronsUpDownIcon className="size-3.5 shrink-0" />
       </PopoverTrigger>
-      <PopoverContent aria-label="Language" className="flex flex-col gap-0.5 p-1">
+      {/* As wide as the trigger (or its longest name): at the popover's default
+          240px, its edge would land just short of the theme switch's. */}
+      <PopoverContent
+        aria-label="Language"
+        align="start"
+        className="flex w-max min-w-(--anchor-width) flex-col gap-0.5 p-1"
+      >
         {locales.map((item) => (
           <button
             key={item.locale}
@@ -161,7 +167,7 @@ const themes: [value: string, label: string, icon: LucideIcon, turn: string][] =
 ];
 
 /**
- * The theme row of Spacious' options menu (system, light, dark, with its
+ * The theme segments of Spacious' options menu (system, light, dark, with their
  * sliding thumb and icon turn), on native radios so that the current theme is
  * announced and the arrow keys move between the options.
  */
@@ -185,45 +191,39 @@ function ThemeSwitch() {
   }
 
   return (
-    <div className="flex h-9 items-center gap-3 ps-2.5">
-      <SunMoonIcon className="size-4 shrink-0" />
-      <span id={`${id}-label`} className="flex-1">
-        Theme
-      </span>
-      <div
-        role="radiogroup"
-        aria-labelledby={`${id}-label`}
-        className="relative flex rounded-full border bg-fd-secondary p-0.5"
-      >
-        {index !== -1 && (
-          <span
-            aria-hidden
-            className="absolute start-0.5 top-0.5 size-7 rounded-full bg-fd-background shadow-sm ring-1 ring-fd-border transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-            style={{ translate: `${index * 100}%` }}
+    <div
+      role="radiogroup"
+      aria-label="Theme"
+      className="relative ms-auto flex shrink-0 rounded-full border bg-fd-secondary p-0.5"
+    >
+      {index !== -1 && (
+        <span
+          aria-hidden
+          className="absolute start-0.5 top-0.5 size-7 rounded-full bg-fd-background shadow-sm ring-1 ring-fd-border transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+          style={{ translate: `${index * 100}%` }}
+        />
+      )}
+      {themes.map(([value, label, Icon, turn]) => (
+        <label
+          key={value}
+          className={`relative flex size-7 cursor-pointer items-center justify-center rounded-full transition-colors duration-150 has-focus-visible:ring-2 has-focus-visible:ring-fd-ring ${
+            value === theme
+              ? 'text-fd-foreground'
+              : 'hover:bg-fd-accent hover:text-fd-accent-foreground'
+          }`}
+        >
+          <input
+            type="radio"
+            name={id}
+            value={value}
+            checked={value === theme}
+            aria-label={label}
+            className="sr-only"
+            onChange={(event) => pick(value, event.currentTarget.nextElementSibling, turn)}
           />
-        )}
-        {themes.map(([value, label, Icon, turn]) => (
-          <label
-            key={value}
-            className={`relative flex size-7 cursor-pointer items-center justify-center rounded-full transition-colors duration-150 has-focus-visible:ring-2 has-focus-visible:ring-fd-ring ${
-              value === theme
-                ? 'text-fd-foreground'
-                : 'hover:bg-fd-accent hover:text-fd-accent-foreground'
-            }`}
-          >
-            <input
-              type="radio"
-              name={id}
-              value={value}
-              checked={value === theme}
-              aria-label={label}
-              className="sr-only"
-              onChange={(event) => pick(value, event.currentTarget.nextElementSibling, turn)}
-            />
-            <Icon className="size-3.5" />
-          </label>
-        ))}
-      </div>
+          <Icon className="size-3.5" />
+        </label>
+      ))}
     </div>
   );
 }

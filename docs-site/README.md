@@ -210,7 +210,7 @@ When changing the palette, check text contrast (4.5:1) on the panel, on the
 hover accent (a selected search result), on the sidebar's active tint, on the
 step circles' tint, and on the 404 button. The theme follows the system
 setting; readers can switch it at the bottom of the sidebar (of the navigation
-drawer on phones). The language switch above it offers English and 简体中文,
+drawer on phones). The language switch beside it offers English and 简体中文,
 but every page is in English so far: the choice is only remembered
 (`localStorage` key `language`) and changes neither the content nor the URL.
 Translations will need locale routes, and the switch's state should then come
