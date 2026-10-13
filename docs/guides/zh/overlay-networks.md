@@ -1,12 +1,12 @@
 <!-- Translated from docs/guides/overlay-networks.md at 2b014a24 -->
 
-# 通过组网网络（Overlay Network）连接 Heeler
+# 通过 Overlay Network 连接 Heeler
 
 当无法直接连接到运行 herdr 的 Mac 时（例如在蜂窝网络下），可以使用 Tailscale、ZeroTier 或 EasyTier 建立连接。本系列指南适用于运行 herdr 的 Mac 以及运行在 iPhone 或 iPad 上的 Heeler。
 
 你需要使用包含 **Settings > Overlay Networks** 的 Heeler 版本。
 
-Heeler 会直接加入组网网络，因此手机上无需安装 Tailscale、ZeroTier 或 EasyTier 应用，也无需配置系统 VPN。Mac 上需要安装对应服务商的客户端、开启“远程登录”（SSH）并运行 herdr。连接后仍按常规方式通过 SSH 登录 Mac。
+Heeler 会直接加入 Overlay Network，因此手机上无需安装 Tailscale、ZeroTier 或 EasyTier 应用，也无需配置系统 VPN。Mac 上需要安装对应服务商的客户端、开启“远程登录”（SSH）并运行 herdr。连接后仍按常规方式通过 SSH 登录 Mac。
 
 ## 选择方案
 
@@ -63,17 +63,17 @@ Heeler 会直接加入组网网络，因此手机上无需安装 Tailscale、Zer
 
 ## 从 Heeler 连接
 
-当 Mac 与 Heeler 已加入同一个组网网络后，从服务商指南回到这里继续操作。
+当 Mac 与 Heeler 已加入同一个 Overlay Network 后，从服务商指南回到这里继续操作。
 
 1. 打开 **Hosts** 并轻点 **Add Host**。对于 Tailscale 和 EasyTier，也可以直接在 Settings 中打开对应网络，轻点 Mac 旁的 **Add**，系统会自动填入地址。
-2. 将表单顶部的 **Network** 设为你保存的组网网络。（**Direct** 表示不使用组网网络直连。）
+2. 将表单顶部的 **Network** 设为你保存的 Overlay Network。（**Direct** 表示不使用 Overlay Network 直连。）
 3. 按下表填写字段并保存。
 4. 仅在显示的指纹与 Mac 上的指纹一致时轻点 **Trust**。如果某项检查未通过，请排查后轻点 **Run Checks Again**。
 
 | 字段 | 值 |
 | --- | --- |
 | Name | 标识这台 Mac 的任意名称 |
-| Address | Mac 在该组网网络中的 IP 地址（不带端口号或 `/24` 等后缀） |
+| Address | Mac 在该 Overlay Network 中的 IP 地址（不带端口号或 `/24` 等后缀） |
 | Port | `22`（除非具体指南另有说明） |
 | User | 你的 Mac 用户名（来自 `id -un`） |
 | Authentication | 你在上面选择的登录方式 |
@@ -88,7 +88,7 @@ Heeler 会直接加入组网网络，因此手机上无需安装 Tailscale、Zer
 2. Host 各项检查全部通过，会话中的 Agent 或终端正常加载。
 3. 打开一个 **New Terminal**，运行 `pwd` 能输出 Mac 上的目录。测试时请新建终端，不要在正在运行的 Agent 终端里测试。
 4. 关闭手机 Wi-Fi，在蜂窝网络下重复上述测试。
-5. 切出 Heeler 超过 20 秒后再返回，确认 Host 和终端能够自动重连。（切到后台期间 Heeler 会断开组网连接，它不是常驻后台的系统 VPN。）
+5. 切出 Heeler 超过 20 秒后再返回，确认 Host 和终端能够自动重连。（切到后台期间 Heeler 会断开 Overlay Network 连接，它不是常驻后台的系统 VPN。）
 
 ## 故障排查
 

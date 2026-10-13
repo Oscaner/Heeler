@@ -2,7 +2,7 @@
 
 # 通过 EasyTier 连接 Heeler
 
-EasyTier 将 Heeler 与你的 Mac 接入同一个私有组网网络，使 Heeler 能通过 SSH 连接 Mac。Heeler 会直接加入该网络，因此手机上无需安装 EasyTier 应用或配置系统 VPN。
+EasyTier 将 Heeler 与你的 Mac 接入同一个私有 Overlay Network，使 Heeler 能通过 SSH 连接 Mac。Heeler 会直接加入该网络，因此手机上无需安装 EasyTier 应用或配置系统 VPN。
 
 你需要使用包含 **Settings > Overlay Networks** 的 Heeler 版本。
 
@@ -27,8 +27,8 @@ EasyTier 将 Heeler 与你的 Mac 接入同一个私有组网网络，使 Heeler
 | --- | --- |
 | 网络名称 | `heeler-home` |
 | Mac 的 EasyTier 监听地址 | `tcp://192.168.1.20:21010` |
-| Mac 在组网内的虚拟地址 | `10.144.144.2` |
-| Heeler 在组网内的虚拟地址 | `10.144.144.3` |
+| Mac 在 Overlay Network 内的虚拟地址 | `10.144.144.2` |
+| Heeler 在 Overlay Network 内的虚拟地址 | `10.144.144.3` |
 
 ## Network 模式：直接连接 Mac
 

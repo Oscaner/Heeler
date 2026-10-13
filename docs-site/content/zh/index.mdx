@@ -27,7 +27,7 @@ Heeler 是 [herdr](https://herdr.dev)（面向智能体的终端运行时）的�
 
 ### 选择连接方式
 
-在同一局域网下，Heeler 可以直接连接 Mac。如果在局域网外，可以使用 [Tailscale](/zh/tailscale) 等组网网络（Overlay Network），或使用自己搭建在 Debian / Ubuntu VPS 上的 [Jump Host](/zh/vps-jump-host-setup)。同一台 Host 可以配置[多条路由（Route）](/zh/host-routes)，在家和外出都能无缝切换。
+在同一局域网下，Heeler 可以直接连接 Mac。如果在局域网外，可以使用 [Tailscale](/zh/tailscale) 等 Overlay Network，或使用自己搭建在 Debian / Ubuntu VPS 上的 [Jump Host](/zh/vps-jump-host-setup)。同一台 Host 可以配置[多条路由（Route）](/zh/host-routes)，在家和外出都能无缝切换。
 
 </Step>
 <Step>
@@ -39,9 +39,9 @@ Heeler 是 [herdr](https://herdr.dev)（面向智能体的终端运行时）的�
 </Step>
 </Steps>
 
-## 组网网络（Overlay Network）
+## Overlay Network
 
-Heeler 内置了组网接入能力，iPhone 或 iPad 上无需额外安装 VPN 应用，只需在 Mac 上运行对应服务商的客户端。
+Heeler 会直接加入 Overlay Network，iPhone 或 iPad 上无需额外安装 VPN 应用，只需在 Mac 上运行对应服务商的客户端。
 
 <Cards>
   <GuideCard slug="overlay-networks" locale="zh">准备 Host、选择服务商，并从 Heeler 建立连接。</GuideCard>
@@ -53,7 +53,7 @@ Heeler 内置了组网接入能力，iPhone 或 iPad 上无需额外安装 VPN �
 
 ## 跳板机（Jump Host）
 
-如果你有一台 Debian 或 Ubuntu VPS，可以让 Mac 保持一条到 VPS 的反向 SSH 隧道，Heeler 通过 VPS 的常规 SSH 端口中转连接。这种方式不需要组网服务商或第三方账号，也不会把 Mac 的 SSH 端口暴露到公网。
+如果你有一台 Debian 或 Ubuntu VPS，可以让 Mac 保持一条到 VPS 的反向 SSH 隧道，Heeler 通过 VPS 的常规 SSH 端口中转连接。这种方式不需要 Overlay Network 或第三方服务商账号，也不会把 Mac 的 SSH 端口暴露到公网。
 
 <Cards>
   <GuideCard slug="vps-jump-host-setup" locale="zh">按设备分步执行的复制粘贴配置指南，每步均可核对结果。</GuideCard>
