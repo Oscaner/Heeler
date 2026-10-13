@@ -3,11 +3,11 @@
 //
 // - every internal href/src resolves to an emitted file or page, and every
 //   #fragment exists as an id on the target page;
-// - the emitted pages are exactly the index plus the guides in src/guides.json,
-//   so unpublished docs (releasing, native-windows-testing, ...) never ship;
-// - each guide's Markdown (/<slug>.md, for the page actions) exists, and no
-//   other Markdown ships;
-// - the 404 page and the search index exist.
+// - the emitted pages are exactly the index plus the guides in src/guides.json
+//   in both English and Chinese, so unpublished docs never ship;
+// - each guide's Markdown (/<slug>.md and /zh/<slug>.md, for the page actions)
+//   exists, and no other Markdown ships;
+// - the 404 page and both search indexes (/api/search.json, /zh/api/search.json) exist.
 //
 // Node built-ins only. Exits 1 and lists every failure with its source page.
 
@@ -118,21 +118,28 @@ for (const [route, page] of pages) {
   }
 }
 
-// 2. Published routes: exactly the index plus the configured guides.
+// 2. Published routes: exactly the index plus the configured guides in English and Chinese.
 const config = JSON.parse(readFileSync(join(root, 'src', 'guides.json'), 'utf8'));
 /** @type {string[]} */
 const guides = config.sections.flatMap((/** @type {{ guides: string[] }} */ section) => section.guides);
-const expected = new Set(['/', '/404', ...guides.map((slug) => `/${slug}`)]);
+const expected = new Set([
+  '/',
+  '/zh',
+  '/404',
+  ...guides.map((slug) => `/${slug}`),
+  ...guides.map((slug) => `/zh/${slug}`),
+]);
 for (const route of expected) {
   if (!pages.has(route)) failures.push(`missing page ${route}`);
 }
 for (const route of pages.keys()) {
   if (!expected.has(route)) failures.push(`unexpected page ${route} (not listed in src/guides.json)`);
 }
-for (const route of ['/releasing', '/native-windows-testing']) {
+for (const route of ['/releasing', '/native-windows-testing', '/zh/releasing', '/zh/native-windows-testing']) {
   if (resolve(route) !== undefined) failures.push(`${route} must not be published`);
 }
 if (!existsSync(join(dist, 'api', 'search.json'))) failures.push('missing search index /api/search.json');
+if (!existsSync(join(dist, 'zh', 'api', 'search.json'))) failures.push('missing search index /zh/api/search.json');
 
 // 3. Guide Markdown for "Copy Markdown" and "Open" (src/pages/[...slug].md.ts).
 const markdownFiles = new Set(
@@ -140,11 +147,15 @@ const markdownFiles = new Set(
     .filter((file) => file.endsWith('.md'))
     .map((file) => relative(dist, file).split(sep).join('/')),
 );
-for (const slug of guides) {
-  if (!markdownFiles.has(`${slug}.md`)) failures.push(`missing Markdown /${slug}.md`);
+const expectedMarkdown = new Set([
+  ...guides.map((slug) => `${slug}.md`),
+  ...guides.map((slug) => `zh/${slug}.md`),
+]);
+for (const file of expectedMarkdown) {
+  if (!markdownFiles.has(file)) failures.push(`missing Markdown /${file}`);
 }
 for (const file of markdownFiles) {
-  if (!guides.includes(file.replace(/\.md$/, ''))) failures.push(`unexpected Markdown /${file} (not a published guide)`);
+  if (!expectedMarkdown.has(file)) failures.push(`unexpected Markdown /${file} (not a published guide)`);
 }
 
 if (failures.length > 0) {
