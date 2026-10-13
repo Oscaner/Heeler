@@ -169,15 +169,12 @@ html > body[data-scroll-locked] {
   }
 }
 
-/* The active sidebar item and table-of-contents entries differ from the rest
- * by hue alone (teal is about as light as the muted grey), so they also get a
- * cue that needs no colour: medium weight in the sidebar, and a bar on the left
- * edge of the active entries in each table of contents (the column, the
- * header dropdown, and the phone bar's list). */
-:is(#nd-sidebar, #nd-sidebar-mobile) a[data-active='true'] {
-  font-weight: 500;
-}
-
+/* Active table-of-contents entries differ from the rest by hue alone (teal is
+ * about as light as the muted grey), so they also get a cue that needs no
+ * colour: a bar on their left edge, in each table of contents (the column, the
+ * header dropdown, and the phone bar's list). The active sidebar item keeps
+ * just its tinted background, as on fumadocs.dev; a heavier weight there made
+ * its label widen when it became active. */
 a[href^='#'][data-active='true'] {
   box-shadow: inset 2px 0 var(--color-fd-primary);
 }

@@ -201,13 +201,15 @@ sidebar and table-of-contents items, step numbers, checklist and "Run on"
 icons, task-list checkboxes, the 404 page's "Back to home" button, link
 underlines, focus rings, and selection, and Fumadocs also uses it for key caps
 and search matches. Teal is about as light as the muted grey of the other
-items, so the active ones also get a cue that needs no colour (medium weight in
-the sidebar, a bar beside the table of contents); keep it when changing the
-palette. Callouts keep the Substrate status hues. When changing the palette,
-check text contrast (4.5:1) on the panel, on the hover accent (a selected
-search result), on the sidebar's active tint, on the step circles' tint, and on
-the 404 button. The theme follows the system setting; readers can switch it at
-the bottom of the sidebar (of the navigation drawer on phones).
+items, so active table-of-contents entries also get a cue that needs no colour,
+a bar beside them; keep it when changing the palette. The active sidebar item
+keeps just its tinted background, as on fumadocs.dev: a heavier weight made its
+label widen when it became active. Callouts keep the Substrate status hues.
+When changing the palette, check text contrast (4.5:1) on the panel, on the
+hover accent (a selected search result), on the sidebar's active tint, on the
+step circles' tint, and on the 404 button. The theme follows the system
+setting; readers can switch it at the bottom of the sidebar (of the navigation
+drawer on phones).
 
 The Geist and Geist Mono variable fonts in `src/styles/fonts/` and
 `public/logo.png` / `public/favicon.png` are copies of the files in `landing/`.
