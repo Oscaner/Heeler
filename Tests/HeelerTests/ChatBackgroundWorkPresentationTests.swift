@@ -194,12 +194,15 @@ struct ChatBackgroundWorkStripHostedTests {
     private static func work(_ count: Int) -> ChatBackgroundWork {
         var work = ChatBackgroundWork()
         work.isLive = true
-        work.rows = (0..<count).map { index in
-            ChatBackgroundWork.Row(
-                item: ChatBackgroundWorkItem(
-                    id: "work-\(index)", kind: index == 0 ? .workflow : .subagent, title: "Work \(index)",
-                    state: index == 2 ? .completed : .running, launchOffset: UInt64(index),
-                    launchedAt: Date().addingTimeInterval(-90)))
+        // Typed locals keep Xcode 26's type checker within its time limit.
+        let launchedAt = Date().addingTimeInterval(-90)
+        work.rows = (0..<count).map { (index: Int) -> ChatBackgroundWork.Row in
+            let kind: ChatBackgroundWorkItem.Kind = index == 0 ? .workflow : .subagent
+            let state: ChatBackgroundWorkItem.State = index == 2 ? .completed : .running
+            let item = ChatBackgroundWorkItem(
+                id: "work-\(index)", kind: kind, title: "Work \(index)",
+                state: state, launchOffset: UInt64(index), launchedAt: launchedAt)
+            return ChatBackgroundWork.Row(item: item)
         }
         return work
     }

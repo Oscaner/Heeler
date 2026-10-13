@@ -269,7 +269,7 @@ struct ConsoleChatCacheTests {
     private static func saveTranscript(
         for agent: ConsoleAgent, on host: Host, in cache: any ChatTranscriptCache
     ) async throws -> ChatEntry {
-        let reference = try #require(reference(agent))
+        let reference = try #require(Self.reference(agent))
         let entry = ChatEntry(id: ChatEntryID(reference.sessionID), sourceOffset: 10,
                               content: .assistant(ChatAssistantMessage(text: reference.sessionID)))
         await cache.save(ChatCacheDocument(
