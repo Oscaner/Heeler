@@ -20,7 +20,7 @@ import {
   MoonIcon,
   SunIcon,
 } from 'lucide-react';
-import { type ComponentProps, useEffect, useId, useState } from 'react';
+import { type ComponentProps, useEffect, useId, useRef, useState } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 
 /**
@@ -121,7 +121,7 @@ function LanguageSwitch() {
   const current = locales.find((item) => item.locale === locale);
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger className="flex h-9 min-w-0 items-center gap-1.5 rounded-lg px-2.5 transition-colors hover:bg-fd-accent/60 hover:text-fd-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring data-popup-open:bg-fd-accent/60 data-popup-open:text-fd-accent-foreground">
+      <PopoverTrigger className="flex h-9 min-w-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 transition-colors hover:bg-fd-accent/60 hover:text-fd-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring data-popup-open:bg-fd-accent/60 data-popup-open:text-fd-accent-foreground">
         {/* The extra margin lines the name up with the page titles above. */}
         <LanguagesIcon className="me-1.5 size-4 shrink-0" />
         <span className="sr-only">Language: </span>
@@ -145,7 +145,7 @@ function LanguageSwitch() {
             type="button"
             lang={item.locale}
             aria-current={item.locale === locale}
-            className="flex min-h-9 w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-start transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring"
+            className="flex min-h-9 w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-1.5 text-start transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring"
             onClick={() => {
               onChange?.(item.locale);
               setOpen(false);
@@ -175,10 +175,20 @@ function ThemeSwitch() {
   const { theme, setTheme } = useTheme();
   const id = useId();
   const index = themes.findIndex(([value]) => value === theme);
+  const latestTransition = useRef<ViewTransition>(undefined);
 
   function pick(value: string, icon: Element | null, turn: string) {
     if (typeof document.startViewTransition === 'function') {
-      document.startViewTransition(() => flushSync(() => setTheme(value)));
+      const transition = document.startViewTransition(() => flushSync(() => setTheme(value)));
+      // While the transition runs, the pointer hits the root rather than the
+      // option, so the cursor would turn into an arrow until it ends. A quick
+      // second pick skips the first transition, so only the latest restores it.
+      const root = document.documentElement;
+      root.style.cursor = 'pointer';
+      latestTransition.current = transition;
+      transition.finished.finally(() => {
+        if (latestTransition.current === transition) root.style.removeProperty('cursor');
+      });
     } else {
       setTheme(value);
     }
