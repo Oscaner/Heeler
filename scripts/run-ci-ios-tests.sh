@@ -1509,7 +1509,7 @@ printf '%s\n' \
     'while IFS= read -r line; do' \
     '    case "$line" in' \
     '        __exit__) exit 0 ;;' \
-    '        __fail__) exit 23 ;;' \
+    '        __fail__) printf "herdr: fixture attach failed\\n"; exit 23 ;;' \
     '        __end_race__)' \
     '            printf "END-RACE-READY\\n"' \
     '            sleep 1' \

@@ -67,6 +67,7 @@ struct PreflightReportTests {
         (.gitTimedOut, .connection),
         (.cancelled, .connection),
         (.channelFailed(detail: "boom"), .connection),
+        (.attachExited(status: 1, output: "herdr: lost connection"), .connection),
         (.eventsChannelAlreadyOpen, .connection),
         (.herdrBinaryNotFound, .herdrInstalled),
         (.hostFeatureUnavailable(feature: "Windows requires remote-api-bridge"), .remoteEnvironment),
