@@ -10,8 +10,8 @@ export interface RenderedHeading {
   text: string;
 }
 
-/** The "1. ", "Step 1: ", or "Phase 1: " that starts a numbered step heading. */
-const stepPrefix = /^(?:(?:Step|Phase)\s+)?\d+[.:]\s+/;
+/** The "1. ", "Step 1: ", "Phase 1: ", "步骤 1：", or "阶段 1：" that starts a numbered step heading. */
+const stepPrefix = /^(?:(?:(?:Step|Phase)\s+)?\d+[.:]\s+|(?:步骤|阶段)\s*\d+(?:[.:]\s+|：\s*))/;
 
 /**
  * The step number of each step heading, keyed by heading id, from a guide's

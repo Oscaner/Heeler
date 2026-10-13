@@ -30,7 +30,10 @@ const copyCodeSelector = '[data-copy-code]';
 const copyAnchorSelector = '.prose :is(h1, h2, h3, h4, h5, h6)[id] > button';
 const screenshotSelector = '.prose a[href^="/images/"]';
 const statusSelector = '[data-copy-status]';
-const copiedAnchor = 'Copied anchor link';
+
+function isZhPage(): boolean {
+  return document.documentElement.lang.startsWith('zh');
+}
 
 const resetTimers = new WeakMap<HTMLElement, number>();
 /** An MDX heading button's own icon and label while it shows the check mark. */
@@ -83,10 +86,11 @@ function showChecked(button: HTMLElement, reset: () => void): void {
 async function copyCode(button: HTMLElement): Promise<void> {
   const code = button.closest('figure')?.querySelector('pre')?.textContent;
   if (code == null || !(await writeClipboard(code.replace(/\n$/, '')))) return;
+  const zh = isZhPage();
   const label = button.querySelector('.sr-only');
-  if (label) label.textContent = 'Copied code';
+  if (label) label.textContent = zh ? '已复制代码' : 'Copied code';
   showChecked(button, () => {
-    if (label) label.textContent = 'Copy code';
+    if (label) label.textContent = zh ? '复制代码' : 'Copy code';
   });
 }
 
@@ -103,12 +107,15 @@ async function copyAnchor(button: HTMLElement): Promise<void> {
   if (status) status.textContent = '';
   if (!(await writeClipboard(url.href))) return;
 
+  const zh = isZhPage();
   if (status) {
     // CSS swaps the icons on data-checked.
+    const copiedAnchor = zh ? '已复制锚点链接' : 'Copied anchor link';
+    const copyAnchorLabel = zh ? '复制锚点链接' : 'Copy anchor link';
     button.setAttribute('aria-label', copiedAnchor);
     status.textContent = copiedAnchor;
     showChecked(button, () => {
-      button.setAttribute('aria-label', 'Copy anchor link');
+      button.setAttribute('aria-label', copyAnchorLabel);
       if (status.textContent === copiedAnchor) status.textContent = '';
     });
     return;
@@ -118,7 +125,7 @@ async function copyAnchor(button: HTMLElement): Promise<void> {
   const label = button.querySelector('.sr-only');
   if (!mdxOriginals.has(button)) mdxOriginals.set(button, { icon: icon?.innerHTML, label: label?.textContent });
   if (icon) icon.innerHTML = copyCheckShapes;
-  if (label) label.textContent = 'Copied Anchor Link';
+  if (label) label.textContent = zh ? '已复制锚点链接' : 'Copied Anchor Link';
   showChecked(button, () => {
     const original = mdxOriginals.get(button);
     mdxOriginals.delete(button);
@@ -141,7 +148,7 @@ function openLightbox(link: HTMLAnchorElement, image: HTMLImageElement): void {
   const close = document.createElement('button');
   close.type = 'button';
   close.dataset.lightboxClose = '';
-  close.setAttribute('aria-label', 'Close');
+  close.setAttribute('aria-label', isZhPage() ? '关闭' : 'Close');
   close.innerHTML = closeIcon;
 
   const full = document.createElement('img');

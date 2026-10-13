@@ -13,10 +13,10 @@ import {
   ViewOptionsPopover,
 } from '@fumadocs/base-ui/layouts/spacious/page';
 import { RootProvider } from '@fumadocs/base-ui/provider/astro';
-import { GlobeIcon } from 'lucide-react';
-import { type ReactNode, useEffect, useMemo } from 'react';
+import { GlobeIcon, House } from 'lucide-react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { navigate } from 'astro:transitions/client';
-import { githubRepo, type Locale, localeFromPath } from '@/lib/guides.ts';
+import { githubRepo, htmlLang, type Locale, localeFromPath } from '@/lib/guides.ts';
 import { useLanguage } from './language';
 import { layoutSlots } from './layout-slots';
 import { usePanelScroll } from './panel-scroll';
@@ -39,22 +39,42 @@ export interface DocsProps {
     /** The page's Markdown (guides only), for the Copy Markdown and Open actions. */
     markdownUrl?: string;
   };
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 /** The Fumadocs shell (sidebar, nav, search, theme) around one page's rendered HTML. */
 export function Docs({ trees, pathname, params, page, children }: DocsProps) {
-  const locale = localeFromPath(pathname);
+  // Workers serves a single dist/404.html for every unknown path; on the 404
+  // page, read the actual browser pathname so /zh/... 404s render in Chinese.
+  const [clientPath, setClientPath] = useState(pathname);
+  useEffect(() => {
+    if (page) return;
+    const sync = () => {
+      const current = window.location.pathname;
+      setClientPath(current);
+      const loc = localeFromPath(current);
+      document.documentElement.lang = htmlLang(loc);
+      document.title = loc === 'zh' ? '未找到页面 | Heeler 文档' : 'Page not found | Heeler Docs';
+    };
+    sync();
+    document.addEventListener('astro:page-load', sync);
+    return () => document.removeEventListener('astro:page-load', sync);
+  }, [page, pathname]);
+
+  const activePathname = page ? pathname : clientPath;
+  const locale = localeFromPath(activePathname);
+  const isZh = locale === 'zh';
   const tree = trees[locale];
   // deserializePageTree rewrites its argument in place, and during the build
   // every page renders the same serialized tree, so it gets a copy.
   const pageTree = useMemo(() => deserializePageTree(structuredClone(tree)), [tree]);
-  usePanelScroll(pathname);
-  const language = useLanguage(pathname);
+  usePanelScroll(activePathname);
+  const language = useLanguage(activePathname);
+  const websiteLabel = isZh ? 'Heeler 官网' : 'Heeler website';
 
   return (
     <RootProvider
-      pathname={pathname}
+      pathname={activePathname}
       params={params}
       navigate={navigate}
       search={{ SearchDialog: StaticSearchDialog }}
@@ -63,11 +83,11 @@ export function Docs({ trees, pathname, params, page, children }: DocsProps) {
       <DocsLayout
         tree={pageTree}
         nav={{
-          url: locale === 'zh' ? '/zh' : '/',
+          url: isZh ? '/zh' : '/',
           title: (
             <>
               <img src="/logo.png" alt="" width={20} height={20} className="size-5 rounded-[5px]" />
-              <span className="font-medium">Heeler Docs</span>
+              <span className="font-medium">{isZh ? 'Heeler 文档' : 'Heeler Docs'}</span>
             </>
           ),
         }}
@@ -76,8 +96,8 @@ export function Docs({ trees, pathname, params, page, children }: DocsProps) {
         links={[
           {
             type: 'icon',
-            text: 'Heeler website',
-            label: 'Heeler website',
+            text: websiteLabel,
+            label: websiteLabel,
             icon: <GlobeIcon />,
             url: 'https://heeler.bybee.dev',
             external: true,
@@ -122,7 +142,7 @@ export function Docs({ trees, pathname, params, page, children }: DocsProps) {
             <EditOnGitHub href={page.sourceUrl} className="mt-6 self-start" />
           </DocsPage>
         ) : (
-          <NotFoundPanel>{children}</NotFoundPanel>
+          <NotFoundPanel locale={locale}>{children}</NotFoundPanel>
         )}
       </DocsLayout>
     </RootProvider>
@@ -170,15 +190,45 @@ function DrawerFocus() {
  * only DocsPage draws the inset panel with its header actions (the website and
  * GitHub links).
  * The 404 page has no DocsPage, so it gets the same panel and actions here.
+ * On `/zh/...` URLs it renders Simplified Chinese copy while keeping links to
+ * both language home pages.
  */
-function NotFoundPanel({ children }: { children: ReactNode }) {
+function NotFoundPanel({ locale, children }: { locale: Locale; children?: ReactNode }) {
   const { slots } = useSpaciousLayout();
   return (
     <div className="mx-2 mt-2 flex min-h-0 min-w-0 flex-col rounded-t-2xl border-x border-t bg-fd-background [grid-area:main] md:ms-0 md:mb-2 md:overflow-y-auto md:rounded-2xl md:border md:shadow-sm">
       <div className="flex h-(--fd-header-height) shrink-0 items-center ps-6 pe-4 max-md:hidden">
         <slots.actions className="ms-auto" />
       </div>
-      {children}
+      {locale === 'zh' ? (
+        <main className="flex flex-1 flex-col items-center justify-center gap-4 px-8 py-16 text-center">
+          <p aria-hidden="true" className="text-6xl font-bold text-fd-muted-foreground">
+            404
+          </p>
+          <h1 className="text-2xl font-semibold">未找到页面</h1>
+          <p className="max-w-md text-fd-muted-foreground">
+            该地址没有对应的指南。请使用搜索功能，或从侧栏选择一篇指南。
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+            <a
+              href="/zh"
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-fd-primary px-3 py-2 text-sm font-medium text-fd-primary-foreground transition-colors duration-100 hover:bg-fd-primary/90"
+            >
+              <House className="size-4" aria-hidden="true" />
+              返回首页
+            </a>
+            <a
+              href="/"
+              lang="en"
+              className="inline-flex items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium text-fd-muted-foreground transition-colors duration-100 hover:bg-fd-accent hover:text-fd-accent-foreground"
+            >
+              English home
+            </a>
+          </div>
+        </main>
+      ) : (
+        children
+      )}
     </div>
   );
 }

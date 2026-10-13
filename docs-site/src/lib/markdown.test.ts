@@ -1199,3 +1199,116 @@ describe('code frames', () => {
     assert.equal(innerPre(untitled).properties.style, undefined);
   });
 });
+
+describe('Chinese guide conventions', () => {
+  const zhFile = () => ({ path: '/repo/docs/guides/zh/tailscale.md', data: {} as { astro?: { frontmatter?: Record<string, unknown> } } });
+
+  it('drops Chinese lead-in sentences and extracts lead after a top HTML comment', () => {
+    assert.equal(dropLeadIn('连接你的 Mac。输出如下：'), '连接你的 Mac。');
+    assert.equal(leadHtml(h('p', {}, '结果如下：')), undefined);
+
+    const tree = root(
+      raw('<!-- Translated from docs/guides/tailscale.md at 2b014a24 -->'),
+      h('p', {}, '从 Heeler 连接你的 Mac。'),
+      h('h2', { id: '准备工作' }, '准备工作'),
+    );
+    const file = zhFile();
+    rehypeGuideComponents()(tree, file);
+    assert.equal(file.data.astro?.frontmatter?.lead, '从 Heeler 连接你的 Mac。');
+  });
+
+  it('classifies Chinese review metadata and maintainers trailers', () => {
+    assert.equal(trailerKind('最后核对于 2026-10-09（macOS）。'), 'metadata');
+    assert.equal(trailerKind('核对依据为 Tailscale 文档（2026-10-09）。'), 'metadata');
+    assert.equal(trailerKind('命令已对照 Tailscale 1.104.1 核对（2026 年 10 月）。'), 'metadata');
+    assert.equal(trailerKind('命令与控制台标签已核对于 2026-10-09。'), 'metadata');
+    assert.equal(trailerKind('维护者：参见指南维护记录。'), 'maintainers');
+  });
+
+  it('titles Chinese code blocks and localized expectations', () => {
+    const shBlock: Code = { type: 'code', lang: 'sh', value: 'herdr status' };
+    const sshBlock: Code = { type: 'code', lang: 'sshconfig', value: 'Host vps' };
+    const outBlock: Code = { type: 'code', lang: 'text', value: 'ok' };
+    const expectP: Paragraph = { type: 'paragraph', children: [{ type: 'text', value: '预期输出：' }] };
+    const forbidP: Paragraph = { type: 'paragraph', children: [{ type: 'text', value: '不应显示：' }] };
+
+    assert.deepEqual(codeBlockTitle(shBlock, [], 'zh'), { title: '终端', noCopy: false });
+    assert.deepEqual(codeBlockTitle(sshBlock, [], 'zh'), { title: 'SSH 配置', noCopy: false });
+    assert.deepEqual(codeBlockTitle(outBlock, [expectP], 'zh'), { title: '预期输出', noCopy: true });
+    assert.deepEqual(codeBlockTitle(outBlock, [forbidP], 'zh'), { title: '不应出现', noCopy: true });
+
+    const mdTree: MdastRoot = { type: 'root', children: [expectP, { ...outBlock }, { ...shBlock }] };
+    remarkGuideCode()(mdTree, zhFile());
+    assert.equal((mdTree.children[1] as Code).meta, 'title="预期输出" noCopy');
+    assert.equal((mdTree.children[2] as Code).meta, 'title="终端"');
+  });
+
+  it('renders localized GitHub alert labels for Chinese guides', () => {
+    const tree = root(
+      h('blockquote', {}, h('p', {}, '[!NOTE]\n补充说明。')),
+      h('blockquote', {}, h('p', {}, '[!TIP]\n小贴士。')),
+      h('blockquote', {}, h('p', {}, '[!IMPORTANT]\n重要信息。')),
+      h('blockquote', {}, h('p', {}, '[!WARNING]\n警告信息。')),
+      h('blockquote', {}, h('p', {}, '[!CAUTION]\n危险操作。')),
+    );
+    rehypeGithubAlerts()(tree, zhFile());
+    const notes = findAll(tree, (node) => node.properties.role === 'note');
+    assert.deepEqual(
+      notes.map((note) => note.properties.ariaLabel),
+      ['注意', '提示', '重要', '警告', '危险'],
+    );
+  });
+
+  it('recognizes Chinese requirement callouts, success checks, checkpoints, checklists, steps, and Run on badges', () => {
+    const checklist = h('ul', {}, h('li', {}, '一台装有 Heeler 的 iPhone'));
+    const tree = root(
+      h('p', {}, '导语段落。'),
+      h('p', {}, '你需要准备一个 Tailscale 账号。'),
+      h('h2', { id: '开始之前' }, '开始之前'),
+      checklist,
+      h('h2', { id: '步骤-1安装' }, '步骤 1：安装'),
+      h('p', {}, h('strong', {}, '运行位置：macOS')),
+      h('p', {}, h('strong', {}, '成功的标志是'), ' 菜单栏出现图标。'),
+      h('h2', { id: '步骤-2验证' }, '步骤 2：验证'),
+      h('p', {}, '检查点：'),
+      h('p', {}, '状态显示已连接。'),
+    );
+    const file = zhFile();
+    rehypeGuideComponents()(tree, file);
+
+    assert.deepEqual(file.data.astro?.frontmatter?.steps, { '步骤-1安装': 1, '步骤-2验证': 2 });
+    assert.ok(classesOf(checklist).includes('list-none'));
+    const notes = findAll(tree, (node) => node.properties.role === 'note');
+    assert.equal(notes.length, 3);
+    assert.equal(notes[2]?.properties.ariaLabel, '检查点');
+  });
+
+  it('parses Chinese step headings, Run on labels, field tables, and Fumadocs element labels', () => {
+    assert.deepEqual(parseStepHeading('步骤 2：安装 Tailscale'), { number: 2, prefix: '步骤 2：' });
+    assert.deepEqual(parseStepHeading('阶段 1：准备新 VPS'), { number: 1, prefix: '阶段 1：' });
+    assert.deepEqual(parseStepHeading('3. 验证连接'), { number: 3, prefix: '3. ' });
+
+    assert.deepEqual(parseRunOn('运行位置：macOS'), { label: '运行位置：', target: 'macOS', icon: 'Laptop' });
+    assert.deepEqual(parseRunOn('先运行于：VPS'), { label: '先运行于：', target: 'VPS', icon: 'Server' });
+    assert.deepEqual(parseRunOn('接着运行于：macOS'), { label: '接着运行于：', target: 'macOS', icon: 'Laptop' });
+    assert.deepEqual(parseRunOn('在另一会话中运行于：VPS'), { label: '在另一会话中运行于：', target: 'VPS', icon: 'Server' });
+    assert.deepEqual(parseRunOn('在 iOS 上运行：'), { label: '运行位置：', target: 'iOS', icon: 'Smartphone' });
+
+    const zhTable = h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, '字段'), h('th', {}, '值'))));
+    assert.equal(tableKind(zhTable), 'fields');
+
+    const tree = root(
+      h('h2', { id: '准备-host' }, '准备 Host'),
+      h('pre', { class: 'shiki' }, h('code', {}, h('span', { className: ['line'] }, 'ls'))),
+    );
+    rehypeFumadocsElements()(tree, zhFile());
+    const [heading, figure] = tree.children.filter(isElement);
+    assert.ok(heading !== undefined && figure !== undefined);
+    const anchorBtn = findAll(heading, byTag('button'))[0];
+    assert.equal(anchorBtn?.properties.ariaLabel, '复制锚点链接');
+    const copyBtn = findAll(figure, (node) => node.properties.dataCopyCode !== undefined)[0];
+    assert.equal(copyBtn ? textOf(copyBtn) : '', '复制代码');
+    const viewport = findAll(figure, (node) => node.properties.role === 'group')[0];
+    assert.equal(viewport?.properties.ariaLabel, '代码');
+  });
+});

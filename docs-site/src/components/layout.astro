@@ -10,13 +10,13 @@ interface Props {
   noindex?: boolean;
 }
 
-const siteName = 'Heeler Docs';
-const { title, description, noindex = false } = Astro.props;
-const fullTitle = title === siteName ? siteName : `${title} | ${siteName}`;
 // build.format 'file' makes the pathname `/tailscale.html`; Workers serves it at `/tailscale`.
 const path = Astro.url.pathname.replace(/(\/index)?\.html$/, '') || '/';
 const locale = localeFromPath(path);
 const lang = htmlLang(locale);
+const siteName = locale === 'zh' ? 'Heeler 文档' : 'Heeler Docs';
+const { title, description, noindex = false } = Astro.props;
+const fullTitle = title === siteName ? siteName : `${title} | ${siteName}`;
 const ogLocale = locale === 'zh' ? 'zh_CN' : 'en_US';
 const ogAlternateLocale = locale === 'zh' ? 'en_US' : 'zh_CN';
 const canonical = new URL(path, Astro.site);

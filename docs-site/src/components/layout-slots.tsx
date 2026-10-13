@@ -116,18 +116,19 @@ function SidebarFooter() {
  * Spacious' language select (its icon, the current language, and a chevron),
  * opening a list to pick another. Names carry their `lang`, so screen readers
  * say 简体中文 in Chinese. The choice goes to Fumadocs' I18nProvider (see
- * language.ts, which says what it changes so far).
+ * language.ts).
  */
 function LanguageSwitch() {
   const { locale, locales = [], onChange } = useI18n();
   const [open, setOpen] = useState(false);
   const current = locales.find((item) => item.locale === locale);
+  const isZh = locale === 'zh';
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger className="flex h-9 min-w-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 transition-colors hover:bg-fd-accent/60 hover:text-fd-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring data-popup-open:bg-fd-accent/60 data-popup-open:text-fd-accent-foreground">
         {/* The extra margin lines the name up with the page titles above. */}
         <LanguagesIcon className="me-1.5 size-4 shrink-0" />
-        <span className="sr-only">Language: </span>
+        <span className="sr-only">{isZh ? '语言：' : 'Language: '}</span>
         {current && (
           <span lang={current.locale} className="truncate">
             {current.name}
@@ -138,7 +139,7 @@ function LanguageSwitch() {
       {/* As wide as the trigger (or its longest name): at the popover's default
           240px, its edge would land just short of the theme switch's. */}
       <PopoverContent
-        aria-label="Language"
+        aria-label={isZh ? '语言' : 'Language'}
         align="start"
         className="flex w-max min-w-(--anchor-width) flex-col gap-0.5 p-1"
       >
@@ -163,10 +164,10 @@ function LanguageSwitch() {
   );
 }
 
-const themes: [value: string, label: string, icon: LucideIcon, turn: string][] = [
-  ['system', 'System', MonitorIcon, '0deg'],
-  ['light', 'Light', SunIcon, '-90deg'],
-  ['dark', 'Dark', MoonIcon, '40deg'],
+const themes: [value: string, label: { en: string; zh: string }, icon: LucideIcon, turn: string][] = [
+  ['system', { en: 'System', zh: '跟随系统' }, MonitorIcon, '0deg'],
+  ['light', { en: 'Light', zh: '浅色' }, SunIcon, '-90deg'],
+  ['dark', { en: 'Dark', zh: '深色' }, MoonIcon, '40deg'],
 ];
 
 /**
@@ -176,6 +177,8 @@ const themes: [value: string, label: string, icon: LucideIcon, turn: string][] =
  */
 function ThemeSwitch() {
   const { theme, setTheme } = useTheme();
+  const { locale } = useI18n();
+  const isZh = locale === 'zh';
   const id = useId();
   const index = themes.findIndex(([value]) => value === theme);
 
@@ -197,7 +200,7 @@ function ThemeSwitch() {
   return (
     <div
       role="radiogroup"
-      aria-label="Theme"
+      aria-label={isZh ? '主题' : 'Theme'}
       className="relative ms-auto flex shrink-0 rounded-full border bg-fd-secondary p-0.5"
     >
       {index !== -1 && (
@@ -221,7 +224,7 @@ function ThemeSwitch() {
             name={id}
             value={value}
             checked={value === theme}
-            aria-label={label}
+            aria-label={isZh ? label.zh : label.en}
             className="sr-only"
             onChange={(event) => pick(value, event.currentTarget.nextElementSibling, turn)}
           />

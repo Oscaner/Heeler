@@ -18,12 +18,20 @@
 import { posix, relative, sep } from 'node:path';
 import type { Element, ElementContent, Literal, Root as HastRoot, RootContent, Text } from 'hast';
 import type { Code, Html, Nodes as MdastNodes, Paragraph, Root as MdastRoot } from 'mdast';
-import { githubRepo, guideImagesDir, guidesDir, publishedGuides } from './guides.ts';
+import { githubRepo, guideImagesDir, guidesDir, type Locale, publishedGuides } from './guides.ts';
 
 /** The parts of a vfile these plugins touch (Astro stores frontmatter under `data.astro`). */
 interface MarkdownFile {
   path?: string;
   data: { astro?: { frontmatter?: Record<string, unknown> } };
+}
+
+const zhGuidePathPattern = /(?:^|\/)zh\/[^/]+\.md(?:x)?$/;
+
+/** Locale of a Markdown file from its path (`zh` under a `zh/` directory, `en` otherwise). */
+export function guideLocale(file?: Pick<MarkdownFile, 'path'>): Locale {
+  const normalized = file?.path?.split(sep).join('/') ?? '';
+  return zhGuidePathPattern.test(normalized) ? 'zh' : 'en';
 }
 
 /**
@@ -203,17 +211,20 @@ export function summarize(text: string, max = 160): string {
   if (flat.length <= max) return flat;
   const cut = flat.slice(0, max - 1);
   const lastSpace = cut.lastIndexOf(' ');
-  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(/[\s,.;:]+$/, '')}…`;
+  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(/[\s,.;:，。；：、]+$/, '')}…`;
 }
 
 /**
- * Drops a trailing lead-in sentence such as "The result is:", which only makes
- * sense next to the block it introduces. Text with no earlier sentence is kept.
+ * Drops a trailing lead-in sentence such as "The result is:" or "结果如下：",
+ * which only makes sense next to the block it introduces. Text with no earlier
+ * sentence is kept.
  */
 export function dropLeadIn(text: string): string {
   const flat = text.replace(/\s+/g, ' ').trim();
-  if (!flat.endsWith(':')) return flat;
-  const end = Math.max(flat.lastIndexOf('. '), flat.lastIndexOf('! '), flat.lastIndexOf('? '));
+  if (!flat.endsWith(':') && !flat.endsWith('：')) return flat;
+  const englishEnd = Math.max(flat.lastIndexOf('. '), flat.lastIndexOf('! '), flat.lastIndexOf('? '));
+  const chineseEnd = Math.max(flat.lastIndexOf('。'), flat.lastIndexOf('！'), flat.lastIndexOf('？'));
+  const end = Math.max(englishEnd, chineseEnd);
   return end === -1 ? flat : flat.slice(0, end + 1);
 }
 
@@ -264,14 +275,16 @@ export function remarkGuideTitle({ repoRoot }: Pick<GuidePluginOptions, 'repoRoo
 
 /** How many closing blocks may hold trailers. */
 const trailerWindow = 3;
-const metadataPattern = /^(?:Last checked on |Checked against |Commands (?:and console labels )?were checked )/;
-const maintainersPattern = /^Maintainers: /;
+const metadataPattern =
+  /^(?:Last checked on |Checked against |Commands (?:and console labels )?were checked |最后核对于|核对依据为|已对照|(?:命令(?:与控制台标签)?已(?:对照|核对于)))/;
+const maintainersPattern = /^(?:Maintainers: |维护者[：:]\s*)/;
 
 /**
  * Classifies a guide's closing paragraph: `metadata` for "Last checked on …",
- * "Checked against …", "Commands were checked …", or "Commands and console
- * labels were checked …"; `maintainers` for "Maintainers: …"; otherwise
- * `undefined`.
+ * "Checked against …", "Commands were checked …", "Commands and console labels
+ * were checked …", or their Chinese equivalents ("最后核对于 …", "核对依据为 …",
+ * "已对照 …", "命令已核对于 …", "命令与控制台标签已核对于 …"); `maintainers` for
+ * "Maintainers: …" or "维护者：…"; otherwise `undefined`.
  */
 export function trailerKind(text: string): 'metadata' | 'maintainers' | undefined {
   const flat = text.replace(/\s+/g, ' ').trim();
@@ -302,34 +315,44 @@ export interface CodeBlockTitle {
 const shellLanguages = new Set(['sh', 'bash', 'zsh', 'shell', 'console']);
 const powerShellLanguages = new Set(['powershell', 'ps1', 'pwsh']);
 const textLanguages = new Set(['', 'text', 'txt', 'plaintext']);
-const expectedLeadIn = /(?:Expected:|Expected state:|must show:|The required result is:)$/;
-const forbiddenLeadIn = /must not show:$/;
+const expectedLeadIn =
+  /(?:Expected:|Expected state:|must show:|The required result is:|(?:预期|预期输出|预期状态|应显示|必须显示|所需结果为)[：:])$/;
+const forbiddenLeadIn = /(?:must not show:|(?:不应显示|不得显示)[：:])$/;
 const configPathPattern = /^(?:~|\/)\S+$/;
 const plistPathPattern = /^\S+\.plist$/;
 
 /**
  * Title for a guide code block, from its language and the blocks before it
- * (`previous`, nearest first): shells get "Terminal", PowerShell "PowerShell",
- * SSH config the file named in the lead-in paragraph, XML the `.plist` file
- * named just before it, and text after "Expected:", "Expected state:", "must
- * show:", or "The required result is:" is "Expected output" (after "must not
- * show:", "Must not appear") with no copy button. A fence with its own meta
- * keeps it.
+ * (`previous`, nearest first): shells get "Terminal" ("终端" in Chinese),
+ * PowerShell "PowerShell", SSH config the file named in the lead-in paragraph
+ * (or "SSH config" / "SSH 配置"), XML the `.plist` file named just before it,
+ * and text after "Expected:", "Expected state:", "must show:", "The required
+ * result is:", or their Chinese equivalents ("预期：", "预期输出：", "预期状态：",
+ * "应显示：", "必须显示：", "所需结果为：") is "Expected output" ("预期输出" in
+ * Chinese; after "must not show:" or "不应显示：" / "不得显示：", "Must not appear"
+ * / "不应出现") with no copy button. A fence with its own meta keeps it.
  */
-export function codeBlockTitle(code: Code, previous: readonly (MdastNodes | undefined)[]): CodeBlockTitle | undefined {
+export function codeBlockTitle(
+  code: Code,
+  previous: readonly (MdastNodes | undefined)[],
+  locale: Locale = 'en',
+): CodeBlockTitle | undefined {
   if (code.meta) return undefined;
   const lang = code.lang?.toLowerCase() ?? '';
   const [before, earlier] = previous;
   const leadIn = before?.type === 'paragraph' ? before : undefined;
+  const isZh = locale === 'zh';
 
-  if (shellLanguages.has(lang)) return { title: 'Terminal', noCopy: false };
+  if (shellLanguages.has(lang)) return { title: isZh ? '终端' : 'Terminal', noCopy: false };
   if (powerShellLanguages.has(lang)) return { title: 'PowerShell', noCopy: false };
-  if (lang === 'sshconfig' || lang === 'ssh-config') return { title: configPath(leadIn) ?? 'SSH config', noCopy: false };
+  if (lang === 'sshconfig' || lang === 'ssh-config') {
+    return { title: configPath(leadIn) ?? (isZh ? 'SSH 配置' : 'SSH config'), noCopy: false };
+  }
   if (lang === 'xml') return { title: plistName(before, earlier) ?? 'XML', noCopy: false };
   if (textLanguages.has(lang) && leadIn !== undefined) {
     const sentence = plainText(leadIn).replace(/\s+/g, ' ').trim();
-    if (forbiddenLeadIn.test(sentence)) return { title: 'Must not appear', noCopy: true };
-    if (expectedLeadIn.test(sentence)) return { title: 'Expected output', noCopy: true };
+    if (forbiddenLeadIn.test(sentence)) return { title: isZh ? '不应出现' : 'Must not appear', noCopy: true };
+    if (expectedLeadIn.test(sentence)) return { title: isZh ? '预期输出' : 'Expected output', noCopy: true };
   }
   return undefined;
 }
@@ -366,12 +389,13 @@ export function codeMeta({ title, noCopy }: CodeBlockTitle): string | undefined 
 export function remarkGuideCode() {
   return (tree: MdastRoot, file: Pick<MarkdownFile, 'path'>) => {
     if (file.path?.endsWith('.mdx')) return;
+    const locale = guideLocale(file);
     walk(tree, (node) => {
       if (!('children' in node)) return;
       const children: MdastNodes[] = node.children;
       children.forEach((child, index) => {
         if (child.type !== 'code') return;
-        const title = codeBlockTitle(child, [children[index - 1], children[index - 2]]);
+        const title = codeBlockTitle(child, [children[index - 1], children[index - 2]], locale);
         const meta = title === undefined ? undefined : codeMeta(title);
         if (meta !== undefined) child.meta = meta;
         if (child.lang === 'sshconfig') child.lang = 'ssh-config';
@@ -662,13 +686,13 @@ function callout({ type, icon, title }: CalloutOptions, body: ElementContent[]):
 
 type AlertKind = 'NOTE' | 'TIP' | 'IMPORTANT' | 'WARNING' | 'CAUTION';
 
-/** Fumadocs callout type, label, and Lucide icon for each alert. */
-const alerts: Record<AlertKind, { type: CalloutType; label: string; icon: IconName }> = {
-  NOTE: { type: 'info', label: 'Note', icon: 'Info' },
-  TIP: { type: 'idea', label: 'Tip', icon: 'Lightbulb' },
-  IMPORTANT: { type: 'info', label: 'Important', icon: 'MessageSquareWarning' },
-  WARNING: { type: 'warning', label: 'Warning', icon: 'TriangleAlert' },
-  CAUTION: { type: 'error', label: 'Caution', icon: 'OctagonAlert' },
+/** Fumadocs callout type, localized label, and Lucide icon for each alert. */
+const alerts: Record<AlertKind, { type: CalloutType; label: Record<Locale, string>; icon: IconName }> = {
+  NOTE: { type: 'info', label: { en: 'Note', zh: '注意' }, icon: 'Info' },
+  TIP: { type: 'idea', label: { en: 'Tip', zh: '提示' }, icon: 'Lightbulb' },
+  IMPORTANT: { type: 'info', label: { en: 'Important', zh: '重要' }, icon: 'MessageSquareWarning' },
+  WARNING: { type: 'warning', label: { en: 'Warning', zh: '警告' }, icon: 'TriangleAlert' },
+  CAUTION: { type: 'error', label: { en: 'Caution', zh: '危险' }, icon: 'OctagonAlert' },
 };
 
 const alertPattern = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][^\S\n]*(?:\n|$)/i;
@@ -687,11 +711,12 @@ export function parseAlertMarker(text: string): { kind: AlertKind; rest: string 
  * React component.
  */
 export function rehypeGithubAlerts() {
-  return (tree: HastRoot) => {
+  return (tree: HastRoot, file?: Pick<MarkdownFile, 'path'>) => {
+    const locale = guideLocale(file);
     const visit = (parent: HastRoot | Element) => {
       parent.children = parent.children.map((child) => {
         if (child.type !== 'element') return child;
-        const alert = child.tagName === 'blockquote' ? toCallout(child) : undefined;
+        const alert = child.tagName === 'blockquote' ? toCallout(child, locale) : undefined;
         if (alert) return alert;
         visit(child);
         return child;
@@ -701,7 +726,7 @@ export function rehypeGithubAlerts() {
   };
 }
 
-function toCallout(blockquote: Element): Element | undefined {
+function toCallout(blockquote: Element, locale: Locale): Element | undefined {
   const paragraph = blockquote.children.find((child): child is Element => child.type === 'element');
   const first = paragraph?.tagName === 'p' ? paragraph.children[0] : undefined;
   if (paragraph === undefined || first?.type !== 'text') return undefined;
@@ -715,32 +740,39 @@ function toCallout(blockquote: Element): Element | undefined {
   });
 
   const { type, label, icon } = alerts[marker.kind];
-  return callout({ type, icon, title: label }, body);
+  return callout({ type, icon, title: label[locale] }, body);
 }
 
 // ---------------------------------------------------------------------------
 // Guide components
 
 /**
- * Rehype plugin: turns the guides' prose conventions into Fumadocs UI
- * component markup. Runs before rehypeCode, while code blocks are plain <pre>.
+ * Rehype plugin: turns the guides' prose conventions (both English and
+ * Chinese) into Fumadocs UI component markup. Runs before rehypeCode, while
+ * code blocks are plain <pre>.
  *
- * - Review metadata closing a guide becomes a muted footer line; the
- *   maintainers note is removed (`hiddenForSearch` does the same for search).
- * - A short first paragraph moves to `frontmatter.lead` for the page header.
- * - "You need …" before the first section, "**It worked if** …", and
- *   "Checkpoint:" with the blocks after it become callouts.
- * - The list after "Before you start" or "Prerequisites" becomes a checklist.
- * - Runs of numbered headings become <Steps>; `frontmatter.steps` maps each
- *   step heading's id to its number.
- * - "**Run on: …**" labels become badges, key combinations <kbd>, and menu
- *   paths ("Settings > General") get chevrons.
+ * - Review metadata closing a guide ("Last checked on …" / "最后核对于 …", etc.)
+ *   becomes a muted footer line; the maintainers note ("Maintainers: …" /
+ *   "维护者：…") is removed (`hiddenForSearch` does the same for search).
+ * - A short first paragraph moves to `frontmatter.lead` for the page header
+ *   (skipping any leading HTML comment such as the translation sync marker).
+ * - "You need …" / "你需要 …" before the first section, "**It worked if** …" /
+ *   "**成功的标志是** …", and "Checkpoint:" / "检查点：" with the blocks after
+ *   it become callouts.
+ * - The list after "Before you start" / "Prerequisites" ("开始之前" / "准备工作"
+ *   / "前置条件") becomes a checklist.
+ * - Runs of numbered headings ("1. …", "Step 1: …", "Phase 1: …", "步骤 1：…",
+ *   "阶段 1：…") become <Steps>; `frontmatter.steps` maps each step heading's
+ *   id to its number.
+ * - "**Run on: …**" / "**运行位置：…**" labels become badges, key combinations
+ *   <kbd>, and menu paths ("Settings > General") get chevrons.
  *
  * Heading ids and heading text stay exactly as they were.
  */
 export function rehypeGuideComponents() {
   return (tree: HastRoot, file: MarkdownFile) => {
     if (file.path?.endsWith('.mdx')) return;
+    const locale = guideLocale(file);
     file.data.astro ??= {};
     const frontmatter = (file.data.astro.frontmatter ??= {});
 
@@ -748,7 +780,7 @@ export function rehypeGuideComponents() {
     const lead = extractLead(tree);
     if (lead !== undefined) frontmatter.lead = lead;
     addRequirementCallouts(tree);
-    addSuccessCallouts(tree, footer);
+    addSuccessCallouts(tree, footer, locale);
     addChecklists(tree);
     frontmatter.steps = groupSteps(tree, footer);
     mapElements(tree, (node) => (node.tagName === 'p' ? toRunOnBadge(node) : undefined));
@@ -792,13 +824,18 @@ const leadMaxLength = 320;
 export function leadHtml(paragraph: Element): string | undefined {
   if (paragraph.tagName !== 'p') return undefined;
   const flat = hastText(paragraph).replace(/\s+/g, ' ').trim();
-  if (flat === '' || flat.length > leadMaxLength || flat.endsWith(':')) return undefined;
+  if (flat === '' || flat.length > leadMaxLength || flat.endsWith(':') || flat.endsWith('：')) return undefined;
   return phrasingHtml(paragraph.children);
+}
+
+/** Whether a node is a standalone HTML comment (such as the top translation sync marker). */
+function isHtmlComment(node: RootContent): boolean {
+  return node.type === 'comment' || (node.type === 'raw' && /^<!--[\s\S]*-->$/.test(node.value.trim()));
 }
 
 /** Moves the opening paragraph out of the body when it can serve as the lead. */
 function extractLead(tree: HastRoot): string | undefined {
-  const first = tree.children.find((node) => !isWhitespace(node));
+  const first = tree.children.find((node) => !isWhitespace(node) && !isHtmlComment(node));
   if (!isElement(first, 'p')) return undefined;
   const html = leadHtml(first);
   if (html !== undefined) removeChild(tree, first);
@@ -867,24 +904,27 @@ function escapeAttribute(value: string): string {
   return escapeHtml(value).replace(/"/g, '&quot;');
 }
 
-/** "You need …" paragraphs before the first section become info callouts. */
+/** "You need …" or "你需要…" paragraphs before the first section become info callouts. */
 function addRequirementCallouts(tree: HastRoot): void {
   for (const [index, node] of tree.children.entries()) {
     if (isElement(node, 'h2')) return;
-    if (isElement(node, 'p') && hastText(node).trimStart().startsWith('You need ')) {
+    if (!isElement(node, 'p')) continue;
+    const leading = hastText(node).trimStart();
+    if (leading.startsWith('You need ') || leading.startsWith('你需要')) {
       tree.children[index] = callout({ type: 'info', icon: 'Info' }, [node]);
     }
   }
 }
 
 /**
- * "**It worked if** …" paragraphs become success callouts, and a paragraph
- * reading "Checkpoint:" becomes the title of a success callout around the
- * blocks after it (see `checkpointEnd`), such as a command and the sentence
- * saying what it must print.
+ * "**It worked if** …" / "**成功的标志是** …" paragraphs become success
+ * callouts, and a paragraph reading "Checkpoint:" / "检查点：" becomes the
+ * title of a success callout around the blocks after it (see `checkpointEnd`),
+ * such as a command and the sentence saying what it must print.
  */
-function addSuccessCallouts(parent: HastParent, stops: ReadonlySet<RootContent>): void {
+function addSuccessCallouts(parent: HastParent, stops: ReadonlySet<RootContent>, locale: Locale): void {
   const { children } = parent;
+  const checkpointTitle = locale === 'zh' ? '检查点' : 'Checkpoint';
   for (let index = 0; index < children.length; index++) {
     const node = children[index];
     if (node?.type !== 'element' || node.tagName === 'pre') continue;
@@ -896,22 +936,26 @@ function addSuccessCallouts(parent: HastParent, stops: ReadonlySet<RootContent>)
       const body = start === -1 ? [] : children.slice(start, end);
       // A callout must not split raw HTML such as <details> … </details>.
       if (body.length > 0 && rawTagsBalanced(body)) {
-        const checkpoint = callout({ type: 'success', icon: 'CircleCheck', title: 'Checkpoint' }, elementContent(body));
+        const checkpoint = callout({ type: 'success', icon: 'CircleCheck', title: checkpointTitle }, elementContent(body));
         children.splice(index, end - index, checkpoint);
       }
     } else {
-      addSuccessCallouts(node, stops);
+      addSuccessCallouts(node, stops, locale);
     }
   }
 }
 
+const successCheckLabels = new Set(['It worked if', '成功的标志是']);
+
 function isSuccessCheck(node: Element): boolean {
   const first = node.children[0];
-  return node.tagName === 'p' && isElement(first, 'strong') && hastText(first).trim() === 'It worked if';
+  return node.tagName === 'p' && isElement(first, 'strong') && successCheckLabels.has(hastText(first).trim());
 }
 
+const checkpointLabels = new Set(['Checkpoint:', '检查点：', '检查点:']);
+
 function isCheckpoint(node: RootContent): boolean {
-  return isElement(node, 'p') && hastText(node).trim() === 'Checkpoint:';
+  return isElement(node, 'p') && checkpointLabels.has(hastText(node).trim());
 }
 
 /**
@@ -935,9 +979,9 @@ function endsCheckpoint(node: RootContent): boolean {
   return headingLevel(node) !== undefined || node.tagName === 'hr' || node.properties.role === 'note' || isCheckpoint(node);
 }
 
-const checklistSections = new Set(['before-you-start', 'prerequisites']);
+const checklistSections = new Set(['before-you-start', 'prerequisites', '开始之前', '准备工作', '前置条件']);
 
-/** The list right after "Before you start" or "Prerequisites" (one paragraph may come first) becomes a checklist. */
+/** The list right after "Before you start" / "Prerequisites" ("开始之前" / "准备工作" / "前置条件", one paragraph may come first) becomes a checklist. */
 function addChecklists(tree: HastRoot): void {
   const { children } = tree;
   children.forEach((node, index) => {
@@ -961,16 +1005,18 @@ function toChecklist(list: Element): void {
 // ---------------------------------------------------------------------------
 // Steps
 
-const stepPattern = /^(?:(?:Step|Phase)\s+)?(\d+)[.:]\s+(?=\S)/;
+const stepPattern = /^(?:(?:(?:Step|Phase)\s+)?(\d+)[.:]\s+|(?:步骤|阶段)\s*(\d+)(?:[.:]\s+|：\s*))(?=\S)/;
 
 /**
  * Number and prefix of a step heading: "2. Install Tailscale" gives 2 and
  * "2. "; "Step 2: Install" gives 2 and "Step 2: "; "Phase 2: Move" gives 2
- * and "Phase 2: ". `undefined` for other headings.
+ * and "Phase 2: "; "步骤 2：安装" gives 2 and "步骤 2："; "阶段 2：迁移" gives
+ * 2 and "阶段 2：". `undefined` for other headings.
  */
 export function parseStepHeading(text: string): { number: number; prefix: string } | undefined {
   const match = stepPattern.exec(text);
-  return match?.[1] === undefined ? undefined : { number: Number(match[1]), prefix: match[0] };
+  const number = match?.[1] ?? match?.[2];
+  return match === null || number === undefined ? undefined : { number: Number(number), prefix: match[0] };
 }
 
 interface Step {
@@ -1085,9 +1131,10 @@ function rawTagsBalanced(nodes: readonly RootContent[]): boolean {
 // ---------------------------------------------------------------------------
 // Inline polish
 
-const runOnPattern = /^(?:Then run|Run(?: first| in another session)?) on: (.+)$/;
+const runOnPattern =
+  /^(?:((?:Then run|Run(?: first| in another session)?) on:)\s+(.+)|((?:运行位置|(?:先|接着|然后|在另一会话中)?运行于)[：:])\s*(.+)|在\s*(.+?)\s*上运行[：:]?)$/;
 
-/** A "**Run on: …**" label: the label text, the machine named, and an icon for it. */
+/** A "**Run on: …**" / "**运行位置：…**" label: the label text, the machine named, and an icon for it. */
 export interface RunOn {
   label: string;
   target: string;
@@ -1095,17 +1142,21 @@ export interface RunOn {
 }
 
 /**
- * Parses a label such as "Run on: macOS" or "Then run on: VPS". The icon is a
- * server for a VPS, a laptop for a Mac, a phone for iOS, and a pin otherwise.
+ * Parses a label such as "Run on: macOS", "Then run on: VPS", "运行位置：macOS",
+ * "先运行于：VPS", "接着运行于：macOS", "在另一会话中运行于：VPS", or
+ * "在 macOS 上运行：". The icon is a server for a VPS, a laptop for a Mac, a
+ * phone for iOS, and a pin otherwise.
  */
 export function parseRunOn(text: string): RunOn | undefined {
   const flat = text.replace(/\s+/g, ' ').trim();
-  const target = runOnPattern.exec(flat)?.[1];
-  if (target === undefined) return undefined;
-  const label = flat.slice(0, flat.length - target.length).trimEnd();
-  if (/\bVPS\b/.test(target)) return { label, target, icon: 'Server' };
-  if (/\b(?:Mac|macOS)/.test(target)) return { label, target, icon: 'Laptop' };
-  if (/\b(?:iOS|iPhone|iPad)/.test(target)) return { label, target, icon: 'Smartphone' };
+  const match = runOnPattern.exec(flat);
+  if (match === null) return undefined;
+  const label = match[1] ?? match[3] ?? '运行位置：';
+  const target = (match[2] ?? match[4] ?? match[5] ?? '').trim();
+  if (target === '') return undefined;
+  if (/(?<![A-Za-z0-9])VPS(?![A-Za-z0-9])/.test(target)) return { label, target, icon: 'Server' };
+  if (/(?<![A-Za-z0-9])(?:Mac|macOS)(?![A-Za-z0-9])/.test(target)) return { label, target, icon: 'Laptop' };
+  if (/(?<![A-Za-z0-9])(?:iOS|iPhone|iPad)(?![A-Za-z0-9])/.test(target)) return { label, target, icon: 'Smartphone' };
   return { label, target, icon: 'MapPin' };
 }
 
@@ -1223,13 +1274,14 @@ function addMenuPathSeparators(parent: HastParent): void {
 export function rehypeFumadocsElements() {
   return (tree: HastRoot, file: Pick<MarkdownFile, 'path'>) => {
     if (file.path?.endsWith('.mdx')) return;
+    const locale = guideLocale(file);
     const visit = (parent: HastParent) => {
       parent.children = parent.children.map((child) => {
         if (child.type === 'element') {
-          if (child.tagName === 'pre' && classList(child).includes('shiki')) return toCodeFrame(child);
+          if (child.tagName === 'pre' && classList(child).includes('shiki')) return toCodeFrame(child, locale);
           if (child.tagName === 'table') return toTableFrame(child);
           if (/^h[2-6]$/.test(child.tagName) && typeof child.properties.id === 'string') {
-            return toAnchoredHeading(child, child.properties.id);
+            return toAnchoredHeading(child, child.properties.id, locale);
           }
         }
         // rehypeCode leaves each highlighted block inside a nested root node,
@@ -1249,11 +1301,18 @@ const fieldTables = [
   ['Tab', 'Setting'],
   ['Value', 'Example'],
   ['Placeholder', 'Example', 'Meaning'],
+  ['字段', '值'],
+  ['Host 字段', '值'],
+  ['控制台设置', '值'],
+  ['标签页', '设置'],
+  ['值', '示例'],
+  ['占位符', '示例', '含义'],
 ].map((headers) => headers.join('\n'));
 
 /**
  * `gallery` for a table of screenshots (raw `<img>` in its cells), `fields`
- * for a form-values table such as "Field | Value", otherwise `undefined`.
+ * for a form-values table such as "Field | Value" ("字段 | 值" in Chinese),
+ * otherwise `undefined`.
  */
 export function tableKind(table: Element): 'fields' | 'gallery' | undefined {
   const hasImage = (node: RootContent): boolean =>
@@ -1287,13 +1346,13 @@ function toTableFrame(table: Element): Element {
  * its table-of-contents entry. With no text to change, it is not a live
  * region; content.ts announces the copy through a status element instead.
  */
-function toAnchoredHeading(heading: Element, id: string): Element {
+function toAnchoredHeading(heading: Element, id: string, locale: Locale): Element {
   const button = element(
     'button',
     {
       type: 'button',
       dataCopyAnchor: '',
-      ariaLabel: 'Copy anchor link',
+      ariaLabel: locale === 'zh' ? '复制锚点链接' : 'Copy anchor link',
       className:
         'group inline-flex items-center justify-center rounded-md text-sm font-medium duration-100 disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring hover:bg-fd-accent hover:text-fd-accent-foreground p-1 [&_svg]:size-4 not-prose shrink-0 text-fd-muted-foreground opacity-0 transition-opacity group-hover/heading:opacity-100 focus-visible:opacity-100 data-checked:opacity-100'.split(
           ' ',
@@ -1313,9 +1372,9 @@ function toAnchoredHeading(heading: Element, id: string): Element {
 
 /** Icon for a code block title: a prompt for shells, a check or a cross for sample output, a file otherwise. */
 function codeTitleIcon(title: string): IconName {
-  if (title === 'Terminal' || title === 'PowerShell') return 'Terminal';
-  if (title === 'Expected output') return 'CircleCheck';
-  if (title === 'Must not appear') return 'CircleX';
+  if (title === 'Terminal' || title === '终端' || title === 'PowerShell') return 'Terminal';
+  if (title === 'Expected output' || title === '预期输出') return 'CircleCheck';
+  if (title === 'Must not appear' || title === '不应出现') return 'CircleX';
   return 'FileCode';
 }
 
@@ -1324,7 +1383,7 @@ function codeTitleIcon(title: string): IconName {
  * src/scripts/content.ts copies on click and sets data-checked, which swaps
  * the clipboard icon for a check mark.
  */
-function copyButton(): Element {
+function copyButton(locale: Locale): Element {
   return element(
     'button',
     {
@@ -1339,12 +1398,12 @@ function copyButton(): Element {
     [
       lucideIcon('Clipboard', ['size-4', 'group-data-checked:hidden']),
       lucideIcon('Check', ['size-4', 'hidden', 'group-data-checked:inline']),
-      element('span', { className: ['sr-only'] }, [text('Copy code')]),
+      element('span', { className: ['sr-only'] }, [text(locale === 'zh' ? '复制代码' : 'Copy code')]),
     ],
   );
 }
 
-function toCodeFrame(pre: Element): Element {
+function toCodeFrame(pre: Element, locale: Locale): Element {
   // rehypeCode attaches a language icon for <CodeBlock>, and Shiki copies the
   // meta (title, allowCopy) onto the <pre>; none of these are HTML attributes.
   // The viewport takes over the <pre>'s tab stop.
@@ -1378,7 +1437,7 @@ function toCodeFrame(pre: Element): Element {
           element('div', { className: 'flex text-fd-muted-foreground items-center gap-2 h-9.5 border-b px-4'.split(' ') }, [
             lucideIcon(codeTitleIcon(caption), ['size-3.5', 'shrink-0']),
             element('div', { className: ['flex-1', 'truncate'] }, [text(caption)]),
-            ...(copyable ? [element('div', { className: ['-me-2'] }, [copyButton()])] : []),
+            ...(copyable ? [element('div', { className: ['-me-2'] }, [copyButton(locale)])] : []),
           ]),
         ];
 
@@ -1397,7 +1456,7 @@ function toCodeFrame(pre: Element): Element {
             element(
               'div',
               { className: 'absolute top-2 right-2 z-2 backdrop-blur-lg rounded-lg text-fd-muted-foreground'.split(' ') },
-              [copyButton()],
+              [copyButton(locale)],
             ),
           ]
         : []),
@@ -1409,7 +1468,7 @@ function toCodeFrame(pre: Element): Element {
         {
           role: 'group',
           tabIndex: 0,
-          ariaLabel: caption ?? 'Code',
+          ariaLabel: caption ?? (locale === 'zh' ? '代码' : 'Code'),
           className:
             'text-[0.8125rem] py-3.5 overflow-auto max-h-[600px] fd-scroll-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fd-ring'.split(
               ' ',

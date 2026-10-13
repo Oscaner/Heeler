@@ -54,4 +54,18 @@ describe('tableOfContents', () => {
     const [item] = tableOfContents([{ depth: 2, slug: 'setup', text: 'Setup' }], new Map([['setup', 1]]));
     assert.deepEqual(item, { depth: 2, url: '#setup', title: 'Setup', _step: 1 });
   });
+
+  it('strips Chinese step and phase prefixes when numbering TOC circles', () => {
+    const zhHeadings = [
+      { depth: 2, slug: '步骤-1开启远程登录', text: '步骤 1：开启远程登录' },
+      { depth: 2, slug: '阶段-2迁移', text: '阶段 2：迁移' },
+      { depth: 2, slug: '3-安装-herdr', text: '3. 安装 herdr' },
+    ];
+    const steps = stepNumbers({ '步骤-1开启远程登录': 1, '阶段-2迁移': 2, '3-安装-herdr': 3 });
+    assert.deepEqual(tableOfContents(zhHeadings, steps).map((item) => [item.title, item._step]), [
+      ['开启远程登录', 1],
+      ['迁移', 2],
+      ['安装 herdr', 3],
+    ]);
+  });
 });
