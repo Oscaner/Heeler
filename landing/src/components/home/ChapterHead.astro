@@ -124,13 +124,19 @@ const number = String(index + 1).padStart(2, '0');
   @media (prefers-reduced-motion: no-preference) {
     @supports (animation-timeline: view()) {
       .bar-in {
-        animation: bar-wipe linear both;
+        /* Longhands on purpose: the build's CSS minifier folds animation-timeline
+           into the animation shorthand, which browsers then reject. */
+        animation-name: bar-wipe;
+        animation-timing-function: linear;
+        animation-fill-mode: both;
         animation-timeline: view();
         animation-range: entry 40% cover 45%;
       }
 
       .bar-text {
-        animation: bar-hold linear both;
+        animation-name: bar-hold;
+        animation-timing-function: linear;
+        animation-fill-mode: both;
         animation-timeline: view();
         animation-range: entry 40% cover 45%;
       }

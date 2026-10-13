@@ -68,7 +68,11 @@ const span = 76 / words.length;
       }
 
       .word {
-        animation: word-light linear both;
+        /* Longhands on purpose: the build's CSS minifier folds animation-timeline
+           into the animation shorthand, which browsers then reject. */
+        animation-name: word-light;
+        animation-timing-function: linear;
+        animation-fill-mode: both;
         animation-timeline: --say;
         animation-range: contain calc(var(--a) * 1%) contain calc(var(--b) * 1%);
       }

@@ -830,7 +830,11 @@ const awaySteps: FigureStep[] = [
 
     @supports (animation-timeline: view()) {
       .hero-shift {
-        animation: hero-drift linear both;
+        /* Longhands on purpose: the build's CSS minifier folds animation-timeline
+           into the animation shorthand, which browsers then reject. */
+        animation-name: hero-drift;
+        animation-timing-function: linear;
+        animation-fill-mode: both;
         animation-timeline: scroll(root);
         animation-range: 0 80vh;
       }
@@ -843,7 +847,9 @@ const awaySteps: FigureStep[] = [
       }
 
       [data-rv] {
-        animation: rise linear both;
+        animation-name: rise;
+        animation-timing-function: linear;
+        animation-fill-mode: both;
         animation-timeline: view();
         animation-range: entry 0% entry 40%;
       }
@@ -860,19 +866,25 @@ const awaySteps: FigureStep[] = [
          once the dark page below fills most of the view; that fade sits on
          an inner layer, so the two animations never share a property. */
       .light-ground {
-        animation: ground-in linear both;
+        animation-name: ground-in;
+        animation-timing-function: linear;
+        animation-fill-mode: both;
         animation-timeline: view();
         animation-range: entry 0% entry 55%;
       }
 
       .light-ground-out {
-        animation: fade-out linear both;
+        animation-name: fade-out;
+        animation-timing-function: linear;
+        animation-fill-mode: both;
         animation-timeline: view();
         animation-range: exit 55% exit 100%;
       }
 
       .light-in {
-        animation: rise linear both;
+        animation-name: rise;
+        animation-timing-function: linear;
+        animation-fill-mode: both;
         animation-timeline: view();
         animation-range: entry 25% entry 70%;
       }

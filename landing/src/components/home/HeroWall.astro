@@ -146,7 +146,11 @@ const rows = [images.slice(0, 3), images.slice(3, 6), images.slice(6, 9)].map((r
 
     @supports (animation-timeline: scroll()) {
       .shift {
-        animation: wall-parallax linear both;
+        /* Longhands on purpose: the build's CSS minifier folds animation-timeline
+           into the animation shorthand, which browsers then reject. */
+        animation-name: wall-parallax;
+        animation-timing-function: linear;
+        animation-fill-mode: both;
         animation-timeline: scroll(root);
         animation-range: 0 100vh;
       }
