@@ -1,0 +1,63 @@
+{
+  "$comment": "The guides published from docs/guides/ (and translated in docs/guides/zh/), in sidebar order. Each slug is a basename (without .md) and becomes /<slug> in English and /zh/<slug> in Simplified Chinese. Read by src/lib/guides.ts and scripts/check-links.mjs. Each section's title is localized by locale code (en, zh). sidebarTitles[locale] overrides a page's sidebar label in that language (its H1 title otherwise); keep labels short enough for one sidebar line, in sentence case in English except for domain terms such as Host. The GuideCard links in content/index.mdx and content/zh/index.mdx show the same localized sidebar label and shared icon. icons names the Lucide icon (https://lucide.dev/icons, PascalCase) shown beside each page in the sidebar; every page needs one.",
+  "sections": [
+    {
+      "title": {
+        "en": "Overlay networks",
+        "zh": "Overlay Network"
+      },
+      "guides": ["overlay-networks", "tailscale", "tailscale-userspace", "zerotier", "easytier"]
+    },
+    {
+      "title": {
+        "en": "Jump Host",
+        "zh": "Jump Host"
+      },
+      "guides": ["vps-jump-host-setup", "vps-jump-host"]
+    },
+    {
+      "title": {
+        "en": "Hosts",
+        "zh": "Host"
+      },
+      "guides": ["host-routes", "windows-setup"]
+    }
+  ],
+  "sidebarTitles": {
+    "en": {
+      "index": "Introduction",
+      "overlay-networks": "Overview",
+      "tailscale": "Tailscale",
+      "tailscale-userspace": "Tailscale without a VPN",
+      "zerotier": "ZeroTier",
+      "easytier": "EasyTier",
+      "vps-jump-host-setup": "Set up a Jump Host",
+      "vps-jump-host": "Jump Host in depth",
+      "host-routes": "Multiple routes"
+    },
+    "zh": {
+      "index": "简介",
+      "overlay-networks": "概览",
+      "tailscale": "Tailscale",
+      "tailscale-userspace": "免 VPN 运行 Tailscale",
+      "zerotier": "ZeroTier",
+      "easytier": "EasyTier",
+      "vps-jump-host-setup": "配置 Jump Host",
+      "vps-jump-host": "Jump Host 详解",
+      "host-routes": "多条连接路线",
+      "windows-setup": "Windows 配置"
+    }
+  },
+  "icons": {
+    "index": "BookOpen",
+    "overlay-networks": "Compass",
+    "tailscale": "Waypoints",
+    "tailscale-userspace": "SquareTerminal",
+    "zerotier": "Orbit",
+    "easytier": "Network",
+    "vps-jump-host-setup": "ListChecks",
+    "vps-jump-host": "ShieldCheck",
+    "host-routes": "Route",
+    "windows-setup": "MonitorCog"
+  }
+}
