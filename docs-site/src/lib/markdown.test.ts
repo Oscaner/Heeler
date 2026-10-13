@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Element, ElementContent, Root as HastRoot, RootContent } from 'hast';
 import type { Code, Paragraph, PhrasingContent, Root as MdastRoot } from 'mdast';
+import { htmlLang, localeFromPath, localePath, sidebarTitle } from './guides.ts';
 import {
   codeBlockTitle,
   codeMeta,
@@ -33,14 +34,54 @@ import {
 
 const repo = 'https://github.com/ZingerLittleBee/Heeler';
 const source = 'docs/guides/tailscale.md';
+const zhSource = 'docs/guides/zh/tailscale.md';
 const directories = new Set(['docs/adr', 'Sources/Heeler']);
 const resolve = (href: string) => resolveGuideHref(href, source, (path) => directories.has(path));
+const resolveZh = (href: string) => resolveGuideHref(href, zhSource, (path) => directories.has(path));
+
+describe('locale helpers', () => {
+  it('derives the active locale from the URL pathname', () => {
+    assert.equal(localeFromPath('/'), 'en');
+    assert.equal(localeFromPath('/tailscale'), 'en');
+    assert.equal(localeFromPath('/zh'), 'zh');
+    assert.equal(localeFromPath('/zh/'), 'zh');
+    assert.equal(localeFromPath('/zh/tailscale'), 'zh');
+    assert.equal(localeFromPath('/zh-extra'), 'en');
+  });
+
+  it('switches a pathname between English and Chinese without keeping fragments', () => {
+    assert.equal(localePath('/', 'zh'), '/zh');
+    assert.equal(localePath('/tailscale', 'zh'), '/zh/tailscale');
+    assert.equal(localePath('/zh', 'en'), '/');
+    assert.equal(localePath('/zh/', 'en'), '/');
+    assert.equal(localePath('/zh/tailscale', 'en'), '/tailscale');
+    assert.equal(localePath('/zh/tailscale.html', 'en'), '/tailscale');
+  });
+
+  it('returns the BCP 47 language tag and localized sidebar title', () => {
+    assert.equal(htmlLang('en'), 'en');
+    assert.equal(htmlLang('zh'), 'zh-CN');
+    assert.equal(sidebarTitle('overlay-networks', 'en'), 'Overview');
+    assert.equal(sidebarTitle('overlay-networks', 'zh'), '概览');
+    assert.equal(sidebarTitle('tailscale', 'zh'), 'Tailscale');
+  });
+});
 
 describe('resolveGuideHref', () => {
   it('routes published guides to flat site URLs and keeps the fragment', () => {
     assert.equal(resolve('overlay-networks.md#prepare-the-host'), '/overlay-networks#prepare-the-host');
     assert.equal(resolve('tailscale-userspace.md'), '/tailscale-userspace');
     assert.equal(resolve('./zerotier.md'), '/zerotier');
+  });
+
+  it('routes Chinese guides under docs/guides/zh/ to /zh/<slug> and keeps shared ../images/ on /images/', () => {
+    assert.equal(resolveZh('overlay-networks.md#准备-host'), '/zh/overlay-networks#准备-host');
+    assert.equal(resolveZh('./zerotier.md'), '/zh/zerotier');
+    assert.equal(resolveZh('../images/overlay-networks/tailscale-form.png'), '/images/overlay-networks/tailscale-form.png');
+    assert.equal(
+      resolveZh('../native-windows-testing.md#4-test-device-key-authentication'),
+      `${repo}/blob/main/docs/guides/native-windows-testing.md#4-test-device-key-authentication`,
+    );
   });
 
   it('sends unpublished files to GitHub on main, keeping line anchors', () => {

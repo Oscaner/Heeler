@@ -1,5 +1,6 @@
 ---
 import { ClientRouter } from 'astro:transitions';
+import { htmlLang, localeFromPath, localePath } from '@/lib/guides.ts';
 import '@/styles/global.css';
 
 interface Props {
@@ -14,23 +15,42 @@ const { title, description, noindex = false } = Astro.props;
 const fullTitle = title === siteName ? siteName : `${title} | ${siteName}`;
 // build.format 'file' makes the pathname `/tailscale.html`; Workers serves it at `/tailscale`.
 const path = Astro.url.pathname.replace(/(\/index)?\.html$/, '') || '/';
+const locale = localeFromPath(path);
+const lang = htmlLang(locale);
+const ogLocale = locale === 'zh' ? 'zh_CN' : 'en_US';
+const ogAlternateLocale = locale === 'zh' ? 'en_US' : 'zh_CN';
 const canonical = new URL(path, Astro.site);
+const enUrl = new URL(localePath(path, 'en'), Astro.site);
+const zhUrl = new URL(localePath(path, 'zh'), Astro.site);
 const ogImage = new URL('/logo.png', Astro.site);
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={lang}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
-    {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
+    {
+      noindex ? (
+        <meta name="robots" content="noindex" />
+      ) : (
+        <>
+          <link rel="canonical" href={canonical} />
+          <link rel="alternate" hreflang="en" href={enUrl} />
+          <link rel="alternate" hreflang="zh-CN" href={zhUrl} />
+          <link rel="alternate" hreflang="x-default" href={enUrl} />
+        </>
+      )
+    }
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/logo.png" />
     <meta name="color-scheme" content="light dark" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content={siteName} />
+    <meta property="og:locale" content={ogLocale} />
+    <meta property="og:locale:alternate" content={ogAlternateLocale} />
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
     {!noindex && <meta property="og:url" content={canonical} />}

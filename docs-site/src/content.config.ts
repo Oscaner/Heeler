@@ -10,7 +10,7 @@ import { publishedGuides } from './lib/guides.ts';
 const guides = defineCollection({
   loader: glob({
     base: '../docs/guides',
-    pattern: publishedGuides.map((slug) => `${slug}.md`),
+    pattern: publishedGuides.flatMap((slug) => [`${slug}.md`, `zh/${slug}.md`]),
   }),
   schema: z.object({}),
 });

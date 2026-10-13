@@ -2,12 +2,12 @@
 import { House } from 'lucide-react';
 import { Docs } from '@/components/docs';
 import Layout from '@/components/layout.astro';
-import { serializedPageTree } from '@/lib/source.ts';
+import { serializedPageTrees } from '@/lib/source.ts';
 ---
 
 <Layout title="Page not found" description="This page does not exist on Heeler Docs." noindex>
   <Docs
-    tree={serializedPageTree}
+    trees={serializedPageTrees}
     pathname={Astro.url.pathname}
     params={{}}
     client:load

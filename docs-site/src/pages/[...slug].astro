@@ -3,12 +3,12 @@ import { render } from 'astro:content';
 import defaultMdxComponents from '@fumadocs/base-ui/mdx';
 import { Docs } from '@/components/docs';
 import Layout from '@/components/layout.astro';
-import { serializedPageTree, source } from '@/lib/source.ts';
+import { serializedPageTrees, source } from '@/lib/source.ts';
 import { stepNumbers, tableOfContents } from '@/lib/toc.ts';
 
 export function getStaticPaths() {
   return source.getPages().map((page) => ({
-    params: { slug: page.slugs.length > 0 ? page.slugs.join('/') : undefined },
+    params: { slug: page.url.slice(1) || undefined },
     props: { page },
   }));
 }
@@ -26,7 +26,7 @@ const { lead, steps } = remarkPluginFrontmatter;
 
 <Layout title={title} description={description}>
   <Docs
-    tree={serializedPageTree}
+    trees={serializedPageTrees}
     pathname={page.url}
     params={Astro.params}
     page={{

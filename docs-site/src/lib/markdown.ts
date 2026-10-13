@@ -57,7 +57,7 @@ export interface GuidePluginOptions {
 // Links
 
 const schemePattern = /^[a-z][a-z0-9+.-]*:/i;
-const guidePattern = new RegExp(`^${guidesDir}/([^/]+)\\.md$`);
+const guidePattern = new RegExp(`^${guidesDir}/(?:(zh)/)?([^/]+)\\.md$`);
 
 /**
  * Percent-encodes each path segment canonically: `my file` becomes `my%20file`
@@ -114,9 +114,11 @@ export function resolveGuideHref(
   if (target === '..' || target.startsWith('../')) return undefined;
   const plainTarget = decodePath(target);
 
-  const guide = guidePattern.exec(plainTarget)?.[1];
+  const guideMatch = guidePattern.exec(plainTarget);
+  const guideLocale = guideMatch?.[1];
+  const guide = guideMatch?.[2];
   if (guide !== undefined && publishedGuides.includes(guide)) {
-    return `/${guide}${fragment}`;
+    return guideLocale ? `/${guideLocale}/${guide}${fragment}` : `/${guide}${fragment}`;
   }
 
   if (plainTarget.startsWith(`${guideImagesDir}/`)) {

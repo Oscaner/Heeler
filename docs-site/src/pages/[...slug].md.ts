@@ -21,14 +21,14 @@ export const getStaticPaths = (() =>
   source
     .getPages()
     .filter((page) => page.data.entry.collection === 'guides')
-    .map((page) => ({ params: { slug: page.slugs.join('/') }, props: { page } }))) satisfies GetStaticPaths;
+    .map((page) => ({ params: { slug: page.url.slice(1) }, props: { page } }))) satisfies GetStaticPaths;
 
 type Props = ReturnType<typeof getStaticPaths>[number]['props'];
 
 export const GET: APIRoute<Props> = ({ props: { page }, site }) => {
   if (site === undefined) throw new Error('astro.config.mjs must set `site` for absolute links');
   const markdown = toRawMarkdown(page.data.entry.body ?? '', {
-    sourcePath: `${guidesDir}/${page.slugs.join('/')}.md`,
+    sourcePath: `${guidesDir}/${page.path}`,
     site: site.href,
     isDirectory,
   });

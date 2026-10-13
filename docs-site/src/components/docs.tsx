@@ -16,15 +16,15 @@ import { RootProvider } from '@fumadocs/base-ui/provider/astro';
 import { GlobeIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo } from 'react';
 import { navigate } from 'astro:transitions/client';
-import { githubRepo } from '@/lib/guides.ts';
+import { githubRepo, type Locale, localeFromPath } from '@/lib/guides.ts';
 import { useLanguage } from './language';
 import { layoutSlots } from './layout-slots';
 import { usePanelScroll } from './panel-scroll';
 import StaticSearchDialog from './search';
 
 export interface DocsProps {
-  /** From `serializedPageTree` in src/lib/source.ts. */
-  tree: SerializedPageTree;
+  /** From `serializedPageTrees` in src/lib/source.ts. */
+  trees: Readonly<Record<Locale, SerializedPageTree>>;
   pathname: string;
   params: AstroProviderProps['params'];
   /** Omitted on the 404 page, which has no article chrome. */
@@ -43,12 +43,14 @@ export interface DocsProps {
 }
 
 /** The Fumadocs shell (sidebar, nav, search, theme) around one page's rendered HTML. */
-export function Docs({ tree, pathname, params, page, children }: DocsProps) {
+export function Docs({ trees, pathname, params, page, children }: DocsProps) {
+  const locale = localeFromPath(pathname);
+  const tree = trees[locale];
   // deserializePageTree rewrites its argument in place, and during the build
   // every page renders the same serialized tree, so it gets a copy.
   const pageTree = useMemo(() => deserializePageTree(structuredClone(tree)), [tree]);
   usePanelScroll(pathname);
-  const language = useLanguage();
+  const language = useLanguage(pathname);
 
   return (
     <RootProvider
@@ -61,6 +63,7 @@ export function Docs({ tree, pathname, params, page, children }: DocsProps) {
       <DocsLayout
         tree={pageTree}
         nav={{
+          url: locale === 'zh' ? '/zh' : '/',
           title: (
             <>
               <img src="/logo.png" alt="" width={20} height={20} className="size-5 rounded-[5px]" />
