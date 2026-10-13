@@ -1,7 +1,7 @@
 # Heeler landing page
 
-The marketing site at <https://heeler.bybee.dev>. Astro, zero client-side
-JavaScript, deployed as a static asset bundle on Cloudflare Workers — the same
+The marketing site at <https://heeler.bybee.dev>. Astro, no client-side
+JavaScript of its own, deployed as a static asset bundle on Cloudflare Workers — the same
 Cloudflare account that serves `relay/`.
 
 It is self-contained on purpose: nothing outside this directory imports from
@@ -34,6 +34,7 @@ npm run deploy       # wrangler deploy (needs Cloudflare credentials)
 | `src/styles/landing.css` | Page skeleton: gutters, section rhythm, shared text roles. |
 | `src/assets/` | Logo, six iPhone screenshots, and five iPad screenshots, optimised at build time. |
 | `src/data/ipad-screens.ts` | Shared iPad screenshot order and captions. |
+| `public/figures/*.html` | Interactive figures for the How it works section, embedded with lazy iframes. |
 
 Breakpoints live with the component that needs them. The source design is
 desktop-only; the responsive behaviour (header nav collapse, the screenshot
@@ -62,6 +63,12 @@ The iPad screenshots are copies of `docs/images/*-ipad.png`.
 They are not symlinks — refresh them here when the app screenshots change.
 The homepage shows only the floating-window iPad image, below the iPhone
 screenshots. Its image and text link open `/ipad` for the full gallery.
+
+The How it works figures are generated, self-contained pages (inline SVG and
+script, dark theme, `noindex`), so they are replaced whole rather than edited.
+Each card fills its iframe, and `HowItWorks.astro` sizes the frame from the
+figure's viewBox ratio and card padding, wide and below 560px. A figure whose
+drawing or padding changes needs its numbers there updated too.
 
 ## Deployment
 

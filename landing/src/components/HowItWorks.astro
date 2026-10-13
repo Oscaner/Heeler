@@ -1,0 +1,147 @@
+---
+// Each figure is an interactive page in public/figures/, built from the
+// anatomy figure sources. Its card fills the frame, so the frame's height
+// reproduces the card's own: the drawing's viewBox ratio times the drawing
+// width, plus the card's padding. Below 560px the figure switches to its
+// narrow padding and, where it has one, a cropped viewBox.
+const figures = [
+  {
+    slug: 'pairing',
+    title: 'Pairing admits your phone once',
+    body: 'The Device Key never leaves your phone. Only its public line reaches the Host, carried by a single-use Bootstrap line that expires after 120&nbsp;s, and the Host key is checked against the Pairing Code first.',
+    label: 'Interactive figure: pairing a phone with a Host',
+    ratio: 400 / 600,
+    // Narrow, this drawing bleeds 6% past each side of the card's padding.
+    narrowRatio: (400 / 600) * 1.12,
+    narrowBottom: 88,
+  },
+  {
+    slug: 'routes',
+    title: 'Every Route races to one trusted Host',
+    body: 'Direct Routes start at once and the rest 400&nbsp;ms later. The first machine to present the Host’s trusted key wins and the others are cancelled, so a different machine on the same address is turned away.',
+    label: 'Interactive figure: Heeler racing a Host’s Routes',
+    ratio: 320 / 600,
+    narrowRatio: 293.22 / 471.32,
+    narrowBottom: 78,
+  },
+  {
+    slug: 'compose',
+    title: 'The draft stays on your phone until Send',
+    body: 'Send delivers the whole draft as one <span class="mono">agent.prompt</span> and presses Enter. Add Image copies the photo over SFTP into a private folder on the Host and puts only its path into the draft.',
+    label: 'Interactive figure: writing and sending a draft from the Composer',
+    ratio: 320 / 600,
+    narrowRatio: 211.47 / 281.47,
+    narrowBottom: 78,
+  },
+  {
+    slug: 'away',
+    title: 'Alerts are sealed while you’re away',
+    body: 'Once you leave Heeler, the Host’s plugin seals each Blocked or Done alert with that Host’s Notification Key. The Push Relay and APNs see only the outside; your phone opens it with the same key.',
+    label: 'Interactive figure: sealed notifications while you are away',
+    ratio: 400 / 600,
+    narrowRatio: 315.09 / 392.44,
+    narrowBottom: 78,
+  },
+];
+---
+
+<section id="how-it-works" class="section">
+  <div class="container">
+    <div class="eyebrow">How it works</div>
+    <h2 class="section-title title">Small machines, real mechanisms.</h2>
+    <p class="section-lede lede">Each drawing is built from what Heeler actually does. Tap or press its controls to step through it; left alone, it runs a short tour.</p>
+    <ol class="figures">
+      {
+        figures.map((figure) => (
+          <li class="figure">
+            <div class="text">
+              <h3 class="figure-title">{figure.title}</h3>
+              <p class="figure-body" set:html={figure.body} />
+            </div>
+            <div
+              class="frame"
+              style={`--ratio: ${figure.ratio}; --narrow-ratio: ${figure.narrowRatio}; --narrow-bottom: ${figure.narrowBottom}px`}
+            >
+              <iframe src={`/figures/${figure.slug}.html`} title={figure.label} loading="lazy"></iframe>
+            </div>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+</section>
+
+<style>
+  .title,
+  .lede {
+    max-width: 720px;
+  }
+
+  .figures {
+    display: flex;
+    flex-direction: column;
+    gap: 72px;
+    margin: 56px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .figure {
+    display: grid;
+    grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
+  }
+
+  .figure-title {
+    font: var(--type-h4);
+    text-wrap: balance;
+  }
+
+  .figure-body {
+    font: var(--type-body-sm);
+    color: var(--text-secondary);
+    margin-top: var(--sp-2-5);
+  }
+
+  /* The figure's own card colour, so the frame shows no seam while it loads. */
+  .frame {
+    container-type: inline-size;
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--r-card);
+    overflow: hidden;
+    background: #131313;
+  }
+
+  iframe {
+    display: block;
+    width: 100%;
+    height: calc((100cqw - 48px) * var(--ratio) + 104px);
+    border: 0;
+    color-scheme: dark;
+  }
+
+  @container (max-width: 560px) {
+    iframe {
+      height: calc((100cqw - 24px) * var(--narrow-ratio) + 48px + var(--narrow-bottom));
+    }
+  }
+
+  @media (max-width: 1060px) {
+    .figure {
+      grid-template-columns: 1fr;
+      gap: var(--sp-6);
+    }
+
+    .text {
+      max-width: 640px;
+    }
+  }
+
+  @media (max-width: 680px) {
+    .figures {
+      gap: 56px;
+      margin-top: 40px;
+    }
+  }
+</style>
