@@ -1,12 +1,12 @@
 {
-  "$comment": "The guides published from docs/guides/, in sidebar order. Each slug is a basename (without .md) and becomes the route /<slug>. Read by src/lib/guides.ts and scripts/check-links.mjs. sidebarTitles overrides a page's sidebar label (its H1 title otherwise); keep it in sentence case and in step with the Card titles in content/index.mdx.",
+  "$comment": "The guides published from docs/guides/, in sidebar order. Each slug is a basename (without .md) and becomes the route /<slug>. Read by src/lib/guides.ts and scripts/check-links.mjs. sidebarTitles overrides a page's sidebar label (its H1 title otherwise); keep it short enough for one sidebar line, in sentence case except for domain terms such as Host. The GuideCard links in content/index.mdx take their titles and icons from here. icons names the Lucide icon (https://lucide.dev/icons, PascalCase) shown beside each page in the sidebar; every page needs one.",
   "sections": [
     {
       "title": "Overlay networks",
       "guides": ["overlay-networks", "tailscale", "tailscale-userspace", "zerotier", "easytier"]
     },
     {
-      "title": "Jump host",
+      "title": "Jump Host",
       "guides": ["vps-jump-host-setup", "vps-jump-host"]
     },
     {
@@ -21,7 +21,20 @@
     "tailscale-userspace": "Tailscale without a VPN",
     "zerotier": "ZeroTier",
     "easytier": "EasyTier",
-    "vps-jump-host-setup": "Set up remote access through a VPS",
-    "vps-jump-host": "VPS jump host and reverse tunnel"
+    "vps-jump-host-setup": "Set up a Jump Host",
+    "vps-jump-host": "Jump Host in depth",
+    "host-routes": "Multiple routes"
+  },
+  "icons": {
+    "index": "BookOpen",
+    "overlay-networks": "Compass",
+    "tailscale": "Waypoints",
+    "tailscale-userspace": "SquareTerminal",
+    "zerotier": "Orbit",
+    "easytier": "Network",
+    "vps-jump-host-setup": "ListChecks",
+    "vps-jump-host": "ShieldCheck",
+    "host-routes": "Route",
+    "windows-setup": "MonitorCog"
   }
 }

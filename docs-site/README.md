@@ -1,9 +1,9 @@
 # Heeler docs site
 
 The user guides at <https://docs.heeler.bybee.dev>. [Fumadocs](https://fumadocs.dev)
-on Astro (fumadocs-ui as a React island, Tailwind CSS 4), built to static
-files and deployed as an assets-only Cloudflare Worker, the same way as
-`landing/`.
+on Astro (the Base UI flavour, `@fumadocs/base-ui`, with its Spacious layout, as
+a React island; Tailwind CSS 4), built to static files and deployed as an
+assets-only Cloudflare Worker, the same way as `landing/`.
 
 It is self-contained: nothing outside this directory imports from it, and it
 imports nothing from `landing/` (the fonts and logo are copies).
@@ -48,21 +48,34 @@ Astro. Keep persistence on the island, not on `<body>` or a wrapper.
 Only the page content is keyed by pathname, so page-specific TOC observers and
 state reset without remounting the sidebar, search, or theme provider.
 
+On wide screens the Spacious layout scrolls the article inside its panel, not
+the window, so neither the browser nor Astro restores that position.
+`src/components/panel-scroll.ts` remembers it for each history entry and
+restores it on Back and Forward (also between `#fragment` entries of one page);
+a new page or `#fragment` scrolls the panel instead. It also scrolls the panel
+for the scroll keys (Page Up and Page Down, Space, the arrow keys, Home, and
+End) while nothing has focus, which the browser would send to the window.
+
 After changing navigation, serve the production build and check home → guide →
 another guide → Back, search-result navigation, and 404 → home. The sidebar DOM
 node must stay the same while the title, article, table of contents, active
-sidebar link, and "Edit on GitHub" destination update. Also check code copying,
-theme retention, and the mobile navigation drawer.
+sidebar link, and "Edit on GitHub" destination update. On a wide window, also
+check Back after a table-of-contents click (also after then clicking the same
+page in the sidebar) and Page Down right after a page loads. Also check code
+copying, theme retention, and the mobile navigation drawer (it takes focus when
+it opens and keeps it until it closes).
 
 ## Layout
 
 | Path | What it holds |
 | --- | --- |
-| `src/guides.json` | Which guides are published, their sidebar groups and order, and sidebar label overrides. |
+| `src/guides.json` | Which guides are published, their sidebar groups and order, sidebar label overrides, and each page's Lucide icon. |
 | `src/content.config.ts` | Content collections: `guides` (read from `../docs/guides`) and `pages` (`content/`). |
 | `src/lib/markdown.ts` | Remark/rehype plugins that adapt the GitHub-flavoured guides (see below). Tests in `markdown.test.ts`. |
 | `src/lib/source.ts` | Fumadocs page source and page tree built from both collections. |
 | `src/components/docs.tsx` | The Fumadocs shell: nav, sidebar, search, theme switch, page header, "Edit on GitHub". |
+| `src/components/panel-scroll.ts` | Saves and restores the article's scroll position (see above). |
+| `src/components/guide-card.tsx` | `<GuideCard>` for `content/index.mdx`: a card with a guide's sidebar label and icon. |
 | `src/components/layout.astro` | `<head>` metadata and the global stylesheet. |
 | `src/pages/[...slug].astro` | Every page, at `/<slug>`. `404.astro` is the not-found page. |
 | `src/pages/api/search.json.ts` | Static search index, emitted as `dist/api/search.json`. |
@@ -112,19 +125,32 @@ GitHub-only; links to them point at GitHub.
 
 1. Write `docs/guides/<slug>.md` for GitHub as usual, starting with `# Title`
    and a paragraph.
-2. Add `<slug>` to a section in `src/guides.json`, plus a short sentence-case
-   sidebar label under `sidebarTitles` if the H1 is long or title case.
-3. Add a card for it to `content/index.mdx`.
+2. Add `<slug>` to a section in `src/guides.json` with a
+   [Lucide](https://lucide.dev/icons) icon under `icons`, plus a short
+   sentence-case sidebar label under `sidebarTitles` if the H1 is long or title
+   case. Labels should fit on one sidebar line.
+3. Add `<GuideCard slug="<slug>">One sentence.</GuideCard>` to its section in
+   `content/index.mdx`. The card takes its title and icon from `src/guides.json`.
 4. Run `pnpm run build && pnpm run check:links`. The checker fails if a page is
    missing, an unlisted page is emitted, or a link or anchor does not resolve.
 
 ## Design
 
-The palette maps the landing page's Substrate tokens
-(`landing/src/styles/substrate/tokens/colors.css`) onto Fumadocs' `--color-fd-*`
-variables: dark mode uses them directly, light mode is the same neutral ramp
-inverted, and hue is reserved for callouts. The theme follows the system
-setting, with a light/dark switch in the sidebar.
+The layout follows <https://fumadocs.dev/docs>: the Spacious layout, a block
+table of contents, and Lucide icons in the sidebar. The palette in
+`src/styles/global.css` sets Fumadocs' `--color-fd-*` variables: the dark
+neutrals come from the landing page's Substrate tokens
+(`landing/src/styles/substrate/tokens/colors.css`), and the light ones are
+plain greys in the same roles. The one brand hue is teal, set by
+`--color-fd-primary` in `:root` (light) and `.dark`; it marks the active
+sidebar and table-of-contents items, link underlines, focus rings, and
+selection. Teal is about as light as the muted grey of the other items, so the
+active ones also get a cue that needs no colour (medium weight in the sidebar,
+a bar beside the table of contents); keep it when changing the palette.
+Callouts keep the Substrate status hues. Check text contrast (4.5:1) on the
+panel and on the sidebar's active tint when changing it. The theme follows the
+system setting; readers can switch it in the header's options menu (in the
+sidebar drawer on phones).
 
 The Geist and Geist Mono variable fonts in `src/styles/fonts/` and
 `public/logo.png` / `public/favicon.png` are copies of the files in `landing/`.

@@ -21,3 +21,6 @@ export const publishedGuides: readonly string[] = guideSections.flatMap((section
 
 /** Sidebar labels that differ from a guide's H1 title. */
 export const sidebarTitles: Readonly<Record<string, string>> = config.sidebarTitles;
+
+/** Lucide icon name for each page (the index and every guide), keyed by slug. */
+export const pageIcons: Readonly<Record<string, string>> = config.icons;

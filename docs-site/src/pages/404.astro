@@ -1,23 +1,32 @@
 ---
+import { House } from 'lucide-react';
 import { Docs } from '@/components/docs';
 import Layout from '@/components/layout.astro';
-import { source } from '@/lib/source.ts';
+import { serializedPageTree } from '@/lib/source.ts';
 ---
 
 <Layout title="Page not found" description="This page does not exist on Heeler Docs." noindex>
   <Docs
-    tree={source.getPageTree()}
+    tree={serializedPageTree}
     pathname={Astro.url.pathname}
     params={{}}
     client:load
     transition:persist="docs-shell"
   >
-    <main class="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-4 px-6 py-16">
-      <h1 class="text-3xl font-semibold">Page not found</h1>
-      <p class="text-fd-muted-foreground">
-        There is no guide at this address. Pick one from the sidebar, search, or go back to
-        the <a class="text-fd-foreground underline underline-offset-4" href="/">documentation home</a>.
+    <!-- Fumadocs' DefaultNotFound, with the page title as the h1. -->
+    <main class="flex flex-1 flex-col items-center justify-center gap-4 px-8 py-16 text-center">
+      <p aria-hidden="true" class="text-6xl font-bold text-fd-muted-foreground">404</p>
+      <h1 class="text-2xl font-semibold">Page not found</h1>
+      <p class="max-w-md text-fd-muted-foreground">
+        There is no guide at this address. Search the guides or pick one from the sidebar.
       </p>
+      <a
+        href="/"
+        class="mt-4 inline-flex items-center justify-center gap-1.5 rounded-md bg-fd-primary p-2 text-sm font-medium text-fd-primary-foreground transition-colors duration-100 hover:bg-fd-primary/90"
+      >
+        <House className="size-4" aria-hidden="true" />
+        Back to home
+      </a>
     </main>
   </Docs>
 </Layout>

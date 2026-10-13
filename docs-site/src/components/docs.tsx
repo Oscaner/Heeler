@@ -1,22 +1,31 @@
 import type { AstroProviderProps } from 'fumadocs-core/framework/astro';
-import type { Root } from 'fumadocs-core/page-tree';
+import { deserializePageTree, type SerializedPageTree } from 'fumadocs-core/source/client';
 import type { TOCItemType } from 'fumadocs-core/toc';
-import { DocsLayout } from 'fumadocs-ui/layouts/docs';
-import { DocsBody, DocsDescription, DocsPage, DocsTitle, EditOnGitHub } from 'fumadocs-ui/layouts/docs/page';
-import { RootProvider } from 'fumadocs-ui/provider/astro';
-import type { ReactNode } from 'react';
+import { useSidebar } from '@fumadocs/base-ui/components/sidebar/base';
+import { DocsLayout, useSpaciousLayout } from '@fumadocs/base-ui/layouts/spacious';
+import {
+  DocsBody,
+  DocsDescription,
+  DocsPage,
+  DocsTitle,
+  EditOnGitHub,
+} from '@fumadocs/base-ui/layouts/spacious/page';
+import { RootProvider } from '@fumadocs/base-ui/provider/astro';
+import { type ReactNode, useEffect, useMemo } from 'react';
 import { navigate } from 'astro:transitions/client';
 import { githubRepo } from '@/lib/guides.ts';
+import { usePanelScroll } from './panel-scroll';
 import StaticSearchDialog from './search';
 
 export interface DocsProps {
-  tree: Root;
+  /** From `serializedPageTree` in src/lib/source.ts. */
+  tree: SerializedPageTree;
   pathname: string;
   params: AstroProviderProps['params'];
   /** Omitted on the 404 page, which has no article chrome. */
   page?: {
     title: string;
-    /** Shown under the title; guides leave it out because it repeats their first paragraph. */
+    /** Plain-text line under the title (the site's own pages). */
     description?: string;
     toc: TOCItemType[];
     sourceUrl: string;
@@ -26,6 +35,11 @@ export interface DocsProps {
 
 /** The Fumadocs shell (sidebar, nav, search, theme) around one page's rendered HTML. */
 export function Docs({ tree, pathname, params, page, children }: DocsProps) {
+  // deserializePageTree rewrites its argument in place, and during the build
+  // every page renders the same serialized tree, so it gets a copy.
+  const pageTree = useMemo(() => deserializePageTree(structuredClone(tree)), [tree]);
+  usePanelScroll(pathname);
+
   return (
     <RootProvider
       pathname={pathname}
@@ -34,29 +48,92 @@ export function Docs({ tree, pathname, params, page, children }: DocsProps) {
       search={{ SearchDialog: StaticSearchDialog }}
     >
       <DocsLayout
-        tree={tree}
+        tree={pageTree}
         nav={{
           title: (
             <>
-              <img src="/logo.png" alt="" width={24} height={24} className="rounded-md" />
-              Heeler Docs
+              <img src="/logo.png" alt="" width={20} height={20} className="size-5 rounded-[5px]" />
+              <span className="font-medium">Heeler Docs</span>
             </>
           ),
         }}
         links={[{ text: 'Heeler website', url: 'https://heeler.bybee.dev', external: true }]}
         githubUrl={githubRepo}
       >
+        <DrawerFocus />
         {page ? (
-          <DocsPage key={pathname} toc={page.toc}>
+          <DocsPage
+            key={pathname}
+            toc={page.toc}
+            // Spacious has no <main>; make the article the main landmark.
+            role="main"
+            // The phone table-of-contents bar has no focus indicator of its own.
+            tableOfContentPopover={{
+              trigger: { className: 'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fd-ring' },
+            }}
+          >
             <DocsTitle>{page.title}</DocsTitle>
-            <DocsDescription>{page.description}</DocsDescription>
-            <DocsBody>{children}</DocsBody>
-            <EditOnGitHub href={page.sourceUrl} />
+            {page.description !== undefined && <DocsDescription>{page.description}</DocsDescription>}
+            <DocsBody className="text-fd-foreground/90">{children}</DocsBody>
+            <EditOnGitHub href={page.sourceUrl} className="mt-6 self-start" />
           </DocsPage>
         ) : (
-          children
+          <NotFoundPanel>{children}</NotFoundPanel>
         )}
       </DocsLayout>
     </RootProvider>
+  );
+}
+
+/**
+ * Spacious renders the phone sidebar drawer after the page, so keyboard focus
+ * would walk the whole article before reaching it, and Shift-Tab would leave
+ * the open drawer for the page under its overlay. While the drawer is open,
+ * the page behind it is inert and focus starts in the drawer; when it closes,
+ * focus returns to its trigger. Escape closes it.
+ */
+function DrawerFocus() {
+  const { open, setOpen, mode } = useSidebar();
+  useEffect(() => {
+    if (mode !== 'drawer' || !open) return;
+    const drawer = document.getElementById('nd-sidebar-mobile');
+    // The page behind the drawer: the header, table-of-contents bar, and page
+    // panel, its siblings in the layout grid. The overlay is fixed like the
+    // drawer and stays live, so tapping it still closes the drawer.
+    const background = [...(drawer?.parentElement?.children ?? [])].filter(
+      (element): element is HTMLElement =>
+        element instanceof HTMLElement && element !== drawer && getComputedStyle(element).position !== 'fixed',
+    );
+    for (const element of background) element.inert = true;
+    drawer?.querySelector<HTMLElement>('a[href], button:not(:disabled)')?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      for (const element of background) element.inert = false;
+      if (drawer?.contains(document.activeElement)) {
+        document.querySelector<HTMLElement>('[aria-controls="nd-sidebar-mobile"]')?.focus();
+      }
+    };
+  }, [open, mode, setOpen]);
+  return null;
+}
+
+/**
+ * Spacious lays its children out on a named grid (sidebar | header | main), and
+ * only DocsPage draws the inset panel with its header actions (theme, GitHub).
+ * The 404 page has no DocsPage, so it gets the same panel and actions here.
+ */
+function NotFoundPanel({ children }: { children: ReactNode }) {
+  const { slots } = useSpaciousLayout();
+  return (
+    <div className="mx-2 mt-2 flex min-h-0 min-w-0 flex-col rounded-t-2xl border-x border-t bg-fd-background [grid-area:main] md:ms-0 md:mb-2 md:overflow-y-auto md:rounded-2xl md:border md:shadow-sm">
+      <div className="flex h-(--fd-header-height) shrink-0 items-center ps-6 pe-4 max-md:hidden">
+        <slots.actions className="ms-auto" />
+      </div>
+      {children}
+    </div>
   );
 }

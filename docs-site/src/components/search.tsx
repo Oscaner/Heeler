@@ -9,7 +9,7 @@ import {
   SearchDialogList,
   SearchDialogOverlay,
   type SharedProps,
-} from 'fumadocs-ui/components/dialog/search';
+} from '@fumadocs/base-ui/components/dialog/search';
 
 /** Path of the prebuilt search index (src/pages/api/search.json.ts). */
 export const searchIndexPath = '/api/search.json';
