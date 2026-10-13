@@ -35,6 +35,13 @@ test-app test-directory-browser-ui sim build-sim sim-id: DERIVED = $(DERIVED_SIM
 help: ## Show available targets
 	@awk -F':.*## ' '/^[a-z-]+:.*## / { printf "  make %-20s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
+.PHONY: docs-install docs-dev
+docs-install: ## Install docs site dependencies from the pnpm lockfile
+	pnpm --dir docs-site install --frozen-lockfile
+
+docs-dev: docs-install ## Start the docs site with hot reload (optional DOCS_ARGS)
+	pnpm --dir docs-site run dev $(DOCS_ARGS)
+
 ssh-artifacts: ## Rebuild the pinned HeelerSSH XCFrameworks
 	Packages/HeelerSSH/Scripts/build-native.sh
 

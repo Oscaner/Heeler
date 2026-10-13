@@ -1,4 +1,4 @@
-// Unit tests for the guide pipeline helpers. Run with `npm test` (Node's
+// Unit tests for the guide pipeline helpers. Run with `pnpm test` (Node's
 // built-in runner; Node strips the TypeScript types).
 
 import assert from 'node:assert/strict';

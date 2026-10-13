@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Checks the static build in dist/ (run after `npm run build`):
+// Checks the static build in dist/ (run after `pnpm run build`):
 //
 // - every internal href/src resolves to an emitted file or page, and every
 //   #fragment exists as an id on the target page;
@@ -18,7 +18,7 @@ const dist = join(root, 'dist');
 const failures = [];
 
 if (!existsSync(dist)) {
-  console.error('dist/ is missing; run `npm run build` first.');
+  console.error('dist/ is missing; run `pnpm run build` first.');
   process.exit(1);
 }
 

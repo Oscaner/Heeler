@@ -3,7 +3,7 @@
 // The guides are written for GitHub: no frontmatter, a leading `# Title`, links
 // between `.md` files, and GitHub alert blockquotes. These plugins adapt them
 // at build time so the files themselves stay untouched. The string helpers are
-// pure and covered by `npm test`; the plugins only walk trees and apply them.
+// pure and covered by `pnpm test`; the plugins only walk trees and apply them.
 
 import { posix, relative, sep } from 'node:path';
 import type { Element, ElementContent, Root as HastRoot, RootContent } from 'hast';

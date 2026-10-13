@@ -7,20 +7,31 @@ files and deployed as an assets-only Cloudflare Worker, the same way as
 
 It is self-contained: nothing outside this directory imports from it, and it
 imports nothing from `landing/` (the fonts and logo are copies).
-`.github/workflows/docs-site.yml` runs for `docs-site/**` and `docs/guides/**`;
+`.github/workflows/docs-site.yml` runs for `docs-site/**`, `docs/guides/**`, and the root `Makefile`;
 `ci.yml` and `ci-node.yml` include neither path.
 
 ## Commands
 
+Use Node 22.18 or newer and pnpm 11.11.0 (pinned in `package.json`). From the repository root:
+
 ```bash
-npm install          # once (Node 22.18 or newer)
-npm run dev          # local dev server with hot reload
-npm test             # unit tests for the Markdown pipeline (node:test)
-npm run check        # astro check (typechecks .astro and .ts files)
-npm run build        # static build into dist/
-npm run check:links  # after build: internal links, #anchors, published page set
-npm run preview      # serve dist/ locally
-npm run deploy       # wrangler deploy (needs Cloudflare credentials)
+make docs-dev         # install locked dependencies, then start the dev server
+# Optional: make docs-dev DOCS_ARGS='--host 0.0.0.0 --port 4322'
+```
+
+Open the local URL printed by Astro (normally <http://localhost:4321>). `make docs-install` installs dependencies without starting the server. Install pnpm using [its installation guide](https://pnpm.io/installation) if it is not on your PATH.
+
+For individual commands, run these in `docs-site/`:
+
+```bash
+pnpm install --frozen-lockfile # install the committed dependency versions
+pnpm run dev                  # local dev server with hot reload
+pnpm test                     # unit tests for the Markdown pipeline (node:test)
+pnpm run check                # astro check (typechecks .astro and .ts files)
+pnpm run build                # static build into dist/
+pnpm run check:links          # after build: internal links, #anchors, published page set
+pnpm run preview              # serve dist/ locally
+pnpm run deploy               # wrangler deploy (needs Cloudflare credentials)
 ```
 
 Astro caches rendered guides in `node_modules/.astro/` and re-renders only
@@ -102,7 +113,7 @@ GitHub-only; links to them point at GitHub.
 2. Add `<slug>` to a section in `src/guides.json`, plus a short sentence-case
    sidebar label under `sidebarTitles` if the H1 is long or title case.
 3. Add a card for it to `content/index.mdx`.
-4. Run `npm run build && npm run check:links`. The checker fails if a page is
+4. Run `pnpm run build && pnpm run check:links`. The checker fails if a page is
    missing, an unlisted page is emitted, or a link or anchor does not resolve.
 
 ## Design
@@ -125,9 +136,6 @@ The fonts come from the `geist` npm package (SIL Open Font License 1.1,
 (`build.format: 'file'`), which Workers serves at `/<slug>`, and
 `dist/404.html` answers unmatched paths.
 
-A push to `main` that touches `docs-site/**` or `docs/guides/**` deploys
-automatically, using the same `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID` repository secrets as the landing page.
+A push to `main` that touches `docs-site/**`, `docs/guides/**`, the root `Makefile`, or the docs site workflow deploys automatically, using the same `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets as the landing page.
 
-For a manual deploy, `wrangler login` once, then `npm run build && npm run
-deploy`.
+For a manual deploy, `pnpm exec wrangler login` once, then `pnpm run build && pnpm run deploy`.

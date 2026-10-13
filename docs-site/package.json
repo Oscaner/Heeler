@@ -5,6 +5,7 @@
   "license": "Apache-2.0",
   "description": "User guides for Heeler (docs.heeler.bybee.dev), built with Fumadocs on Astro and deployed to Cloudflare Workers",
   "type": "module",
+  "packageManager": "pnpm@11.11.0",
   "engines": {
     "node": ">=22.18"
   },
