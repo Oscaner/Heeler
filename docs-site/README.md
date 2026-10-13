@@ -15,8 +15,10 @@ imports nothing from `landing/` (the fonts and logo are copies).
 Use Node 22.18 or newer and pnpm 11.11.0 (pinned in `package.json`). From the repository root:
 
 ```bash
-make docs-dev         # install locked dependencies, then start the dev server
-# Optional: make docs-dev DOCS_ARGS='--host 0.0.0.0 --port 4322'
+make docs-install     # install locked dependencies when needed
+cd docs-site
+pnpm run dev          # start the dev server
+# Optional: pnpm run dev --host 0.0.0.0 --port 4322
 ```
 
 Open the local URL printed by Astro (normally <http://localhost:4321>). `make docs-install` installs dependencies without starting the server. Install pnpm using [its installation guide](https://pnpm.io/installation) if it is not on your PATH.
