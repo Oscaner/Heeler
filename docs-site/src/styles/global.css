@@ -48,7 +48,7 @@
   --color-fd-popover: #ffffff;
   --color-fd-popover-foreground: #0a0a0a;
   --color-fd-muted: #f2f2f2; /* inline code, table header */
-  --color-fd-muted-foreground: #666666;
+  --color-fd-muted-foreground: #636363; /* 4.5:1 on accent too, as in a selected search result */
   --color-fd-secondary: #ededed; /* buttons */
   --color-fd-secondary-foreground: #101010;
   --color-fd-accent: #e3e3e3; /* hover; replaces secondary and card backgrounds, so darker than both */
@@ -76,7 +76,7 @@
   --color-fd-popover: #1c1c1c; /* --n-200 */
   --color-fd-popover-foreground: #ededed;
   --color-fd-muted: #212121; /* --n-250 */
-  --color-fd-muted-foreground: #969696;
+  --color-fd-muted-foreground: #999999; /* between --text-secondary and --n-800, for 4.5:1 on accent */
   --color-fd-secondary: #212121; /* --n-250 */
   --color-fd-secondary-foreground: #ededed;
   --color-fd-accent: #303030; /* --n-400, hover; lighter than secondary and card */
