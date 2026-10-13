@@ -16,6 +16,7 @@ import { RootProvider } from '@fumadocs/base-ui/provider/astro';
 import { type ReactNode, useEffect, useMemo } from 'react';
 import { navigate } from 'astro:transitions/client';
 import { githubRepo } from '@/lib/guides.ts';
+import { layoutSlots } from './layout-slots';
 import { usePanelScroll } from './panel-scroll';
 import StaticSearchDialog from './search';
 
@@ -65,6 +66,9 @@ export function Docs({ tree, pathname, params, page, children }: DocsProps) {
         }}
         links={[{ text: 'Heeler website', url: 'https://heeler.bybee.dev', external: true }]}
         githubUrl={githubRepo}
+        // layoutSlots puts the theme switch at the bottom of the sidebar instead.
+        themeSwitch={{ enabled: false }}
+        slots={layoutSlots}
       >
         <DrawerFocus />
         {page ? (
@@ -145,7 +149,7 @@ function DrawerFocus() {
 
 /**
  * Spacious lays its children out on a named grid (sidebar | header | main), and
- * only DocsPage draws the inset panel with its header actions (theme, GitHub).
+ * only DocsPage draws the inset panel with its header actions (the GitHub link).
  * The 404 page has no DocsPage, so it gets the same panel and actions here.
  */
 function NotFoundPanel({ children }: { children: ReactNode }) {

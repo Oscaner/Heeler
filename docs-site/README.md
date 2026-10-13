@@ -76,7 +76,8 @@ navigation drawer (it takes focus when it opens and keeps it until it closes).
 | `src/lib/source.ts` | Fumadocs page source and page tree built from both collections. |
 | `src/lib/toc.ts` | The table of contents, with numbered circles for step headings. |
 | `src/lib/raw-markdown.ts` | A guide's Markdown with absolute links, for the page actions. |
-| `src/components/docs.tsx` | The Fumadocs shell: nav, sidebar, search, theme switch, page header with "Copy Markdown" and "Open", "Edit on GitHub". |
+| `src/components/docs.tsx` | The Fumadocs shell: nav, sidebar, search, page header with "Copy Markdown" and "Open", "Edit on GitHub". |
+| `src/components/layout-slots.tsx` | Spacious slot overrides: the theme switch at the bottom of the sidebar and the navigation drawer, and the GitHub link always in the page header. |
 | `src/components/panel-scroll.ts` | Saves and restores the article's scroll position (see above). |
 | `src/components/guide-card.tsx` | `<GuideCard>` for `content/index.mdx`: a card with a guide's sidebar label and icon. |
 | `src/components/layout.astro` | `<head>` metadata and the global stylesheet. |
@@ -205,8 +206,8 @@ the sidebar, a bar beside the table of contents); keep it when changing the
 palette. Callouts keep the Substrate status hues. When changing the palette,
 check text contrast (4.5:1) on the panel, on the hover accent (a selected
 search result), on the sidebar's active tint, on the step circles' tint, and on
-the 404 button. The theme follows the system setting; readers can switch it in
-the header's options menu (in the sidebar drawer on phones).
+the 404 button. The theme follows the system setting; readers can switch it at
+the bottom of the sidebar (of the navigation drawer on phones).
 
 The Geist and Geist Mono variable fonts in `src/styles/fonts/` and
 `public/logo.png` / `public/favicon.png` are copies of the files in `landing/`.
