@@ -9,9 +9,12 @@ Entries reference the pull request that made the change.
 
 ### Added
 
-- Read and search Heeler's connection guides on the new documentation site,
-  with navigation for overlay networks, Jump Hosts, Host Routes, and Windows
-  setup, and copy any guide as Markdown. (#442)
+- Read and search Heeler's connection guides in English or Simplified Chinese
+  on the new documentation site, with navigation for overlay networks, Jump
+  Hosts, Host Routes, and Windows setup, and copy any guide as Markdown. (#442)
+- Return to the Console from an Agent's More menu. Back to Console does
+  what swiping in from the left edge does, so the way back no longer
+  depends on knowing the gesture; the Agent keeps running on the Host. (#439)
 - Give a Host more than one route — its LAN address for home, say, and an
   overlay network or Jump Host for everywhere else. Add Route in Edit Host;
   Heeler tries every route each time it connects and keeps the first that
@@ -73,8 +76,21 @@ Entries reference the pull request that made the change.
 
 ### Fixed
 
+- Removing a Host now ends its Live Activity and forgets its Live Activity
+  setting, and Heeler no longer keeps retrying Live Activity updates for the
+  removed Host. (#444)
+- Removing a connected Host now also stops its notifications to this
+  device: Heeler first takes this device off the Host's notification list,
+  then deletes the Host's Notification Key along with its saved password. If
+  the Host isn't connected, the confirmation says so and suggests connecting
+  first; a Host removed without being reached may keep sending this device
+  generic "Agent update" notifications. (#445)
 - Close Agent and Close Terminal now ask from the More button you tapped,
   instead of a bubble floating in the middle of the terminal. (#440)
+- When attaching to an Agent or terminal on a macOS or Linux Host fails
+  because herdr exits, the message now quotes herdr's own error, such as an
+  older herdr earlier on the SSH PATH losing its connection to the server,
+  instead of only an exit status. (#443)
 - Start Tailscale browser authorization with one Sign In button and reconnect automatically after returning from the browser. (#426)
 - Show Connected and remove the sign-in prompt when Tailscale browser authorization completes, without requiring another Connect. (#426)
 - Open a Host's connection checks after adding it from an overlay network's peer list, so its SSH host key can be trusted on the first connection. (#426)
