@@ -20,7 +20,7 @@ import {
   MoonIcon,
   SunIcon,
 } from 'lucide-react';
-import { type ComponentProps, useEffect, useId, useRef, useState } from 'react';
+import { type ComponentProps, useEffect, useId, useState } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 
 /**
@@ -175,20 +175,11 @@ function ThemeSwitch() {
   const { theme, setTheme } = useTheme();
   const id = useId();
   const index = themes.findIndex(([value]) => value === theme);
-  const latestTransition = useRef<ViewTransition>(undefined);
 
   function pick(value: string, icon: Element | null, turn: string) {
     if (typeof document.startViewTransition === 'function') {
-      const transition = document.startViewTransition(() => flushSync(() => setTheme(value)));
-      // While the transition runs, the pointer hits the root rather than the
-      // option, so the cursor would turn into an arrow until it ends. A quick
-      // second pick skips the first transition, so only the latest restores it.
-      const root = document.documentElement;
-      root.style.cursor = 'pointer';
-      latestTransition.current = transition;
-      transition.finished.finally(() => {
-        if (latestTransition.current === transition) root.style.removeProperty('cursor');
-      });
+      // global.css keeps the pointer cursor while the transition runs.
+      document.startViewTransition(() => flushSync(() => setTheme(value)));
     } else {
       setTheme(value);
     }

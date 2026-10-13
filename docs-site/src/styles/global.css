@@ -122,6 +122,14 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* While a view transition runs (a theme switch, a client-side navigation),
+   the pointer hits <html> instead of the link or switch under it, so the
+   cursor would turn into an arrow until the transition ends. Those
+   transitions start from a click on a link or switch, so keep its cursor. */
+:root:active-view-transition {
+  cursor: pointer;
+}
+
 html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;
