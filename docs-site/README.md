@@ -77,7 +77,7 @@ navigation drawer (it takes focus when it opens and keeps it until it closes).
 | `src/lib/toc.ts` | The table of contents, with numbered circles for step headings. |
 | `src/lib/raw-markdown.ts` | A guide's Markdown with absolute links, for the page actions. |
 | `src/components/docs.tsx` | The Fumadocs shell: nav, sidebar, search, page header with "Copy Markdown" and "Open", "Edit on GitHub". |
-| `src/components/layout-slots.tsx` | Spacious slot overrides: the language and theme switches at the bottom of the sidebar and the navigation drawer, and the GitHub link always in the page header. |
+| `src/components/layout-slots.tsx` | Spacious slot overrides: the language and theme switches at the bottom of the sidebar and the navigation drawer, and the website and GitHub links always in the page header. |
 | `src/components/language.ts` | The languages the language switch offers and the reader's remembered choice (no translations yet; see Design). |
 | `src/components/panel-scroll.ts` | Saves and restores the article's scroll position (see above). |
 | `src/components/guide-card.tsx` | `<GuideCard>` for `content/index.mdx`: a card with a guide's sidebar label and icon. |

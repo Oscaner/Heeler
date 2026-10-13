@@ -75,7 +75,8 @@ function DrawerWithFooter() {
 /**
  * The page panel's header actions. Spacious shows icon links from lg up and
  * folds them into the options menu below that; without the theme switch the
- * menu would hold the GitHub link alone, so the links show at every width.
+ * menu would hold just those links (the website and GitHub), so they show at
+ * every width.
  */
 function HeaderActions({ className, ...props }: ComponentProps<'div'>) {
   const { menuItems } = useSpaciousLayout();
@@ -88,6 +89,8 @@ function HeaderActions({ className, ...props }: ComponentProps<'div'>) {
               key={item.url}
               item={item}
               aria-label={item.label}
+              // The globe is less obvious than GitHub's mark, so name each on hover.
+              title={item.label}
               className={buttonVariants({ variant: 'ghost', size: 'icon-sm', className: 'text-fd-muted-foreground' })}
             >
               {item.icon}

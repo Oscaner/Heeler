@@ -13,6 +13,7 @@ import {
   ViewOptionsPopover,
 } from '@fumadocs/base-ui/layouts/spacious/page';
 import { RootProvider } from '@fumadocs/base-ui/provider/astro';
+import { GlobeIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo } from 'react';
 import { navigate } from 'astro:transitions/client';
 import { githubRepo } from '@/lib/guides.ts';
@@ -67,7 +68,18 @@ export function Docs({ tree, pathname, params, page, children }: DocsProps) {
             </>
           ),
         }}
-        links={[{ text: 'Heeler website', url: 'https://heeler.bybee.dev', external: true }]}
+        // An icon beside GitHub's in the page header (and the drawer's top row),
+        // rather than a text link at the top of the sidebar.
+        links={[
+          {
+            type: 'icon',
+            text: 'Heeler website',
+            label: 'Heeler website',
+            icon: <GlobeIcon />,
+            url: 'https://heeler.bybee.dev',
+            external: true,
+          },
+        ]}
         githubUrl={githubRepo}
         // layoutSlots puts the theme switch at the bottom of the sidebar instead.
         themeSwitch={{ enabled: false }}
@@ -152,7 +164,8 @@ function DrawerFocus() {
 
 /**
  * Spacious lays its children out on a named grid (sidebar | header | main), and
- * only DocsPage draws the inset panel with its header actions (the GitHub link).
+ * only DocsPage draws the inset panel with its header actions (the website and
+ * GitHub links).
  * The 404 page has no DocsPage, so it gets the same panel and actions here.
  */
 function NotFoundPanel({ children }: { children: ReactNode }) {
