@@ -1,0 +1,84 @@
+---
+// A one-line command with a copy button. The button stays hidden until the
+// page script can copy; the command itself is always selectable.
+interface Props {
+  command: string;
+}
+
+const { command } = Astro.props;
+---
+
+<div class="chip">
+  <span class="prompt" aria-hidden="true">$</span>
+  <code class="command" data-command>{command}</code>
+  <button class="copy" type="button" data-copy hidden>
+    <span class="copy-label" data-copy-label>Copy</span>
+  </button>
+  <span class="visually-hidden" role="status" data-copy-status></span>
+</div>
+
+<style>
+  .chip {
+    display: inline-flex;
+    align-self: flex-start;
+    align-items: center;
+    gap: var(--sp-3);
+    max-width: 100%;
+    min-height: 48px;
+    padding: 0 6px 0 var(--sp-4);
+    border: 1px solid var(--border-default);
+    border-radius: 999px;
+    background: var(--surface-code);
+  }
+
+  .prompt {
+    font: var(--type-mono-sm);
+    color: var(--text-muted);
+  }
+
+  .command {
+    min-width: 0;
+    overflow-x: auto;
+    font: var(--fw-regular) 13px / 1.4 var(--font-mono);
+    color: var(--text-primary);
+    white-space: nowrap;
+    scrollbar-width: none;
+    user-select: all;
+  }
+
+  .command::-webkit-scrollbar {
+    display: none;
+  }
+
+  .copy {
+    flex: none;
+    min-width: 64px;
+    height: 36px;
+    padding: 0 var(--sp-3);
+    border: 1px solid var(--border-hairline);
+    border-radius: 999px;
+    background: var(--surface-card);
+    font: var(--fw-medium) 12px / 1 var(--font-mono);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition-control);
+  }
+
+  .copy:hover {
+    color: var(--text-primary);
+  }
+
+  .copy:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+</style>

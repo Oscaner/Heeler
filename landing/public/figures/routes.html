@@ -1642,14 +1642,14 @@ function settleNow() {
 // head start and the others never start. Away again: the Direct connection drops, the next one races, and Tailscale
 // wins at +400 ms, which is the resting frame the loop started from.
 const TOUR_AWAY = [
-  [3.0, () => { W.impostor = true; race(); }],
+  [0.8, () => { W.impostor = true; race(); }],
   [15.6, () => { W.impostor = false; flip(); }],
   [18.0, () => race()],
   [26.0, () => flip()],
   [40.0, null],
 ];
 const TOUR_HOME = [
-  [2.0, () => race()],
+  [0.8, () => race()],
   [10.0, () => flip()],
   [24.0, () => { W.impostor = true; race(); }],
   [35.6, () => { W.impostor = false; }],
@@ -1664,6 +1664,32 @@ function startTour() {
   for (const [t, fn] of plan) if (fn) events.push({ at: t0 + t, fn, tag: "tour" });
   events.push({ at: t0 + plan[plan.length - 1][0], fn: () => touring && startTour(), tag: "tour" });
 }
+let goBeat = null;
+window.heelerFigure = {
+  go(target) {
+    if (!["race", "impostor", "home"].includes(target)) return;
+    touring = false;
+    clearTimeout(idleTimer);
+    events = events.filter((e) => e.tag !== "tour" && e.tag !== "step");
+    if (goBeat === target) return kick();
+    goBeat = target;
+    const step = (t, fn) => events.push({ at: clock + t, fn, tag: "step" });
+    W.impostor = target === "impostor";
+    if (target === "home" && W.place !== "home") {
+      flip();
+      step(2.4, () => race());
+    } else {
+      if (target !== "home" && W.place !== "away") {
+        W.place = "away";
+        W.slider.target = D.slide.away;
+        for (const el of $$("[data-place]")) off(el, el.dataset.place !== "away");
+      }
+      step(0.2, () => race());
+    }
+    if (still.matches) settleNow();
+    else kick();
+  },
+};
 function steer() {
   if (touring) {
     touring = false;

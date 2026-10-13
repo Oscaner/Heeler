@@ -2569,7 +2569,7 @@ function step() {
 }
 
 // ---------------------------------------------------------------- the idle tour: it starts and ends on the saved Host
-const TOUR = [[2.8, "locked"], [4.0, "confirm"], [6.0, "scan"], [7.8, "reach"], [9.6, "auth"], [11.2, "enroll"], [15.2, "verify"], [17.4, "saved"], [21.0, null]];
+const TOUR = [[0.8, "locked"], [4.0, "confirm"], [6.0, "scan"], [7.8, "reach"], [9.6, "auth"], [11.2, "enroll"], [15.2, "verify"], [17.4, "saved"], [21.0, null]];
 let touring = !still.matches;
 let idleTimer = 0;
 function startTour() {
@@ -2580,6 +2580,30 @@ function startTour() {
   plan.forEach(([t, beat]) => beat && events.push({ at: t0 + t, fn: () => run(beat), tag: "tour" }));
   events.push({ at: t0 + plan[plan.length - 1][0], fn: () => touring && startTour(), tag: "tour" });
 }
+window.heelerFigure = {
+  go(target) {
+    const to = ORDER.indexOf(target);
+    if (to < 0) return;
+    touring = false;
+    clearTimeout(idleTimer);
+    events = events.filter((e) => e.tag !== "tour");
+    const at = Object.fromEntries(TOUR.filter(([, b]) => b).map(([t, b]) => [b, t]));
+    // The embed's first pass reaches "locked" early; keep the loop's spacing.
+    at.locked = at.confirm - 1.2;
+    let from = ORDER.indexOf(S.beat);
+    if (from === to && !S.failed) return kick();
+    const plan = [];
+    if (S.failed || from < 0 || from > to) {
+      plan.push([0, "locked"]);
+      from = 0;
+    }
+    const base = at[ORDER[from]];
+    for (let i = from + 1; i <= to; i++) plan.push([at[ORDER[i]] - base, ORDER[i]]);
+    const lead = plan[0][1] === "locked" ? 0 : plan[0][0] - 0.2;
+    for (const [t, beat] of plan) events.push({ at: clock + (still.matches ? 0 : t - lead), fn: () => run(beat), tag: "tour" });
+    kick();
+  },
+};
 function steer() {
   if (touring) {
     touring = false;
