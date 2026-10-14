@@ -2313,7 +2313,10 @@ struct ConsoleStoreTests {
         let checkout = try #require(agent.repositoryCheckout)
 
         await transport.setWorktreeRemoveFailure(
-            HerdrAPIError(code: "dirty_worktree_requires_force", message: "dirty"))
+            HerdrAPIError(
+                code: "dirty_worktree_requires_force",
+                message:
+                    "fatal: '/work/one-wt' contains modified or untracked files, use --force to delete it"))
         let rejected = WorktreeRemovalRequest(
             identity: WorktreeIdentity(
                 hostID: host.id, workspaceID: "w1", checkout: checkout))

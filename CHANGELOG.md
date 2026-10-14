@@ -113,6 +113,12 @@ Entries reference the pull request that made the change.
   syllables now compose as typed instead of arriving as repeated or loose
   jamo ("한글 지원", not "한한한글글글글지지지원"), with the software keyboard
   and a hardware keyboard alike, including after Backspace. (#441)
+- Removing a Worktree that has checked-out submodules now says that the
+  submodules block it, instead of blaming modified or untracked files.
+  Show Changes stays, and Copy Command hands you the herdr command that
+  forces the removal. While herdr is still loading restored Worktrees
+  after a restart, the message gives herdr's own reason instead of
+  saying a worktree change is already underway. (#458)
 
 ## [0.1.13] - 2026-10-07
 
