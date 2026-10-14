@@ -70,7 +70,7 @@ describe('locale helpers', () => {
 describe('resolveGuideHref', () => {
   it('routes published guides to flat site URLs and keeps the fragment', () => {
     assert.equal(resolve('overlay-networks.md#prepare-the-host'), '/overlay-networks#prepare-the-host');
-    assert.equal(resolve('tailscale-userspace.md'), '/tailscale-userspace');
+    assert.equal(resolve('tailscale.md#troubleshooting'), '/tailscale#troubleshooting');
     assert.equal(resolve('./zerotier.md'), '/zerotier');
   });
 
