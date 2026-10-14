@@ -115,6 +115,95 @@ struct AttachBootstrapGate {
     }
 }
 
+/// Drops herdr's direct-attach startup probe from attach output (#451).
+///
+/// herdr 0.9.4's `agent attach` and `terminal attach` set the terminal up
+/// before their handshake and, once in the alternate screen, query it: a
+/// DECRQM for SGR pixel mouse, then DA1. herdr waits up to 250 ms for the
+/// answer. One that arrives later, as it does over a slow link, reaches the
+/// Pane as typed input. With the probe gone, the terminal never answers.
+///
+/// The probe starts 138 bytes after the bootstrap marker in 0.9.4's output,
+/// so only the first 4 KiB after the marker are searched, and only the first
+/// probe found there is removed. Every byte after it, or after the window,
+/// passes unchanged. At most 15 bytes, the start of a probe split across
+/// reads, are held back until the next read settles them; `finish()` hands
+/// them on when the output ends.
+struct HerdrStartupProbeFilter {
+    /// The probe shapes herdr writes: direct attach's, and its client
+    /// shell's, which adds the kitty keyboard query.
+    static let probes = [
+        Data("\u{1B}[?1016$p\u{1B}[c".utf8),
+        Data("\u{1B}[?1016$p\u{1B}[?u\u{1B}[c".utf8),
+    ]
+
+    /// How far after the marker a probe may start and still be herdr's.
+    static let scanWindow = 4 * 1024
+
+    private var isScanning: Bool
+    /// The bytes after the marker already handed on.
+    private var scanned = 0
+    /// A trailing partial probe, held until the next read completes or
+    /// refutes it.
+    private var held = Data()
+
+    /// A disabled filter passes every byte through, for a channel that never
+    /// carries the probe.
+    init(isEnabled: Bool) {
+        isScanning = isEnabled
+    }
+
+    /// The bytes the terminal should paint, given the next bytes after the
+    /// bootstrap marker.
+    mutating func filter(_ bytes: Data) -> Data {
+        guard isScanning else { return bytes }
+        var data = held
+        data.append(bytes)
+        held = Data()
+        // Offsets into `data` below this still lie inside the window.
+        let limit = Self.scanWindow - scanned
+        if let probe = Self.earliestProbe(in: data) {
+            isScanning = false
+            if data.distance(from: data.startIndex, to: probe.lowerBound) < limit {
+                data.removeSubrange(probe)
+            }
+            return data
+        }
+        let heldStart = data.count - Self.trailingProbePrefixLength(of: data)
+        guard heldStart < limit else {
+            isScanning = false
+            return data
+        }
+        held = Data(data.dropFirst(heldStart))
+        scanned += heldStart
+        return Data(data.prefix(heldStart))
+    }
+
+    /// The partial probe still held when the output ends: no read is left to
+    /// complete it, so it is output like any other.
+    mutating func finish() -> Data {
+        isScanning = false
+        defer { held = Data() }
+        return held
+    }
+
+    private static func earliestProbe(in data: Data) -> Range<Data.Index>? {
+        probes.compactMap { data.range(of: $0) }.min { $0.lowerBound < $1.lowerBound }
+    }
+
+    /// The length of the longest suffix of `data` that is a proper prefix of
+    /// a probe.
+    private static func trailingProbePrefixLength(of data: Data) -> Int {
+        probes.map { probe in
+            for length in stride(from: min(probe.count - 1, data.count), to: 0, by: -1)
+            where data.suffix(length).elementsEqual(probe.prefix(length)) {
+                return length
+            }
+            return 0
+        }.max() ?? 0
+    }
+}
+
 /// The last thing an attach command said before it exited, as one line a
 /// failure message can quote (#431).
 ///

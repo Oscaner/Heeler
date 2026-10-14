@@ -33,6 +33,14 @@ export const pairLines = [
   '<span class="tk-fn">herdr</span> plugin action invoke heeler.pair',
 ];
 
+// The closing steps' commands, wrapped so every line fits a phone-width column.
+export const addCommandLines = [
+  '<span class="tk-fn">herdr</span> plugin install \\',
+  '  ZingerLittleBee/Heeler/plugin \\',
+  '  <span class="tk-string">--ref main --yes</span>',
+  '<span class="tk-fn">herdr</span> plugin action invoke heeler.pair',
+];
+
 export const security = [
   {
     title: 'Device Key in the Keychain',
@@ -94,5 +102,5 @@ export const source = {
 export const links = {
   appStore: 'https://apps.apple.com/us/app/heeler-for-herdr/id6797263135',
   testFlight: 'https://testflight.apple.com/join/aXSxRn4r',
-  setup: 'https://github.com/ZingerLittleBee/Heeler#adding-a-machine',
+  setup: 'https://docs.heeler.bybee.dev/pairing',
 };

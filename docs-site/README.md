@@ -186,7 +186,7 @@ repository root.
 
 ### Published guides
 
-`overlay-networks`, `tailscale`, `tailscale-userspace`, `zerotier`, `easytier`,
+`pairing`, `overlay-networks`, `tailscale`, `zerotier`, `easytier`,
 `vps-jump-host-setup`, `vps-jump-host`, `host-routes`, and `windows-setup`.
 Maintainer documents in `docs/guides/` (`releasing.md`,
 `native-windows-testing.md`), ADRs, and everything else under `docs/` stay

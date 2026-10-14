@@ -1,4 +1,4 @@
-<!-- Translated from docs/guides/host-routes.md at 2b014a24 -->
+<!-- Translated from docs/guides/host-routes.md at 6a68aa1b -->
 # 通过多条路由访问 Host
 
 一台 Host 可以配置不止一条路由：在家时使用局域网地址，在外时使用 Overlay Network 或跳板机（Jump Host）。每次连接时，Heeler 都会尝试所有路由并采用最先连通 Host 的那一条，因此无需手动切换任何设置。
@@ -14,7 +14,7 @@
 5. 如需经过跳板机，请填写 **Jump Host** 相关字段；否则留空。详情参见[通过跳板机远程访问](vps-jump-host-setup.md)。
 6. 轻点右上角的 **Save**，然后在 Edit Host 页面再次轻点 **Save**。
 
-**Add Host** 初始不包含任何路由；轻点 **Add Route** 即可按相同方式输入第一个地址。扫描配对码（Pairing Code）时，配对码提供的每个地址都会分别添加为一条独立路由。
+**Add Host** 初始不包含任何路由；轻点 **Add Route** 即可按相同方式输入第一个地址。[扫描配对码（Pairing Code）](pairing.md)时，配对码提供的每个地址都会分别添加为一条独立路由。
 
 ## Heeler 如何选择路由
 

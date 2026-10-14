@@ -6,11 +6,11 @@
 // IntersectionObserver fallback; the one inline script also moves each step
 // figure with the scroll, counts the stats and copies the command.
 import ChapterHead from '../components/home/ChapterHead.astro';
-import CommandChip from '../components/home/CommandChip.astro';
 import HeroWall from '../components/home/HeroWall.astro';
 import StatRow from '../components/home/StatRow.astro';
 import StepFigure, { type FigureStep } from '../components/home/StepFigure.astro';
 import WordReveal from '../components/home/WordReveal.astro';
+import AddSteps from '../components/home/AddSteps.astro';
 import CodeCard from '../components/home/CodeCard.astro';
 import { connect, consoleCopy, hero, pairLines, steerCopy } from '../components/home/content';
 import FaqList from '../components/home/FaqList.astro';
@@ -297,9 +297,8 @@ const awaySteps: FigureStep[] = [
   <section class="section close" id="add">
     <div class="container home-col" style="--gap: var(--sp-6)" data-rv>
       <p class="mono-eyebrow">Add a machine</p>
-      <h2 class="home-h2">One command on the Host. <span class="rest">Then scan.</span></h2>
-      <CommandChip command="herdr plugin action invoke heeler.pair" />
-      <StoreActions />
+      <h2 class="home-h2">Three steps. <span class="rest">Nothing to type.</span></h2>
+      <AddSteps />
     </div>
   </section>
 
@@ -330,12 +329,12 @@ const awaySteps: FigureStep[] = [
       if (location.hash !== `#${id}`) history.pushState(null, '', `#${id}`);
     });
 
-    // The command chip's copy button, shown only when it can work.
+    // The closing steps' copy button, shown only when it can work.
     document.querySelectorAll('[data-copy]').forEach((button) => {
-      const chip = button.parentElement;
-      const command = chip.querySelector('[data-command]');
-      const label = chip.querySelector('[data-copy-label]');
-      const status = chip.querySelector('[data-copy-status]');
+      const block = button.parentElement;
+      const command = block.querySelector('[data-command]');
+      const label = block.querySelector('[data-copy-label]');
+      const status = block.querySelector('[data-copy-status]');
       if (!navigator.clipboard || !command) return;
       let timer = 0;
       button.hidden = false;
@@ -343,10 +342,10 @@ const awaySteps: FigureStep[] = [
         try {
           await navigator.clipboard.writeText(command.textContent.trim());
           label.textContent = 'Copied';
-          status.textContent = 'Command copied';
+          status.textContent = 'Commands copied';
         } catch {
           label.textContent = 'Select';
-          status.textContent = 'Copy failed; select the command instead';
+          status.textContent = 'Copy failed; select the commands instead';
         }
         clearTimeout(timer);
         timer = setTimeout(() => {
