@@ -61,7 +61,9 @@ passed explicitly.
 ## What `make publish` does, in order
 
 1. **Preflight.** Tooling present and `gh` authenticated; clean tree; on
-   `main` and level with `origin/main`; `[Unreleased]` non-empty; the
+   `main` and level with `origin/main`; the newest tag released on GitHub
+   (a tag without a release is still running or needs
+   [recovery](#failure-and-recovery) first); `[Unreleased]` non-empty; the
    target tag absent locally *and* on the remote — a local-only check
    passes right up until the push fails, by which time the release
    commit has already landed.

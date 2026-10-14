@@ -74,7 +74,10 @@ branch="$(git rev-parse --abbrev-ref HEAD)"
 [ "$branch" = "$DEFAULT_BRANCH" ] || die "on branch '$branch', expected '$DEFAULT_BRANCH'"
 
 git rev-parse --verify --quiet "refs/heads/$DEFAULT_BRANCH" >/dev/null || die "no $DEFAULT_BRANCH branch"
-git fetch --quiet --tags "$REMOTE"
+# --quiet also hides why a fetch failed, such as a local tag that a re-cut
+# replaced on the remote.
+git fetch --quiet --tags "$REMOTE" \
+    || die "git fetch --tags $REMOTE failed. If it refuses to clobber a re-cut tag, update this clone first: git fetch --tags --force $REMOTE"
 [ "$(git rev-parse HEAD)" = "$(git rev-parse "$REMOTE/$DEFAULT_BRANCH")" ] \
     || die "$DEFAULT_BRANCH differs from $REMOTE/$DEFAULT_BRANCH; pull or push first"
 
@@ -86,15 +89,6 @@ notes="$(awk '
     inside && /^## / { exit }
     inside { print }
 ' "$CHANGELOG")"
-if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
-    # After a failed release the notes sit in that version's section instead.
-    newest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)"
-    if [ -n "$newest_tag" ] && ! gh release view "$newest_tag" >/dev/null 2>&1; then
-        die "[Unreleased] is empty and $newest_tag has no GitHub release. If its release failed before publishing anything, re-run the failed jobs or re-cut $newest_tag: docs/guides/releasing.md, \"Failure and recovery\"."
-    fi
-    die "[Unreleased] is empty — there is nothing to release. Entries belong there as they merge."
-fi
-
 # Drop the blank line that follows the heading; $( ) already ate the trailing ones.
 notes="$(printf '%s\n' "$notes" | awk 'NF == 0 && !seen { next } { seen = 1; print }')"
 
@@ -102,7 +96,7 @@ notes="$(printf '%s\n' "$notes" | awk 'NF == 0 && !seen { next } { seen = 1; pri
 
 # The newest released heading and the newest tag must agree: if they disagree
 # one of them is lying, and guessing which is how a release gets cut from the
-# wrong base.
+# wrong base. A re-cut removes both before it publishes again.
 released_heading="$(grep -m1 -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' "$CHANGELOG" | tr -d '#[] ' || true)"
 latest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)"
 
@@ -110,8 +104,26 @@ if [ -n "$released_heading" ] || [ -n "$latest_tag" ]; then
     [ -n "$released_heading" ] || die "git has tag $latest_tag but $CHANGELOG has no released section"
     [ -n "$latest_tag" ] || die "$CHANGELOG has [$released_heading] but there is no matching git tag"
     [ "v$released_heading" = "$latest_tag" ] \
-        || die "$CHANGELOG's newest release [$released_heading] disagrees with the newest tag $latest_tag"
+        || die "$CHANGELOG's newest release [$released_heading] disagrees with the newest tag $latest_tag. A re-cut removes the heading and the tag together: docs/guides/releasing.md, \"Re-cutting an unpublished version\"."
 fi
+
+# A tag without a GitHub release belongs to a release that is still running,
+# failed before publishing anything, or uploaded a build whose release step
+# did not finish. Settle it first: a version that published nothing keeps its
+# number instead of being skipped by the next cut.
+if [ -n "$latest_tag" ] && ! release_lookup="$(gh release view "$latest_tag" --json tagName 2>&1)"; then
+    case "$release_lookup" in
+        *"release not found"*)
+            die "$latest_tag has no GitHub release. If its release run is still going, wait for it. If it published nothing, re-run its failed jobs or re-cut $latest_tag; if its build reached TestFlight, create the release by hand: docs/guides/releasing.md, \"Failure and recovery\"." ;;
+        *)
+            die "could not look up the GitHub release for $latest_tag: $release_lookup" ;;
+    esac
+fi
+
+# Checked last: in a half-finished re-cut [Unreleased] is empty, and the tag
+# checks above say why.
+[ -n "$(printf '%s' "$notes" | tr -d '[:space:]')" ] \
+    || die "[Unreleased] is empty — there is nothing to release. Entries belong there as they merge."
 
 if [ -n "$VERSION" ]; then
     version="${VERSION#v}"
