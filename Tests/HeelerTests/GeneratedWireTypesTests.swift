@@ -81,10 +81,30 @@ import Testing
         #expect(!info.exceedsGeneratedProtocol)
     }
 
+    @Test func pongResponseRoundTripsZeroNineFourCapture() throws {
+        // Live `ping` capture from an isolated herdr 0.9.4 server; 0.9.3
+        // answered with the same capabilities. `ssh_agent_registration`
+        // first appears in herdr 0.9.2.
+        let line = #"{"id":"t-ping","result":{"type":"pong","version":"0.9.4","protocol":22,"capabilities":{"live_handoff":true,"detached_server_daemon":true,"endpoint_protocol_generation":1,"surface_interest":true,"health_check":true,"ssh_agent_registration":true}}}"#
+
+        let pong = try HerdrWire.decodeResult(
+            PongResponse.self, fromResponseLine: Data(line.utf8), requestID: "t-ping")
+
+        #expect(pong.version == "0.9.4")
+        #expect(pong.capabilities == ServerCapabilities(
+            liveHandoff: true, detachedServerDaemon: true, endpointProtocolGeneration: 1,
+            healthCheck: true, sshAgentRegistration: true, surfaceInterest: true))
+        #expect(pong.protocolVersion == HeelerSSHTransport.generatedProtocolVersion)
+        let info = try HeelerSSHTransport.serverInfo(from: pong)
+        #expect(!info.exceedsGeneratedProtocol)
+        _ = try roundTrip(PongResponse.self, #"{"type":"pong","version":"0.9.4","protocol":22,"capabilities":{"live_handoff":true,"detached_server_daemon":true,"endpoint_protocol_generation":1,"surface_interest":true,"health_check":true,"ssh_agent_registration":true}}"#)
+    }
+
     @Test func olderCapabilitiesOmitNewFields() throws {
         let capabilities = try roundTrip(ServerCapabilities.self, #"{"live_handoff":true}"#)
         #expect(capabilities.endpointProtocolGeneration == nil)
         #expect(capabilities.healthCheck == nil)
+        #expect(capabilities.sshAgentRegistration == nil)
         #expect(capabilities.surfaceInterest == nil)
         let nullGeneration = try roundTrip(ServerCapabilities.self,
             #"{"live_handoff":true,"endpoint_protocol_generation":null,"health_check":false,"surface_interest":false}"#)
