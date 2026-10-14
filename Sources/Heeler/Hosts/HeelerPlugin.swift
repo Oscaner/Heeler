@@ -201,7 +201,11 @@ struct HeelerPluginPresentation: Equatable {
     let value: String
     let notice: Notice?
 
-    init(_ status: HeelerPluginStatus, bundled: PluginVersion = HeelerPluginCompatibility.bundled) {
+    /// `session` is the Host's herdr session name, as for `enableCommand`.
+    init(
+        _ status: HeelerPluginStatus, session: String,
+        bundled: PluginVersion = HeelerPluginCompatibility.bundled
+    ) {
         switch status {
         case .checking:
             value = "Checking…"
@@ -221,14 +225,14 @@ struct HeelerPluginPresentation: Equatable {
                 commands: [Self.installCommand],
                 notes: [])
         case .installed(let installation):
-            let described = Self.describe(installation, bundled: bundled)
+            let described = Self.describe(installation, session: session, bundled: bundled)
             value = described.value
             notice = described.notice
         }
     }
 
     private static func describe(
-        _ installation: HeelerPluginInstallation, bundled: PluginVersion
+        _ installation: HeelerPluginInstallation, session: String, bundled: PluginVersion
     ) -> (value: String, notice: Notice?) {
         let version = installation.version.isEmpty ? "Unknown version" : installation.version
         let parsed = installation.parsedVersion
@@ -274,7 +278,7 @@ struct HeelerPluginPresentation: Equatable {
                         tone: .warning,
                         message: "The Heeler plugin is disabled and out of date: \(parsed) → "
                             + "\(bundled). Update it, then turn it on:",
-                        commands: [installCommand, enableCommand(installation.pluginID, session: "")],
+                        commands: [installCommand, enableCommand(installation.pluginID, session: session)],
                         notes: missing))
             }
             return (
@@ -283,7 +287,7 @@ struct HeelerPluginPresentation: Equatable {
                     tone: .warning,
                     message: "The Heeler plugin is disabled, so this Host sends no notifications "
                         + "or Live Activity updates.",
-                    commands: [enableCommand(installation.pluginID, session: "")],
+                    commands: [enableCommand(installation.pluginID, session: session)],
                     notes: []))
         }
         if installation.hasManifestWarning {

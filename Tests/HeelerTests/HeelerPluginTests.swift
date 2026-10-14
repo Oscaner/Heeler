@@ -152,7 +152,7 @@ struct HeelerPluginPresentationTests {
             (.installed(HeelerPluginInstallation(version: "")), "Unknown version"),
         ]
         for (status, value) in cases {
-            let presentation = HeelerPluginPresentation(status, bundled: PluginVersion(0, 6, 0))
+            let presentation = HeelerPluginPresentation(status, session: "", bundled: PluginVersion(0, 6, 0))
             #expect(presentation.value == value)
             #expect(presentation.notice == nil, "\(status)")
         }
@@ -160,7 +160,8 @@ struct HeelerPluginPresentationTests {
 
     @Test func anOlderGitHubPluginGetsTheInstallCommandAndWhatItLacks() throws {
         let presentation = HeelerPluginPresentation(
-            .installed(HeelerPluginInstallation(version: "0.4.0")), bundled: PluginVersion(0, 6, 0))
+            .installed(HeelerPluginInstallation(version: "0.4.0")),
+            session: "", bundled: PluginVersion(0, 6, 0))
         let notice = try #require(presentation.notice)
         #expect(presentation.value == "0.4.0")
         #expect(notice.tone == .warning)
@@ -176,7 +177,7 @@ struct HeelerPluginPresentationTests {
     @Test func anUnknownSourceStillGetsTheInstallCommand() throws {
         let presentation = HeelerPluginPresentation(
             .installed(HeelerPluginInstallation(version: "0.5.0", source: .unknown)),
-            bundled: PluginVersion(0, 6, 0))
+            session: "", bundled: PluginVersion(0, 6, 0))
         #expect(try #require(presentation.notice).commands == [install])
     }
 
@@ -185,7 +186,7 @@ struct HeelerPluginPresentationTests {
         let notice = try #require(
             HeelerPluginPresentation(
                 .installed(HeelerPluginInstallation(version: "0.5.0", source: .local)),
-                bundled: PluginVersion(0, 6, 0)
+                session: "", bundled: PluginVersion(0, 6, 0)
             ).notice)
         #expect(notice.commands.isEmpty)
         #expect(notice.message.contains("local checkout"))
@@ -199,7 +200,7 @@ struct HeelerPluginPresentationTests {
                 HeelerPluginInstallation(
                     pluginID: "herdr-mobile.pairing", version: "0.3.0", isEnabled: false,
                     source: .github)),
-            bundled: PluginVersion(0, 6, 0))
+            session: "", bundled: PluginVersion(0, 6, 0))
         let notice = try #require(presentation.notice)
         #expect(notice.commands == ["herdr plugin uninstall herdr-mobile.pairing", install])
         // Background updates' row note folds into the updates note, and the
@@ -214,7 +215,7 @@ struct HeelerPluginPresentationTests {
                 .installed(
                     HeelerPluginInstallation(
                         version: "0.6.0", leftoverLegacyIDs: ["herdr-mobile.pairing"])),
-                bundled: PluginVersion(0, 6, 0)
+                session: "", bundled: PluginVersion(0, 6, 0)
             ).notice)
         #expect(current.commands == ["herdr plugin uninstall herdr-mobile.pairing"])
         let outdated = try #require(
@@ -222,7 +223,7 @@ struct HeelerPluginPresentationTests {
                 .installed(
                     HeelerPluginInstallation(
                         version: "0.5.0", leftoverLegacyIDs: ["herdr-mobile.pairing"])),
-                bundled: PluginVersion(0, 6, 0)
+                session: "", bundled: PluginVersion(0, 6, 0)
             ).notice)
         #expect(outdated.commands == ["herdr plugin uninstall herdr-mobile.pairing", install])
     }
@@ -233,7 +234,7 @@ struct HeelerPluginPresentationTests {
     @Test func aDisabledOutdatedPluginIsUpdatedThenTurnedOn() throws {
         let presentation = HeelerPluginPresentation(
             .installed(HeelerPluginInstallation(version: "0.5.0", isEnabled: false)),
-            bundled: PluginVersion(0, 6, 0))
+            session: "", bundled: PluginVersion(0, 6, 0))
         #expect(presentation.value == "0.5.0 · Disabled")
         let notice = try #require(presentation.notice)
         #expect(
@@ -242,28 +243,54 @@ struct HeelerPluginPresentationTests {
                 + "Update it, then turn it on:")
         #expect(notice.commands == [install, "herdr plugin enable heeler"])
         #expect(notice.notes.count == 1)
+    }
+
+    /// `herdr plugin install` refuses to replace a linked plugin.
+    @Test func aDisabledLinkedPluginIsOnlyTurnedOnEvenWhenOutdated() throws {
         let linked = try #require(
             HeelerPluginPresentation(
                 .installed(
                     HeelerPluginInstallation(version: "0.5.0", isEnabled: false, source: .local)),
-                bundled: PluginVersion(0, 6, 0)
+                session: "work", bundled: PluginVersion(0, 6, 0)
             ).notice)
-        #expect(linked.commands == ["herdr plugin enable heeler"])
+        #expect(linked.commands == ["herdr --session work plugin enable heeler"])
+    }
+
+    /// `herdr plugin enable` asks the server of the session it targets, so
+    /// it names the Host's session. Install writes the plugin registry that
+    /// every session shares, so it names none.
+    @Test func onlyTheEnableCommandNamesTheHostsSession() throws {
+        let notice = try #require(
+            HeelerPluginPresentation(
+                .installed(HeelerPluginInstallation(version: "0.5.0", isEnabled: false)),
+                session: "work", bundled: PluginVersion(0, 6, 0)
+            ).notice)
+        #expect(
+            notice.commands == [
+                "herdr plugin install ZingerLittleBee/Heeler/plugin --ref main --yes",
+                "herdr --session work plugin enable heeler",
+            ])
     }
 
     @Test func aDisabledPluginIsEnabledNotReinstalled() throws {
         let presentation = HeelerPluginPresentation(
             .installed(HeelerPluginInstallation(version: "0.6.0", isEnabled: false)),
-            bundled: PluginVersion(0, 6, 0))
+            session: "", bundled: PluginVersion(0, 6, 0))
         #expect(presentation.value == "0.6.0 · Disabled")
         #expect(try #require(presentation.notice).commands == ["herdr plugin enable heeler"])
+        let named = try #require(
+            HeelerPluginPresentation(
+                .installed(HeelerPluginInstallation(version: "0.6.0", isEnabled: false)),
+                session: "work", bundled: PluginVersion(0, 6, 0)
+            ).notice)
+        #expect(named.commands == ["herdr --session work plugin enable heeler"])
     }
 
     @Test func aStaleManifestAsksForAReinstallUnlessLinked() throws {
         let github = try #require(
             HeelerPluginPresentation(
                 .installed(HeelerPluginInstallation(version: "0.6.0", hasManifestWarning: true)),
-                bundled: PluginVersion(0, 6, 0)
+                session: "", bundled: PluginVersion(0, 6, 0)
             ).notice)
         #expect(github.commands == [install])
         let linked = try #require(
@@ -271,13 +298,13 @@ struct HeelerPluginPresentationTests {
                 .installed(
                     HeelerPluginInstallation(
                         version: "0.6.0", source: .local, hasManifestWarning: true)),
-                bundled: PluginVersion(0, 6, 0)
+                session: "", bundled: PluginVersion(0, 6, 0)
             ).notice)
         #expect(linked.commands.isEmpty)
     }
 
     @Test func notInstalledOffersTheInstallCommandCalmly() throws {
-        let notice = try #require(HeelerPluginPresentation(.notInstalled).notice)
+        let notice = try #require(HeelerPluginPresentation(.notInstalled, session: "").notice)
         #expect(notice.tone == .info)
         #expect(notice.commands == [install])
     }
