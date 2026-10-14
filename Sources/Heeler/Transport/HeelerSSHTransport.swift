@@ -2762,7 +2762,9 @@ actor HeelerSSHTransport: Transport {
                 target: request.target)
             let environment = try await apiEnvironment()
             let channel: any HeelerSSHAttachChannel
-            // Only herdr's direct attach writes the startup probe.
+            // herdr's direct attach writes a startup probe (#451). The Windows
+            // terminal controller never sets the terminal up, so only the Unix
+            // PTY attach drops it.
             let dropsStartupProbe: Bool
             do {
                 if environment.isWindows {

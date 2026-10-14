@@ -116,6 +116,19 @@ struct AttachBootstrapGate {
 }
 
 /// Drops herdr's direct-attach startup probe from attach output (#451).
+///
+/// herdr 0.9.4's `agent attach` and `terminal attach` set the terminal up
+/// before their handshake and, once in the alternate screen, query it: a
+/// DECRQM for SGR pixel mouse, then DA1. herdr waits up to 250 ms for the
+/// answer. One that arrives later, as it does over a slow link, reaches the
+/// Pane as typed input. With the probe gone, the terminal never answers.
+///
+/// The probe starts 138 bytes after the bootstrap marker in 0.9.4's output,
+/// so only the first 4 KiB after the marker are searched, and only the first
+/// probe found there is removed. Every byte after it, or after the window,
+/// passes unchanged. At most 15 bytes, the start of a probe split across
+/// reads, are held back until the next read settles them; `finish()` hands
+/// them on when the output ends.
 struct HerdrStartupProbeFilter {
     /// The probe shapes herdr writes: direct attach's, and its client
     /// shell's, which adds the kitty keyboard query.
