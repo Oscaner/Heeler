@@ -360,6 +360,7 @@ struct WorktreeDetailStoreTests {
             showChanges: { _ in },
             error: HerdrAPIError(
                 code: "dirty_worktree_requires_force", message: Self.submoduleMessage))
+        try #require(store.refusalCommand != nil, "the refusal should hand over a command")
 
         store.dismissFeedback()
 
