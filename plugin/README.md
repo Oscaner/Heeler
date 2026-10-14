@@ -498,7 +498,7 @@ a newly created plugin config directory has mode **0700**.
 | `diagnostics` | string[] | Empty on success or a missing source. Otherwise `parse_error`, `invalid_token`, `invalid_schema`, or `read_error`. Raw config values and parser excerpts are never included. |
 
 Every token is an object, including TOML string tokens. Builtins are
-`state_icon`, `state_text`, `workspace`, `tab`, `pane`, `agent`,
+`state_icon`, `state_text`, `machine`, `workspace`, `tab`, `pane`, `agent`,
 `terminal_title`, and `terminal_title_stripped`. Custom names must match
 `^\$[A-Za-z0-9_-]{1,32}$` and retain their `$` in the snapshot. A styled TOML
 table accepts only `token`, `fg`, `bold`, and `dim`: `fg` must be `#RGB` or
@@ -514,12 +514,15 @@ not a substitute for `herdr config check` for unrelated herdr settings.
 case variations, and unknown ids are invalid. A future herdr release adding
 canonical ids requires updating this validation list and the shared vectors.
 
-Missing files or fields use herdr defaults: sort `spaces`, `row_gap: 0`,
+Missing files or fields use the snapshot defaults: sort `spaces`, `row_gap: 0`,
 `rows: [[{"token":"state_icon"},{"token":"workspace"},{"token":"tab"}],
-[{"token":"agent"}]]`, and `rows_by_agent: {}`. TOML parse errors, invalid
-tokens, or invalid schema revert the **entire layout and sort** to those
-defaults with a diagnostic. Read errors also produce defaults with a
-diagnostic and are retried at the next invocation.
+[{"token":"agent"}]]`, and `rows_by_agent: {}`. These are not herdr 0.9's
+defaults: herdr 0.9.0 and later put `machine` after `state_icon` in the
+first row, which Heeler does not render, and the snapshot defaults leave it
+out. TOML parse errors, invalid tokens, or invalid schema revert the
+**entire layout and sort** to those defaults with a diagnostic. Read errors
+also produce defaults with a diagnostic and are retried at the next
+invocation.
 
 Both `notify-hook.js` and `activity-hook.js` refresh at the beginning of
 `main()`, before debounce, dedupe, or no-device exits. An unchanged source
@@ -531,18 +534,21 @@ prevent the event hooks from delivering notifications.
 There is no watcher and config reload does not run startup hooks. A config
 edit with no Agent Status transition is picked up at the next transition or
 server start. The snapshot reflects the file on disk, not any live TUI
-`agent.view.set` sort override. Heeler never installs or updates this plugin;
-older installations have no `sidebar.json`, which the app treats as nil
-without a version gate.
+`agent.view.set` sort override. It is this Host's own herdr configuration: a
+herdr client elsewhere that has this Host as a saved machine renders its
+sidebar from that client's own settings, as herdr's configuration docs
+describe. Heeler never installs or updates this plugin; older installations
+have no `sidebar.json`, which the app treats as nil without a version gate.
 
-Swift readers ignore unknown fields and drop individual unknown token names.
-The app resolves whole layouts in this order: the Host's saved user layout,
-the Host's plugin snapshot, Heeler default. There is no global user layout,
-and the default is never offered as a choice. Rows are never merged across
-sources. Its renderer skips `state_icon` and `state_text` because the status
-column already shows Agent Status; `$name` resolves as plain text from
-`AgentInfo.tokens["name"]`. Heeler's Pin is independent. Styles are retained
-in the Swift model; rendering may ignore them (color is ignored by default).
+Swift readers ignore unknown fields and drop individual unknown token names,
+such as `machine`. The app resolves whole layouts in this order: the Host's
+saved user layout, the Host's plugin snapshot, Heeler default. There is no
+global user layout, and the default is never offered as a choice. Rows are
+never merged across sources. Its renderer skips `state_icon` and
+`state_text` because the status column already shows Agent Status; `$name`
+resolves as plain text from `AgentInfo.tokens["name"]`. Heeler's Pin is
+independent. Styles are retained in the Swift model; rendering may ignore
+them (color is ignored by default).
 
 ### Shared test vectors
 

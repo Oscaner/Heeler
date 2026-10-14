@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { parse } from "smol-toml";
 
 const BUILTIN_TOKENS = new Set([
-  "state_icon", "state_text", "workspace", "tab", "pane", "agent",
+  "state_icon", "state_text", "machine", "workspace", "tab", "pane", "agent",
   "terminal_title", "terminal_title_stripped",
 ]);
 // Canonical labels verified against herdr v0.9.4 src/detect/mod.rs; aliases are invalid.

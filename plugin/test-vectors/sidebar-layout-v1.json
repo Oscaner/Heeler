@@ -730,6 +730,121 @@
         },
         "diagnostics": []
       }
+    },
+    {
+      "name": "machine plain",
+      "toml": "[ui]\nagent_panel_sort = \"priority\"\n[ui.sidebar.agents]\nrows = [[\"state_icon\", \"machine\", \"agent\"], [\"workspace\"]]\n",
+      "snapshot": {
+        "v": 1,
+        "generated_at": 1757040000,
+        "source": {
+          "path": "/home/u/.config/herdr/config.toml",
+          "found": true,
+          "mtime_ms": 1757039000123
+        },
+        "agent_panel_sort": "priority",
+        "sidebar": {
+          "agents": {
+            "row_gap": 0,
+            "rows": [
+              [
+                {
+                  "token": "state_icon"
+                },
+                {
+                  "token": "machine"
+                },
+                {
+                  "token": "agent"
+                }
+              ],
+              [
+                {
+                  "token": "workspace"
+                }
+              ]
+            ],
+            "rows_by_agent": {}
+          }
+        },
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "machine styled alone in a row",
+      "toml": "[ui.sidebar.agents]\nrows = [[{ token = \"machine\", fg = \"#61afef\" }], [\"agent\"]]\n",
+      "snapshot": {
+        "v": 1,
+        "generated_at": 1757040000,
+        "source": {
+          "path": "/home/u/.config/herdr/config.toml",
+          "found": true,
+          "mtime_ms": 1757039000123
+        },
+        "agent_panel_sort": "spaces",
+        "sidebar": {
+          "agents": {
+            "row_gap": 0,
+            "rows": [
+              [
+                {
+                  "token": "machine",
+                  "fg": "#61afef"
+                }
+              ],
+              [
+                {
+                  "token": "agent"
+                }
+              ]
+            ],
+            "rows_by_agent": {}
+          }
+        },
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "herdr 0.9.4 documented default block",
+      "toml": "[ui.sidebar.agents]\nrow_gap = 0\nrows = [\n  [\"state_icon\", \"machine\", \"workspace\", \"tab\"],\n  [\"agent\"],\n]\n\n[ui.sidebar.spaces]\nrow_gap = 0\nrows = [\n  [\"state_icon\", \"workspace\"],\n  [\"branch\", \"git_status\"],\n]\n",
+      "snapshot": {
+        "v": 1,
+        "generated_at": 1757040000,
+        "source": {
+          "path": "/home/u/.config/herdr/config.toml",
+          "found": true,
+          "mtime_ms": 1757039000123
+        },
+        "agent_panel_sort": "spaces",
+        "sidebar": {
+          "agents": {
+            "row_gap": 0,
+            "rows": [
+              [
+                {
+                  "token": "state_icon"
+                },
+                {
+                  "token": "machine"
+                },
+                {
+                  "token": "workspace"
+                },
+                {
+                  "token": "tab"
+                }
+              ],
+              [
+                {
+                  "token": "agent"
+                }
+              ]
+            ],
+            "rows_by_agent": {}
+          }
+        },
+        "diagnostics": []
+      }
     }
   ],
   "invalid": [
