@@ -18,11 +18,10 @@ struct SidebarLayoutVectorTests {
         ["state_icon", "workspace", "tab"], ["agent"],
     ]
 
-    /// Guards against silently loading an empty or truncated vector file;
-    /// mirrors the same assertion in the Node suite.
+    /// Guards against silently loading an empty or truncated vector file.
     @Test func sharedVectorFileHasCases() {
-        #expect(Self.vectors.valid.count >= 12)
-        #expect(Self.vectors.invalid.count >= 37)
+        #expect(Self.vectors.valid.count >= 25)
+        #expect(Self.vectors.invalid.count >= 52)
         #expect(Set(Self.vectors.valid.map(\.name)).count == Self.vectors.valid.count)
         #expect(Set(Self.vectors.invalid.map(\.name)).count == Self.vectors.invalid.count)
         #expect(Self.vectors.valid.allSatisfy { $0.snapshot.v == 1 })

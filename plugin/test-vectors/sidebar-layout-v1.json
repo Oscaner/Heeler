@@ -1064,6 +1064,147 @@
         },
         "diagnostics": []
       }
+    },
+    {
+      "name": "leading byte-order mark",
+      "toml": "\ufeff[ui]\nagent_panel_sort = \"priority\"\n[ui.sidebar.agents]\nrows = [[\"state_icon\", \"agent\"], [\"workspace\"]]\n",
+      "snapshot": {
+        "v": 1,
+        "generated_at": 1757040000,
+        "source": {
+          "path": "/home/u/.config/herdr/config.toml",
+          "found": true,
+          "mtime_ms": 1757039000123
+        },
+        "agent_panel_sort": "priority",
+        "sidebar": {
+          "agents": {
+            "row_gap": 0,
+            "rows": [
+              [
+                {
+                  "token": "state_icon"
+                },
+                {
+                  "token": "agent"
+                }
+              ],
+              [
+                {
+                  "token": "workspace"
+                }
+              ]
+            ],
+            "rows_by_agent": {}
+          }
+        },
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "byte-order mark displaced to a line start",
+      "toml": "onboarding = false\n\ufeff[ui]\nagent_panel_sort = \"priority\"\n[ui.sidebar.agents]\nrows = [[\"state_icon\", \"agent\"], [\"workspace\"]]\n",
+      "snapshot": {
+        "v": 1,
+        "generated_at": 1757040000,
+        "source": {
+          "path": "/home/u/.config/herdr/config.toml",
+          "found": true,
+          "mtime_ms": 1757039000123
+        },
+        "agent_panel_sort": "priority",
+        "sidebar": {
+          "agents": {
+            "row_gap": 0,
+            "rows": [
+              [
+                {
+                  "token": "state_icon"
+                },
+                {
+                  "token": "agent"
+                }
+              ],
+              [
+                {
+                  "token": "workspace"
+                }
+              ]
+            ],
+            "rows_by_agent": {}
+          }
+        },
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "byte-order mark displaced to a CRLF line start",
+      "toml": "onboarding = false\r\n\ufeff[ui]\r\nagent_panel_sort = \"priority\"\r\n[ui.sidebar.agents]\r\nrows = [[\"state_icon\", \"agent\"], [\"workspace\"]]\r\n",
+      "snapshot": {
+        "v": 1,
+        "generated_at": 1757040000,
+        "source": {
+          "path": "/home/u/.config/herdr/config.toml",
+          "found": true,
+          "mtime_ms": 1757039000123
+        },
+        "agent_panel_sort": "priority",
+        "sidebar": {
+          "agents": {
+            "row_gap": 0,
+            "rows": [
+              [
+                {
+                  "token": "state_icon"
+                },
+                {
+                  "token": "agent"
+                }
+              ],
+              [
+                {
+                  "token": "workspace"
+                }
+              ]
+            ],
+            "rows_by_agent": {}
+          }
+        },
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "U+FEFF at a line start inside a multi-line rule string is kept",
+      "toml": "[ui.sidebar.agents]\nrows = [[{ token = \"$load\", rules = [{ equals = \"\"\"\nfirst\n\ufeffsecond\"\"\" }] }]]\n",
+      "snapshot": {
+        "v": 1,
+        "generated_at": 1757040000,
+        "source": {
+          "path": "/home/u/.config/herdr/config.toml",
+          "found": true,
+          "mtime_ms": 1757039000123
+        },
+        "agent_panel_sort": "spaces",
+        "sidebar": {
+          "agents": {
+            "row_gap": 0,
+            "rows": [
+              [
+                {
+                  "token": "$load",
+                  "rules": [
+                    {
+                      "equals": "first\n\ufeffsecond"
+                    }
+                  ]
+                }
+              ]
+            ],
+            "rows_by_agent": {}
+          }
+        },
+        "diagnostics": []
+      }
     }
   ],
   "invalid": [
@@ -3206,6 +3347,48 @@
         },
         "diagnostics": [
           "invalid_schema"
+        ]
+      }
+    },
+    {
+      "name": "byte-order mark inside a line",
+      "toml": "[ui]\nagent_panel_sort = \ufeff\"priority\"\n",
+      "error": "parse_error",
+      "snapshot": {
+        "v": 1,
+        "generated_at": 1757040000,
+        "source": {
+          "path": "/home/u/.config/herdr/config.toml",
+          "found": true,
+          "mtime_ms": 1757039000123
+        },
+        "agent_panel_sort": "spaces",
+        "sidebar": {
+          "agents": {
+            "row_gap": 0,
+            "rows": [
+              [
+                {
+                  "token": "state_icon"
+                },
+                {
+                  "token": "workspace"
+                },
+                {
+                  "token": "tab"
+                }
+              ],
+              [
+                {
+                  "token": "agent"
+                }
+              ]
+            ],
+            "rows_by_agent": {}
+          }
+        },
+        "diagnostics": [
+          "parse_error"
         ]
       }
     }

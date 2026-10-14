@@ -462,6 +462,21 @@ to `notify.json`. It never writes this snapshot to `HERDR_PLUGIN_STATE_DIR`.
 Writes use an exclusive mode **0600** temporary file followed by atomic rename;
 a newly created plugin config directory has mode **0700**.
 
+A UTF-8 byte-order mark is handled as herdr 0.9.4 handles its usual
+placements: a leading U+FEFF is stripped, and a U+FEFF at the start of a
+later line is removed only when the parser's error points at it, after which
+parsing is retried. A U+FEFF that is string data, such as one at a line start
+inside a multi-line string, parses and is kept. herdr 0.9.4 also removes a
+U+FEFF elsewhere in a line, for example after indentation or after `=`, when
+its parser's error points there; the plugin reports `parse_error` for such a
+file.
+
+`smol-toml` implements TOML 1.1, while herdr 0.9.4 reads TOML 1.0, so the
+plugin accepts some files that herdr rejects: a newline or trailing comma
+inside an inline table and the `\e` and `\xHH` string escapes pass here
+although `herdr config check` reports them. `herdr config check` remains the
+authority on whether herdr accepts a file.
+
 ```json
 {
   "v": 1,

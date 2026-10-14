@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parse } from "smol-toml";
+import { parse, TomlError } from "smol-toml";
 
 const BUILTIN_TOKENS = new Set([
   "state_icon", "state_text", "machine", "workspace", "tab", "pane", "agent",
@@ -118,12 +118,45 @@ function rows(value) {
   });
 }
 
+const BOM = "\uFEFF";
+
+// Where 1-based `line` starts, splitting lines as smol-toml's TomlError counts them.
+function lineStart(text, line) {
+  const breaks = /\r\n|\n|\r/g;
+  let offset = 0;
+  for (let current = 1; current < line; current += 1) {
+    const match = breaks.exec(text);
+    if (match === null) return -1;
+    offset = match.index + match[0].length;
+  }
+  return offset;
+}
+
+/**
+ * Parse with herdr 0.9.4's byte-order mark handling for a leading mark and one
+ * displaced to a line start: strip a leading U+FEFF, then remove a U+FEFF at
+ * the start of a line only while the parse error points at it. A U+FEFF that
+ * is string data parses, so it is kept.
+ */
+function parseToml(toml) {
+  let text = toml.startsWith(BOM) ? toml.slice(BOM.length) : toml;
+  for (;;) {
+    try {
+      // Preserve integer types so row_gap = 1.0 is rejected like herdr's u16.
+      return parse(text, { integersAsBigInt: true });
+    } catch (error) {
+      const offset = error instanceof TomlError && error.column === 1 ? lineStart(text, error.line) : -1;
+      if (offset < 0 || !text.startsWith(BOM, offset)) throw error;
+      text = text.slice(0, offset) + text.slice(offset + BOM.length);
+    }
+  }
+}
+
 /** Normalize only the sidebar agent layout and sort; never expose raw TOML in diagnostics. */
 export function parseSidebarConfig(toml) {
   let parsed;
   try {
-    // Preserve integer types so row_gap = 1.0 is rejected like herdr's u16.
-    parsed = parse(toml, { integersAsBigInt: true });
+    parsed = parseToml(toml);
   } catch {
     return defaults(["parse_error"]);
   }
