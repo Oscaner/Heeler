@@ -100,7 +100,7 @@ struct WorktreeDetailStoreTests {
             remove: { _ in
                 throw HerdrAPIError(
                     code: "dirty_worktree_requires_force",
-                    message: "dirty")
+                    message: Self.dirtyMessage)
             })
         store.prepareConfirmation()
         let request = try #require(store.beginRemoval())
@@ -199,7 +199,7 @@ struct WorktreeDetailStoreTests {
         let store = try await refusedStore(
             showChanges: { handed.append($0) },
             error: HerdrAPIError(
-                code: "dirty_worktree_requires_force", message: "dirty"))
+                code: "dirty_worktree_requires_force", message: Self.dirtyMessage))
 
         #expect(store.refusalOffersChanges)
         #expect(store.showsFeedback)
@@ -222,7 +222,7 @@ struct WorktreeDetailStoreTests {
         let store = try await refusedStore(
             showChanges: { handed.append($0) },
             error: TransportError.apiRejected(
-                code: "dirty_worktree_requires_force", message: "dirty"))
+                code: "dirty_worktree_requires_force", message: Self.dirtyMessage))
 
         #expect(store.refusalOffersChanges)
         store.showChanges()
@@ -249,7 +249,7 @@ struct WorktreeDetailStoreTests {
         let store = try await refusedStore(
             showChanges: { _ in },
             error: HerdrAPIError(
-                code: "dirty_worktree_requires_force", message: "dirty"))
+                code: "dirty_worktree_requires_force", message: Self.dirtyMessage))
 
         #expect(store.refusalOffersChanges)
         store.dismissFeedback()
@@ -340,13 +340,13 @@ struct WorktreeDetailStoreTests {
 
     @Test func dirtyClassificationMatchesTheRefusalCode() {
         let dirty = HerdrAPIError(
-            code: "dirty_worktree_requires_force", message: "dirty")
+            code: "dirty_worktree_requires_force", message: Self.dirtyMessage)
         #expect(WorktreeRemovalRefusal.dirtyCode == "dirty_worktree_requires_force")
         #expect(WorktreeRemovalRefusal.isDirty(dirty))
         #expect(
             WorktreeRemovalRefusal.isDirty(
                 TransportError.apiRejected(
-                    code: "dirty_worktree_requires_force", message: "dirty")))
+                    code: "dirty_worktree_requires_force", message: Self.dirtyMessage)))
         #expect(
             !WorktreeRemovalRefusal.isDirty(
                 HerdrAPIError(code: "workspace_not_found", message: "gone")))
@@ -355,6 +355,11 @@ struct WorktreeDetailStoreTests {
                 TransportError.sshUnreachable(detail: "down")))
         #expect(!WorktreeRemovalRefusal.isDirty(WorktreeRemovalError.staleIdentity))
     }
+
+    /// herdr's refusal for a Worktree with changes, in git's words, naming the
+    /// checkout path.
+    private static let dirtyMessage =
+        "fatal: '/work/Heeler-wt' contains modified or untracked files, use --force to delete it"
 
     private func refusedStore(
         showChanges: @escaping (String) -> Void,
