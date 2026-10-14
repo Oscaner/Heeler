@@ -83,7 +83,8 @@ herdr remote-api-bridge --check
 Expect herdr 0.9.3 or newer and the bridge marker `herdr-api-bridge-v1`.
 See [herdr's native Windows guide](https://herdr.dev/docs/windows-beta/).
 
-Start the named session once in a native Windows terminal:
+Start the named session once in a normal native Windows terminal, not one
+opened as Administrator:
 
 ```powershell
 herdr --session heeler-win-test
@@ -174,7 +175,7 @@ Open **Task Scheduler as Administrator**, select **Create Task**, and use:
 | Tab | Setting |
 | --- | --- |
 | General | Name: `Herdr Server`. Run as the Windows account used by Heeler. |
-| General | Select **Run whether user is logged on or not**. Clear **Do not store password**. Highest privileges are not required. |
+| General | Select **Run whether user is logged on or not**. Clear **Do not store password**. Leave **Run with highest privileges** cleared. |
 | Triggers | **At startup**, optionally delayed by 30 seconds. |
 | Actions | **Start a program**. Program: the full `herdr.exe` path printed above. |
 | Actions | Arguments: `--session heeler-win-test server`. Start in: the home directory printed above. |
@@ -188,6 +189,12 @@ the new password. Running under SYSTEM would use a different account and
 configuration directory. Microsoft documents the
 [task login types](https://learn.microsoft.com/en-us/windows/win32/taskschd/principal-logontype)
 and the [default 72-hour execution limit](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-executiontimelimit).
+
+From herdr 0.9.4, an elevated server, one started with highest privileges or
+from a terminal opened as Administrator, accepts only administrator
+terminals. To let normal terminals in, start it with
+`--allow-unelevated-clients` or set `[server] allow_unelevated_clients = true`
+in herdr's config.
 
 ### Verify the saved task
 
