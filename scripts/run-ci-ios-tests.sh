@@ -1498,10 +1498,14 @@ printf '%s\n' \
     'Fixture body.' \
     > "$fixture_home/.codex/skills/fixture/SKILL.md"
 # The dollar expressions below belong to the generated fixture script.
+# Like herdr 0.9.4's direct attach, the fake attach writes the startup probe
+# before anything it paints; Heeler drops it, so the output still starts with
+# TTY-OK (#451). Octal \044 spells the probe's dollar sign.
 # shellcheck disable=SC2016
 printf '%s\n' \
     '#!/bin/sh' \
     'stty -echo' \
+    'printf "\\033[?1016\\044p\\033[c"' \
     'printf "TTY-OK\\n"' \
     'printf "ARGS:%s\\n" "$*"' \
     'printf "SOCKET:%s\\n" "$HERDR_SOCKET_PATH"' \
