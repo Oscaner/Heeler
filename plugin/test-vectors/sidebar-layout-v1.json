@@ -480,8 +480,8 @@
       }
     },
     {
-      "name": "canonical herdr 0.9.0 agent override keys",
-      "toml": "[ui.sidebar.agents.rows_by_agent]\npi = [[\"agent\"]]\nclaude = [[\"agent\"]]\ncodex = [[\"agent\"]]\ngemini = [[\"agent\"]]\ncursor = [[\"agent\"]]\ndevin = [[\"agent\"]]\nagy = [[\"agent\"]]\ncline = [[\"agent\"]]\nomp = [[\"agent\"]]\nmastracode = [[\"agent\"]]\nopencode = [[\"agent\"]]\ncopilot = [[\"agent\"]]\nkimi = [[\"agent\"]]\nkiro = [[\"agent\"]]\ndroid = [[\"agent\"]]\namp = [[\"agent\"]]\ngrok = [[\"agent\"]]\nhermes = [[\"agent\"]]\nkilo = [[\"agent\"]]\nqodercli = [[\"agent\"]]\nqwen = [[\"agent\"]]\nmaki = [[\"agent\"]]\nmuse = [[\"agent\"]]\n",
+      "name": "canonical herdr 0.9.4 agent override keys",
+      "toml": "[ui.sidebar.agents.rows_by_agent]\npi = [[\"agent\"]]\nclaude = [[\"agent\"]]\ncodex = [[\"agent\"]]\ngemini = [[\"agent\"]]\ncursor = [[\"agent\"]]\ndevin = [[\"agent\"]]\nagy = [[\"agent\"]]\ncline = [[\"agent\"]]\nomp = [[\"agent\"]]\nmastracode = [[\"agent\"]]\nopencode = [[\"agent\"]]\ncopilot = [[\"agent\"]]\nkimi = [[\"agent\"]]\nkiro = [[\"agent\"]]\ndroid = [[\"agent\"]]\namp = [[\"agent\"]]\ngrok = [[\"agent\"]]\nhermes = [[\"agent\"]]\nkilo = [[\"agent\"]]\nqodercli = [[\"agent\"]]\nqwen = [[\"agent\"]]\nletta = [[\"agent\"]]\nmaki = [[\"agent\"]]\nmuse = [[\"agent\"]]\n",
       "snapshot": {
         "v": 1,
         "generated_at": 1757040000,
@@ -660,6 +660,13 @@
                   }
                 ]
               ],
+              "letta": [
+                [
+                  {
+                    "token": "agent"
+                  }
+                ]
+              ],
               "maki": [
                 [
                   {
@@ -671,6 +678,50 @@
                 [
                   {
                     "token": "agent"
+                  }
+                ]
+              ]
+            }
+          }
+        },
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "letta override",
+      "toml": "[ui]\nagent_panel_sort = \"priority\"\n[ui.sidebar.agents]\nrows = [[\"state_icon\", \"agent\"], [\"workspace\"]]\n[ui.sidebar.agents.rows_by_agent]\nletta = [[\"terminal_title_stripped\"]]\n",
+      "snapshot": {
+        "v": 1,
+        "generated_at": 1757040000,
+        "source": {
+          "path": "/home/u/.config/herdr/config.toml",
+          "found": true,
+          "mtime_ms": 1757039000123
+        },
+        "agent_panel_sort": "priority",
+        "sidebar": {
+          "agents": {
+            "row_gap": 0,
+            "rows": [
+              [
+                {
+                  "token": "state_icon"
+                },
+                {
+                  "token": "agent"
+                }
+              ],
+              [
+                {
+                  "token": "workspace"
+                }
+              ]
+            ],
+            "rows_by_agent": {
+              "letta": [
+                [
+                  {
+                    "token": "terminal_title_stripped"
                   }
                 ]
               ]

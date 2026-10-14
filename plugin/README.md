@@ -507,11 +507,11 @@ only when explicitly provided, preserving `false` and the original hex case.
 Other config fields are ignored. This is validation of the exported subset,
 not a substitute for `herdr config check` for unrelated herdr settings.
 
-`rows_by_agent` accepts the canonical ids verified against herdr v0.9.0:
+`rows_by_agent` accepts the 24 canonical ids verified against herdr v0.9.4:
 `pi`, `claude`, `codex`, `gemini`, `cursor`, `devin`, `agy`, `cline`, `omp`,
 `mastracode`, `opencode`, `copilot`, `kimi`, `kiro`, `droid`, `amp`, `grok`,
-`hermes`, `kilo`, `qodercli`, `qwen`, `maki`, and `muse`. Aliases, case
-variations, and unknown ids are invalid. A future herdr release adding
+`hermes`, `kilo`, `qodercli`, `qwen`, `letta`, `maki`, and `muse`. Aliases,
+case variations, and unknown ids are invalid. A future herdr release adding
 canonical ids requires updating this validation list and the shared vectors.
 
 Missing files or fields use herdr defaults: sort `spaces`, `row_gap: 0`,

@@ -7,11 +7,11 @@ const BUILTIN_TOKENS = new Set([
   "state_icon", "state_text", "workspace", "tab", "pane", "agent",
   "terminal_title", "terminal_title_stripped",
 ]);
-// Canonical labels from herdr v0.9.0 src/detect/mod.rs; aliases are invalid.
+// Canonical labels verified against herdr v0.9.4 src/detect/mod.rs; aliases are invalid.
 const AGENT_IDS = new Set([
   "pi", "claude", "codex", "gemini", "cursor", "devin", "agy", "cline",
   "omp", "mastracode", "opencode", "copilot", "kimi", "kiro", "droid",
-  "amp", "grok", "hermes", "kilo", "qodercli", "qwen", "maki", "muse",
+  "amp", "grok", "hermes", "kilo", "qodercli", "qwen", "letta", "maki", "muse",
 ]);
 const STYLE_KEYS = new Set(["token", "fg", "bold", "dim"]);
 
