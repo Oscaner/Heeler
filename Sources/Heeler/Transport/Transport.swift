@@ -133,9 +133,18 @@ protocol Transport: Sendable {
         onDispatched: @escaping @Sendable (WorktreeRemovalRequest) async -> Void
     ) async throws -> WorktreeRemovedResponse
 
-    /// Marks the viewed Agent seen through `agent.focus`. herdr 0.9.0 also
-    /// focuses its Tab and marks every Pane in that Tab seen. Callers must
-    /// refresh the entire Host rather than synthesize a selected-row status.
+    /// Marks the viewed Agent seen through `agent.focus`. herdr makes the
+    /// Agent's Tab the server's active Tab and marks every Pane in it seen.
+    /// It emits no status event for that change, although a Pane-scoped
+    /// `pane.agent_status_changed` subscription still reports the new
+    /// statuses from its own polling. Callers must refresh the entire Host
+    /// rather than synthesize a selected-row status. Later completions in
+    /// that Tab read Idle, not Done, while no herdr client is attached or the
+    /// attached one has focus. On every supported herdr except 0.9.0 the call
+    /// also moves attached herdr clients, and their next keystrokes, to that
+    /// Tab: through the shared view on 0.8.x and earlier, and through the
+    /// client focus projection since 0.9.1. A direct `agent attach` or
+    /// `terminal attach` stays on its terminal.
     func focusAgent(_ target: AgentTarget) async throws
 
     /// Renames an Agent (`agent.rename`): the Console management action
