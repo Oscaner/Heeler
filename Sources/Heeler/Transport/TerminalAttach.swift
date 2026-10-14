@@ -166,6 +166,14 @@ struct HerdrStartupProbeFilter {
         return Data(data.prefix(heldStart))
     }
 
+    /// The partial probe still held when the output ends: no read is left to
+    /// complete it, so it is output like any other.
+    mutating func finish() -> Data {
+        isScanning = false
+        defer { held = Data() }
+        return held
+    }
+
     private static func earliestProbe(in data: Data) -> Range<Data.Index>? {
         probes.compactMap { data.range(of: $0) }.min { $0.lowerBound < $1.lowerBound }
     }

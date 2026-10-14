@@ -3541,6 +3541,100 @@ struct TerminalAttachTests {
         #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
     }
 
+    /// The filter holds back the start of what may be a probe until the next
+    /// read settles it. A stream that ends cleanly there hands those bytes
+    /// on rather than dropping them.
+    @Test func aPartialProbeStillHeldWhenTheStreamEndsReachesTheTerminal() async throws {
+        let session = Self.sessionEndingInAPartialProbe
+        var mismatches: [String] = []
+        let deliveries = Self.deliveries(of: AttachBootstrapHandshake.marker + session)
+        for delivery in deliveries {
+            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
+            if output != session { mismatches.append(delivery.name) }
+        }
+        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+    }
+
+    /// A nonzero exit hands the held bytes on as well.
+    @Test func aPartialProbeStillHeldReachesTheTerminalOnANonzeroExit() async throws {
+        let session = Self.sessionEndingInAPartialProbe
+        let channel = FakeAttachPTYChannel(
+            reads: [AttachBootstrapHandshake.marker + session, nil],
+            remoteExitStatus: 1)
+        let source = HeelerSSHAttachOutputGate.makeStream()
+
+        do {
+            _ = try await HeelerSSHTransport.runAttachPumps(
+                channel: channel,
+                input: TerminalAttachInputQueue(),
+                output: source.gate,
+                requestTimeout: .seconds(1),
+                dropsStartupProbe: true)
+            Issue.record("exit 1 should fail the attach pumps")
+        } catch HeelerSSHAttachPumpError.remoteExit(let status, _) {
+            #expect(status == 1)
+        }
+        source.gate.finish()
+
+        #expect(try await Self.joined(source.output) == session)
+    }
+
+    /// So does an input failure, which stops the output pump mid-stream.
+    @Test(.timeLimit(.minutes(1)))
+    func aPartialProbeStillHeldReachesTheTerminalWhenInputFails() async throws {
+        let session = Self.sessionEndingInAPartialProbe
+        let channel = FakeAttachPTYChannel(
+            reads: [AttachBootstrapHandshake.marker + session],
+            writeError: FakeAttachChannelError.rejectedWrite,
+            blockAfterReads: true)
+        let input = TerminalAttachInputQueue()
+        let source = HeelerSSHAttachOutputGate.makeStream()
+        let pump = Task {
+            do {
+                _ = try await HeelerSSHTransport.runAttachPumps(
+                    channel: channel,
+                    input: input,
+                    output: source.gate,
+                    requestTimeout: .seconds(1),
+                    dropsStartupProbe: true)
+                return false
+            } catch HeelerSSHAttachPumpError.input(_) {
+                return true
+            } catch {
+                return false
+            }
+        }
+
+        await channel.waitUntilFirstRead()
+        input.send(Data("x".utf8))
+        #expect(await pump.value)
+        source.gate.finish()
+
+        #expect(try await Self.joined(source.output) == session)
+    }
+
+    /// And so does a failed read.
+    @Test func aPartialProbeStillHeldReachesTheTerminalWhenAReadFails() async throws {
+        let session = Self.sessionEndingInAPartialProbe
+        let channel = FakeAttachPTYChannel(
+            reads: [AttachBootstrapHandshake.marker + session],
+            readError: SSHError.channelFailed)
+        let source = HeelerSSHAttachOutputGate.makeStream()
+
+        do {
+            _ = try await HeelerSSHTransport.runAttachPumps(
+                channel: channel,
+                input: TerminalAttachInputQueue(),
+                output: source.gate,
+                requestTimeout: .seconds(1),
+                dropsStartupProbe: true)
+            Issue.record("a read failure should fail the attach pumps")
+        } catch HeelerSSHAttachPumpError.output(_) {}
+        source.gate.finish()
+
+        #expect(try await Self.joined(source.output) == session)
+    }
+
     /// The native Windows terminal controller never writes the probe, so its
     /// pumps run with the option off and pass those bytes through like any
     /// others.
@@ -3587,12 +3681,24 @@ struct TerminalAttachTests {
             dropsStartupProbe: dropsStartupProbe)
         source.gate.finish()
         #expect(cleanEnd)
-        var output = Data()
-        for try await chunk in source.output {
-            output.append(chunk)
-        }
-        return output
+        return try await Self.joined(source.output)
     }
+
+    /// Everything a finished output stream carried.
+    private static func joined(_ output: AsyncThrowingStream<Data, any Error>) async throws -> Data {
+        var bytes = Data()
+        for try await chunk in output {
+            bytes.append(chunk)
+        }
+        return bytes
+    }
+
+    /// herdr 0.9.4's preamble up to the client shell's probe, which stops one
+    /// byte short: the 15 bytes the filter holds back, at the end.
+    private static let sessionEndingInAPartialProbe =
+        HerdrAttachOutput.mouseReset + HerdrAttachOutput.alternateScreen
+        + HerdrAttachOutput.mouseReset + HerdrAttachOutput.colorSchemeReportsOff
+        + HerdrAttachOutput.clientShellProbe.dropLast()
 
     @Test func sessionDropsEmptyKeystrokeWrites() async {
         // An empty write must not ride down the channel as an empty

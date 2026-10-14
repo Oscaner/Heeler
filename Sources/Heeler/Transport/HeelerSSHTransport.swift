@@ -3054,6 +3054,7 @@ actor HeelerSSHTransport: Transport {
                 // diagnostic. Only explicit cancellation skips it.
                 func releaseWithheld() {
                     yieldAdmitted(gate.flush())
+                    yieldAdmitted(startupProbe.finish())
                 }
                 do {
                     while !Task.isCancelled {
