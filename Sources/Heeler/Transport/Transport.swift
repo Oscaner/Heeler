@@ -78,8 +78,9 @@ protocol Transport: Sendable {
     /// resolves the repository from the source workspace's cwd (a non-git cwd
     /// fails with `not_git_worktree`) and returns a new workspace whose root
     /// pane already runs a shell, so this variant skips `tab.create` and
-    /// starts the agent in that pane directly (the `agent_pane_busy`
-    /// readiness retry still applies). `request.workspaceID` is the *source*
+    /// starts the agent in that pane directly (the shell-readiness retry on
+    /// `agent_pane_busy` and on herdr 0.9.4's canonical-mode refusal still
+    /// applies). `request.workspaceID` is the *source*
     /// workspace; the started agent lives in the returned worktree workspace
     /// and surfaces through the normal snapshot/delta machinery.
     func startAgentInNewWorktree(
@@ -90,8 +91,9 @@ protocol Transport: Sendable {
     /// `workspace.create` opens the remote directory as its own Workspace
     /// (no existing Workspace required) and returns a root pane already
     /// running a shell, so this variant skips `tab.create` and starts the
-    /// agent in that pane directly (the `agent_pane_busy` readiness retry
-    /// still applies). `request.workspaceID` is unused; the started agent
+    /// agent in that pane directly (the shell-readiness retry on
+    /// `agent_pane_busy` and on herdr 0.9.4's canonical-mode refusal still
+    /// applies). `request.workspaceID` is unused; the started agent
     /// lives in the returned Workspace and surfaces through the normal
     /// snapshot/delta machinery.
     func startAgentInNewWorkspace(
@@ -1136,4 +1138,13 @@ struct HerdrAPIError: Error, Sendable, Equatable {
     /// without pinning the code's JSON type.
     let code: String
     let message: String
+
+    /// herdr 0.9.4's macOS refusal of an `agent.start` whose launch line is
+    /// longer than the terminal's canonical input limit while the fresh
+    /// shell is still in canonical mode. Only "canonical mode" marks it: the
+    /// sibling "could not determine canonical input capacity" is a different
+    /// failure.
+    var isCanonicalModeRefusal: Bool {
+        code == "agent_start_input_failed" && message.contains("canonical mode")
+    }
 }
