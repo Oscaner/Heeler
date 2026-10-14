@@ -3197,6 +3197,66 @@ struct TerminalAttachTests {
         #expect(try await iterator.next() == nil)
     }
 
+    /// With no marker, herdr never ran and the filter is not involved: the
+    /// startup diagnostic reaches the terminal and the failure as it always
+    /// did, probe-shaped bytes included.
+    @Test func aStartupFailureBeforeTheHandshakeKeepsProbeShapedBytes() async throws {
+        let diagnostic = HerdrAttachOutput.probe
+            + Data("bash: /etc/profile.d/x.sh: Permission denied\r\n".utf8)
+        let channel = FakeAttachPTYChannel(reads: [diagnostic, nil], remoteExitStatus: 2)
+        let source = HeelerSSHAttachOutputGate.makeStream()
+
+        do {
+            _ = try await HeelerSSHTransport.runAttachPumps(
+                channel: channel,
+                input: TerminalAttachInputQueue(),
+                output: source.gate,
+                requestTimeout: .seconds(1),
+                dropsStartupProbe: true)
+            Issue.record("exit 2 should fail the attach pumps")
+        } catch HeelerSSHAttachPumpError.remoteExit(let status, let output) {
+            #expect(status == 2)
+            #expect(output == "bash: /etc/profile.d/x.sh: Permission denied")
+        }
+        source.gate.finish()
+
+        #expect(try await Self.joined(source.output) == diagnostic)
+    }
+
+    /// herdr 0.9.4 sets the terminal up, probe included, before its
+    /// handshake, so a handshake failure arrives wrapped in the alternate
+    /// screen. The failure still quotes herdr's last line, and the terminal
+    /// gets everything but the probe, however the reads split it.
+    @Test func herdr094sHandshakeFailureIsStillQuoted() async throws {
+        let expected = #"Error: Custom { kind: Other, error: "lost connection to server: server closed connection" }"#
+        var unexpected: [String] = []
+        let deliveries = Self.deliveries(
+            of: AttachBootstrapHandshake.marker + HerdrAttachOutput.herdr094LostServer)
+        for delivery in deliveries {
+            let channel = FakeAttachPTYChannel(
+                reads: delivery.reads.map(Optional.some) + [nil],
+                remoteExitStatus: 1)
+            let source = HeelerSSHAttachOutputGate.makeStream()
+            var quoted: String?
+            do {
+                _ = try await HeelerSSHTransport.runAttachPumps(
+                    channel: channel,
+                    input: TerminalAttachInputQueue(),
+                    output: source.gate,
+                    requestTimeout: .seconds(1),
+                    dropsStartupProbe: true)
+            } catch HeelerSSHAttachPumpError.remoteExit(1, let output) {
+                quoted = output
+            }
+            source.gate.finish()
+            let output = try await Self.joined(source.output)
+            if quoted != expected || output != HerdrAttachOutput.herdr093LostServer {
+                unexpected.append(delivery.name)
+            }
+        }
+        #expect(unexpected == [], "\(unexpected.count) of \(deliveries.count): \(unexpected.prefix(3))")
+    }
+
     /// The Windows controller reports its own reason as a `TransportError`;
     /// Attach hands it on as is instead of nesting its debug description in
     /// another channel failure.
@@ -3512,6 +3572,51 @@ struct TerminalAttachTests {
         #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
     }
 
+    /// herdr 0.9.3 writes no probe, and its output reaches the terminal byte
+    /// for byte, including a mode reset that a read cuts right where it
+    /// stops looking like the probe.
+    @Test func herdr093sOutputReachesTheTerminalUnchanged() async throws {
+        let stream = AttachBootstrapHandshake.marker + HerdrAttachOutput.herdr093
+        let cut = AttachBootstrapHandshake.marker.count + Data("\u{1B}[?1006l\u{1B}[?1016".utf8).count
+        let deliveries = Self.deliveries(of: stream) + [
+            Delivery(
+                name: "a read ending in ESC[?1016, then one starting with l",
+                reads: [Data(stream.prefix(cut)), Data(stream.dropFirst(cut))]),
+        ]
+        var mismatches: [String] = []
+        for delivery in deliveries {
+            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
+            if output != HerdrAttachOutput.herdr093 { mismatches.append(delivery.name) }
+        }
+        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+    }
+
+    /// Only the first probe is herdr's. Whatever follows it, another probe, a
+    /// DECRQM for some other mode or a lone DA1, reaches the terminal.
+    @Test func everythingAfterTheProbeReachesTheTerminal() async throws {
+        let later = HerdrAttachOutput.probe + Data("\u{1B}[?2026$p".utf8) + Data("\u{1B}[c".utf8)
+        var mismatches: [String] = []
+        let deliveries = Self.deliveries(of: AttachBootstrapHandshake.marker + HerdrAttachOutput.herdr094 + later)
+        for delivery in deliveries {
+            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
+            if output != HerdrAttachOutput.herdr093 + later { mismatches.append(delivery.name) }
+        }
+        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+    }
+
+    /// Another DECRQM and a lone DA1 ahead of the probe are not the probe:
+    /// they reach the terminal, and the probe after them is still dropped.
+    @Test func otherQueriesAheadOfTheProbeReachTheTerminal() async throws {
+        let earlier = Data("\u{1B}[?2026$p".utf8) + Data("\u{1B}[c".utf8)
+        var mismatches: [String] = []
+        let deliveries = Self.deliveries(of: AttachBootstrapHandshake.marker + earlier + HerdrAttachOutput.herdr094)
+        for delivery in deliveries {
+            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
+            if output != earlier + HerdrAttachOutput.herdr093 { mismatches.append(delivery.name) }
+        }
+        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+    }
+
     /// herdr writes its probe within the first 4 KiB after the marker. One
     /// that starts after them belongs to whatever runs in the Pane and
     /// reaches the terminal, however the reads split it.
@@ -3810,6 +3915,34 @@ private enum HerdrAttachOutput {
             mouseReset, alternateScreen, mouseReset, colorSchemeReportsOff,
             mouseReset, inputModes, firstFrame,
         ].joined())
+
+    /// herdr 0.9.4's `terminal attach` when the server closes the connection
+    /// during the handshake, recorded against a stand-in server: the setup
+    /// and probe come first, then the terminal is restored and herdr exits 1
+    /// with the error below.
+    static let herdr094LostServer = Data(
+        [
+            mouseReset, alternateScreen, mouseReset, colorSchemeReportsOff, probe,
+            mouseReset, inputModes, restore, lostServer,
+        ].joined())
+    /// What the terminal gets of it.
+    static let herdr093LostServer = Data(
+        [
+            mouseReset, alternateScreen, mouseReset, colorSchemeReportsOff,
+            mouseReset, inputModes, restore, lostServer,
+        ].joined())
+    /// Line wrap on, focus reports and bracketed paste off, every mouse mode
+    /// off, the main screen back, the cursor shown and its shape reset.
+    private static let restore = Data(
+        [
+            Data("\u{1B}[?7h\u{1B}[?1004l\u{1B}[?2004l".utf8),
+            mouseReset,
+            Data("\u{1B}[?1006l\u{1B}[?1015l\u{1B}[?1003l\u{1B}[?1002l\u{1B}[?1000l".utf8),
+            Data("\u{1B}[?1049l\u{1B}[?25h\u{1B}[0 q".utf8),
+        ].joined())
+    private static let lostServer = Data(
+        (#"Error: Custom { kind: Other, error: "lost connection to server: server closed connection" }"#
+            + "\r\n").utf8)
 }
 
 @MainActor
