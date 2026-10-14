@@ -3250,7 +3250,7 @@ struct TerminalAttachTests {
             }
             source.gate.finish()
             let output = try await Self.joined(source.output)
-            if quoted != expected || output != HerdrAttachOutput.herdr093LostServer {
+            if quoted != expected || output != HerdrAttachOutput.herdr094LostServerWithoutProbe {
                 unexpected.append(delivery.name)
             }
         }
@@ -3926,8 +3926,9 @@ private enum HerdrAttachOutput {
             mouseReset, alternateScreen, mouseReset, colorSchemeReportsOff, probe,
             mouseReset, inputModes, restore, lostServer,
         ].joined())
-    /// What the terminal gets of it.
-    static let herdr093LostServer = Data(
+    /// `herdr094LostServer` as the terminal gets it: everything but the
+    /// probe.
+    static let herdr094LostServerWithoutProbe = Data(
         [
             mouseReset, alternateScreen, mouseReset, colorSchemeReportsOff,
             mouseReset, inputModes, restore, lostServer,
