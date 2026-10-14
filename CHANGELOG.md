@@ -91,6 +91,11 @@ Entries reference the pull request that made the change.
   because herdr exits, the message now quotes herdr's own error, such as an
   older herdr earlier on the SSH PATH losing its connection to the server,
   instead of only an exit status. (#443)
+- On a macOS or Linux Host with herdr 0.9.4, opening an Agent or a Shell
+  Terminal over a slow connection no longer types stray characters into
+  the Agent or shell: Heeler no longer answers the terminal query herdr
+  sends when it attaches, whose late answer herdr passed on as typing.
+  (#TBD-PR)
 - Start Tailscale browser authorization with one Sign In button and reconnect automatically after returning from the browser. (#426)
 - Show Connected and remove the sign-in prompt when Tailscale browser authorization completes, without requiring another Connect. (#426)
 - Open a Host's connection checks after adding it from an overlay network's peer list, so its SSH host key can be trusted on the first connection. (#426)
