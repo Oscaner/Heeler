@@ -2187,13 +2187,13 @@ run_app_fixture_suites() {
             run_suite HeelerSSHDirectStreamLocalE2ETests 9 1 0 \
                 HeelerSSHDirectStreamLocalE2ETests || return $?
             if [[ "$ci_app_shard" == all ]]; then
-                run_suite SharedFixtureE2ETests 118 7 0 \
+                run_suite SharedFixtureE2ETests 119 7 0 \
                     HeelerSSHPTYE2ETests HeelerSSHJumpHostGateE2ETests \
                     HeelerSSHTransportBehaviorE2ETests ChangesFieldHostE2ETests \
                     ImageStagingE2ETests WeakNetworkE2ETests PairingCeremonyE2ETests || return $?
                 ln -s SharedFixtureE2ETests.log "$fixture_dir/WeakNetworkE2ETests.log"
             else
-                run_suite SharedFixtureE2ETests 108 6 0 \
+                run_suite SharedFixtureE2ETests 109 6 0 \
                     HeelerSSHPTYE2ETests HeelerSSHJumpHostGateE2ETests \
                     HeelerSSHTransportBehaviorE2ETests ChangesFieldHostE2ETests \
                     ImageStagingE2ETests PairingCeremonyE2ETests || return $?
@@ -2450,11 +2450,16 @@ assert_behavior "herdr API rejection" HeelerSSHTransportBehaviorE2ETests \
     '"a herdr error envelope surfaces as a typed API rejection"'
 assert_behavior "session API rejection mapping" HeelerSSHTransportBehaviorE2ETests \
     '"the session maps a herdr rejection to apiRejected"'
-# herdr 0.7.5's `agent_pane_busy` window, which 0.8.0 no longer opens: nothing
-# live exercises this any more, so a named assertion is the only thing standing
-# between a refactor and silently dropping a documented server behaviour (#128).
+# herdr still answers `agent_pane_busy` while a startup command holds a fresh
+# pane's foreground, and 0.9.4 on macOS also refuses a launch line longer than
+# the terminal's canonical input limit until the shell's line editor starts.
+# Only the fixture scripts these refusals, so a named assertion for each is the
+# only thing standing between a refactor and silently dropping a documented
+# server behaviour (#128, #453).
 assert_behavior "agent_pane_busy retry" HeelerSSHTransportBehaviorE2ETests \
     '"agent start waits out a fresh pane'"'"'s booting shell"'
+assert_behavior "canonical-mode launch retry" HeelerSSHTransportBehaviorE2ETests \
+    '"agent start waits out a shell that cannot yet take a long launch line"'
 # Each compensation cleans up different Host state; a count alone cannot tell
 # which of them a change removed. New Workspace (#230) also names the
 # create-then-start shape and the ambiguous-failure preserve rule, because
