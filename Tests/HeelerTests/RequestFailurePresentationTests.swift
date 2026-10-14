@@ -14,7 +14,8 @@ struct RequestFailurePresentationTests {
         #expect(
             NotificationPreferencesStore.message(
                 for: NotificationRegistrationError.pluginNotInstalled)
-                == "Install the Heeler plugin on this Host, then check again.")
+                == "The Heeler plugin is missing or turned off on this Host. "
+                + "See this Host's page in Hosts, then check again.")
         #expect(
             NotificationPreferencesStore.message(
                 for: NotificationRegistrationError.pluginProbeFailed(detail: "boom"))

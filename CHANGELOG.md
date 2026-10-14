@@ -85,19 +85,47 @@ Entries reference the pull request that made the change.
   the Host isn't connected, the confirmation says so and suggests connecting
   first; a Host removed without being reached may keep sending this device
   generic "Agent update" notifications. (#445)
+- When a Host's Heeler plugin is turned off, the steps on the Host's page
+  now always end with the command that turns it back on: after updating an
+  outdated plugin, which herdr 0.9.4 leaves off, and after removing a copy
+  left under the plugin's former name. That command names the Host's herdr
+  session, so it works when the default session isn't running.
+  Notification settings now say the plugin is missing or turned off and
+  point to the Host's page. (#458)
 - Close Agent and Close Terminal now ask from the More button you tapped,
   instead of a bubble floating in the middle of the terminal. (#440)
+- New Agent with long Arguments on a macOS Host running herdr 0.9.4 now
+  waits for the new shell to take the launch command instead of failing at
+  once and removing what it created. If the shell never takes it, as with
+  dash, New Agent asks you to shorten the Arguments. (#458)
 - When attaching to an Agent or terminal on a macOS or Linux Host fails
   because herdr exits, the message now quotes herdr's own error, such as an
   older herdr earlier on the SSH PATH losing its connection to the server,
   instead of only an exit status. (#443)
+- On a macOS or Linux Host with herdr 0.9.4, opening an Agent or a Shell
+  Terminal over a slow connection no longer types stray characters into
+  the Agent or shell: Heeler no longer answers the terminal query herdr
+  sends when it attaches, whose late answer herdr passed on as typing.
+  (#458)
 - Start Tailscale browser authorization with one Sign In button and reconnect automatically after returning from the browser. (#426)
 - Show Connected and remove the sign-in prompt when Tailscale browser authorization completes, without requiring another Connect. (#426)
 - Open a Host's connection checks after adding it from an overlay network's peer list, so its SSH host key can be trusted on the first connection. (#426)
+- Agent cards keep a Host's herdr sidebar fields and Agent order when its
+  herdr sidebar settings use the letta agent, the machine field, field
+  rules, or a UTF-8 byte-order mark, instead of falling back to herdr's
+  defaults. Update the Heeler plugin to 0.6.1 on each Host. Sync from
+  plugin no longer blames herdr when the plugin can't read a Host's
+  settings. (#458)
 - Type Korean straight into the terminal with the iOS Korean keyboard:
   syllables now compose as typed instead of arriving as repeated or loose
   jamo ("한글 지원", not "한한한글글글글지지지원"), with the software keyboard
   and a hardware keyboard alike, including after Backspace. (#441)
+- Removing a Worktree that has checked-out submodules now says that the
+  submodules block it, instead of blaming modified or untracked files.
+  Show Changes stays, and Copy Command hands you the herdr command that
+  forces the removal. While herdr is still loading restored Worktrees
+  after a restart, the message gives herdr's own reason instead of
+  saying a worktree change is already underway. (#458)
 
 ## [0.1.13] - 2026-10-07
 

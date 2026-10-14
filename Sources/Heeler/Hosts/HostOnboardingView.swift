@@ -442,7 +442,7 @@ struct HostOnboardingView: View {
     }
 
     private var pluginPresentation: HeelerPluginPresentation {
-        HeelerPluginPresentation(store.pluginStatus)
+        HeelerPluginPresentation(store.pluginStatus, session: store.host.sessionName)
     }
 
     /// The installed version. When the user has something to do on the Host
