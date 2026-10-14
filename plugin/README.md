@@ -83,7 +83,21 @@ command again. Plugin 0.6.0 scopes notifications to the herdr session they
 come from; update it on every Host along with the app (see
 [Updating to 0.6.0](#updating-to-060)). The app's Host details show the
 installed version and offer this command when it is older than the plugin
-the app was built alongside. To inspect notification or pairing failures:
+the app was built alongside.
+
+On herdr 0.9.4, reinstalling a disabled plugin keeps it disabled, where
+herdr 0.9.3 turned it back on. Turn it on afterwards:
+
+```bash
+herdr plugin enable heeler
+```
+
+Unlike `plugin install`, `plugin enable` only works through a running herdr
+session: if the default session is not running, name one that is, for
+example `herdr --session work plugin enable heeler`. For a disabled plugin,
+the app's Host details show the enable command for the Host's session.
+
+To inspect notification or pairing failures:
 
 ```bash
 herdr plugin log list --plugin heeler --limit 20

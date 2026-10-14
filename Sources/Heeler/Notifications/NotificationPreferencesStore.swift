@@ -309,7 +309,8 @@ final class NotificationPreferencesStore {
     static func message(for error: any Error) -> String {
         switch error {
         case NotificationRegistrationError.pluginNotInstalled:
-            "Install the Heeler plugin on this Host, then check again."
+            "The Heeler plugin is missing or turned off on this Host. "
+                + "See this Host's page in Hosts, then check again."
         case NotificationRegistrationError.pluginProbeFailed:
             "Could not check the Heeler plugin on this Host. "
                 + "Check the connection and try again."

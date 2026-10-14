@@ -85,6 +85,13 @@ Entries reference the pull request that made the change.
   the Host isn't connected, the confirmation says so and suggests connecting
   first; a Host removed without being reached may keep sending this device
   generic "Agent update" notifications. (#445)
+- When a Host's Heeler plugin is turned off, the steps on the Host's page
+  now always end with the command that turns it back on: after updating an
+  outdated plugin, which herdr 0.9.4 leaves off, and after removing a copy
+  left under the plugin's former name. That command names the Host's herdr
+  session, so it works when the default session isn't running.
+  Notification settings now say the plugin is missing or turned off and
+  point to the Host's page. (#458)
 - Close Agent and Close Terminal now ask from the More button you tapped,
   instead of a bubble floating in the middle of the terminal. (#440)
 - New Agent with long Arguments on a macOS Host running herdr 0.9.4 now

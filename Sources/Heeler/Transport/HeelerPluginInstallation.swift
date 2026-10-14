@@ -56,6 +56,14 @@ struct HeelerPluginInstallation: Equatable, Sendable {
         /// `herdr plugin link` to a checkout; install refuses to replace it.
         case local
         case unknown
+
+        init(_ source: PluginListResult.Entry.Source?) {
+            switch source?.kind {
+            case "github": self = .github
+            case "local": self = .local
+            default: self = .unknown
+            }
+        }
     }
 
     let pluginID: String
@@ -69,6 +77,10 @@ struct HeelerPluginInstallation: Equatable, Sendable {
     /// Legacy ids still installed and enabled beside this current-id
     /// plugin: both run their hooks, so a Host can notify twice.
     let leftoverLegacyIDs: [String]
+    /// Beside this enabled legacy-id plugin, herdr also lists the current
+    /// id, disabled: that plugin's source. Once the legacy id is removed,
+    /// it is the plugin to turn on, and a linked one cannot be reinstalled.
+    let disabledCurrentIDSource: Source?
 
     /// Installed under a name the plugin used before 0.4.0.
     var isLegacyID: Bool { pluginID != SSHTransportSettings.notificationPluginID }
@@ -81,26 +93,25 @@ struct HeelerPluginInstallation: Equatable, Sendable {
         guard let entry = result.heelerEntry(enabledOnly: false),
             let pluginID = entry.pluginID
         else { return nil }
-        let source: Source =
-            switch entry.source?.kind {
-            case "github": .github
-            case "local": .local
-            default: .unknown
-            }
+        let currentID = SSHTransportSettings.notificationPluginID
         let leftovers =
-            pluginID == SSHTransportSettings.notificationPluginID
+            pluginID == currentID
             ? result.heelerEntries.filter { $0.pluginID != pluginID && $0.isEnabled }
                 .compactMap(\.pluginID)
             : []
+        let disabledCurrentEntry =
+            pluginID == currentID
+            ? nil : result.heelerEntries.first { $0.pluginID == currentID && !$0.isEnabled }
         self.init(
             pluginID: pluginID,
             version: entry.version ?? "",
             isEnabled: entry.isEnabled,
-            source: source,
+            source: Source(entry.source),
             hasManifestWarning: entry.warnings?.contains {
                 $0.hasPrefix("manifest unavailable")
             } == true,
-            leftoverLegacyIDs: leftovers)
+            leftoverLegacyIDs: leftovers,
+            disabledCurrentIDSource: disabledCurrentEntry.map { Source($0.source) })
     }
 
     init(
@@ -109,7 +120,8 @@ struct HeelerPluginInstallation: Equatable, Sendable {
         isEnabled: Bool = true,
         source: Source = .github,
         hasManifestWarning: Bool = false,
-        leftoverLegacyIDs: [String] = []
+        leftoverLegacyIDs: [String] = [],
+        disabledCurrentIDSource: Source? = nil
     ) {
         self.pluginID = pluginID
         self.version = version
@@ -117,5 +129,6 @@ struct HeelerPluginInstallation: Equatable, Sendable {
         self.source = source
         self.hasManifestWarning = hasManifestWarning
         self.leftoverLegacyIDs = leftoverLegacyIDs
+        self.disabledCurrentIDSource = disabledCurrentIDSource
     }
 }

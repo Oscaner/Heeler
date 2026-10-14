@@ -252,6 +252,9 @@
             ("Plugin disabled (0.6.1)", .success(HeelerPluginInstallation(version: "0.6.1", isEnabled: false))),
             ("Plugin disabled + outdated (0.5.0)",
              .success(HeelerPluginInstallation(version: "0.5.0", isEnabled: false))),
+            ("Plugin under legacy name + current disabled (0.3.0)",
+             .success(HeelerPluginInstallation(
+                pluginID: "herdr-mobile.pairing", version: "0.3.0", disabledCurrentIDSource: .github))),
             ("Plugin under legacy name (0.3.0)",
              .success(HeelerPluginInstallation(pluginID: "herdr-mobile.pairing", version: "0.3.0"))),
             ("Plugin with legacy leftover (0.6.1)",
