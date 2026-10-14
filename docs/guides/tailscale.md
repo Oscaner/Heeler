@@ -60,7 +60,7 @@ Instead of the Tailscale app in step 2, you can run Tailscale on the Mac from Te
 
 ### 1. Check SSH on the Mac
 
-After [step 1](#1-prepare-the-mac), check that SSH answers on the Mac itself:
+After [Prepare the Mac](#1-prepare-the-mac), check that SSH answers on the Mac itself:
 
 ```sh
 nc -vz 127.0.0.1 22
@@ -114,7 +114,7 @@ TS_STATE_DIR="$HOME/.local/share/heeler-tailscale"
 > [!IMPORTANT]
 > In this mode, any tailnet device that is allowed to reach the Mac can connect to every service listening on the Mac itself, not only SSH. In your tailnet's [access rules](https://tailscale.com/docs/features/access-control/grants), allow Heeler to reach this Mac only on `tcp:22`.
 
-Then continue with [step 3](#3-join-the-same-tailnet-from-heeler). In [step 4](#4-add-the-mac-as-a-host), tap `heeler-mac-userspace` in **Choose from Tailnet…**, or type the IPv4 address you wrote down. Keep the Mac awake and Terminal A open while you use Heeler.
+Then continue with [Join the same tailnet from Heeler](#3-join-the-same-tailnet-from-heeler) through [Check that it works](#5-check-that-it-works). In [Add the Mac as a Host](#4-add-the-mac-as-a-host), tap `heeler-mac-userspace` in **Choose from Tailnet…**, or type the IPv4 address you wrote down. Keep the Mac awake and Terminal A open while you use Heeler.
 
 ### Stop or remove the Mac
 
