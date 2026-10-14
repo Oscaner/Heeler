@@ -1081,6 +1081,12 @@ actor HeelerSSHTransport: Transport {
             decoding: OkResponse.self)
     }
 
+    /// Starts the agent in a fresh pane, resending the same request while
+    /// herdr answers that the pane's shell is not ready for it yet: busy
+    /// while a startup command runs, or, on a macOS Host, a launch line too
+    /// long for the terminal before the shell's line editor starts. Both
+    /// refusals share one budget, and the last one surfaces unchanged when
+    /// it runs out, so the caller still removes what it created.
     private func startAgentAwaitingShell(
         _ launch: AgentLaunchRequest,
         paneID: String
@@ -1097,7 +1103,7 @@ actor HeelerSSHTransport: Transport {
                     method: "agent.start",
                     params: params,
                     decoding: AgentStartedResponse.self)
-            } catch let error as HerdrAPIError where error.code == "agent_pane_busy" {
+            } catch let error as HerdrAPIError where Self.isShellReadinessRefusal(error) {
                 guard ContinuousClock.now + Self.shellReadinessRetryDelay < deadline else {
                     throw error
                 }
@@ -1108,6 +1114,17 @@ actor HeelerSSHTransport: Transport {
 
     private static let shellReadinessBudget: Duration = .seconds(10)
     private static let shellReadinessRetryDelay: Duration = .milliseconds(500)
+
+    /// Whether an `agent.start` refusal means the fresh pane's shell is not
+    /// ready for the launch yet, so the same request is worth resending: herdr
+    /// answers `agent_pane_busy` while a startup command holds the pane's
+    /// foreground, and herdr 0.9.4 on macOS refuses a launch line longer than
+    /// the terminal's canonical input limit until the shell's line editor
+    /// starts (`HerdrAPIError.isCanonicalModeRefusal`). Every other
+    /// `agent_start_input_failed` message is final.
+    static func isShellReadinessRefusal(_ error: HerdrAPIError) -> Bool {
+        error.code == "agent_pane_busy" || error.isCanonicalModeRefusal
+    }
 
     func closePane(_ params: PaneTarget) async throws {
         _ = try await request(

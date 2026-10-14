@@ -87,6 +87,10 @@ Entries reference the pull request that made the change.
   generic "Agent update" notifications. (#445)
 - Close Agent and Close Terminal now ask from the More button you tapped,
   instead of a bubble floating in the middle of the terminal. (#440)
+- New Agent with long Arguments on a macOS Host running herdr 0.9.4 now
+  waits for the new shell to take the launch command instead of failing at
+  once and removing what it created. If the shell never takes it, as with
+  dash, New Agent asks you to shorten the Arguments. (#458)
 - When attaching to an Agent or terminal on a macOS or Linux Host fails
   because herdr exits, the message now quotes herdr's own error, such as an
   older herdr earlier on the SSH PATH losing its connection to the server,
