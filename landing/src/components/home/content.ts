@@ -94,5 +94,5 @@ export const source = {
 export const links = {
   appStore: 'https://apps.apple.com/us/app/heeler-for-herdr/id6797263135',
   testFlight: 'https://testflight.apple.com/join/aXSxRn4r',
-  setup: 'https://docs.heeler.bybee.dev/',
+  setup: 'https://docs.heeler.bybee.dev/pairing',
 };
