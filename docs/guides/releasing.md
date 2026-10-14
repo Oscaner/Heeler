@@ -116,18 +116,21 @@ no build number is consumed, and no release is created.
 
 ### Failure and recovery
 
-A failed release keeps its version as long as it published nothing: no
-build reached TestFlight and no GitHub release exists. App Store Connect
-rejects a reused build number, not a reused version, so the same version
-is either re-run or re-cut. Once a build or release is out, its tag is
-never moved or deleted, and a fix ships as the next version.
+A failed release keeps its version as long as its run published nothing:
+no build from the run is in TestFlight, not even one still processing,
+and no GitHub release exists. Until a version is approved for the App
+Store, App Store Connect accepts more builds of it, each with a higher
+build number, so such a release re-runs its failed jobs or is re-cut as
+the same version. Once anything is published, its tag is never moved or
+deleted: finish a missing step by hand, and ship a fix as the next
+version.
 
 | Failure | Recovery |
 |---|---|
-| `meta` | Nothing was built. Fix the cause on `main`, then [re-cut the same version](#re-cutting-an-unpublished-version). |
-| `test` | If the failure is flaky, for example the same commit passes in its `main` CI run, re-run failed jobs. Otherwise fix it on `main`, then re-cut the same version. |
+| `meta` | Nothing was built. If the cause was external (runner, network), re-run failed jobs. Otherwise fix the cause on `main`, then [re-cut the same version](#re-cutting-an-unpublished-version). |
+| `test` | If the failure looks flaky (a test known to be flaky, or one that passes on the same commit elsewhere, such as its `main` CI run), re-run failed jobs once. If it fails again, fix it on `main`, then re-cut the same version. |
 | `archive`, before the upload step | If the cause was external (runner, network, an Apple outage), re-run failed jobs. For a signing or credential error, fix the `release` environment (see below), rehearse, then re-run failed jobs. For a code error, fix it on `main`, then re-cut the same version. |
-| `archive`, upload step or later | Check TestFlight first. If the build did not arrive, re-run failed jobs. If it arrived, do not re-run anything: `archive` would upload the same build number again, which App Store Connect rejects, and `release` stays skipped while `archive` reads as failed. Create the GitHub release by hand instead (below). |
+| `archive`, upload step or later | Check TestFlight first. If the build did not arrive, re-run failed jobs, unless App Store Connect rejected the build itself: a re-run repeats that, so fix it on `main` and re-cut the same version. If it arrived, do not re-run anything: `archive` would upload the same build number again, which App Store Connect rejects, and `release` stays skipped while `archive` reads as failed. Create the GitHub release by hand instead (below). |
 | `release` | Re-run failed jobs; the job skips creating a release that already exists. |
 
 Use **Re-run failed jobs** (`gh run rerun <run-id> --failed`), not "Re-run
@@ -145,14 +148,20 @@ gh release create vX.Y.Z --verify-tag --title vX.Y.Z --notes-file /tmp/heeler-no
 
 ### Re-cutting an unpublished version
 
-A fix lands on `main` after the tag, so the tag has to go before the same
-version can be cut again:
+When the fix needs a change on `main`, the tag names the commit without
+it, so the tag goes and the same version is cut again:
 
-1. Wait for the release run to finish, then confirm that nothing was
-   published: `gh release view vX.Y.Z` finds no release, and no build of
-   X.Y.Z is in TestFlight (a run that failed before the upload step never
-   sent one).
-2. Delete the tag on GitHub and locally. The "Protect release tags"
+1. Wait for the release run to finish, then confirm that it published
+   nothing: `gh release view vX.Y.Z` finds no release, and TestFlight has
+   no build from the run (X.Y.Z with the tag's build number), not even
+   one still processing. A run that failed before its upload step never
+   sent one, and interim `make testflight` builds do not count.
+2. On `main`, move the body of `## [X.Y.Z] - YYYY-MM-DD` back under
+   `## [Unreleased]`, merged with any newer entries (one `### Added`, one
+   `### Fixed`, and so on), and delete the heading. Land this on `main`
+   with the fix: publish refuses a dirty tree or a `main` that differs
+   from `origin/main`.
+3. Delete the tag on GitHub and locally. The "Protect release tags"
    ruleset lets only admins do this:
 
    ```sh
@@ -160,13 +169,12 @@ version can be cut again:
    git tag -d vX.Y.Z
    ```
 
-3. On `main`, move the body of `## [X.Y.Z] - YYYY-MM-DD` back under
-   `## [Unreleased]`, alongside any newer entries, and delete the heading.
-   Publish checks the newest heading against the newest tag, so the
-   heading goes with the tag.
-4. Run `make publish VERSION=X.Y.Z` from the fixed `main`. The version
-   stays; the build number moves on to the next one, and the skipped
-   number is harmless.
+   Another clone that fetched the old tag keeps it, because `git fetch`
+   does not move an existing tag; run `git fetch --tags --force origin`
+   there before publishing from it.
+4. Run `make publish VERSION=X.Y.Z`. Its plan shows
+   `MARKETING_VERSION X.Y.Z -> X.Y.Z`; the build number moves on to the
+   next one, and the skipped number is harmless.
 
 ## Signing and credentials
 
@@ -222,7 +230,9 @@ Once, before the first release:
    repository level.
 2. **Tag ruleset**: target tags matching `v*`; restrict creation, updates,
    and deletions, with only the admin role allowed to bypass. Creating a
-   release tag is then an admin's decision, and a pushed tag never moves.
+   release tag is then an admin's decision, and so is deleting one for a
+   [re-cut](#re-cutting-an-unpublished-version) of a version that
+   published nothing; a published tag never moves.
 3. **Rehearse**: run the workflow from `main`. It must pass before the
    first `make publish`.
 
@@ -236,13 +246,13 @@ Two paths to TestFlight, different jobs:
   the tags stay where they are. Leaves `project.yml` and
   `project.pbxproj` dirty. Commit and push the bump to `main` before the
   next `make publish`, which refuses a dirty or unpushed tree. Discarding
-  the bump instead makes publish reuse the uploaded build number, and App
-  Store Connect validation then fails the release before it uploads
-  anything, so it has to be [re-cut](#re-cutting-an-unpublished-version).
-  Since its marketing version still names the previous tag, the build
-  records the commit it was archived from (About › Acknowledgements), but
-  only when that commit is pushed and nothing but the build number is
-  uncommitted; push first.
+  the bump instead can make publish reuse a build number that App Store
+  Connect already holds for the version, and it then rejects the release
+  build (see [Failure and recovery](#failure-and-recovery)). Since its
+  marketing version still names the previous tag, the build records the
+  commit it was archived from (About › Acknowledgements), but only when
+  that commit is pushed and nothing but the build number is uncommitted;
+  push first.
 - `make publish` — a **release**. Everything above, with a version,
   notes, a tag, a reviewed CI build, and a GitHub release.
 
