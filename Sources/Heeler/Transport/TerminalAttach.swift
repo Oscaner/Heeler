@@ -124,7 +124,12 @@ struct HerdrStartupProbeFilter {
         Data("\u{1B}[?1016$p\u{1B}[?u\u{1B}[c".utf8),
     ]
 
+    /// How far after the marker a probe may start and still be herdr's.
+    static let scanWindow = 4 * 1024
+
     private var isScanning: Bool
+    /// The bytes after the marker already handed on.
+    private var scanned = 0
     /// A trailing partial probe, held until the next read completes or
     /// refutes it.
     private var held = Data()
@@ -142,14 +147,23 @@ struct HerdrStartupProbeFilter {
         var data = held
         data.append(bytes)
         held = Data()
+        // Offsets into `data` below this still lie inside the window.
+        let limit = Self.scanWindow - scanned
         if let probe = Self.earliestProbe(in: data) {
             isScanning = false
-            data.removeSubrange(probe)
+            if data.distance(from: data.startIndex, to: probe.lowerBound) < limit {
+                data.removeSubrange(probe)
+            }
             return data
         }
-        let heldCount = Self.trailingProbePrefixLength(of: data)
-        held = Data(data.suffix(heldCount))
-        return Data(data.dropLast(heldCount))
+        let heldStart = data.count - Self.trailingProbePrefixLength(of: data)
+        guard heldStart < limit else {
+            isScanning = false
+            return data
+        }
+        held = Data(data.dropFirst(heldStart))
+        scanned += heldStart
+        return Data(data.prefix(heldStart))
     }
 
     private static func earliestProbe(in data: Data) -> Range<Data.Index>? {

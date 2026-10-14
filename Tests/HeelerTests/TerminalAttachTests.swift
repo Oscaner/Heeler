@@ -3512,6 +3512,35 @@ struct TerminalAttachTests {
         #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
     }
 
+    /// herdr writes its probe within the first 4 KiB after the marker. One
+    /// that starts after them belongs to whatever runs in the Pane and
+    /// reaches the terminal, however the reads split it.
+    @Test func aProbeStartingPastTheFirst4KiBReachesTheTerminal() async throws {
+        let session = Data(repeating: UInt8(ascii: "x"), count: 4096) + HerdrAttachOutput.probe
+        var mismatches: [String] = []
+        let deliveries = Self.deliveries(of: AttachBootstrapHandshake.marker + session)
+        for delivery in deliveries {
+            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
+            if output != session { mismatches.append(delivery.name) }
+        }
+        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+    }
+
+    /// What counts is where the probe starts: one whose first byte is the
+    /// window's last is still dropped, though it ends past the window.
+    @Test func aProbeStartingOnTheWindowsLastByteIsDropped() async throws {
+        let filler = Data(repeating: UInt8(ascii: "x"), count: 4095)
+        let tail = Data("after".utf8)
+        let stream = AttachBootstrapHandshake.marker + filler + HerdrAttachOutput.probe + tail
+        var mismatches: [String] = []
+        let deliveries = Self.deliveries(of: stream)
+        for delivery in deliveries {
+            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
+            if output != filler + tail { mismatches.append(delivery.name) }
+        }
+        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+    }
+
     /// The native Windows terminal controller never writes the probe, so its
     /// pumps run with the option off and pass those bytes through like any
     /// others.
