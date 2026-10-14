@@ -33,6 +33,14 @@ export const pairLines = [
   '<span class="tk-fn">herdr</span> plugin action invoke heeler.pair',
 ];
 
+// The closing steps' commands, wrapped so every line fits a phone-width column.
+export const addCommandLines = [
+  '<span class="tk-fn">herdr</span> plugin install \\',
+  '  ZingerLittleBee/Heeler/plugin \\',
+  '  <span class="tk-string">--ref main --yes</span>',
+  '<span class="tk-fn">herdr</span> plugin action invoke heeler.pair',
+];
+
 export const security = [
   {
     title: 'Device Key in the Keychain',
