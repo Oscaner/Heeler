@@ -370,6 +370,52 @@ struct WorktreeDetailStoreTests {
         #expect(store.canRemove)
     }
 
+    /// herdr takes an id such as `--session=other` as its own option however
+    /// it is quoted, so no command can name that workspace. The refusal still
+    /// names the submodules and points at Changes.
+    @Test(arguments: ["--session", "--session=other", "--handoff", "--remote=other"], ["", "work"])
+    func aWorkspaceIDHerdrTakesAsAnOptionGetsNoCommand(
+        workspaceID: String, sessionName: String
+    ) async throws {
+        var handed: [String] = []
+        let store = try await refusedStore(
+            workspaceID: workspaceID,
+            sessionName: sessionName,
+            showChanges: { handed.append($0) },
+            error: HerdrAPIError(
+                code: "dirty_worktree_requires_force", message: Self.submoduleMessage))
+
+        #expect(
+            store.removalPhase
+                == .failed(
+                    "herdr couldn't remove this worktree because it has checked-out submodules. Forcing the removal deletes /work/Heeler-wt and any uncommitted changes in it, so check its Changes first."
+                ))
+        #expect(store.refusalCommand == nil)
+        #expect(store.refusalOffersChanges)
+
+        store.showChanges()
+
+        #expect(handed == ["/work/Heeler-wt"])
+    }
+
+    /// An id that only resembles one of herdr's options reaches
+    /// `--workspace`, so its refusal still hands over the command.
+    @Test func aWorkspaceIDThatOnlyResemblesAnOptionKeepsTheCommand() async throws {
+        let store = try await refusedStore(
+            workspaceID: "--sessions",
+            showChanges: { _ in },
+            error: HerdrAPIError(
+                code: "dirty_worktree_requires_force", message: Self.submoduleMessage))
+
+        #expect(
+            store.removalPhase
+                == .failed(
+                    "herdr couldn't remove this worktree because it has checked-out submodules. Forcing the removal deletes /work/Heeler-wt and any uncommitted changes in it, so check its Changes first. To force it, run on the Host: herdr worktree remove --workspace --sessions --force"
+                ))
+        #expect(store.refusalCommand == "herdr worktree remove --workspace --sessions --force")
+        #expect(store.refusalOffersChanges)
+    }
+
     /// herdr sends one code both while another operation runs on the checkout
     /// and, since 0.9.4, while it re-validates restored Worktrees, so only its
     /// own message states the cause. Either way the removal can be retried.
@@ -490,11 +536,13 @@ struct WorktreeDetailStoreTests {
 
     /// A blank `sessionName` is the Host's default herdr session.
     private func refusedStore(
+        workspaceID: String = "w1",
         sessionName: String = "",
         showChanges: @escaping (String) -> Void,
         error: some Error
     ) async throws -> WorktreeDetailStore {
         let store = makeStore(
+            workspaceID: workspaceID,
             sessionName: sessionName,
             list: { _ in Self.list(branch: "feat/issue-99") },
             remove: { _ in throw error },
@@ -506,6 +554,7 @@ struct WorktreeDetailStoreTests {
     }
 
     private func makeStore(
+        workspaceID: String = "w1",
         sessionName: String = "",
         list: @escaping (String) async throws -> WorktreeListResponse,
         remove: @escaping (WorktreeRemovalRequest) async throws -> WorktreeRemovalReceipt,
@@ -520,7 +569,7 @@ struct WorktreeDetailStoreTests {
         return WorktreeDetailStore(
             request: WorktreeRemovalRequest(
                 identity: WorktreeIdentity(
-                    hostID: UUID(), workspaceID: "w1", checkout: checkout)),
+                    hostID: UUID(), workspaceID: workspaceID, checkout: checkout)),
             workspaceLabel: "issue-99",
             checkout: checkout,
             sessionName: sessionName,

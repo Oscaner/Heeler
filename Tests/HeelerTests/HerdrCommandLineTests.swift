@@ -97,4 +97,27 @@ struct HerdrCommandLineTests {
             HerdrCommandLine.render(session: "bad name", arguments: ["plugin", "enable", "heeler"])
                 == "herdr --session 'bad name' plugin enable heeler")
     }
+
+    /// herdr takes these words as its own options wherever they appear before
+    /// `--`, however they are quoted. It compares bytes, so a combining mark
+    /// after the `=` hides nothing.
+    @Test(arguments: [
+        "--session", "--session=other", "--session=", "--session=\u{301}other",
+        "--remote", "--remote=other", "--remote-keybindings", "--remote-keybindings=server",
+        "--handoff",
+    ])
+    func herdrTakesTheseAsItsOwnOptions(word: String) {
+        #expect(HerdrCommandLine.readsAsGlobalOption(word))
+    }
+
+    /// These reach the subcommand as arguments. herdr reads `--machine` only
+    /// before the subcommand, `--handoff` has no `=value` form, and `--` ends
+    /// herdr's own options.
+    @Test(arguments: [
+        "--sessions", "-session", "--session-x", "w1", "--workspace",
+        "--remotes", "--handoff=yes", "--machine=other", "--",
+    ])
+    func theseReachTheSubcommandAsArguments(word: String) {
+        #expect(!HerdrCommandLine.readsAsGlobalOption(word))
+    }
 }

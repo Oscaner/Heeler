@@ -15,13 +15,29 @@ enum HerdrCommandLine {
     /// The user pastes the line into a shell on the Host, which may be sh,
     /// bash, zsh or fish, so every word, the session name included, reads the
     /// same in all four. Valid session names and herdr's own ids stay bare;
-    /// anything else is single-quoted. herdr still reads any word before `--`
-    /// that is `--session` or starts with `--session=` as its own flag,
-    /// however it was quoted; herdr's ids never look like that.
+    /// anything else is single-quoted. herdr still takes a word that
+    /// `readsAsGlobalOption` matches as its own option, however it was
+    /// quoted, so such a word cannot be passed as an argument: a caller
+    /// passing a value Heeler did not choose, such as a herdr id, checks it
+    /// with `readsAsGlobalOption` and offers no command when it matches.
     static func render(session: String, arguments: [String]) -> String {
         let name = session.trimmingCharacters(in: .whitespaces)
         let scope = name.isEmpty ? [] : ["--session", name]
         return (["herdr"] + (scope + arguments).map(word)).joined(separator: " ")
+    }
+
+    /// Whether herdr takes `word` as one of its own options wherever it
+    /// appears before `--`, however it was quoted: a word that is
+    /// `--handoff`, `--session`, `--remote` or `--remote-keybindings`, or
+    /// that starts with one of the last three and `=`
+    /// (`session::configure_from_args` and `remote::extract_remote_args`,
+    /// checked at 0.9.3 and 0.9.4). herdr compares bytes, so this does too.
+    static func readsAsGlobalOption(_ word: String) -> Bool {
+        let bytes = word.utf8
+        return bytes.elementsEqual("--handoff".utf8)
+            || ["--session", "--remote", "--remote-keybindings"].contains { option in
+                bytes.elementsEqual(option.utf8) || bytes.starts(with: (option + "=").utf8)
+            }
     }
 
     /// Inside single quotes fish reads `\'` and `\\` as escapes and POSIX

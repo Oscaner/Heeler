@@ -571,11 +571,11 @@ in Heeler.
 `hermes`, `kilo`, `qodercli`, `qwen`, `letta`, `maki`, and `muse`. Aliases,
 case variations, and unknown ids are invalid. A future herdr release that
 adds canonical ids, built-in agent tokens, styled-token keys, or rule fields
-requires updating this validation and the shared vectors together. The
-validator follows herdr's grammar for these fields but is not a complete copy
-of it: herdr also accepts a few unusual shapes that the plugin rejects with
-`invalid_schema`, such as `ui = []`, `agents = []` under `[ui.sidebar]`, or a
-rule written as an array (`rules = [["x"]]`).
+requires updating the validator, this README and the shared vectors together.
+The validator follows herdr's grammar for these fields but is not a complete
+copy of it: herdr also accepts a few unusual shapes that the plugin rejects
+with `invalid_schema`, such as `ui = []`, `agents = []` under `[ui.sidebar]`,
+or a rule written as an array (`rules = [["x"]]`).
 
 Missing files or fields use the snapshot defaults: sort `spaces`, `row_gap: 0`,
 `rows: [[{"token":"state_icon"},{"token":"workspace"},{"token":"tab"}],
