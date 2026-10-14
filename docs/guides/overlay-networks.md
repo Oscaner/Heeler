@@ -13,7 +13,7 @@ Prepare the Host below, then follow one provider guide. It sends you to [Connect
 | Guide | You need | Away from home |
 | --- | --- | --- |
 | [Tailscale](tailscale.md) | A Tailscale account and the Tailscale app on the Mac | Works |
-| [Tailscale without a VPN on the Mac (advanced)](tailscale-userspace.md) | A Tailscale account and Homebrew | Works |
+| [Tailscale without a VPN on the Mac (advanced)](tailscale.md#run-tailscale-without-a-vpn-on-the-mac-advanced) | A Tailscale account and Homebrew | Works |
 | [ZeroTier](zerotier.md) | A ZeroTier Central account and ZeroTier One on the Mac | Works |
 | [EasyTier](easytier.md) | No account; EasyTier on the Mac from Terminal | Needs a relay you run, such as a small VPS, or a Mac reachable from the internet ([how](easytier.md#reaching-a-mac-outside-the-lan)) |
 
@@ -57,7 +57,7 @@ Do these steps on the Mac that runs herdr, signed in as the account Heeler will 
    echo 'PASTE_THE_LINE_HERE' >> ~/.ssh/authorized_keys
    ```
 
-   For **RSA Key**, do the same with **Copy RSA Public Key**. For **Password**, use your Mac password. A key from [QR pairing](../../README.md#adding-a-machine) also works.
+   For **RSA Key**, do the same with **Copy RSA Public Key**. For **Password**, use your Mac password. A key from [pairing](pairing.md) also works.
 
 ## Connect from Heeler
 

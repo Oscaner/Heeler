@@ -11,10 +11,18 @@ It connects over SSH to your Host, the computer that runs herdr. These guides se
 reach it when you are away from it.
 
 <Callout title="New here?">
-  Follow the three steps below. If you are not sure which network to use, start with Tailscale.
+  With a Mac or Linux Host on the same network as your iPhone or iPad, such as the same Wi-Fi, the quickest start is
+  to [pair by scanning a code](/pairing). Otherwise, follow the three steps below. If you are not sure which network to
+  use, start with Tailscale.
 </Callout>
 
-## Start here
+## Get started
+
+<Cards>
+  <GuideCard slug="pairing">Install the Heeler plugin, show a Pairing Code on the Host, and scan it. No form to fill in.</GuideCard>
+</Cards>
+
+## Set up by hand
 
 <Steps>
 <Step>
@@ -43,7 +51,8 @@ have [multiple routes](/host-routes), so it works both at home and away.
 Open **Hosts**, tap **Add Host**, and [fill in the form](/overlay-networks#connect-from-heeler) (through a Jump Host,
 use [these values](/vps-jump-host-setup#step-13-add-the-host-in-heeler)). Tap **Trust** only if the fingerprint
 matches the one you noted; through a Jump Host, Heeler asks about the VPS first, then the Mac. Then
-[verify the connection](/overlay-networks#verify-the-connection), including over cellular.
+[verify the connection](/overlay-networks#verify-the-connection), including over cellular. Already paired? Add the
+Host's address on that network as [another route](/host-routes#add-a-route) instead.
 
 </Step>
 </Steps>
@@ -54,8 +63,7 @@ Heeler joins the network by itself, so your iPhone or iPad needs no VPN app. The
 
 <Cards>
   <GuideCard slug="overlay-networks">Prepare the Host, pick a provider, and connect from Heeler.</GuideCard>
-  <GuideCard slug="tailscale">Heeler joins your tailnet; the Mac runs the Tailscale app. Start here if you are new.</GuideCard>
-  <GuideCard slug="tailscale-userspace">Advanced: run Tailscale from Terminal so the Mac gets no VPN.</GuideCard>
+  <GuideCard slug="tailscale">Heeler joins your tailnet; the Mac runs the Tailscale app, or Tailscale from Terminal without a VPN. Start here if you are new.</GuideCard>
   <GuideCard slug="zerotier">A private ZeroTier network; the Mac runs ZeroTier One.</GuideCard>
   <GuideCard slug="easytier">No account needed. Away from home, it needs a relay or a Mac reachable from the internet.</GuideCard>
 </Cards>

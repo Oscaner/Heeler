@@ -4,8 +4,8 @@
 
 # Heeler
 
-<a href="https://testflight.apple.com/join/aXSxRn4r"><img src="docs/images/testflight-badge-zh.svg" alt="在 TestFlight 下载" height="40" /></a>
 <a href="https://apps.apple.com/us/app/heeler-for-herdr/id6797263135"><img src="https://toolbox.marketingtools.apple.com/api/badges/download-on-the-app-store/black/zh-cn?size=250x83" alt="在 App Store 下载" height="40" /></a>
+<a href="https://testflight.apple.com/join/aXSxRn4r"><img src="docs/images/testflight-badge-zh.svg" alt="在 TestFlight 下载" height="40" /></a>
 
 **[herdr](https://herdr.dev) 的原生 iOS 伴侣应用 —— herdr 是一个 agent 优先的终端运行时。**
 
@@ -109,7 +109,8 @@ herdr plugin action invoke heeler.pair
 
 用应用扫描弹出的 Pairing Code 二维码，机器即被添加为 Host —— 地址、
 host key 指纹和 SSH 密钥注册全部由配对码承载。在应用里为该 Host 启用通知
-后，同一个[插件](plugin/README.md)负责投递加密通知。
+后，同一个[插件](plugin/README.md)负责投递加密通知。完整步骤、弹窗按键和排错
+方法见[扫码配对指南](https://docs.heeler.bybee.dev/zh/pairing)。
 
 ## 技术栈
 

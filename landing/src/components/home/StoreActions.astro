@@ -2,6 +2,13 @@
 import appStoreBadge from '../../assets/badges/app-store-badge.svg';
 import testFlightBadge from '../../assets/badges/testflight-badge.svg';
 import { links } from './content';
+
+interface Props {
+  /** Show the setup guide link after the badges. */
+  guide?: boolean;
+}
+
+const { guide = true } = Astro.props;
 ---
 
 <div class="actions">
@@ -11,9 +18,13 @@ import { links } from './content';
   <a class="store-badge" href={links.testFlight}>
     <img src={testFlightBadge.src} width={testFlightBadge.width} height={testFlightBadge.height} alt="Available on TestFlight" />
   </a>
-  <a class="setup-link" href={links.setup}>
-    Read the setup guide <span aria-hidden="true">&rarr;</span>
-  </a>
+  {
+    guide && (
+      <a class="setup-link" href={links.setup}>
+        Read the setup guide <span aria-hidden="true">&rarr;</span>
+      </a>
+    )
+  }
 </div>
 
 <style>

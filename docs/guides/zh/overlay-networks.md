@@ -1,4 +1,4 @@
-<!-- Translated from docs/guides/overlay-networks.md at 2b014a24 -->
+<!-- Translated from docs/guides/overlay-networks.md at 9fe5247e -->
 
 # 通过 Overlay Network 连接 Heeler
 
@@ -15,7 +15,7 @@ Heeler 会直接加入 Overlay Network，因此手机上无需安装 Tailscale�
 | 指南 | 前置条件 | 局域网外连接 |
 | --- | --- | --- |
 | [Tailscale](tailscale.md) | Tailscale 账号，以及 Mac 上的 Tailscale 应用 | 支持 |
-| [不在 Mac 上配置 VPN 运行 Tailscale（进阶）](tailscale-userspace.md) | Tailscale 账号与 Homebrew | 支持 |
+| [不在 Mac 上配置 VPN 运行 Tailscale（进阶）](tailscale.md#不在-mac-上配置-vpn-运行-tailscale进阶) | Tailscale 账号与 Homebrew | 支持 |
 | [ZeroTier](zerotier.md) | ZeroTier Central 账号，以及 Mac 上的 ZeroTier One | 支持 |
 | [EasyTier](easytier.md) | 无需账号；在 Mac 终端中运行 EasyTier | 需要自建中继（如小型 VPS）或具备公网入口的 Mac（[配置方法](easytier.md#在局域网外连接-mac)） |
 
@@ -59,7 +59,7 @@ Heeler 会直接加入 Overlay Network，因此手机上无需安装 Tailscale�
    echo 'PASTE_THE_LINE_HERE' >> ~/.ssh/authorized_keys
    ```
 
-   如果使用 **RSA Key**，请用 **Copy RSA Public Key** 执行相同操作。如果使用 **Password**，则使用你的 Mac 登录密码。通过[二维码配对（QR pairing）](../../../README.md#adding-a-machine)生成的密钥同样可用。
+   如果使用 **RSA Key**，请用 **Copy RSA Public Key** 执行相同操作。如果使用 **Password**，则使用你的 Mac 登录密码。通过[扫码配对](pairing.md)添加的密钥同样可用。
 
 ## 从 Heeler 连接
 

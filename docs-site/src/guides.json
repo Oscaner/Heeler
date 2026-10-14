@@ -3,10 +3,17 @@
   "sections": [
     {
       "title": {
+        "en": "Get started",
+        "zh": "快速开始"
+      },
+      "guides": ["pairing"]
+    },
+    {
+      "title": {
         "en": "Overlay networks",
         "zh": "Overlay Network"
       },
-      "guides": ["overlay-networks", "tailscale", "tailscale-userspace", "zerotier", "easytier"]
+      "guides": ["overlay-networks", "tailscale", "zerotier", "easytier"]
     },
     {
       "title": {
@@ -26,9 +33,9 @@
   "sidebarTitles": {
     "en": {
       "index": "Introduction",
+      "pairing": "Pair by scanning",
       "overlay-networks": "Overview",
       "tailscale": "Tailscale",
-      "tailscale-userspace": "Tailscale without a VPN",
       "zerotier": "ZeroTier",
       "easytier": "EasyTier",
       "vps-jump-host-setup": "Set up a Jump Host",
@@ -37,9 +44,9 @@
     },
     "zh": {
       "index": "简介",
+      "pairing": "扫码配对",
       "overlay-networks": "概览",
       "tailscale": "Tailscale",
-      "tailscale-userspace": "免 VPN 运行 Tailscale",
       "zerotier": "ZeroTier",
       "easytier": "EasyTier",
       "vps-jump-host-setup": "配置 Jump Host",
@@ -50,9 +57,9 @@
   },
   "icons": {
     "index": "BookOpen",
+    "pairing": "ScanQrCode",
     "overlay-networks": "Compass",
     "tailscale": "Waypoints",
-    "tailscale-userspace": "SquareTerminal",
     "zerotier": "Orbit",
     "easytier": "Network",
     "vps-jump-host-setup": "ListChecks",
