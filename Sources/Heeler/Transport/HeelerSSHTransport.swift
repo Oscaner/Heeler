@@ -3035,6 +3035,12 @@ actor HeelerSSHTransport: Transport {
                     diagnostic.record(bytes)
                     output.yield(bytes)
                 }
+                // Hands over whatever is still withheld when the stream ends,
+                // whichever way it ends, before a failure quotes the
+                // diagnostic. Only explicit cancellation skips it.
+                func releaseWithheld() {
+                    yieldAdmitted(gate.flush())
+                }
                 do {
                     while !Task.isCancelled {
                         let bytes: Data?
@@ -3047,12 +3053,11 @@ actor HeelerSSHTransport: Transport {
                         }
                         guard let bytes else {
                             let status = try await channel.exitStatus(timeout: requestTimeout)
+                            releaseWithheld()
                             guard status == 0 else {
-                                yieldAdmitted(gate.flush())
                                 throw HeelerSSHAttachPumpError.remoteExit(
                                     status, output: diagnostic.line)
                             }
-                            yieldAdmitted(gate.flush())
                             return true
                         }
                         yieldAdmitted(gate.admit(bytes))
@@ -3062,13 +3067,13 @@ actor HeelerSSHTransport: Transport {
                     // A sibling input failure requests one diagnostic flush;
                     // explicit cancellation leaves the request false.
                     if cancellation.shouldFlushDiagnostic {
-                        yieldAdmitted(gate.flush())
+                        releaseWithheld()
                     }
                     throw CancellationError()
                 } catch let error as HeelerSSHAttachPumpError {
                     throw error
                 } catch {
-                    yieldAdmitted(gate.flush())
+                    releaseWithheld()
                     throw HeelerSSHAttachPumpError.output(error)
                 }
             }
