@@ -188,8 +188,11 @@ struct HeelerPluginPresentation: Equatable {
         "herdr plugin uninstall \(pluginID)"
     }
 
-    static func enableCommand(_ pluginID: String) -> String {
-        "herdr plugin enable \(pluginID)"
+    /// `herdr plugin enable` asks a herdr server, so the command names the
+    /// session the Host targets: `session` is the Host's session name, blank
+    /// for the default session.
+    static func enableCommand(_ pluginID: String, session: String) -> String {
+        HerdrCommandLine.render(session: session, arguments: ["plugin", "enable", pluginID])
     }
     static let reenableNotificationsNote =
         "The current plugin keeps its own registrations, so turn Notifications back on "
@@ -277,7 +280,7 @@ struct HeelerPluginPresentation: Equatable {
                     tone: .warning,
                     message: "The Heeler plugin is disabled, so this Host sends no notifications "
                         + "or Live Activity updates.",
-                    commands: [enableCommand(installation.pluginID)],
+                    commands: [enableCommand(installation.pluginID, session: "")],
                     notes: []))
         }
         if installation.hasManifestWarning {
