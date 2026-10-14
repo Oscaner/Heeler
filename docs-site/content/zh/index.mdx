@@ -10,10 +10,16 @@ Heeler 是 [herdr](https://herdr.dev)（面向智能体的终端运行时）的�
 它通过 SSH 连接到你的 Host（即运行 herdr 的电脑）。本系列指南介绍如何配置 Host，以及出门在外时如何连接它。
 
 <Callout title="初次使用？">
-  请按下面三个步骤操作。如果还不确定选哪种网络，建议从 Tailscale 开始。
+  如果 Host 是 Mac 或 Linux，并且与 iPhone 或 iPad 处于同一网络（例如同一个 Wi-Fi），最快的方式是[扫码配对](/zh/pairing)。否则请按下面三个步骤操作。如果还不确定选哪种网络，建议从 Tailscale 开始。
 </Callout>
 
-## 从这里开始
+## 快速开始
+
+<Cards>
+  <GuideCard slug="pairing" locale="zh">安装 Heeler 插件，在 Host 上显示配对码并扫描，无需填写表单。</GuideCard>
+</Cards>
+
+## 手动配置
 
 <Steps>
 <Step>
@@ -34,7 +40,7 @@ Heeler 是 [herdr](https://herdr.dev)（面向智能体的终端运行时）的�
 
 ### 在 Heeler 中添加 Host
 
-打开 **Hosts**，轻点 **Add Host**，然后[填写表单](/zh/overlay-networks#从-heeler-连接)（如果通过 Jump Host 连接，请按[这里的字段值](/zh/vps-jump-host-setup#步骤-13在-heeler-中添加-host)填写）。核对显示的指纹与之前记下的一致后，再轻点 **Trust**；通过 Jump Host 连接时，Heeler 会先询问 VPS 的指纹，再询问 Mac 的指纹。最后[验证连接](/zh/overlay-networks#验证连接)，包括在蜂窝网络下测试。
+打开 **Hosts**，轻点 **Add Host**，然后[填写表单](/zh/overlay-networks#从-heeler-连接)（如果通过 Jump Host 连接，请按[这里的字段值](/zh/vps-jump-host-setup#步骤-13在-heeler-中添加-host)填写）。核对显示的指纹与之前记下的一致后，再轻点 **Trust**；通过 Jump Host 连接时，Heeler 会先询问 VPS 的指纹，再询问 Mac 的指纹。最后[验证连接](/zh/overlay-networks#验证连接)，包括在蜂窝网络下测试。如果已经扫码配对，请改为把 Host 在该网络中的地址添加为[另一条路由](/zh/host-routes#添加路由)。
 
 </Step>
 </Steps>

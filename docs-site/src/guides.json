@@ -3,6 +3,13 @@
   "sections": [
     {
       "title": {
+        "en": "Get started",
+        "zh": "快速开始"
+      },
+      "guides": ["pairing"]
+    },
+    {
+      "title": {
         "en": "Overlay networks",
         "zh": "Overlay Network"
       },
@@ -26,6 +33,7 @@
   "sidebarTitles": {
     "en": {
       "index": "Introduction",
+      "pairing": "Pair by scanning",
       "overlay-networks": "Overview",
       "tailscale": "Tailscale",
       "tailscale-userspace": "Tailscale without a VPN",
@@ -37,6 +45,7 @@
     },
     "zh": {
       "index": "简介",
+      "pairing": "扫码配对",
       "overlay-networks": "概览",
       "tailscale": "Tailscale",
       "tailscale-userspace": "免 VPN 运行 Tailscale",
@@ -50,6 +59,7 @@
   },
   "icons": {
     "index": "BookOpen",
+    "pairing": "ScanQrCode",
     "overlay-networks": "Compass",
     "tailscale": "Waypoints",
     "tailscale-userspace": "SquareTerminal",
