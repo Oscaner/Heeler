@@ -3544,12 +3544,7 @@ struct TerminalAttachTests {
                     Output.mouseReset + Output.inputModes, Output.firstFrame,
                 ]))
 
-        var mismatches: [String] = []
-        for delivery in deliveries {
-            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
-            if output != Output.herdr093 { mismatches.append(delivery.name) }
-        }
-        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+        try await expectEveryDelivery(deliveries, yields: Output.herdr093, dropsStartupProbe: true)
     }
 
     /// herdr's client shell writes the same probe with the kitty keyboard
@@ -3563,13 +3558,8 @@ struct TerminalAttachTests {
                 Output.mouseReset, Output.colorSchemeReportsOff, Output.clientShellProbe,
                 Output.mouseReset, Output.inputModes, Output.firstFrame,
             ].joined())
-        var mismatches: [String] = []
-        let deliveries = Self.deliveries(of: stream)
-        for delivery in deliveries {
-            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
-            if output != Output.herdr093 { mismatches.append(delivery.name) }
-        }
-        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+        try await expectEveryDelivery(
+            Self.deliveries(of: stream), yields: Output.herdr093, dropsStartupProbe: true)
     }
 
     /// herdr 0.9.3 writes no probe, and its output reaches the terminal byte
@@ -3583,38 +3573,26 @@ struct TerminalAttachTests {
                 name: "a read ending in ESC[?1016, then one starting with l",
                 reads: [Data(stream.prefix(cut)), Data(stream.dropFirst(cut))]),
         ]
-        var mismatches: [String] = []
-        for delivery in deliveries {
-            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
-            if output != HerdrAttachOutput.herdr093 { mismatches.append(delivery.name) }
-        }
-        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+        try await expectEveryDelivery(
+            deliveries, yields: HerdrAttachOutput.herdr093, dropsStartupProbe: true)
     }
 
     /// Only the first probe is herdr's. Whatever follows it, another probe, a
     /// DECRQM for some other mode or a lone DA1, reaches the terminal.
     @Test func everythingAfterTheProbeReachesTheTerminal() async throws {
         let later = HerdrAttachOutput.probe + Data("\u{1B}[?2026$p".utf8) + Data("\u{1B}[c".utf8)
-        var mismatches: [String] = []
-        let deliveries = Self.deliveries(of: AttachBootstrapHandshake.marker + HerdrAttachOutput.herdr094 + later)
-        for delivery in deliveries {
-            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
-            if output != HerdrAttachOutput.herdr093 + later { mismatches.append(delivery.name) }
-        }
-        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+        try await expectEveryDelivery(
+            Self.deliveries(of: AttachBootstrapHandshake.marker + HerdrAttachOutput.herdr094 + later),
+            yields: HerdrAttachOutput.herdr093 + later, dropsStartupProbe: true)
     }
 
     /// Another DECRQM and a lone DA1 ahead of the probe are not the probe:
     /// they reach the terminal, and the probe after them is still dropped.
     @Test func otherQueriesAheadOfTheProbeReachTheTerminal() async throws {
         let earlier = Data("\u{1B}[?2026$p".utf8) + Data("\u{1B}[c".utf8)
-        var mismatches: [String] = []
-        let deliveries = Self.deliveries(of: AttachBootstrapHandshake.marker + earlier + HerdrAttachOutput.herdr094)
-        for delivery in deliveries {
-            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
-            if output != earlier + HerdrAttachOutput.herdr093 { mismatches.append(delivery.name) }
-        }
-        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+        try await expectEveryDelivery(
+            Self.deliveries(of: AttachBootstrapHandshake.marker + earlier + HerdrAttachOutput.herdr094),
+            yields: earlier + HerdrAttachOutput.herdr093, dropsStartupProbe: true)
     }
 
     /// herdr writes its probe within the first 4 KiB after the marker. One
@@ -3622,13 +3600,9 @@ struct TerminalAttachTests {
     /// reaches the terminal, however the reads split it.
     @Test func aProbeStartingPastTheFirst4KiBReachesTheTerminal() async throws {
         let session = Data(repeating: UInt8(ascii: "x"), count: 4096) + HerdrAttachOutput.probe
-        var mismatches: [String] = []
-        let deliveries = Self.deliveries(of: AttachBootstrapHandshake.marker + session)
-        for delivery in deliveries {
-            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
-            if output != session { mismatches.append(delivery.name) }
-        }
-        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+        try await expectEveryDelivery(
+            Self.deliveries(of: AttachBootstrapHandshake.marker + session),
+            yields: session, dropsStartupProbe: true)
     }
 
     /// What counts is where the probe starts: one whose first byte is the
@@ -3637,13 +3611,8 @@ struct TerminalAttachTests {
         let filler = Data(repeating: UInt8(ascii: "x"), count: 4095)
         let tail = Data("after".utf8)
         let stream = AttachBootstrapHandshake.marker + filler + HerdrAttachOutput.probe + tail
-        var mismatches: [String] = []
-        let deliveries = Self.deliveries(of: stream)
-        for delivery in deliveries {
-            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
-            if output != filler + tail { mismatches.append(delivery.name) }
-        }
-        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+        try await expectEveryDelivery(
+            Self.deliveries(of: stream), yields: filler + tail, dropsStartupProbe: true)
     }
 
     /// The filter holds back the start of what may be a probe until the next
@@ -3651,13 +3620,9 @@ struct TerminalAttachTests {
     /// on rather than dropping them.
     @Test func aPartialProbeStillHeldWhenTheStreamEndsReachesTheTerminal() async throws {
         let session = Self.sessionEndingInAPartialProbe
-        var mismatches: [String] = []
-        let deliveries = Self.deliveries(of: AttachBootstrapHandshake.marker + session)
-        for delivery in deliveries {
-            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
-            if output != session { mismatches.append(delivery.name) }
-        }
-        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+        try await expectEveryDelivery(
+            Self.deliveries(of: AttachBootstrapHandshake.marker + session),
+            yields: session, dropsStartupProbe: true)
     }
 
     /// A nonzero exit hands the held bytes on as well.
@@ -3745,13 +3710,9 @@ struct TerminalAttachTests {
     /// others.
     @Test func withTheProbeOptionOffTheOutputPassesUntouched() async throws {
         let marker = AttachBootstrapHandshake.marker
-        var mismatches: [String] = []
-        let deliveries = Self.deliveries(of: marker + HerdrAttachOutput.herdr094)
-        for delivery in deliveries {
-            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: false)
-            if output != HerdrAttachOutput.herdr094 { mismatches.append(delivery.name) }
-        }
-        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+        try await expectEveryDelivery(
+            Self.deliveries(of: marker + HerdrAttachOutput.herdr094),
+            yields: HerdrAttachOutput.herdr094, dropsStartupProbe: false)
     }
 
     /// One way a channel can hand over a stream, named for failure messages.
@@ -3771,6 +3732,23 @@ struct TerminalAttachTests {
         }
         deliveries.append(Delivery(name: "byte by byte", reads: stream.map { Data([$0]) }))
         return deliveries
+    }
+
+    /// Expects the terminal to get `expected` from every delivery, and names
+    /// the first deliveries that differ.
+    private func expectEveryDelivery(
+        _ deliveries: [Delivery], yields expected: Data, dropsStartupProbe: Bool,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
+        var mismatches: [String] = []
+        for delivery in deliveries {
+            let output = try await terminalBytes(
+                from: delivery.reads, dropsStartupProbe: dropsStartupProbe)
+            if output != expected { mismatches.append(delivery.name) }
+        }
+        #expect(
+            mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))",
+            sourceLocation: sourceLocation)
     }
 
     /// Every byte the terminal is handed when the attach output arrives as
