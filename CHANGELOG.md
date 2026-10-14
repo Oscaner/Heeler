@@ -7,6 +7,8 @@ Entries reference the pull request that made the change.
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-10-15
+
 ### Added
 
 - Read and search Heeler's connection guides in English or Simplified Chinese
