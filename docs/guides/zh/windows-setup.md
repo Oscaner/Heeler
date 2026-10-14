@@ -1,4 +1,4 @@
-<!-- Translated from docs/guides/windows-setup.md at 2b014a24 -->
+<!-- Translated from docs/guides/windows-setup.md at eb67dbec -->
 # Windows 配置
 
 为 Heeler 配置原生 Windows Host，包括 SSH 登录以及 SSH 与 herdr 的开机自启。请使用 Windows 11、原生 herdr 0.9.3 或更高版本，以及包含[原生 Windows Host 支持（#399）](https://github.com/ZingerLittleBee/Heeler/issues/399)的 Heeler 版本。
@@ -69,7 +69,7 @@ herdr remote-api-bridge --check
 
 预期会输出 herdr 0.9.3 或更高版本，以及桥接标记 `herdr-api-bridge-v1`。参见 [herdr 原生 Windows 指南](https://herdr.dev/docs/windows-beta/)。
 
-在原生 Windows 终端中先启动一次命名会话：
+在普通的原生 Windows 终端中先启动一次命名会话，不要使用以管理员身份打开的终端：
 
 ```powershell
 herdr --session heeler-win-test
@@ -148,7 +148,7 @@ $env:USERPROFILE
 | 标签页 | 设置 |
 | --- | --- |
 | 常规（General） | 名称：`Herdr Server`。运行账户设为 Heeler 使用的 Windows 账户。 |
-| 常规（General） | 选择 **不管用户是否登录都要运行（Run whether user is logged on or not）**，取消勾选 **不存储密码（Do not store password）**。无需勾选使用最高权限运行。 |
+| 常规（General） | 选择 **不管用户是否登录都要运行（Run whether user is logged on or not）**，取消勾选 **不存储密码（Do not store password）**。保持 **使用最高权限运行（Run with highest privileges）** 未勾选。 |
 | 触发器（Triggers） | **启动时（At startup）**，可选延迟 30 秒。 |
 | 操作（Actions） | **启动程序（Start a program）**。程序或脚本：上方输出的完整 `herdr.exe` 路径。 |
 | 操作（Actions） | 添加参数：`--session heeler-win-test server`。起始于：上方输出的账户主目录。 |
@@ -156,6 +156,8 @@ $env:USERPROFILE
 | 设置（Settings） | 取消勾选 **如果任务运行时间超过以下时间，停止任务（Stop the task if it runs longer than）**。当任务已在运行时选择 **请勿启动新实例（Do not start a new instance）**。 |
 
 保存时在弹出的 Windows 对话框中输入该 Windows 账户的密码。这允许计划任务在桌面登录之前就以该账户的配置文件和网络权限运行。如果将来修改了账户密码，请重新保存计划任务并输入新密码。切勿使用 SYSTEM 账户运行，否则会使用不同的账户和配置目录。Microsoft 文档详细说明了[任务登录类型](https://learn.microsoft.com/en-us/windows/win32/taskschd/principal-logontype)和[默认的 72 小时执行时间限制](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-executiontimelimit)。
+
+从 herdr 0.9.4 起，以提升权限运行的服务端（使用最高权限运行，或从以管理员身份打开的终端启动）只接受管理员终端的连接。如需允许普通终端连接，请在启动服务端时加上 `--allow-unelevated-clients`，或在 herdr 配置中设置 `[server] allow_unelevated_clients = true`。
 
 ### 验证已保存的计划任务
 
