@@ -2762,6 +2762,8 @@ actor HeelerSSHTransport: Transport {
                 target: request.target)
             let environment = try await apiEnvironment()
             let channel: any HeelerSSHAttachChannel
+            // Only herdr's direct attach writes the startup probe.
+            let dropsStartupProbe: Bool
             do {
                 if environment.isWindows {
                     try await checkWindowsBridge()
@@ -2780,6 +2782,7 @@ actor HeelerSSHTransport: Transport {
                             streaming: true),
                         timeout: requestTimeout)
                     channel = WindowsTerminalChannel(channel: BootstrappedExecChannel(channel: exec))
+                    dropsStartupProbe = false
                 } else {
                     let command = try Self.attachExecCommand(
                         agentAttachCommand: attachCommand,
@@ -2791,6 +2794,7 @@ actor HeelerSSHTransport: Transport {
                         columns: request.cols,
                         rows: request.rows,
                         timeout: requestTimeout)
+                    dropsStartupProbe = true
                 }
             } catch {
                 if let error = error as? TransportError { throw error }
@@ -2810,7 +2814,8 @@ actor HeelerSSHTransport: Transport {
                     admissionLease: lease,
                     input: input,
                     output: outputGate,
-                    attachCommand: selectedAttachCommand)
+                    attachCommand: selectedAttachCommand,
+                    dropsStartupProbe: dropsStartupProbe)
             }
             return TerminalAttachSession(
                 output: outputGate.makeOutput,
@@ -2948,7 +2953,8 @@ actor HeelerSSHTransport: Transport {
         admissionLease: SSHChannelAdmissionLease,
         input: TerminalAttachInputQueue,
         output: HeelerSSHAttachOutputGate,
-        attachCommand: String
+        attachCommand: String,
+        dropsStartupProbe: Bool
     ) async {
         var failure: TransportError?
         var sawCleanEnd = false
@@ -2958,7 +2964,8 @@ actor HeelerSSHTransport: Transport {
                 channel: channel,
                 input: input,
                 output: output,
-                requestTimeout: requestTimeout)
+                requestTimeout: requestTimeout,
+                dropsStartupProbe: dropsStartupProbe)
             failure = nil
         } catch is CancellationError {
             failure = nil
@@ -2994,11 +3001,17 @@ actor HeelerSSHTransport: Transport {
 
     /// Runs the same input and output pumps used by `runAttachChannel`, while
     /// leaving connection teardown and actor state to its caller.
+    ///
+    /// `dropsStartupProbe` is chosen where the platform branch opens the
+    /// channel: on for a Unix PTY attach, whose herdr direct attach writes
+    /// the probe, and off for the native Windows terminal controller, which
+    /// never does.
     static func runAttachPumps(
         channel: any HeelerSSHAttachChannel,
         input: TerminalAttachInputQueue,
         output: HeelerSSHAttachOutputGate,
-        requestTimeout: Duration
+        requestTimeout: Duration,
+        dropsStartupProbe: Bool
     ) async throws -> Bool {
         let cancellation = HeelerSSHAttachPumpCancellation()
         return try await withThrowingTaskGroup(of: Bool.self) { group in
@@ -3027,6 +3040,7 @@ actor HeelerSSHTransport: Transport {
                 // Remote startup chatter stays off the terminal until the
                 // attach exec prints the bootstrap marker.
                 var gate = AttachBootstrapGate()
+                var startupProbe = HerdrStartupProbeFilter(isEnabled: dropsStartupProbe)
                 // Everything the terminal is handed, so a nonzero exit can
                 // quote the command's last words (#431).
                 var diagnostic = AttachExitDiagnostic()
@@ -3060,7 +3074,7 @@ actor HeelerSSHTransport: Transport {
                             }
                             return true
                         }
-                        yieldAdmitted(gate.admit(bytes))
+                        yieldAdmitted(startupProbe.filter(gate.admit(bytes)))
                     }
                     throw CancellationError()
                 } catch is CancellationError {
