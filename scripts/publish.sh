@@ -87,10 +87,10 @@ notes="$(awk '
     inside { print }
 ' "$CHANGELOG")"
 if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
-    # After a void tag the notes sit in that version's section instead.
+    # After a failed release the notes sit in that version's section instead.
     newest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)"
     if [ -n "$newest_tag" ] && ! gh release view "$newest_tag" >/dev/null 2>&1; then
-        die "[Unreleased] is empty and $newest_tag has no GitHub release. If its build never reached TestFlight, reopen its notes first: docs/guides/releasing.md, \"Cutting the next version after a void tag\"."
+        die "[Unreleased] is empty and $newest_tag has no GitHub release. If its release failed before publishing anything, re-run the failed jobs or re-cut $newest_tag: docs/guides/releasing.md, \"Failure and recovery\"."
     fi
     die "[Unreleased] is empty — there is nothing to release. Entries belong there as they merge."
 fi
