@@ -117,7 +117,12 @@ struct AttachBootstrapGate {
 
 /// Drops herdr's direct-attach startup probe from attach output (#451).
 struct HerdrStartupProbeFilter {
-    static let probe = Data("\u{1B}[?1016$p\u{1B}[c".utf8)
+    /// The probe shapes herdr writes: direct attach's, and its client
+    /// shell's, which adds the kitty keyboard query.
+    static let probes = [
+        Data("\u{1B}[?1016$p\u{1B}[c".utf8),
+        Data("\u{1B}[?1016$p\u{1B}[?u\u{1B}[c".utf8),
+    ]
 
     private var isScanning: Bool
     /// A trailing partial probe, held until the next read completes or
@@ -137,7 +142,7 @@ struct HerdrStartupProbeFilter {
         var data = held
         data.append(bytes)
         held = Data()
-        if let probe = data.range(of: Self.probe) {
+        if let probe = Self.earliestProbe(in: data) {
             isScanning = false
             data.removeSubrange(probe)
             return data
@@ -147,14 +152,20 @@ struct HerdrStartupProbeFilter {
         return Data(data.dropLast(heldCount))
     }
 
+    private static func earliestProbe(in data: Data) -> Range<Data.Index>? {
+        probes.compactMap { data.range(of: $0) }.min { $0.lowerBound < $1.lowerBound }
+    }
+
     /// The length of the longest suffix of `data` that is a proper prefix of
-    /// the probe.
+    /// a probe.
     private static func trailingProbePrefixLength(of data: Data) -> Int {
-        for length in stride(from: min(probe.count - 1, data.count), to: 0, by: -1)
-        where data.suffix(length).elementsEqual(probe.prefix(length)) {
-            return length
-        }
-        return 0
+        probes.map { probe in
+            for length in stride(from: min(probe.count - 1, data.count), to: 0, by: -1)
+            where data.suffix(length).elementsEqual(probe.prefix(length)) {
+                return length
+            }
+            return 0
+        }.max() ?? 0
     }
 }
 

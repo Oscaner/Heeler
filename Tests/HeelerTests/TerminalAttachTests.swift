@@ -3492,6 +3492,26 @@ struct TerminalAttachTests {
         #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
     }
 
+    /// herdr's client shell writes the same probe with the kitty keyboard
+    /// query between its two halves. That shape never reaches the terminal
+    /// either, however the reads split it.
+    @Test func theClientShellsStartupProbeNeverReachesTheTerminal() async throws {
+        typealias Output = HerdrAttachOutput
+        let stream = Data(
+            [
+                AttachBootstrapHandshake.marker, Output.mouseReset, Output.alternateScreen,
+                Output.mouseReset, Output.colorSchemeReportsOff, Output.clientShellProbe,
+                Output.mouseReset, Output.inputModes, Output.firstFrame,
+            ].joined())
+        var mismatches: [String] = []
+        let deliveries = Self.deliveries(of: stream)
+        for delivery in deliveries {
+            let output = try await terminalBytes(from: delivery.reads, dropsStartupProbe: true)
+            if output != Output.herdr093 { mismatches.append(delivery.name) }
+        }
+        #expect(mismatches == [], "\(mismatches.count) of \(deliveries.count): \(mismatches.prefix(3))")
+    }
+
     /// The native Windows terminal controller never writes the probe, so its
     /// pumps run with the option off and pass those bytes through like any
     /// others.
@@ -3630,6 +3650,9 @@ private enum HerdrAttachOutput {
     static let colorSchemeReportsOff = Data("\u{1B}[?2031l".utf8)
     /// herdr 0.9.4's startup probe: a DECRQM for SGR pixel mouse, then DA1.
     static let probe = Data("\u{1B}[?1016$p\u{1B}[c".utf8)
+    /// The probe of herdr's client shell, which also queries the kitty
+    /// keyboard flags.
+    static let clientShellProbe = Data("\u{1B}[?1016$p\u{1B}[?u\u{1B}[c".utf8)
     /// Mouse capture and bracketed paste on, line wrap off.
     static let inputModes = Data(
         ("\u{1B}[?1000h\u{1B}[?1002h\u{1B}[?1003h\u{1B}[?1015h\u{1B}[?1006h"
