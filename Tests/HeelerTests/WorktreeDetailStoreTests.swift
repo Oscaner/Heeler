@@ -369,6 +369,34 @@ struct WorktreeDetailStoreTests {
         #expect(store.canRemove)
     }
 
+    /// herdr sends one code both while another operation runs on the checkout
+    /// and, since 0.9.4, while it re-validates restored Worktrees, so only its
+    /// own message states the cause. Either way the removal can be retried.
+    @Test(arguments: [
+        (
+            "worktree operation is already in progress for this checkout",
+            "herdr couldn't remove this worktree: worktree operation is already in progress for this checkout"
+        ),
+        (
+            "Restored worktree is still loading. Try again shortly.",
+            "herdr couldn't remove this worktree: Restored worktree is still loading. Try again shortly."
+        ),
+    ])
+    func anOperationInProgressShowsHerdrsReason(message: String, copy: String) async throws {
+        let store = try await refusedStore(
+            showChanges: { _ in },
+            error: HerdrAPIError(code: "worktree_operation_in_progress", message: message))
+
+        #expect(store.removalPhase == .failed(copy))
+        #expect(store.refusalCommand == nil)
+        #expect(!store.refusalOffersChanges)
+
+        store.dismissFeedback()
+
+        #expect(store.removalPhase == .idle)
+        #expect(store.canRemove)
+    }
+
     @Test func noChangesWhileRemovingOrWithoutAHandler() async throws {
         var handed: [String] = []
         let store = makeStore(

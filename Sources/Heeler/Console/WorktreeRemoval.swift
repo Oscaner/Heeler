@@ -189,8 +189,6 @@ struct WorktreeRemovalRefusal {
             self.init(message: "herdr couldn't remove this worktree because the workspace is not a linked worktree.")
         case "workspace_not_found":
             self.init(message: "herdr couldn't remove this worktree because the workspace is no longer on the Host.")
-        case "worktree_operation_in_progress":
-            self.init(message: "herdr is already changing a worktree on this Host. Wait a moment, then retry.")
         default:
             self.init(message: "herdr couldn't remove this worktree: \(serverMessage)")
         }
