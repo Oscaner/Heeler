@@ -1120,13 +1120,10 @@ actor HeelerSSHTransport: Transport {
     /// answers `agent_pane_busy` while a startup command holds the pane's
     /// foreground, and herdr 0.9.4 on macOS refuses a launch line longer than
     /// the terminal's canonical input limit until the shell's line editor
-    /// starts. Only "canonical mode" marks that refusal: its sibling "could
-    /// not determine canonical input capacity" is final, like every other
-    /// `agent_start_input_failed` message.
+    /// starts (`HerdrAPIError.isCanonicalModeRefusal`). Every other
+    /// `agent_start_input_failed` message is final.
     static func isShellReadinessRefusal(_ error: HerdrAPIError) -> Bool {
-        error.code == "agent_pane_busy"
-            || (error.code == "agent_start_input_failed"
-                && error.message.contains("canonical mode"))
+        error.code == "agent_pane_busy" || error.isCanonicalModeRefusal
     }
 
     func closePane(_ params: PaneTarget) async throws {

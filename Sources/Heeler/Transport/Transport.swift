@@ -1138,4 +1138,13 @@ struct HerdrAPIError: Error, Sendable, Equatable {
     /// without pinning the code's JSON type.
     let code: String
     let message: String
+
+    /// herdr 0.9.4's macOS refusal of an `agent.start` whose launch line is
+    /// longer than the terminal's canonical input limit while the fresh
+    /// shell is still in canonical mode. Only "canonical mode" marks it: the
+    /// sibling "could not determine canonical input capacity" is a different
+    /// failure.
+    var isCanonicalModeRefusal: Bool {
+        code == "agent_start_input_failed" && message.contains("canonical mode")
+    }
 }
