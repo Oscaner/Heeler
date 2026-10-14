@@ -130,8 +130,10 @@ never moved or deleted, and a fix ships as the next version.
 | `archive`, upload step or later | Check TestFlight first. If the build did not arrive, re-run failed jobs. If it arrived, do not re-run anything: `archive` would upload the same build number again, which App Store Connect rejects, and `release` stays skipped while `archive` reads as failed. Create the GitHub release by hand instead (below). |
 | `release` | Re-run failed jobs; the job skips creating a release that already exists. |
 
-Use **Re-run failed jobs**, not "Re-run all jobs", so the tests are not
-repeated needlessly.
+Use **Re-run failed jobs** (`gh run rerun <run-id> --failed`), not "Re-run
+all jobs", so the tests are not repeated needlessly. Re-run only the run
+that the current tag started: after a re-cut, an older run of the same tag
+stops before its upload, because the tag no longer names its commit.
 
 To create the GitHub release by hand, take the notes from the run's
 `release-notes` artifact:

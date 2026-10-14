@@ -240,6 +240,19 @@ jobs:
           xcrun altool --validate-app -f "$RUNNER_TEMP/export/Heeler.ipa" -t ios \
             --apiKey "$ASC_API_KEY_ID" --apiIssuer "$ASC_API_ISSUER_ID"
 
+      # A re-cut deletes an unpublished tag and creates it again on a fixed
+      # commit. A re-run keeps its original commit, and re-running failed jobs
+      # skips meta's tag check, so an older run must not upload under the tag.
+      - name: Check the tag still names this commit
+        if: env.MODE == 'release'
+        env:
+          TAG: ${{ needs.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          tagged="$(git ls-remote origin "refs/tags/$TAG^{}" | cut -f1)"
+          [[ "$tagged" == "$GITHUB_SHA" ]] \
+            || { echo "::error::$TAG names ${tagged:-no commit}, not $GITHUB_SHA: this run is stale, so re-run the one $TAG started"; exit 1; }
+
       - name: Upload to App Store Connect
         if: env.MODE == 'release'
         env:
