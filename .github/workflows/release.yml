@@ -251,7 +251,7 @@ jobs:
           set -euo pipefail
           tagged="$(git ls-remote origin "refs/tags/$TAG^{}" | cut -f1)"
           [[ "$tagged" == "$GITHUB_SHA" ]] \
-            || { echo "::error::$TAG names ${tagged:-no commit}, not $GITHUB_SHA: this run is stale, so re-run the one $TAG started"; exit 1; }
+            || { echo "::error::$TAG now names ${tagged:-nothing}, not $GITHUB_SHA: a re-cut replaced or removed the tag, so this run must not upload. Re-run only the run the current $TAG started."; exit 1; }
 
       - name: Upload to App Store Connect
         if: env.MODE == 'release'
