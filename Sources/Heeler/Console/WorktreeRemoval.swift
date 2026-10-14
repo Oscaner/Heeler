@@ -172,15 +172,22 @@ struct WorktreeRemovalRefusal {
         switch code {
         case Self.forceRequiredCode
         where serverMessage.range(of: Self.submodulesRefusal, options: .caseInsensitive) != nil:
-            let command = HerdrCommandLine.render(
-                session: sessionName,
-                arguments: [
-                    "worktree", "remove", "--workspace", request.identity.workspaceID, "--force",
-                ])
-            self.init(
-                message: "herdr couldn't remove this worktree because it has checked-out submodules. Forcing the removal deletes \(request.identity.checkoutPath) and any uncommitted changes in it, so check its Changes first. To force it, run on the Host: \(command)",
-                offersChanges: true,
-                command: command)
+            let workspaceID = request.identity.workspaceID
+            let warning =
+                "herdr couldn't remove this worktree because it has checked-out submodules. Forcing the removal deletes \(request.identity.checkoutPath) and any uncommitted changes in it, so check its Changes first."
+            if HerdrCommandLine.readsAsGlobalOption(workspaceID) {
+                // herdr would take this id as its own option, so no command
+                // can hand it to `--workspace`.
+                self.init(message: warning, offersChanges: true)
+            } else {
+                let command = HerdrCommandLine.render(
+                    session: sessionName,
+                    arguments: ["worktree", "remove", "--workspace", workspaceID, "--force"])
+                self.init(
+                    message: "\(warning) To force it, run on the Host: \(command)",
+                    offersChanges: true,
+                    command: command)
+            }
         case Self.forceRequiredCode:
             self.init(
                 message: "herdr couldn't remove this worktree because it has modified or untracked files. Commit or discard those changes on the Host, then retry.",
