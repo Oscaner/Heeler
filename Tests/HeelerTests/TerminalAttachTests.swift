@@ -3798,8 +3798,9 @@ struct TerminalAttachTests {
         return bytes
     }
 
-    /// herdr 0.9.4's preamble up to the client shell's probe, which stops one
-    /// byte short: the 15 bytes the filter holds back, at the end.
+    /// herdr 0.9.4's preamble up to where its probe starts, then the client
+    /// shell's longer probe without its last byte: the 15 bytes the filter
+    /// holds back, left at the end.
     private static let sessionEndingInAPartialProbe =
         HerdrAttachOutput.mouseReset + HerdrAttachOutput.alternateScreen
         + HerdrAttachOutput.mouseReset + HerdrAttachOutput.colorSchemeReportsOff
@@ -3876,11 +3877,11 @@ private actor FakeAttachPTYChannel: HeelerSSHAttachChannel {
     }
 }
 
-/// herdr's direct-attach output after Heeler's bootstrap marker, recorded
-/// through Heeler's attach command against isolated servers: herdr 0.9.4's
-/// `terminal attach` and `agent attach`, and herdr 0.9.3's `terminal attach`
-/// (#451). The preambles match those recordings byte for byte up to the
-/// first frame's text, which is made up.
+/// herdr's direct-attach output after Heeler's bootstrap marker (#451). The
+/// preambles match recordings made through Heeler's attach command against
+/// isolated servers, herdr 0.9.4's `terminal attach` and `agent attach` and
+/// herdr 0.9.3's `terminal attach`, byte for byte up to the first frame's
+/// text, which is made up.
 private enum HerdrAttachOutput {
     /// Every mouse mode off. herdr writes it three times on the way in.
     static let mouseReset = Data(
