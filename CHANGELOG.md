@@ -87,13 +87,28 @@ Entries reference the pull request that made the change.
   generic "Agent update" notifications. (#445)
 - Close Agent and Close Terminal now ask from the More button you tapped,
   instead of a bubble floating in the middle of the terminal. (#440)
+- New Agent with long Arguments on a macOS Host running herdr 0.9.4 now
+  waits for the new shell to take the launch command instead of failing at
+  once and removing what it created. If the shell never takes it, as with
+  dash, New Agent asks you to shorten the Arguments. (#458)
 - When attaching to an Agent or terminal on a macOS or Linux Host fails
   because herdr exits, the message now quotes herdr's own error, such as an
   older herdr earlier on the SSH PATH losing its connection to the server,
   instead of only an exit status. (#443)
+- On a macOS or Linux Host with herdr 0.9.4, opening an Agent or a Shell
+  Terminal over a slow connection no longer types stray characters into
+  the Agent or shell: Heeler no longer answers the terminal query herdr
+  sends when it attaches, whose late answer herdr passed on as typing.
+  (#458)
 - Start Tailscale browser authorization with one Sign In button and reconnect automatically after returning from the browser. (#426)
 - Show Connected and remove the sign-in prompt when Tailscale browser authorization completes, without requiring another Connect. (#426)
 - Open a Host's connection checks after adding it from an overlay network's peer list, so its SSH host key can be trusted on the first connection. (#426)
+- Agent cards keep a Host's herdr sidebar fields and Agent order when its
+  herdr sidebar settings use the letta agent, the machine field, field
+  rules, or a UTF-8 byte-order mark, instead of falling back to herdr's
+  defaults. Update the Heeler plugin to 0.6.1 on each Host. Sync from
+  plugin no longer blames herdr when the plugin can't read a Host's
+  settings. (#458)
 - Type Korean straight into the terminal with the iOS Korean keyboard:
   syllables now compose as typed instead of arriving as repeated or loose
   jamo ("한글 지원", not "한한한글글글글지지지원"), with the software keyboard
