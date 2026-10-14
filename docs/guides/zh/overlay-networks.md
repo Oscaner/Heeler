@@ -1,4 +1,4 @@
-<!-- Translated from docs/guides/overlay-networks.md at 2b014a24 -->
+<!-- Translated from docs/guides/overlay-networks.md at 6a68aa1b -->
 
 # 通过 Overlay Network 连接 Heeler
 
@@ -59,7 +59,7 @@ Heeler 会直接加入 Overlay Network，因此手机上无需安装 Tailscale�
    echo 'PASTE_THE_LINE_HERE' >> ~/.ssh/authorized_keys
    ```
 
-   如果使用 **RSA Key**，请用 **Copy RSA Public Key** 执行相同操作。如果使用 **Password**，则使用你的 Mac 登录密码。通过[二维码配对（QR pairing）](../../../README.md#adding-a-machine)生成的密钥同样可用。
+   如果使用 **RSA Key**，请用 **Copy RSA Public Key** 执行相同操作。如果使用 **Password**，则使用你的 Mac 登录密码。通过[扫码配对](pairing.md)添加的密钥同样可用。
 
 ## 从 Heeler 连接
 
