@@ -263,15 +263,18 @@ struct HeelerPluginPresentation: Equatable {
                     notes: missing))
         }
         if !installation.isEnabled {
-            // Install registers the plugin enabled, so one command does both.
+            // A reinstall keeps a disabled plugin disabled on herdr 0.9.4,
+            // while 0.9.3 turned it back on, and the Host's herdr command
+            // line decides, not its server. So the update is followed by
+            // enable, which also succeeds on an enabled plugin.
             if isOutdated, !isLocal, let parsed {
                 return (
                     "\(version) · Disabled",
                     Notice(
                         tone: .warning,
                         message: "The Heeler plugin is disabled and out of date: \(parsed) → "
-                            + "\(bundled). Installing the update also turns it on:",
-                        commands: [installCommand],
+                            + "\(bundled). Update it, then turn it on:",
+                        commands: [installCommand, enableCommand(installation.pluginID, session: "")],
                         notes: missing))
             }
             return (

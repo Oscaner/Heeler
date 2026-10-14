@@ -227,15 +227,20 @@ struct HeelerPluginPresentationTests {
         #expect(outdated.commands == ["herdr plugin uninstall herdr-mobile.pairing", install])
     }
 
-    /// Install registers the plugin enabled, so one command updates and
-    /// turns it on.
-    @Test func aDisabledOutdatedPluginIsReinstalledInOneStep() throws {
+    /// herdr 0.9.4 keeps a disabled plugin disabled when it is reinstalled,
+    /// while 0.9.3 turned it back on, so the update is always followed by
+    /// the enable command.
+    @Test func aDisabledOutdatedPluginIsUpdatedThenTurnedOn() throws {
         let presentation = HeelerPluginPresentation(
             .installed(HeelerPluginInstallation(version: "0.5.0", isEnabled: false)),
             bundled: PluginVersion(0, 6, 0))
         #expect(presentation.value == "0.5.0 · Disabled")
         let notice = try #require(presentation.notice)
-        #expect(notice.commands == [install])
+        #expect(
+            notice.message
+                == "The Heeler plugin is disabled and out of date: 0.5.0 → 0.6.0. "
+                + "Update it, then turn it on:")
+        #expect(notice.commands == [install, "herdr plugin enable heeler"])
         #expect(notice.notes.count == 1)
         let linked = try #require(
             HeelerPluginPresentation(
