@@ -440,6 +440,16 @@ behavior under an unchanged number, as 0.3.0 and 0.4.0 did.
   Hosts that share a server; after upgrading again, re-check each Host's
   Notifications toggle.
 
+### Updating to 0.6.1
+
+- Plugin 0.6.0 rejected some sidebar settings that herdr 0.9 accepts
+  (`letta`, `machine`, token `rules`, a UTF-8 byte-order mark) and wrote the
+  default layout and sort with a diagnostic. After the update, the next
+  refresh, at server start or the next Agent Status transition, replaces that
+  snapshot without a config edit.
+- A Host whose rows Sync from plugin replaced while 0.6.0 rejected its
+  settings keeps the default fields it saved; sync it again.
+
 ## Sidebar layout snapshot (v1)
 
 `src/sidebar-hook.js` runs through `[[startup]]` at server start and live
@@ -547,7 +557,11 @@ in Heeler.
 `hermes`, `kilo`, `qodercli`, `qwen`, `letta`, `maki`, and `muse`. Aliases,
 case variations, and unknown ids are invalid. A future herdr release that
 adds canonical ids, built-in agent tokens, styled-token keys, or rule fields
-requires updating this validation and the shared vectors together.
+requires updating this validation and the shared vectors together. The
+validator follows herdr's grammar for these fields but is not a complete copy
+of it: herdr also accepts a few unusual shapes that the plugin rejects with
+`invalid_schema`, such as `ui = []`, `agents = []` under `[ui.sidebar]`, or a
+rule written as an array (`rules = [["x"]]`).
 
 Missing files or fields use the snapshot defaults: sort `spaces`, `row_gap: 0`,
 `rows: [[{"token":"state_icon"},{"token":"workspace"},{"token":"tab"}],
@@ -596,7 +610,10 @@ Its `valid` and `invalid` arrays contain `name`, `toml`, and a full expected
 `snapshot`; invalid entries also contain the expected `error` diagnostic.
 Node asserts normalized layout equality and whole-layout fallback. Swift
 consumes the structured snapshots to assert decoded layout, defaults, and
-diagnostics; it does not parse TOML. Change the contract and vectors together.
+diagnostics, expecting the app to drop token names it does not model, such as
+`machine`, and to ignore `rules`; it does not parse TOML. A U+FEFF in a
+vector is written as the JSON escape `\ufeff`, so it stays visible. Change the
+contract and vectors together.
 
 ## Notify hook
 
