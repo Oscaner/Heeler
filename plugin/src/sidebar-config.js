@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { parse, TomlError } from "smol-toml";
 
 const BUILTIN_TOKENS = new Set([
@@ -195,7 +196,11 @@ function writeAtomic(path, contents) {
   }
 }
 
-/** Refresh on source path/existence/mtime changes. Return the current snapshot. */
+/**
+ * Refresh on source path/existence/mtime changes. Return the current snapshot.
+ * A snapshot with diagnostics is checked again, because an older plugin may
+ * have rejected what this one accepts, and rewritten only when its result changes.
+ */
 export function refreshSidebarSnapshot(configDir, { env = process.env, now = Date.now } = {}) {
   const path = resolveConfigPath(env);
   const destination = join(configDir, "sidebar.json");
@@ -207,13 +212,16 @@ export function refreshSidebarSnapshot(configDir, { env = process.env, now = Dat
   } catch (error) {
     readError = error.code !== "ENOENT";
   }
+  let previous;
   if (!readError) {
     try {
-      const previous = JSON.parse(readFileSync(destination, "utf8"));
-      if (previous.v === 1 && previous.source?.path === path &&
-          previous.source.found === source.found && previous.source.mtime_ms === source.mtime_ms &&
-          Array.isArray(previous.sidebar?.agents?.rows) && Array.isArray(previous.diagnostics) &&
-          !previous.diagnostics.includes("read_error")) return previous;
+      const cached = JSON.parse(readFileSync(destination, "utf8"));
+      if (cached.v === 1 && cached.source?.path === path &&
+          cached.source.found === source.found && cached.source.mtime_ms === source.mtime_ms &&
+          Array.isArray(cached.sidebar?.agents?.rows) && Array.isArray(cached.diagnostics)) {
+        if (cached.diagnostics.length === 0) return cached;
+        previous = cached;
+      }
     } catch { /* Missing or corrupt snapshots are replaced. */ }
   }
   let config = defaults(readError ? ["read_error"] : []);
@@ -229,6 +237,10 @@ export function refreshSidebarSnapshot(configDir, { env = process.env, now = Dat
         config = defaults(["read_error"]);
       }
     }
+  }
+  if (previous !== undefined) {
+    const { v, generated_at, ...result } = previous;
+    if (isDeepStrictEqual(result, { source, ...config })) return previous;
   }
   const snapshot = { v: 1, generated_at: Math.floor(now() / 1000), source, ...config };
   mkdirSync(configDir, { recursive: true, mode: 0o700 });

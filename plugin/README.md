@@ -561,10 +561,13 @@ invocation.
 
 Both `notify-hook.js` and `activity-hook.js` refresh at the beginning of
 `main()`, before debounce, dedupe, or no-device exits. An unchanged source
-path, existence, and `mtimeMs` reuses the snapshot without reparsing or
-rewriting. A missing/corrupt snapshot is rebuilt. Changes that preserve the
-source mtime are not detected. Snapshot write failures are logged but do not
-prevent the event hooks from delivering notifications.
+path, existence, and `mtimeMs` reuses a snapshot without diagnostics, without
+reparsing or rewriting. A snapshot with diagnostics is parsed again at every
+refresh, so an updated plugin replaces an older plugin's rejection without a
+config edit, and it is rewritten only when the result changes. A
+missing/corrupt snapshot is rebuilt. Other changes that preserve the source
+mtime are not detected. Snapshot write failures are logged but do not prevent
+the event hooks from delivering notifications.
 
 There is no watcher and config reload does not run startup hooks. A config
 edit with no Agent Status transition is picked up at the next transition or
