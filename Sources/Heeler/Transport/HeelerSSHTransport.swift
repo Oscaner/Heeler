@@ -7,12 +7,16 @@ private struct HeelerSSHSessionListResponse: Decodable {
     let sessions: [HerdrSession]
 }
 
-private enum HeelerSSHAttachPumpError: Error, Sendable {
-    case input(String)
-    case output(String)
+enum HeelerSSHAttachPumpError: Error, Sendable {
+    /// The underlying failure, left unmapped so the Attach reader can apply
+    /// the Transport's own classification.
+    case input(any Error)
+    case output(any Error)
     /// Remote process exited nonzero. Distinct from a channel I/O failure so
     /// Attach can map a bare-`herdr` exit 127 onto the PATH problem (#206).
-    case remoteExit(Int32)
+    /// `output` is the line the command last printed outside the alternate
+    /// screen (#431).
+    case remoteExit(Int32, output: String?)
 }
 
 /// The live PTY operations used by the Attach pumps. `SSHPTYChannel` is the
@@ -1233,6 +1237,12 @@ actor HeelerSSHTransport: Transport {
             decoding: OkResponse.self)
     }
 
+    /// Starts the agent in a fresh pane, resending the same request while
+    /// herdr answers that the pane's shell is not ready for it yet: busy
+    /// while a startup command runs, or, on a macOS Host, a launch line too
+    /// long for the terminal before the shell's line editor starts. Both
+    /// refusals share one budget, and the last one surfaces unchanged when
+    /// it runs out, so the caller still removes what it created.
     private func startAgentAwaitingShell(
         _ launch: AgentLaunchRequest,
         paneID: String
@@ -1249,7 +1259,7 @@ actor HeelerSSHTransport: Transport {
                     method: "agent.start",
                     params: params,
                     decoding: AgentStartedResponse.self)
-            } catch let error as HerdrAPIError where error.code == "agent_pane_busy" {
+            } catch let error as HerdrAPIError where Self.isShellReadinessRefusal(error) {
                 guard ContinuousClock.now + Self.shellReadinessRetryDelay < deadline else {
                     throw error
                 }
@@ -1260,6 +1270,17 @@ actor HeelerSSHTransport: Transport {
 
     private static let shellReadinessBudget: Duration = .seconds(10)
     private static let shellReadinessRetryDelay: Duration = .milliseconds(500)
+
+    /// Whether an `agent.start` refusal means the fresh pane's shell is not
+    /// ready for the launch yet, so the same request is worth resending: herdr
+    /// answers `agent_pane_busy` while a startup command holds the pane's
+    /// foreground, and herdr 0.9.4 on macOS refuses a launch line longer than
+    /// the terminal's canonical input limit until the shell's line editor
+    /// starts (`HerdrAPIError.isCanonicalModeRefusal`). Every other
+    /// `agent_start_input_failed` message is final.
+    static func isShellReadinessRefusal(_ error: HerdrAPIError) -> Bool {
+        error.code == "agent_pane_busy" || error.isCanonicalModeRefusal
+    }
 
     func closePane(_ params: PaneTarget) async throws {
         _ = try await request(
@@ -2540,10 +2561,31 @@ actor HeelerSSHTransport: Transport {
     }
 
     private func mapOperationError(_ error: any Error) async -> TransportError {
-        if error as? SSHError == .connectionInvalidated {
+        noteOperationFailure(error)
+        return Self.map(error)
+    }
+
+    /// A post-connect failure's effect on the connection itself, apart from
+    /// how the failure is classified.
+    private func noteOperationFailure(_ error: any Error) {
+        if Self.invalidatesConnection(error) {
             connected = false
         }
-        return Self.map(error)
+    }
+
+    /// Whether a post-connect failure means the SSH connection is gone. An
+    /// Attach pump I/O failure is judged by the error it wraps, so a dead
+    /// connection under a live terminal marks the Transport disconnected
+    /// like any other operation; a remote exit never does.
+    static func invalidatesConnection(_ error: any Error) -> Bool {
+        switch error as? HeelerSSHAttachPumpError {
+        case .input(let underlying), .output(let underlying):
+            invalidatesConnection(underlying)
+        case .remoteExit:
+            false
+        case nil:
+            error as? SSHError == .connectionInvalidated
+        }
     }
 
     private static func map(_ error: any Error) -> TransportError {
@@ -2893,6 +2935,10 @@ actor HeelerSSHTransport: Transport {
                 target: request.target)
             let environment = try await apiEnvironment()
             let channel: any HeelerSSHAttachChannel
+            // herdr's direct attach writes a startup probe (#451). The Windows
+            // terminal controller never sets the terminal up, so only the Unix
+            // PTY attach drops it.
+            let dropsStartupProbe: Bool
             do {
                 if environment.isWindows {
                     try await checkWindowsBridge()
@@ -2911,6 +2957,7 @@ actor HeelerSSHTransport: Transport {
                             streaming: true),
                         timeout: requestTimeout)
                     channel = WindowsTerminalChannel(channel: BootstrappedExecChannel(channel: exec))
+                    dropsStartupProbe = false
                 } else {
                     let command = try Self.attachExecCommand(
                         agentAttachCommand: attachCommand,
@@ -2922,6 +2969,7 @@ actor HeelerSSHTransport: Transport {
                         columns: request.cols,
                         rows: request.rows,
                         timeout: requestTimeout)
+                    dropsStartupProbe = true
                 }
             } catch {
                 if let error = error as? TransportError { throw error }
@@ -2941,7 +2989,8 @@ actor HeelerSSHTransport: Transport {
                     admissionLease: lease,
                     input: input,
                     output: outputGate,
-                    attachCommand: selectedAttachCommand)
+                    attachCommand: selectedAttachCommand,
+                    dropsStartupProbe: dropsStartupProbe)
             }
             return TerminalAttachSession(
                 output: outputGate.makeOutput,
@@ -3033,12 +3082,43 @@ actor HeelerSSHTransport: Transport {
 
     /// Maps a remote attach exit onto the Transport taxonomy. Exit 127 is
     /// `herdrBinaryNotFound` only when the exec'd command is still a bare
-    /// `herdr` word; injectable scripts keep the generic channel failure.
+    /// `herdr` word; injectable scripts keep the generic exit with its output.
     static func attachChannelFailure(
-        exitStatus: Int32, attachCommand: String
+        exitStatus: Int32, output: String? = nil, attachCommand: String
     ) -> TransportError {
         HerdrHostPath.missingBinaryError(exitStatus: exitStatus, command: attachCommand)
-            ?? .channelFailed(detail: "attach channel: remote exit status \(exitStatus)")
+            ?? .attachExited(status: exitStatus, output: output)
+    }
+
+    /// Classifies a failed `runAttachPumps`. A remote exit keeps its status
+    /// and output. An I/O failure that is already a `TransportError` (the
+    /// Windows controller's own reason, say) passes through unchanged; an
+    /// `SSHError` takes the Transport's operation mapping. An SSH failure
+    /// that mapping leaves unclassified names only the side that failed: its
+    /// case name is no explanation, and the detail reaches the user.
+    static func attachFailure(_ error: any Error, attachCommand: String) -> TransportError {
+        let underlying: any Error
+        let prefix: String
+        switch error as? HeelerSSHAttachPumpError {
+        case .remoteExit(let status, let output):
+            return attachChannelFailure(
+                exitStatus: status, output: output, attachCommand: attachCommand)
+        case .input(let inputError):
+            (underlying, prefix) = (inputError, "attach input")
+        case .output(let outputError):
+            (underlying, prefix) = (outputError, "attach channel")
+        case nil:
+            (underlying, prefix) = (error, "attach channel")
+        }
+        if let underlying = underlying as? TransportError { return underlying }
+        guard underlying is SSHError else {
+            return .channelFailed(detail: "\(prefix): \(String(describing: underlying))")
+        }
+        let mapped = map(underlying)
+        if case .channelFailed = mapped {
+            return .channelFailed(detail: "\(prefix) failed")
+        }
+        return mapped
     }
 
     private func runAttachChannel(
@@ -3048,23 +3128,19 @@ actor HeelerSSHTransport: Transport {
         admissionLease: SSHChannelAdmissionLease,
         input: TerminalAttachInputQueue,
         output: HeelerSSHAttachOutputGate,
-        attachCommand: String
+        attachCommand: String,
+        dropsStartupProbe: Bool
     ) async {
         var failure: TransportError?
         var sawCleanEnd = false
-        var pumpFailure: HeelerSSHAttachPumpError?
 
         do {
-            do {
-                sawCleanEnd = try await Self.runAttachPumps(
-                    channel: channel,
-                    input: input,
-                    output: output,
-                    requestTimeout: requestTimeout)
-            } catch let error as HeelerSSHAttachPumpError {
-                pumpFailure = error
-                throw error
-            }
+            sawCleanEnd = try await Self.runAttachPumps(
+                channel: channel,
+                input: input,
+                output: output,
+                requestTimeout: requestTimeout,
+                dropsStartupProbe: dropsStartupProbe)
             failure = nil
         } catch is CancellationError {
             failure = nil
@@ -3072,17 +3148,8 @@ actor HeelerSSHTransport: Transport {
             if Task.isCancelled || sawCleanEnd {
                 failure = nil
             } else {
-                switch pumpFailure {
-                case .input(let detail):
-                    failure = .channelFailed(detail: "attach input: \(detail)")
-                case .output(let detail):
-                    failure = .channelFailed(detail: "attach channel: \(detail)")
-                case .remoteExit(let status):
-                    failure = Self.attachChannelFailure(
-                        exitStatus: status, attachCommand: attachCommand)
-                case nil:
-                    failure = .channelFailed(detail: "attach channel: \(error)")
-                }
+                noteOperationFailure(error)
+                failure = Self.attachFailure(error, attachCommand: attachCommand)
             }
         }
 
@@ -3109,11 +3176,17 @@ actor HeelerSSHTransport: Transport {
 
     /// Runs the same input and output pumps used by `runAttachChannel`, while
     /// leaving connection teardown and actor state to its caller.
+    ///
+    /// `dropsStartupProbe` is chosen where the platform branch opens the
+    /// channel: on for a Unix PTY attach, whose herdr direct attach writes
+    /// the probe, and off for the native Windows terminal controller, which
+    /// never does.
     static func runAttachPumps(
         channel: any HeelerSSHAttachChannel,
         input: TerminalAttachInputQueue,
         output: HeelerSSHAttachOutputGate,
-        requestTimeout: Duration
+        requestTimeout: Duration,
+        dropsStartupProbe: Bool
     ) async throws -> Bool {
         let cancellation = HeelerSSHAttachPumpCancellation()
         return try await withThrowingTaskGroup(of: Bool.self) { group in
@@ -3135,16 +3208,28 @@ actor HeelerSSHTransport: Transport {
                 } catch {
                     guard !Task.isCancelled else { throw CancellationError() }
                     cancellation.requestDiagnosticFlush()
-                    throw HeelerSSHAttachPumpError.input(String(describing: error))
+                    throw HeelerSSHAttachPumpError.input(error)
                 }
             }
             group.addTask {
                 // Remote startup chatter stays off the terminal until the
                 // attach exec prints the bootstrap marker.
                 var gate = AttachBootstrapGate()
+                var startupProbe = HerdrStartupProbeFilter(isEnabled: dropsStartupProbe)
+                // Everything the terminal is handed, so a nonzero exit can
+                // quote the command's last words (#431).
+                var diagnostic = AttachExitDiagnostic()
                 func yieldAdmitted(_ bytes: Data) {
                     guard !bytes.isEmpty else { return }
+                    diagnostic.record(bytes)
                     output.yield(bytes)
+                }
+                // Hands over whatever is still withheld when the stream ends,
+                // whichever way it ends, before a failure quotes the
+                // diagnostic. Only explicit cancellation skips it.
+                func releaseWithheld() {
+                    yieldAdmitted(gate.flush())
+                    yieldAdmitted(startupProbe.finish())
                 }
                 do {
                     while !Task.isCancelled {
@@ -3158,28 +3243,28 @@ actor HeelerSSHTransport: Transport {
                         }
                         guard let bytes else {
                             let status = try await channel.exitStatus(timeout: requestTimeout)
+                            releaseWithheld()
                             guard status == 0 else {
-                                yieldAdmitted(gate.flush())
-                                throw HeelerSSHAttachPumpError.remoteExit(status)
+                                throw HeelerSSHAttachPumpError.remoteExit(
+                                    status, output: diagnostic.line)
                             }
-                            yieldAdmitted(gate.flush())
                             return true
                         }
-                        yieldAdmitted(gate.admit(bytes))
+                        yieldAdmitted(startupProbe.filter(gate.admit(bytes)))
                     }
                     throw CancellationError()
                 } catch is CancellationError {
                     // A sibling input failure requests one diagnostic flush;
                     // explicit cancellation leaves the request false.
                     if cancellation.shouldFlushDiagnostic {
-                        yieldAdmitted(gate.flush())
+                        releaseWithheld()
                     }
                     throw CancellationError()
                 } catch let error as HeelerSSHAttachPumpError {
                     throw error
                 } catch {
-                    yieldAdmitted(gate.flush())
-                    throw HeelerSSHAttachPumpError.output(String(describing: error))
+                    releaseWithheld()
+                    throw HeelerSSHAttachPumpError.output(error)
                 }
             }
             defer {

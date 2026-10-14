@@ -40,6 +40,8 @@ final class HeelerAppModel {
     let relaySettings: NotificationRelaySettings
     let bannerStore: AgentNotificationBannerStore
     let liveActivities: HostLiveActivityCoordinator
+    /// What a confirmed Host removal cleans up beyond the catalog (#414).
+    let hostRemoval: HostRemovalDependencies
     let activity: AppActivityCoordinator
 
     private var isStarted = false
@@ -128,6 +130,9 @@ final class HeelerAppModel {
             },
             rowLayout: { [weak console] id in console?.rowLayout(for: id) })
         self.liveActivities = liveActivities
+        hostRemoval = HostRemovalDependencies.app(
+            console: console, notificationPreferences: notificationPreferences,
+            liveActivities: liveActivities)
         // A Live Activity write that found no entry stays dirty; a fresh
         // registration is its cue to retry.
         notificationPreferences.onRegistered = { [weak liveActivities] _ in

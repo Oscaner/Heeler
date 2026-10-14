@@ -44,6 +44,8 @@ struct ContentView: View {
         .environment(app.overlayNetworks)
         // Settings › Overlay Networks adds a Host from a network's peer.
         .environment(app.hostStore)
+        // The Hosts list's removal reaches app-wide state.
+        .environment(\.hostRemovalDependencies, app.hostRemoval)
         .environment(\.sceneWindow, window)
         .environment(
             \.agentSceneRouting,

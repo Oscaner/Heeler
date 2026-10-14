@@ -16,6 +16,35 @@ Entries reference the pull request that made the change.
   cards, lists background agents and Workflows, and stays readable offline
   from its cache. Sending checks the Agent's input box before and after and
   never resends. (#425)
+
+### Fixed
+
+- Chat restores a saved conversation when a live Agent temporarily omits its
+  session ID, including while the local directory is still loading. (#425)
+- Chat keeps disclosure headers in place while expanding downward, including
+  short conversations, and aligns tool icons with the first title line. (#425)
+- Chat preloads conversations after connecting, restores saved conversations
+  before contacting the Host, and keeps them available from the Agent list
+  after an offline relaunch while reconnecting. (#425)
+- Chat previews recorded image files on long press, opens them with zoom, and
+  aligns tool icons with their titles above subtitles. (#425)
+- Chat groups each Subagent's activity into one card per turn, with
+  a Lucide Bot icon beside its title and expandable history, and no longer marks message exchanges
+  as completed work. (#425)
+- Chat explains a missing session ID without incorrectly suggesting that the
+  integration needs installing, and shows failed session queries with a retry
+  while keeping messages already loaded. (#425)
+
+## [0.1.14] - 2026-10-15
+
+### Added
+
+- Read and search Heeler's connection guides in English or Simplified Chinese
+  on the new documentation site, with navigation for overlay networks, Jump
+  Hosts, Host Routes, and Windows setup, and copy any guide as Markdown. (#442)
+- Group the Agents list By Workspace from its presentation menu. Collapse
+  Workspaces to focus on one project while keeping status counts visible;
+  the choice and collapsed Workspaces persist across launches. (refs #364)
 - Return to the Console from an Agent's More menu. Back to Console does
   what swiping in from the left edge does, so the way back no longer
   depends on knowing the gesture; the Agent keeps running on the Host. (#439)
@@ -80,26 +109,56 @@ Entries reference the pull request that made the change.
 
 ### Fixed
 
-- Chat restores a saved conversation when a live Agent temporarily omits its
-  session ID, including while the local directory is still loading. (#425)
-- Chat keeps disclosure headers in place while expanding downward, including
-  short conversations, and aligns tool icons with the first title line. (#425)
-- Chat preloads conversations after connecting, restores saved conversations
-  before contacting the Host, and keeps them available from the Agent list
-  after an offline relaunch while reconnecting. (#425)
-- Chat previews recorded image files on long press, opens them with zoom, and
-  aligns tool icons with their titles above subtitles. (#425)
-- Chat groups each Subagent's activity into one card per turn, with
-  a Lucide Bot icon beside its title and expandable history, and no longer marks message exchanges
-  as completed work. (#425)
-- Chat explains a missing session ID without incorrectly suggesting that the
-  integration needs installing, and shows failed session queries with a retry
-  while keeping messages already loaded. (#425)
+- Removing a Host now ends its Live Activity and forgets its Live Activity
+  setting, and Heeler no longer keeps retrying Live Activity updates for the
+  removed Host. (#444)
+- Removing a connected Host now also stops its notifications to this
+  device: Heeler first takes this device off the Host's notification list,
+  then deletes the Host's Notification Key along with its saved password. If
+  the Host isn't connected, the confirmation says so and suggests connecting
+  first; a Host removed without being reached may keep sending this device
+  generic "Agent update" notifications. (#445)
+- When a Host's Heeler plugin is turned off, the steps on the Host's page
+  now always end with the command that turns it back on: after updating an
+  outdated plugin, which herdr 0.9.4 leaves off, and after removing a copy
+  left under the plugin's former name. That command names the Host's herdr
+  session, so it works when the default session isn't running.
+  Notification settings now say the plugin is missing or turned off and
+  point to the Host's page. (#458)
 - Close Agent and Close Terminal now ask from the More button you tapped,
   instead of a bubble floating in the middle of the terminal. (#440)
+- New Agent with long Arguments on a macOS Host running herdr 0.9.4 now
+  waits for the new shell to take the launch command instead of failing at
+  once and removing what it created. If the shell never takes it, as with
+  dash, New Agent asks you to shorten the Arguments. (#458)
+- When attaching to an Agent or terminal on a macOS or Linux Host fails
+  because herdr exits, the message now quotes herdr's own error, such as an
+  older herdr earlier on the SSH PATH losing its connection to the server,
+  instead of only an exit status. (#443)
+- On a macOS or Linux Host with herdr 0.9.4, opening an Agent or a Shell
+  Terminal over a slow connection no longer types stray characters into
+  the Agent or shell: Heeler no longer answers the terminal query herdr
+  sends when it attaches, whose late answer herdr passed on as typing.
+  (#458)
 - Start Tailscale browser authorization with one Sign In button and reconnect automatically after returning from the browser. (#426)
 - Show Connected and remove the sign-in prompt when Tailscale browser authorization completes, without requiring another Connect. (#426)
 - Open a Host's connection checks after adding it from an overlay network's peer list, so its SSH host key can be trusted on the first connection. (#426)
+- Agent cards keep a Host's herdr sidebar fields and Agent order when its
+  herdr sidebar settings use the letta agent, the machine field, field
+  rules, or a UTF-8 byte-order mark, instead of falling back to herdr's
+  defaults. Update the Heeler plugin to 0.6.1 on each Host. Sync from
+  plugin no longer blames herdr when the plugin can't read a Host's
+  settings. (#458)
+- Type Korean straight into the terminal with the iOS Korean keyboard:
+  syllables now compose as typed instead of arriving as repeated or loose
+  jamo ("한글 지원", not "한한한글글글글지지지원"), with the software keyboard
+  and a hardware keyboard alike, including after Backspace. (#441)
+- Removing a Worktree that has checked-out submodules now says that the
+  submodules block it, instead of blaming modified or untracked files.
+  Show Changes stays, and Copy Command hands you the herdr command that
+  forces the removal. While herdr is still loading restored Worktrees
+  after a restart, the message gives herdr's own reason instead of
+  saying a worktree change is already underway. (#458)
 
 ## [0.1.13] - 2026-10-07
 

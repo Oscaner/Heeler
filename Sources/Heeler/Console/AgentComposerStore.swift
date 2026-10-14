@@ -134,9 +134,10 @@ final class AgentComposerStore: ComposerDraftOperations {
     }
 
     /// The shell-readiness wait in `HeelerSSHTransport.startAgentAwaitingShell`
-    /// covers the 0.7.5 `agent_pane_busy` shape only; on 0.8.0+ the launch
-    /// race moved downstream to `agent.prompt`, so the composer carries the
-    /// same budget here.
+    /// ends once herdr accepts `agent.start`, and since 0.8.0 herdr accepts it
+    /// while the agent is still booting (`launch_pending`), so the first
+    /// `agent.prompt` can race the launch; the composer waits that out with
+    /// the same pace and budget.
     private static let defaultAgentNotReadyRetryDelay: Duration = .milliseconds(500)
     private static let defaultAgentNotReadyRetryBudget: Duration = .seconds(10)
 

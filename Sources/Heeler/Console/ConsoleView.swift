@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The Console home screen (#8): a bottom tab bar over Agents across every
-/// Host (flat or grouped by Host, #245), their ordinary shell Terminals
+/// Host (flat or grouped by Host or Workspace), their ordinary shell Terminals
 /// grouped by Workspace or Host (#316), and one Search across both. Host
 /// management (#14) and Settings are tabs too. An iPad beside its sidebar
 /// has no tab bar: the sidebar switches lists at its top and opens Hosts
@@ -109,7 +109,7 @@ struct ConsoleView: View {
     /// The Agent whose tab the swipe action would close; non-nil shows the
     /// close confirmation.
     @State private var pendingTabClose: ConsoleAgent?
-    /// Owns flat/grouped mode and per-Host collapsed state (#245).
+    /// Owns presentation mode and Host/Workspace collapse state.
     @State private var listPresentation = ConsoleListPresentationStore()
     /// Outlives the detail column's rebuilds, which is the whole point: it
     /// carries the raised keyboard from one Attach screen to the next.
@@ -960,9 +960,7 @@ struct ConsoleView: View {
                         : notificationRouter.path.last ?? selectedTerminal.map {
                             ConsoleAgent.ID(hostID: $0.hostID, paneID: $0.paneID)
                         },
-                    agents: listPresentation.mode == .flat
-                        ? filteredAgents.map(\.id)
-                        : hostSections.filter { !$0.isCollapsed }.flatMap { $0.agents.map(\.id) },
+                    agents: visibleAgentIDs,
                     isSearchFocused: focusedSearch != nil,
                     // Tabs are navigation, not cover: only sheets and alerts
                     // are, including the ones Hosts, Settings and the
@@ -1358,10 +1356,10 @@ struct ConsoleView: View {
             ContentUnavailableView.search(text: agentSearchText)
         case .rows:
             List(selection: selectedItem) {
-                if listPresentation.mode == .flat {
-                    flatAgentListRows
-                } else {
-                    groupedAgentListRows
+                switch listPresentation.mode {
+                case .flat: flatAgentListRows
+                case .grouped: groupedAgentListRows
+                case .byWorkspace: workspaceAgentListRows
                 }
             }
             .listStyle(.plain)
@@ -1385,7 +1383,7 @@ struct ConsoleView: View {
     }
 
     @ViewBuilder
-    private var flatAgentListRows: some View {
+    private var agentHostIssueRows: some View {
         if !visibleHostIssues.isEmpty {
             // On the Agent rows' edges; the list's own separator sets it
             // apart from the first Agent.
@@ -1399,6 +1397,11 @@ struct ConsoleView: View {
                 .listRowSeparator(.hidden, edges: .top)
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         }
+    }
+
+    @ViewBuilder
+    private var flatAgentListRows: some View {
+        agentHostIssueRows
         ForEach(filteredAgents) { agent in
             agentRow(agent)
                 // Right under an iPad sidebar's bar, a rule over the
@@ -1407,6 +1410,27 @@ struct ConsoleView: View {
                     usesSidebarNavigation && visibleHostIssues.isEmpty
                         && agent.id == filteredAgents.first?.id ? .hidden : .automatic,
                     edges: .top)
+        }
+    }
+
+    @ViewBuilder
+    private var workspaceAgentListRows: some View {
+        agentHostIssueRows
+        ForEach(workspaceSections) { section in
+            Section {
+                if !section.isCollapsed {
+                    ForEach(section.agents) { agent in agentRow(agent) }
+                }
+            } header: {
+                ConsoleWorkspaceSectionHeader(section: section) {
+                    guard agentSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        return
+                    }
+                    withAnimation(reduceMotion ? nil : .snappy) {
+                        listPresentation.toggleWorkspace(section.id)
+                    }
+                }
+            }
         }
     }
 
@@ -1634,6 +1658,20 @@ struct ConsoleView: View {
             console: console,
             filteredHostID: hostFilter,
             searchQuery: agentSearchText)
+    }
+
+    private var workspaceSections: [ConsoleWorkspaceSection] {
+        listPresentation.workspaceSections(
+            hosts: hosts.hosts, agents: console.agents,
+            filteredHostID: hostFilter, searchQuery: agentSearchText)
+    }
+
+    private var visibleAgentIDs: [ConsoleAgent.ID] {
+        switch listPresentation.mode {
+        case .flat: filteredAgents.map(\.id)
+        case .grouped: hostSections.filter { !$0.isCollapsed }.flatMap { $0.agents.map(\.id) }
+        case .byWorkspace: workspaceSections.flatMap(\.visibleAgentIDs)
+        }
     }
 
     private var presentationModeBinding: Binding<ConsoleListPresentationMode> {
@@ -2201,6 +2239,49 @@ struct MissingAgentPresentation: Equatable {
             hosts: hosts.hosts,
             hostsAwaitingSnapshot: console.hostsAwaitingSnapshot,
             hostStandingFailures: console.hostStandingFailures)
+    }
+}
+
+/// Workspace headers use the same typography and status counts as Hosts.
+private struct ConsoleWorkspaceSectionHeader: View {
+    let section: ConsoleWorkspaceSection
+    let onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(section.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.primary)
+                    Text(section.hostName)
+                        .font(.caption)
+                        .foregroundStyle(Color.secondary)
+                    if section.isCollapsed && !section.statusCounts.items.isEmpty {
+                        ConsoleHostStatusCountPills(items: section.statusCounts.items)
+                    }
+                }
+                .lineLimit(1)
+                Spacer(minLength: 0)
+                Text("\(section.agents.count)")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.secondary)
+                Image(systemName: section.isCollapsed ? "chevron.right" : "chevron.down")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.secondary)
+                    .frame(width: 12)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .hoverEffect(.highlight)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(section.title), \(section.hostName)")
+        .accessibilityValue(section.accessibilityValue)
+        .accessibilityHint(section.isCollapsed ? "Expands this Workspace." : "Collapses this Workspace.")
+        .accessibilityAddTraits(.isHeader)
+        .textCase(nil)
     }
 }
 

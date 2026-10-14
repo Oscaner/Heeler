@@ -171,8 +171,9 @@ struct AgentTerminalView: View {
     private let console: ConsoleStore
     private let terminal: TerminalSettings
     private let inputMode: AgentInputModeSettings
-    /// Passed through to the new-agent sheet, which keeps its Host picker for
-    /// the Console's own entry point even though this screen pre-selects one.
+    /// The Host catalog. The new-agent sheet keeps its Host picker for the
+    /// Console's own entry point even though this screen pre-selects one, and
+    /// Worktree Details reads this Agent's Host's herdr session from it.
     private let hosts: [Host]
     private let activity: AppActivityCoordinator
     /// Keeps the keyboard up across the terminal rebuild an Agent switch
@@ -994,6 +995,7 @@ struct AgentTerminalView: View {
             request: request,
             workspaceLabel: agent.workspaceLabel ?? checkout.repoName,
             checkout: checkout,
+            sessionName: hosts.first(where: { $0.id == hostID })?.sessionName ?? "",
             list: { [console] workspaceID in
                 try await console.listWorktrees(
                     forWorkspaceID: workspaceID, on: hostID)

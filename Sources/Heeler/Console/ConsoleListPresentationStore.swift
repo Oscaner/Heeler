@@ -1,12 +1,13 @@
 import Foundation
 import Observation
 
-/// The two Console Agent-list presentations. Flat remains the default so
+/// The Console Agent-list presentations. Flat remains the default so
 /// introducing grouped-list support does not change the existing surface
 /// until the UI explicitly selects it.
 enum ConsoleListPresentationMode: String, CaseIterable, Identifiable, Sendable {
     case flat
     case grouped
+    case byWorkspace
 
     var id: Self { self }
 
@@ -15,6 +16,7 @@ enum ConsoleListPresentationMode: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .flat: "All Agents"
         case .grouped: "By Host"
+        case .byWorkspace: "By Workspace"
         }
     }
 
@@ -24,7 +26,32 @@ enum ConsoleListPresentationMode: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .flat: "list.bullet"
         case .grouped: "list.bullet.indent"
+        case .byWorkspace: "rectangle.3.group"
         }
+    }
+}
+
+/// Workspace identity includes the Host: pane and Workspace ids are local
+/// to one herdr session, and labels can be shared or renamed.
+struct ConsoleWorkspaceSection: Identifiable, Equatable {
+    struct ID: Hashable, Codable {
+        let hostID: Host.ID
+        let workspaceID: String
+    }
+
+    let id: ID
+    let title: String
+    let hostName: String
+    let agents: [ConsoleAgent]
+    let isCollapsed: Bool
+
+    var statusCounts: ConsoleHostAgentStatusCounts { .init(agents: agents) }
+    var visibleAgentIDs: [ConsoleAgent.ID] { isCollapsed ? [] : agents.map(\.id) }
+    var accessibilityValue: String {
+        let count = agents.count == 1 ? "1 Agent" : "\(agents.count) Agents"
+        return [count, isCollapsed ? "Collapsed" : "Expanded",
+                ConsoleHostSectionHeaderPresentation.statusText(items: statusCounts.items)]
+            .compactMap { $0 }.joined(separator: ", ")
     }
 }
 
@@ -80,18 +107,58 @@ struct ConsoleHostAgentStatusCount: Identifiable, Equatable {
     var id: String { status.rawValue }
 }
 
-/// Persists the Console presentation choice and per-Host collapsed state,
+/// Persists the Console presentation choice and Host/Workspace collapse state,
 /// and projects grouped sections without taking ownership of Agent sorting.
 /// Collapsed Host ids are deliberately retained when a Host disconnects or
 /// leaves the catalog so a reconnect or later return restores the choice.
 @MainActor
 @Observable
 final class ConsoleListPresentationStore {
+    /// Hosts follow catalog order; Workspaces follow their first Agent in
+    /// the supplied priority order. Grouping never re-sorts Agents or pins.
+    func workspaceSections(
+        hosts: [Host], agents: [ConsoleAgent],
+        filteredHostID: Host.ID? = nil, searchQuery: String = ""
+    ) -> [ConsoleWorkspaceSection] {
+        let isSearching = !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return sections(
+            hosts: hosts, agents: agents, filteredHostID: filteredHostID, searchQuery: searchQuery
+        ).flatMap { host in
+            let buckets = Dictionary(grouping: host.agents, by: \.agent.workspaceID)
+            var seen: Set<String> = []
+            return host.agents.compactMap { agent -> ConsoleWorkspaceSection? in
+                let workspaceID = agent.agent.workspaceID
+                guard seen.insert(workspaceID).inserted else { return nil }
+                let members = buckets[workspaceID] ?? []
+                let label = members.compactMap(\.workspaceLabel).first {
+                    !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+                let id = ConsoleWorkspaceSection.ID(hostID: host.id, workspaceID: workspaceID)
+                return ConsoleWorkspaceSection(
+                    id: id, title: label ?? (workspaceID.isEmpty ? "Unknown Workspace" : workspaceID),
+                    hostName: host.hostDisplayName, agents: members,
+                    isCollapsed: !isSearching && collapsedWorkspaceIDs.contains(id))
+            }
+        }
+    }
+
+    func toggleWorkspace(_ id: ConsoleWorkspaceSection.ID) {
+        if !collapsedWorkspaceIDs.insert(id).inserted {
+            collapsedWorkspaceIDs.remove(id)
+        }
+        let sorted = collapsedWorkspaceIDs.sorted {
+            ($0.hostID.uuidString, $0.workspaceID) < ($1.hostID.uuidString, $1.workspaceID)
+        }
+        defaults.set(try? JSONEncoder().encode(sorted), forKey: Self.collapsedWorkspacesDefaultsKey)
+    }
+
     private static let modeDefaultsKey = "console-list.presentation-mode"
     private static let collapsedHostsDefaultsKey = "console-list.collapsed-hosts"
+    private static let collapsedWorkspacesDefaultsKey = "console-list.collapsed-workspaces"
 
     private(set) var mode: ConsoleListPresentationMode
     private var collapsedHostIDs: Set<Host.ID>
+    private var collapsedWorkspaceIDs: Set<ConsoleWorkspaceSection.ID>
     // UserDefaults is documented thread-safe; Sendable modulo that promise.
     @ObservationIgnored private nonisolated(unsafe) let defaults: UserDefaults
 
@@ -103,6 +170,9 @@ final class ConsoleListPresentationStore {
         collapsedHostIDs = Set(
             (defaults.stringArray(forKey: Self.collapsedHostsDefaultsKey) ?? [])
                 .compactMap(UUID.init(uuidString:)))
+        collapsedWorkspaceIDs = Set(
+            defaults.data(forKey: Self.collapsedWorkspacesDefaultsKey)
+                .flatMap { try? JSONDecoder().decode([ConsoleWorkspaceSection.ID].self, from: $0) } ?? [])
     }
 
     func select(_ mode: ConsoleListPresentationMode) {
