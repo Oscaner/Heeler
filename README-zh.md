@@ -109,7 +109,8 @@ herdr plugin action invoke heeler.pair
 
 用应用扫描弹出的 Pairing Code 二维码，机器即被添加为 Host —— 地址、
 host key 指纹和 SSH 密钥注册全部由配对码承载。在应用里为该 Host 启用通知
-后，同一个[插件](plugin/README.md)负责投递加密通知。
+后，同一个[插件](plugin/README.md)负责投递加密通知。完整步骤、弹窗按键和排错
+方法见[扫码配对指南](https://docs.heeler.bybee.dev/zh/pairing)。
 
 ## 技术栈
 

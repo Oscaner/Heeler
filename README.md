@@ -118,7 +118,8 @@ herdr plugin action invoke heeler.pair
 Scan the Pairing Code QR it shows and the machine is added as a Host — the
 code carries the addresses, the host key fingerprint, and SSH key enrollment.
 The same [plugin](plugin/README.md) delivers the encrypted notifications once
-you enable them for the Host in the app.
+you enable them for the Host in the app. For every step, the popup's keys, and
+troubleshooting, see the [pairing guide](https://docs.heeler.bybee.dev/pairing).
 
 ## Opening an Agent from another app
 
