@@ -247,7 +247,7 @@ enum ConsoleHostIssuePlacement: Equatable {
 
     init(mode: ConsoleListPresentationMode) {
         switch mode {
-        case .flat: self = .flatIssueRows
+        case .flat, .byWorkspace: self = .flatIssueRows
         case .grouped: self = .sectionHeaders
         }
     }

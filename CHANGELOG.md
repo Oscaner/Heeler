@@ -12,6 +12,9 @@ Entries reference the pull request that made the change.
 - Read and search Heeler's connection guides in English or Simplified Chinese
   on the new documentation site, with navigation for overlay networks, Jump
   Hosts, Host Routes, and Windows setup, and copy any guide as Markdown. (#442)
+- Group the Agents list By Workspace from its presentation menu. Collapse
+  Workspaces to focus on one project while keeping status counts visible;
+  the choice and collapsed Workspaces persist across launches. (refs #364)
 - Return to the Console from an Agent's More menu. Back to Console does
   what swiping in from the left edge does, so the way back no longer
   depends on knowing the gesture; the Agent keeps running on the Host. (#439)
