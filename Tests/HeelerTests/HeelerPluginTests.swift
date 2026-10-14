@@ -108,6 +108,42 @@ struct HeelerPluginListResultTests {
             PluginListResult(plugins: [result.plugins[0]]).heelerEntry(enabledOnly: true) == nil)
     }
 
+    /// Once the former id is removed, the disabled current id is the plugin
+    /// to turn on, and its source says whether reinstalling can replace it.
+    @Test func aDisabledCurrentIDBesideAnEnabledLegacyIDIsRecorded() throws {
+        let github = try #require(
+            try decode(
+                #"{"plugin_id":"heeler","version":"0.6.0","enabled":false,"source":{"kind":"github"}},"#
+                    + #"{"plugin_id":"herdr-mobile.pairing","version":"0.3.0"}"#))
+        #expect(github.pluginID == "herdr-mobile.pairing")
+        #expect(github.disabledCurrentIDSource == .github)
+        let linked = try #require(
+            try decode(
+                #"{"plugin_id":"heeler","version":"0.6.0","enabled":false,"source":{"kind":"local"}},"#
+                    + #"{"plugin_id":"herdr-mobile.pairing","version":"0.3.0"}"#))
+        #expect(linked.disabledCurrentIDSource == .local)
+    }
+
+    @Test(arguments: [
+        // The former id alone.
+        #"{"plugin_id":"herdr-mobile.pairing","version":"0.3.0"}"#,
+        // Both enabled: the current id runs, beside a leftover.
+        #"{"plugin_id":"herdr-mobile.pairing","version":"0.3.0"},"#
+            + #"{"plugin_id":"heeler","version":"0.6.0","enabled":true}"#,
+        // A missing `enabled` reads as enabled.
+        #"{"plugin_id":"herdr-mobile.pairing","version":"0.3.0"},"#
+            + #"{"plugin_id":"heeler","version":"0.6.0"}"#,
+        // With no enabled former id, the disabled current id is the entry
+        // itself and already reads as disabled.
+        #"{"plugin_id":"heeler","version":"0.6.0","enabled":false}"#,
+        #"{"plugin_id":"herdr-mobile.pairing","version":"0.3.0","enabled":false},"#
+            + #"{"plugin_id":"heeler","version":"0.6.0","enabled":false}"#,
+    ])
+    func noDisabledCurrentIDIsRecordedOtherwise(plugins: String) throws {
+        let installation = try #require(try decode(plugins))
+        #expect(installation.disabledCurrentIDSource == nil)
+    }
+
     @Test func reportsALegacyIDAndADisabledPluginRatherThanCallingThemAbsent() throws {
         let legacy = try #require(
             try decode(#"{"plugin_id":"herdr-mobile.pairing","version":"0.3.0","enabled":false}"#))
@@ -207,6 +243,51 @@ struct HeelerPluginPresentationTests {
         // old plugin's registrations do not carry over.
         #expect(notice.notes.count == 4)
         #expect(notice.notes.last == HeelerPluginPresentation.reenableNotificationsNote)
+    }
+
+    /// The current plugin stays disabled once the former id is gone, and a
+    /// reinstall on herdr 0.9.4 keeps it so.
+    @Test func aDisabledCurrentIDIsTurnedOnAfterTheLegacyIDGoes() throws {
+        let notice = try #require(
+            HeelerPluginPresentation(
+                .installed(
+                    HeelerPluginInstallation(
+                        pluginID: "herdr-mobile.pairing", version: "0.3.0",
+                        disabledCurrentIDSource: .github)),
+                session: "work", bundled: PluginVersion(0, 6, 0)
+            ).notice)
+        #expect(
+            notice.message
+                == "This Host runs an old Heeler plugin under its former name, and the current "
+                + "plugin is disabled. Remove the old copy, then install the current plugin "
+                + "and turn it on.")
+        #expect(
+            notice.commands == [
+                "herdr plugin uninstall herdr-mobile.pairing", install,
+                "herdr --session work plugin enable heeler",
+            ])
+        #expect(notice.notes.count == 4)
+        #expect(notice.notes.last == HeelerPluginPresentation.reenableNotificationsNote)
+    }
+
+    /// `herdr plugin install` refuses to replace a linked plugin.
+    @Test func aDisabledLinkedCurrentIDIsOnlyTurnedOnAfterTheLegacyIDGoes() throws {
+        let notice = try #require(
+            HeelerPluginPresentation(
+                .installed(
+                    HeelerPluginInstallation(
+                        pluginID: "herdr-mobile.pairing", version: "0.3.0",
+                        disabledCurrentIDSource: .local)),
+                session: "", bundled: PluginVersion(0, 6, 0)
+            ).notice)
+        #expect(
+            notice.message
+                == "This Host runs an old Heeler plugin under its former name, and the current "
+                + "plugin is disabled. Remove the old copy, then turn the current plugin on.")
+        #expect(
+            notice.commands == [
+                "herdr plugin uninstall herdr-mobile.pairing", "herdr plugin enable heeler",
+            ])
     }
 
     @Test func aLeftoverLegacyIDIsRemovedAndAnUpdateFoldedIn() throws {

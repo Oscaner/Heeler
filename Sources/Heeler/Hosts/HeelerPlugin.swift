@@ -245,6 +245,25 @@ struct HeelerPluginPresentation: Equatable {
 
         if installation.isLegacyID {
             // Installing next to the old id would run both plugins' hooks.
+            if let currentSource = installation.disabledCurrentIDSource {
+                // Neither removing the old id nor, on herdr 0.9.4, a
+                // reinstall turns the current plugin on, and `herdr plugin
+                // install` refuses to replace a linked one.
+                let reinstalls = currentSource != .local
+                let enable = enableCommand(SSHTransportSettings.notificationPluginID, session: session)
+                return (
+                    version,
+                    Notice(
+                        tone: .warning,
+                        message: "This Host runs an old Heeler plugin under its former name, and the "
+                            + "current plugin is disabled. Remove the old copy, then "
+                            + (reinstalls
+                                ? "install the current plugin and turn it on."
+                                : "turn the current plugin on."),
+                        commands: [uninstallCommand(installation.pluginID)]
+                            + (reinstalls ? [installCommand, enable] : [enable]),
+                        notes: missing + [reenableNotificationsNote]))
+            }
             return (
                 version,
                 Notice(
