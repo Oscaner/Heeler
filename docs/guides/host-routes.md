@@ -13,7 +13,7 @@ A Host can have more than one route: its LAN address for when you are at home, a
 5. To go through a Jump Host, fill in the **Jump Host** fields. Otherwise leave them blank. See [remote access through a Jump Host](vps-jump-host-setup.md).
 6. Tap **Save** at the top right, then **Save** in Edit Host.
 
-**Add Host** starts with no route; tap **Add Route** to enter the first address the same way. Scanning a Pairing Code adds every address the code offers as a route of its own.
+**Add Host** starts with no route; tap **Add Route** to enter the first address the same way. [Scanning a Pairing Code](pairing.md) adds every address the code offers as a route of its own.
 
 ## How Heeler picks a route
 

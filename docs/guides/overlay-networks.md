@@ -57,7 +57,7 @@ Do these steps on the Mac that runs herdr, signed in as the account Heeler will 
    echo 'PASTE_THE_LINE_HERE' >> ~/.ssh/authorized_keys
    ```
 
-   For **RSA Key**, do the same with **Copy RSA Public Key**. For **Password**, use your Mac password. A key from [QR pairing](../../README.md#adding-a-machine) also works.
+   For **RSA Key**, do the same with **Copy RSA Public Key**. For **Password**, use your Mac password. A key from [pairing](pairing.md) also works.
 
 ## Connect from Heeler
 
