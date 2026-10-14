@@ -74,10 +74,12 @@ branch="$(git rev-parse --abbrev-ref HEAD)"
 [ "$branch" = "$DEFAULT_BRANCH" ] || die "on branch '$branch', expected '$DEFAULT_BRANCH'"
 
 git rev-parse --verify --quiet "refs/heads/$DEFAULT_BRANCH" >/dev/null || die "no $DEFAULT_BRANCH branch"
-# --quiet also hides why a fetch failed, such as a local tag that a re-cut
-# replaced on the remote.
-git fetch --quiet --tags "$REMOTE" \
-    || die "git fetch --tags $REMOTE failed. If it refuses to clobber a re-cut tag, update this clone first: git fetch --tags --force $REMOTE"
+# Keep git's output for the message: a tag that a re-cut replaced on the
+# remote is refused here as "would clobber existing tag".
+fetch_output="$(git fetch --tags "$REMOTE" 2>&1)" \
+    || die "git fetch --tags $REMOTE failed:
+$fetch_output
+If it would clobber a tag, a re-cut replaced that tag on $REMOTE: git fetch --tags --force $REMOTE"
 [ "$(git rev-parse HEAD)" = "$(git rev-parse "$REMOTE/$DEFAULT_BRANCH")" ] \
     || die "$DEFAULT_BRANCH differs from $REMOTE/$DEFAULT_BRANCH; pull or push first"
 
@@ -104,24 +106,32 @@ if [ -n "$released_heading" ] || [ -n "$latest_tag" ]; then
     [ -n "$released_heading" ] || die "git has tag $latest_tag but $CHANGELOG has no released section"
     [ -n "$latest_tag" ] || die "$CHANGELOG has [$released_heading] but there is no matching git tag"
     [ "v$released_heading" = "$latest_tag" ] \
-        || die "$CHANGELOG's newest release [$released_heading] disagrees with the newest tag $latest_tag. A re-cut removes the heading and the tag together: docs/guides/releasing.md, \"Re-cutting an unpublished version\"."
+        || die "$CHANGELOG's newest release [$released_heading] disagrees with the newest tag $latest_tag. In the middle of a re-cut that is expected until both the heading and the tag are gone: docs/guides/releasing.md, \"Re-cutting an unpublished version\"."
 fi
 
-# A tag without a GitHub release belongs to a release that is still running,
-# failed before publishing anything, or uploaded a build whose release step
-# did not finish. Settle it first: a version that published nothing keeps its
-# number instead of being skipped by the next cut.
-if [ -n "$latest_tag" ] && ! release_lookup="$(gh release view "$latest_tag" --json tagName 2>&1)"; then
-    case "$release_lookup" in
-        *"release not found"*)
-            die "$latest_tag has no GitHub release. If its release run is still going, wait for it. If it published nothing, re-run its failed jobs or re-cut $latest_tag; if its build reached TestFlight, create the release by hand: docs/guides/releasing.md, \"Failure and recovery\"." ;;
-        *)
-            die "could not look up the GitHub release for $latest_tag: $release_lookup" ;;
-    esac
+# A tag without a published GitHub release belongs to a release that is still
+# running, failed before publishing anything, or uploaded a build whose
+# release step did not finish. Settle it first: a version that published
+# nothing keeps its number instead of being skipped by the next cut. Ask the
+# repository the tags go to rather than whichever one gh would pick, since gh
+# answers "release not found" for a wrong repository too.
+if [ -n "$latest_tag" ]; then
+    release_repo="${GH_REPO:-$(git remote get-url "$REMOTE")}"
+    if ! release_lookup="$(gh release view "$latest_tag" --repo "$release_repo" --json isDraft --jq .isDraft 2>&1)"; then
+        case "$release_lookup" in
+            *"release not found"*)
+                die "$latest_tag has no GitHub release in $release_repo. If its release run is still going, wait for it. If it published nothing, re-run its failed jobs or re-cut $latest_tag; if its build is in TestFlight, even still processing, create the release by hand or re-run its failed release job: docs/guides/releasing.md, \"Failure and recovery\"." ;;
+            *)
+                die "could not look up the GitHub release for $latest_tag in $release_repo: $release_lookup" ;;
+        esac
+    fi
+    [ "$release_lookup" = false ] \
+        || die "$latest_tag's GitHub release is still a draft; publish it first: gh release edit $latest_tag --repo $release_repo --draft=false"
 fi
 
-# Checked last: in a half-finished re-cut [Unreleased] is empty, and the tag
-# checks above say why.
+# Checked last: right after a failed release, or in a re-cut that deleted the
+# tag before reopening the notes, [Unreleased] is empty, and the tag checks
+# above say why.
 [ -n "$(printf '%s' "$notes" | tr -d '[:space:]')" ] \
     || die "[Unreleased] is empty — there is nothing to release. Entries belong there as they merge."
 
