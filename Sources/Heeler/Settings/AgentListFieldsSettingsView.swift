@@ -487,6 +487,10 @@ enum AgentListFieldsCopy {
         "Tap a field to change its style, move it, or remove it. Tap + to add one. Changes save right away."
     static let syncConfirmation =
         "This Host's rows are replaced with its herdr fields and saved right away."
+    /// Sync's result when the plugin snapshot carries diagnostics.
+    static let syncDiagnostics =
+        "The Heeler plugin couldn't read this Host's herdr sidebar settings, so herdr's "
+        + "default fields were used. Update the plugin, or run herdr config check."
     static let unreadableCatalogTitle = "Saved fields can’t be read"
     static let unreadableCatalog =
         "Heeler kept the saved data untouched. Every Host follows its herdr fields, and editing "
