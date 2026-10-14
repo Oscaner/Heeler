@@ -1662,7 +1662,7 @@ struct ConsoleView: View {
 
     private var workspaceSections: [ConsoleWorkspaceSection] {
         listPresentation.workspaceSections(
-            hosts: hosts.hosts, agents: console.agents,
+            hosts: hosts.hosts, console: console,
             filteredHostID: hostFilter, searchQuery: agentSearchText)
     }
 

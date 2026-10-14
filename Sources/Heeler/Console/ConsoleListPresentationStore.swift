@@ -220,6 +220,19 @@ final class ConsoleListPresentationStore {
             searchQuery: searchQuery)
     }
 
+    /// Reads the same inventory as `sections(hosts:console:)`, so saved Chat
+    /// entry points of an unproven Host appear By Workspace too.
+    func workspaceSections(
+        hosts: [Host],
+        console: ConsoleStore,
+        filteredHostID: Host.ID? = nil,
+        searchQuery: String = ""
+    ) -> [ConsoleWorkspaceSection] {
+        workspaceSections(
+            hosts: hosts, agents: console.chatDisplayAgents,
+            filteredHostID: filteredHostID, searchQuery: searchQuery)
+    }
+
     /// Projects one section per catalog Host, in catalog order. `agents` is
     /// already sorted by ConsoleStore; filtering it in-place keeps
     /// that exact relative order within every Host section.
