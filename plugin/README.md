@@ -476,7 +476,7 @@ a newly created plugin config directory has mode **0700**.
     "row_gap": 0,
     "rows": [
       [{"token":"state_icon"},{"token":"terminal_title_stripped","fg":"#6c7086","dim":false}],
-      [{"token":"$pin_icon"},{"token":"workspace","dim":true},{"token":"agent"}]
+      [{"token":"$pin_icon"},{"token":"workspace","dim":true,"rules":[{"equals":"scratch","ignore_case":true,"hide":true}]},{"token":"agent"}]
     ],
     "rows_by_agent": {"claude":[[{"token":"terminal_title_stripped"}]]}
   }},
@@ -501,18 +501,38 @@ Every token is an object, including TOML string tokens. Builtins are
 `state_icon`, `state_text`, `machine`, `workspace`, `tab`, `pane`, `agent`,
 `terminal_title`, and `terminal_title_stripped`. Custom names must match
 `^\$[A-Za-z0-9_-]{1,32}$` and retain their `$` in the snapshot. A styled TOML
-table accepts only `token`, `fg`, `bold`, and `dim`: `fg` must be `#RGB` or
-`#RRGGBB`; `bold` and `dim` must be booleans. Optional style fields appear
-only when explicitly provided, preserving `false` and the original hex case.
-Other config fields are ignored. This is validation of the exported subset,
-not a substitute for `herdr config check` for unrelated herdr settings.
+table accepts only `token`, `fg`, `bold`, `dim`, and `rules`: `fg` must be
+`#RGB` or `#RRGGBB`; `bold` and `dim` must be booleans. Optional style fields
+appear only when explicitly provided, preserving `false` and the original hex
+case. Other config fields are ignored. This is validation of the exported
+subset, not a substitute for `herdr config check` for unrelated herdr
+settings.
+
+`rules` is an array of at most 16 tables; herdr uses the first rule that
+matches the token's text, and a matching rule with `hide = true` hides the
+token. Every rule has exactly one condition: `equals`, `contains`, or
+`starts_with` with a string, or `gt` or `lt` with a finite integer or float.
+`ignore_case` must be a boolean and is allowed only next to a text condition,
+so even `ignore_case = false` beside `gt` or `lt` is invalid. A rule's `fg`
+follows the token `fg` grammar, and `bold`, `dim`, and `hide` must be
+booleans; any other key is invalid. Rules need a text-valued token, so
+`state_icon` accepts only `rules = []`. herdr 0.9.0 does not accept `hide`,
+which herdr 0.9.1 added.
+
+The snapshot exports each rule with only the fields it gave, in the order
+`equals`, `contains`, `starts_with`, `gt`, `lt`, `ignore_case`, `fg`, `bold`,
+`dim`, `hide`. Thresholds are JSON numbers, so `gt = 80` exports `80`. A
+token with `rules = []` exports no `rules` field. The snapshot version stays
+`1`: Swift readers ignore `rules`, so a rule never restyles or hides a token
+in Heeler.
 
 `rows_by_agent` accepts the 24 canonical ids verified against herdr v0.9.4:
 `pi`, `claude`, `codex`, `gemini`, `cursor`, `devin`, `agy`, `cline`, `omp`,
 `mastracode`, `opencode`, `copilot`, `kimi`, `kiro`, `droid`, `amp`, `grok`,
 `hermes`, `kilo`, `qodercli`, `qwen`, `letta`, `maki`, and `muse`. Aliases,
-case variations, and unknown ids are invalid. A future herdr release adding
-canonical ids requires updating this validation list and the shared vectors.
+case variations, and unknown ids are invalid. A future herdr release that
+adds canonical ids, built-in agent tokens, styled-token keys, or rule fields
+requires updating this validation and the shared vectors together.
 
 Missing files or fields use the snapshot defaults: sort `spaces`, `row_gap: 0`,
 `rows: [[{"token":"state_icon"},{"token":"workspace"},{"token":"tab"}],

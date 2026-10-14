@@ -55,6 +55,19 @@ struct SidebarLayoutVectorTests {
         }
     }
 
+    /// `decodesValidVector` feeds the app the plugin's whole snapshot:
+    /// re-encoding a vector keeps every field the plugin exported, `rules`
+    /// included, so those tests also show that the app ignores rules.
+    @Test(arguments: vectors.valid)
+    func reencodingKeepsEveryExportedField(vector: SidebarLayoutVectorFile.Valid) throws {
+        let file = try JSONSerialization.jsonObject(with: SidebarLayoutVectorFile.fileData())
+        let valid = try #require((file as? NSDictionary)?["valid"] as? [NSDictionary])
+        let exported = try #require(
+            valid.first { $0["name"] as? String == vector.name }?["snapshot"] as? NSDictionary)
+        let reencoded = try JSONSerialization.jsonObject(with: vector.snapshot.jsonData())
+        #expect(reencoded as? NSDictionary == exported)
+    }
+
     /// herdr 0.9.0 and later put `machine` second in the default first row.
     /// Heeler does not render it, so herdr's documented default block keeps
     /// the rows Heeler shows today, and a row of only `machine` stays empty.

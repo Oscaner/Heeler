@@ -13,7 +13,10 @@ const AGENT_IDS = new Set([
   "omp", "mastracode", "opencode", "copilot", "kimi", "kiro", "droid",
   "amp", "grok", "hermes", "kilo", "qodercli", "qwen", "letta", "maki", "muse",
 ]);
-const STYLE_KEYS = new Set(["token", "fg", "bold", "dim"]);
+const STYLE_KEYS = new Set(["token", "fg", "bold", "dim", "rules"]);
+// Rule fields of herdr v0.9.4 src/config/sidebar/rules.rs, exported in its order.
+const RULE_CONDITIONS = ["equals", "contains", "starts_with", "gt", "lt"];
+const RULE_KEYS = new Set([...RULE_CONDITIONS, "ignore_case", "fg", "bold", "dim", "hide"]);
 
 export function resolveConfigPath(env = process.env) {
   if (env.HERDR_CONFIG_PATH !== undefined) return env.HERDR_CONFIG_PATH;
@@ -40,6 +43,14 @@ function table(value) {
   return value;
 }
 
+function color(value) {
+  if (typeof value !== "string" || value.trim() !== value ||
+      !/^#(?:[\da-fA-F]{3}|[\da-fA-F]{6})$/.test(value)) {
+    throw new Error("invalid_schema");
+  }
+  return value;
+}
+
 function token(value) {
   const input = typeof value === "string" ? { token: value } : table(value);
   if (Object.keys(input).some((key) => !STYLE_KEYS.has(key))) throw new Error("invalid_schema");
@@ -48,19 +59,55 @@ function token(value) {
     throw new Error("invalid_token");
   }
   const result = { token: input.token };
-  if (input.fg !== undefined) {
-    if (typeof input.fg !== "string" || input.fg.trim() !== input.fg ||
-        !/^#(?:[\da-fA-F]{3}|[\da-fA-F]{6})$/.test(input.fg)) {
-      throw new Error("invalid_schema");
+  if (input.fg !== undefined) result.fg = color(input.fg);
+  booleans(input, ["bold", "dim"], result);
+  if (input.rules !== undefined) {
+    if (!Array.isArray(input.rules) || input.rules.length > 16) throw new Error("invalid_schema");
+    if (input.rules.length > 0) {
+      // herdr requires a text-valued token for rules, so state_icon takes only rules = [].
+      if (input.token === "state_icon") throw new Error("invalid_schema");
+      result.rules = input.rules.map(rule);
     }
-    result.fg = input.fg;
   }
-  for (const key of ["bold", "dim"]) {
+  return result;
+}
+
+function booleans(input, keys, result) {
+  for (const key of keys) {
     if (input[key] === undefined) continue;
     if (typeof input[key] !== "boolean") throw new Error("invalid_schema");
     result[key] = input[key];
   }
+}
+
+/** Exactly one condition: text for equals, contains and starts_with, a number for gt and lt. */
+function rule(value) {
+  const input = table(value);
+  if (Object.keys(input).some((key) => !RULE_KEYS.has(key))) throw new Error("invalid_schema");
+  const conditions = RULE_CONDITIONS.filter((key) => input[key] !== undefined);
+  if (conditions.length !== 1) throw new Error("invalid_schema");
+  const [condition] = conditions;
+  const result = {};
+  if (condition === "gt" || condition === "lt") {
+    // herdr rejects ignore_case next to gt or lt, even ignore_case = false.
+    if (input.ignore_case !== undefined) throw new Error("invalid_schema");
+    result[condition] = threshold(input[condition]);
+  } else {
+    if (typeof input[condition] !== "string") throw new Error("invalid_schema");
+    result[condition] = input[condition];
+  }
+  booleans(input, ["ignore_case"], result);
+  if (input.fg !== undefined) result.fg = color(input.fg);
+  booleans(input, ["bold", "dim", "hide"], result);
   return result;
+}
+
+// herdr reads thresholds as finite f64. smol-toml returns TOML integers as
+// BigInt, which Number.isFinite rejects and JSON cannot hold.
+function threshold(value) {
+  const number = typeof value === "bigint" ? Number(value) : value;
+  if (!Number.isFinite(number)) throw new Error("invalid_schema");
+  return number;
 }
 
 function rows(value) {
