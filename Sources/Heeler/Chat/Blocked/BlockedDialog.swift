@@ -267,6 +267,7 @@ enum BlockedDialogParser {
         switch program {
         case .claude: ClaudeDialogParser.parse(screen)
         case .codex: CodexDialogParser.parse(screen)
+        case .pi, .omp: .none
         }
     }
 }

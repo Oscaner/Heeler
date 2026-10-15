@@ -13,6 +13,8 @@ struct ChatTimelineActions {
     /// Shown in an expanded tool row whose output was never read.
     var missingOutputText: String = "Output is available when connected."
     var loadImage: ChatImagePreviewController.Loader = { _ in throw ChatImagePreviewError.unavailable }
+    /// An open trajectory intersects the reading viewport.
+    var collapseAvailabilityChanged: @MainActor (Bool) -> Void = { _ in }
 }
 
 /// Hands a row's interactions back to the controller that owns the list.
@@ -60,6 +62,8 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
     private var rowsByID: [ChatRowID: ChatRow] = [:]
     /// Each folded row, by the shown header that holds it.
     private var owners: [ChatRowID: ChatRowID] = [:]
+    private var trajectories: [ChatTimelineProjection.Trajectory] = []
+    private var trajectoryByRow: [ChatRowID: Int] = [:]
     /// Turn and group headers the reader opened. Never kept past the
     /// conversation, so every finished turn opens folded.
     private var openHeaders: Set<ChatRowID> = []
@@ -76,6 +80,7 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
     /// until the reader scrolls, follows latest, or changes conversations.
     private var disclosureAnchor: ChatRowID?
     private var reportedFollowing = true
+    private var reportedCanCollapse = false
     private var isJumpAnimating = false
     private var hasReportedFirstLayout = false
     /// The older-history state the last automatic request was made in, so
@@ -86,6 +91,7 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
     var isFollowing: Bool { latch.isFollowing }
     var timeline: ChatCollectionView { collectionView }
     var geometry: ChatTimelineGeometry { layout.geometry }
+    var canCollapseTrajectory: Bool { collapseTarget != nil }
 
     /// Where a row's cell sits in the content, for tests; nil off screen.
     func cellFrame(of id: ChatRowID) -> CGRect? {
@@ -166,6 +172,11 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         }
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        noteCollapseAvailability()
+    }
+
     private var rowActions: ChatRowActions {
         ChatRowActions(
             toggle: { [weak self] id in self?.toggle(id) },
@@ -208,6 +219,7 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
             }
             forgetMeasurements()
             reportFirstLayoutIfReady()
+            noteCollapseAvailability()
             return
         }
 
@@ -240,6 +252,7 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         }
         forgetMeasurements()
         reportFirstLayoutIfReady()
+        noteCollapseAvailability()
     }
 
     /// Folds the applied rows as the open headers say, and makes the
@@ -250,6 +263,11 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
             open: openHeaders)
         rowsByID = Dictionary(output.rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         owners = output.owners
+        trajectories = output.trajectories
+        trajectoryByRow = [:]
+        for (index, trajectory) in trajectories.enumerated() {
+            for id in trajectory.shownIDs { trajectoryByRow[id] = index }
+        }
         if let id = disclosureAnchor, rowsByID[id] == nil {
             disclosureAnchor = owners[id]
         }
@@ -310,6 +328,70 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         latch.reset()
         noteFollowing()
         collectionView.setNeedsLayout()
+    }
+
+    /// The first open turn actually on screen, rather than the most
+    /// recently expanded turn elsewhere in the conversation.
+    private var collapseTarget: (trajectory: ChatTimelineProjection.Trajectory, row: ChatRowID)? {
+        let top = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
+        let bottom = collectionView.contentOffset.y + collectionView.bounds.height
+        for index in layout.geometry.indices(from: top, to: bottom) {
+            guard let id = layout.id(at: index), let scope = trajectoryByRow[id] else { continue }
+            let trajectory = trajectories[scope]
+            if trajectory.shownIDs.contains(where: {
+                openHeaders.contains($0) || expanded.contains($0) || expandedFiles[$0]?.isEmpty == false
+            }) {
+                return (trajectory, id)
+            }
+            return nil
+        }
+        return nil
+    }
+
+    /// Folds this turn's groups, reasoning, tool output and file diffs in
+    /// one update. Other turns keep their disclosures and measurements.
+    func collapseCurrentTrajectory() {
+        guard let target = collapseTarget, let dataSource else { return }
+        let scope = target.trajectory
+        let offset = max(0, rowTop(target.row))
+        let details = scope.shownIDs.filter {
+            openHeaders.contains($0) || expanded.contains($0) || expandedFiles[$0]?.isEmpty == false
+        }
+        let preferred = scope.turnHeader ?? details.first ?? target.row
+        _ = beginDisclosure(preferred)
+        let changed = Set(expanded.filter(scope.contains))
+            .union(expandedFiles.keys.filter(scope.contains))
+        expanded = expanded.filter { !scope.contains($0) }
+        expandedFiles = expandedFiles.filter { !scope.contains($0.key) }
+        openHeaders = openHeaders.filter { !scope.contains($0) }
+        for id in changed {
+            lastDisclosure += 1
+            disclosures[id] = lastDisclosure
+        }
+        let oldRows = rowsByID
+        var snapshot = projectedSnapshot()
+        var anchorID = preferred
+        var visited: Set<ChatRowID> = []
+        while rowsByID[anchorID] == nil, visited.insert(anchorID).inserted, let owner = owners[anchorID] {
+            anchorID = owner
+        }
+        disclosureAnchor = anchorID
+        let reconfigure = Set(changedRows(since: oldRows, in: snapshot))
+            .union(changed.intersection(snapshot.itemIdentifiers))
+        snapshot.reconfigureItems(Array(reconfigure))
+        UIView.performWithoutAnimation {
+            dataSource.apply(snapshot, animatingDifferences: false)
+            collectionView.layoutIfNeeded()
+            restore(.rows([(anchorID, offset)]))
+        }
+        // Restore clamps to the natural end when little content follows.
+        // Never add trailing space just to pin a collapsed header at the top.
+        noteCollapseAvailability()
+        if let index = layout.index(of: anchorID),
+            let cell = collectionView.cellForItem(at: IndexPath(item: index, section: 0))
+        {
+            UIAccessibility.post(notification: .layoutChanged, argument: cell)
+        }
     }
 
     /// Jump to Latest: animates from nearby, and first lands one screen
@@ -486,6 +568,7 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
             latch.disclosureSettled(isAtEnd: true)
         }
         noteFollowing()
+        noteCollapseAvailability()
     }
 
     private func retryOutput(_ id: ChatRowID) {
@@ -557,6 +640,16 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         }
     }
 
+    private func noteCollapseAvailability() {
+        let available = canCollapseTrajectory
+        guard available != reportedCanCollapse else { return }
+        reportedCanCollapse = available
+        Task { @MainActor [weak self] in
+            guard let self, reportedCanCollapse == available else { return }
+            actions.collapseAvailabilityChanged(available)
+        }
+    }
+
     // MARK: Scrolling
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
@@ -570,6 +663,7 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         if disclosureAnchor == nil { latch.scrolled(isAtEnd: isAtEnd) }
         noteFollowing()
         requestOlderIfNear()
+        noteCollapseAvailability()
     }
 
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {

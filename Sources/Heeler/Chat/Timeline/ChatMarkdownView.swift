@@ -2,8 +2,8 @@ import SwiftUI
 
 /// An assistant message's Markdown, one block at a time: paragraphs and
 /// headings as text, list items after their markers, quotes with a bar,
-/// code and tables in a monospaced box that wraps rather than scrolls
-/// sideways (a horizontal scroll would fight the edge back gesture).
+/// code in a monospaced box and tables in aligned, wrapping columns.
+/// Only tables too wide for the available space scroll horizontally.
 ///
 /// Blocks sit on the next line or a blank line apart wherever Claude Code's
 /// terminal puts them. A blank line before a heading is wider and one after
@@ -131,11 +131,11 @@ private struct ChatMarkdownBlockView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(uiColor: .secondarySystemBackground), in: .rect(cornerRadius: 10))
         case .table:
-            Text(verbatim: block.text)
-                .font(.system(.footnote, design: .monospaced))
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(uiColor: .secondarySystemBackground), in: .rect(cornerRadius: 10))
+            if let table = block.table {
+                ChatMarkdownTableView(table: table)
+            } else {
+                Text(verbatim: block.text).font(.body)
+            }
         case .thematicBreak:
             // A `Divider` would follow the axis of the `HStack` in `body`
             // and stand upright.
@@ -162,6 +162,101 @@ private struct ChatMarkdownBlockView: View {
         case 1: .title2.weight(.bold)
         case 2: .title3.weight(.bold)
         default: .body.weight(.bold)
+        }
+    }
+}
+
+/// A native table with stable column widths across every row. Wide tables
+/// scroll within their own bounds; ordinary two-column tables fit the phone.
+struct ChatMarkdownTableView: View {
+    let table: ChatMarkdownBlock.Table
+    @ScaledMetric(relativeTo: .subheadline) private var minimumColumnWidth: CGFloat = 112
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            grid
+            ScrollView(.horizontal) { grid }
+        }
+        .clipShape(.rect(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color(uiColor: .separator), lineWidth: 0.5)
+        }
+    }
+
+    private var grid: some View {
+        ChatMarkdownTableLayout(columns: table.columns.count, minimumColumnWidth: minimumColumnWidth) {
+            ForEach(table.rows.indices, id: \.self) { row in
+                ForEach(table.columns.indices, id: \.self) { column in
+                    let alignment = alignment(for: table.columns[column])
+                    Text(ChatMarkdownView.boldingStrongEmphasis(table.rows[row][column], in: .subheadline))
+                        .font(row == 0 ? .subheadline.weight(.semibold) : .subheadline)
+                        .multilineTextAlignment(textAlignment(for: table.columns[column]))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+                        .padding(8)
+                        .background(Color(uiColor: row == 0 ? .secondarySystemBackground : .systemBackground))
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(Color(uiColor: .separator)).frame(height: 0.5)
+                        }
+                        .overlay(alignment: .trailing) {
+                            Rectangle().fill(Color(uiColor: .separator)).frame(width: 0.5)
+                        }
+                        .accessibilityAddTraits(row == 0 ? .isHeader : [])
+                }
+            }
+        }
+    }
+
+    private func alignment(for column: ChatMarkdownBlock.Table.Alignment) -> Alignment {
+        switch column {
+        case .left: .topLeading
+        case .center: .top
+        case .right: .topTrailing
+        }
+    }
+
+    private func textAlignment(for column: ChatMarkdownBlock.Table.Alignment) -> TextAlignment {
+        switch column {
+        case .left: .leading
+        case .center: .center
+        case .right: .trailing
+        }
+    }
+}
+
+/// Measures each cell with its column width before choosing a row height.
+/// A long cell therefore wraps without changing the widths in other rows.
+struct ChatMarkdownTableLayout: Layout {
+    let columns: Int
+    let minimumColumnWidth: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = max(proposal.width ?? 0, CGFloat(columns) * minimumColumnWidth)
+        return CGSize(width: width, height: rowHeights(width: width, subviews: subviews).reduce(0, +))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard columns > 0 else { return }
+        let width = bounds.width / CGFloat(columns)
+        let heights = rowHeights(width: bounds.width, subviews: subviews)
+        var y = bounds.minY
+        for (row, height) in heights.enumerated() {
+            for column in 0..<columns {
+                let index = row * columns + column
+                guard subviews.indices.contains(index) else { continue }
+                subviews[index].place(at: CGPoint(x: bounds.minX + CGFloat(column) * width, y: y),
+                    anchor: .topLeading, proposal: ProposedViewSize(width: width, height: height))
+            }
+            y += height
+        }
+    }
+
+    private func rowHeights(width: CGFloat, subviews: Subviews) -> [CGFloat] {
+        guard columns > 0 else { return [] }
+        let cellProposal = ProposedViewSize(width: width / CGFloat(columns), height: nil)
+        return stride(from: 0, to: subviews.count, by: columns).map { start in
+            subviews[start..<min(start + columns, subviews.count)]
+                .map { $0.sizeThatFits(cellProposal).height }.max() ?? 0
         }
     }
 }

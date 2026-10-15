@@ -716,6 +716,96 @@ struct ChatTimelineControllerTests {
         }
     }
 
+    @Test func floatingCollapseFoldsOnlyTheReadTurnAndBringsItsOffscreenHeaderBack() async throws {
+        let controller = ChatTimelineController(actions: ChatTimelineActions())
+        let (rows, turns) = await Self.turns(0..<3, steps: 8, answerLength: 10)
+        let header = ChatRowID.turn(ChatEntryID("a0"))
+        let other = ChatRowID.turn(ChatEntryID("a1"))
+        let group = ChatRowID.group(ChatEntryID("c0b"))
+        let member = ChatRowID.entry(ChatEntryID("c0a"))
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.apply(Self.foldState(rows, turns: turns))
+            await Self.settle(controller)
+            Self.drag(controller, to: controller.timeline.minOffsetY)
+            controller.toggle(other)
+            controller.toggle(header)
+            controller.toggle(group)
+            controller.toggle(member)
+            await Self.settle(controller)
+            let expandedHeight = try #require(controller.cellFrame(of: member)).height
+            Self.drag(controller, to: try #require(controller.cellFrame(of: member)).minY + 160)
+            await Self.settle(controller)
+            #expect(!controller.visibleRowIDs.contains(header))
+            #expect(controller.canCollapseTrajectory)
+
+            controller.collapseCurrentTrajectory()
+            await Self.settle(controller)
+            #expect(!controller.isOpen(header))
+            #expect(controller.isOpen(other))
+            #expect(!controller.canCollapseTrajectory)
+            #expect(abs(try #require(Self.screenY(of: header, in: controller))
+                - controller.timeline.adjustedContentInset.top) <= 1)
+
+            controller.toggle(header)
+            await Self.settle(controller)
+            #expect(!controller.isOpen(group))
+            controller.toggle(group)
+            await Self.settle(controller)
+            #expect(try #require(controller.cellFrame(of: member)).height < expandedHeight - 40)
+        }
+    }
+
+    @Test(arguments: ["running", "interrupted"])
+    func floatingCollapseRevealsTheEndOfAShortTurnWithoutTrailingBlankSpace(mode: String) async throws {
+        var availability: [Bool] = []
+        let controller = ChatTimelineController(actions: ChatTimelineActions(
+            collapseAvailabilityChanged: { availability.append($0) }))
+        let question = ChatEntry(id: ChatEntryID("q"), sourceOffset: 0, content: .user(.init(text: "Question")))
+        let reasoning = ChatEntry(id: ChatEntryID("r"), sourceOffset: 1,
+            content: .reasoning(.init(text: String(repeating: "A long reasoning line.\n", count: 150))))
+        let answer = ChatEntry(id: ChatEntryID("a"), sourceOffset: 4, content: .assistant(.init(text: "Continuing.")))
+        let rows = await ChatRowBuilder().rows(for: ChatTimelineInput(entries: [
+            question, reasoning,
+            Self.tool("t1", preview: ChatToolPreview(text: "one", isTruncated: false), output: nil),
+            Self.tool("t2", preview: ChatToolPreview(text: "two", isTruncated: false), output: nil), answer,
+        ]))
+        let turn = ChatTurn(firstEntryID: question.id, startedAt: .now,
+            endedAt: mode == "running" ? nil : .now, ending: mode == "running" ? nil : .interrupted)
+        let activity: ChatAgentActivity = mode == "running" ? .working : .idle
+        let id = ChatRowID.entry(reasoning.id)
+        let group = ChatRowID.group(ChatEntryID("t2"))
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.apply(Self.foldState(rows, turns: [turn], activity: activity))
+            await Self.settle(controller)
+            #expect(!controller.canCollapseTrajectory)
+            controller.toggle(id)
+            controller.toggle(group)
+            await Self.settle(controller)
+            Self.drag(controller, to: try #require(controller.cellFrame(of: id)).minY + 300)
+            await Self.settle(controller)
+            #expect(controller.canCollapseTrajectory)
+            #expect(availability.last == true)
+
+            controller.collapseCurrentTrajectory()
+            await Self.settle(controller)
+            #expect(!controller.canCollapseTrajectory)
+            #expect(availability.last == false)
+            #expect(!controller.isOpen(group))
+            #expect(!controller.isFollowing)
+            // A short last turn must rest against the composer, rather than
+            // manufacturing a viewport of trailing space to pin its header.
+            let end = try #require(controller.cellFrame(of: .entry(answer.id))).maxY
+            #expect(abs(controller.timeline.contentSize.height - end) <= 1)
+            #expect(controller.visibleRowIDs.contains(.entry(answer.id)))
+            #expect(controller.visibleRowIDs.contains(id))
+            let heldHeight = controller.timeline.contentSize.height
+            controller.followLatest()
+            await Self.settle(controller)
+            #expect(controller.isFollowing)
+            #expect(abs(controller.timeline.contentSize.height - heldHeight) <= 1)
+        }
+    }
+
     // MARK: Helpers
 
     private static func foldState(

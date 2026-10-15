@@ -20,7 +20,8 @@
         /// The session herdr's integration reports for a demo Agent; nil
         /// for the Agents whose program Chat does not read.
         static func session(forPane paneID: String) -> AgentSessionInfo? {
-            switch paneID {
+            if DemoScreenshotMode.showsPiChat, let session = DemoPiChatSample.session(forPane: paneID) { return session }
+            return switch paneID {
             case "mobile:p1":
                 AgentSessionInfo(agent: "codex", kind: .id, source: "herdr:codex", value: attachThread)
             case "docs:p2":
@@ -40,7 +41,7 @@
             claudePath(directory: "/workspace/storefront", session: checkoutSession): checkoutConversation(),
             home + "/.codex/sessions/2026/10/06/rollout-2026-10-06T09-30-00-\(attachThread).jsonl":
                 attachConversation(),
-        ]
+        ].merging(DemoPiChatSample.files) { original, _ in original }
 
         /// Chat's Host file operations over `files`.
         static let hostFiles = ChatHostFiles(
@@ -104,7 +105,8 @@
         /// A demo Agent's screen as `agent.read` returns it with colors, for
         /// Chat's Blocked card; nil where the terminal sample serves.
         static func screen(forPane paneID: String) -> String? {
-            paneID == "checkout:p3" ? checkoutApproval : nil
+            if DemoScreenshotMode.showsPiChat, let screen = DemoPiChatSample.screen(forPane: paneID) { return screen }
+            return paneID == "checkout:p3" ? checkoutApproval : nil
         }
 
         /// checkout:p3: Claude asking to run the command its transcript ends

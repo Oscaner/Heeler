@@ -21,14 +21,22 @@ struct ChatMarkdownBlock: Sendable, Equatable {
         /// A fenced or indented code block. The language is the first word
         /// of the fence's info string.
         case code(language: String?)
-        /// A table as its source lines, for a monospaced font. Tables are
-        /// rare in messages; laying them out as grids can come later.
+        /// A GFM table, with source retained for selection and structured
+        /// cells for native column layout.
         case table
         case thematicBreak
         /// A raw HTML block, shown as written. Chat never interprets HTML.
         case html
     }
 
+    struct Table: Sendable, Equatable {
+        enum Alignment: Sendable { case left, center, right }
+        var columns: [Alignment]
+        /// Header first, then body rows. Empty cells retain their positions.
+        var rows: [[AttributedString]]
+    }
+
+    let table: Table?
     let kind: Kind
     /// What to draw: the text with its inline styles (emphasis, strong,
     /// inline code, strikethrough) and permitted links, and without block
@@ -51,8 +59,9 @@ struct ChatMarkdownBlock: Sendable, Equatable {
 
     init(
         kind: Kind, content: AttributedString, text: String, listDepth: Int = 0, quoteDepth: Int = 0,
-        blankLineBefore: Bool = false
+        blankLineBefore: Bool = false, table: Table? = nil
     ) {
+        self.table = table
         self.kind = kind
         self.content = content
         self.text = text
@@ -477,7 +486,11 @@ private struct BlockBuilder {
         case .html:
             return make(.html, Self.droppingFinalNewline(String(parsed[group.range].characters)))
         case .table:
-            return make(.table, tableText(for: group, at: index, in: groups, quoteDepth: quoteDepth))
+            let source = tableText(for: group, at: index, in: groups, quoteDepth: quoteDepth)
+            return ChatMarkdownBlock(
+                kind: .table, content: AttributedString(source), text: source,
+                listDepth: listDepth, quoteDepth: quoteDepth, blankLineBefore: blankLineBefore,
+                table: tableCells(group, source: source))
         case .leaf:
             break
         }
@@ -564,6 +577,39 @@ private struct BlockBuilder {
         let indent = rows.filter { !$0.allSatisfy(\.isWhitespace) }
             .map { $0.prefix { $0 == " " || $0 == "\t" }.count }.min() ?? 0
         return rows.map { $0.dropFirst(indent) }.joined(separator: "\n")
+    }
+
+    /// Use the parser's row/column coordinates rather than splitting pipes:
+    /// escaped pipes, inline code and empty cells must not shift columns.
+    private func tableCells(_ group: Group, source: String) -> ChatMarkdownBlock.Table? {
+        guard let table = group.chain.first(where: Self.isTable), case .table(let columns) = table.kind,
+            !columns.isEmpty else { return nil }
+        let alignments: [ChatMarkdownBlock.Table.Alignment] = columns.map { column in
+            switch column.alignment {
+            case .center: .center
+            case .right: .right
+            default: .left
+            }
+        }
+        // Empty rows carry no runs. The source includes the delimiter, which
+        // is not a displayed row; all other lines belong to the table.
+        let empty = Array(repeating: AttributedString(), count: columns.count)
+        var rows = Array(repeating: empty, count: max(1, source.split(separator: "\n").count - 1))
+        for run in parsed[group.range].runs {
+            let chain = run.presentationIntent?.components ?? []
+            guard let cell = chain.first(where: Self.isTableCell), case .tableCell(let column) = cell.kind,
+                let row = chain.first(where: Self.isTableRow), columns.indices.contains(column) else { continue }
+            let rowIndex: Int
+            switch row.kind {
+            case .tableHeaderRow: rowIndex = 0
+            case .tableRow(let index): rowIndex = index
+            default: continue
+            }
+            guard rowIndex >= 0 else { continue }
+            while rows.count <= rowIndex { rows.append(empty) }
+            rows[rowIndex][column].append(inlineContent(run.range))
+        }
+        return .init(columns: alignments, rows: rows)
     }
 
     /// A table without source positions: its cells as text, one row per

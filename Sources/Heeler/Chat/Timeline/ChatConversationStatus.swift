@@ -28,6 +28,10 @@ extension ChatUnavailableReason {
             "herdr hasn't reported a Claude Code session ID for this Agent. Chat will keep checking. You can continue in the Agent terminal."
         case .noSession(.codex):
             "herdr hasn't reported a Codex session ID for this Agent. If this is a new conversation, send the first prompt. Chat will keep checking, and you can continue in the Agent terminal."
+        case .noSession(.pi):
+            "herdr hasn't reported a Pi conversation for this Agent. Check the Pi integration on the Host. Chat will keep checking, and you can continue in the Agent terminal."
+        case .noSession(.omp):
+            "herdr hasn't reported an Oh My Pi conversation for this Agent. Check the OMP integration on the Host. Chat will keep checking, and you can continue in the Agent terminal."
         case .unidentifiedSession:
             "herdr names this Agent's session without an id, which happens after resuming a conversation by name. Chat can't tell which transcript is its own."
         case .unsupportedSession:
