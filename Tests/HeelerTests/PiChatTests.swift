@@ -439,7 +439,7 @@ struct PiChatTests {
         -> ChatTranscript
     {
         let lines = try ChatFixture.lines("omp/approvals-asks-plan.jsonl")
-        var reducer = PiTranscriptReducer()
+        var reducer = PiTranscriptReducer(program: .omp)
         reducer.append(Array(lines.prefix(line ?? lines.count)))
         return reducer.transcript(.init(activity: activity))
     }
@@ -650,15 +650,15 @@ struct PiChatTests {
 
     // MARK: Steering
 
-    /// Pi writes a message sent during a turn as a plain prompt once the
-    /// turn's tool batch ends, before its next reply.
+    /// Pi writes a message sent during a turn as a plain prompt the moment
+    /// the turn's tool batch ends, before its next reply.
     @Test func piSteerStaysInRunningTurn() {
         let rows = [
             Self.header,
             #"{"type":"message","id":"u","parentId":null,"message":{"role":"user","content":"start"}}"#,
             #"{"type":"message","id":"a1","parentId":"u","message":{"role":"assistant","content":[{"type":"toolCall","id":"c1","name":"bash","arguments":{"command":"ls"}}],"stopReason":"toolUse"}}"#,
-            #"{"type":"message","id":"r1","parentId":"a1","message":{"role":"toolResult","toolCallId":"c1","toolName":"bash","content":[{"type":"text","text":"a.txt"}],"isError":false}}"#,
-            #"{"type":"message","id":"s","parentId":"r1","message":{"role":"user","content":"steer"}}"#,
+            #"{"type":"message","id":"r1","parentId":"a1","timestamp":"2026-10-15T17:54:17.461Z","message":{"role":"toolResult","toolCallId":"c1","toolName":"bash","content":[{"type":"text","text":"a.txt"}],"isError":false}}"#,
+            #"{"type":"message","id":"s","parentId":"r1","timestamp":"2026-10-15T17:54:17.462Z","message":{"role":"user","content":"steer"}}"#,
             #"{"type":"message","id":"a2","parentId":"s","message":{"role":"assistant","content":[{"type":"toolCall","id":"c2","name":"bash","arguments":{"command":"pwd"}}],"stopReason":"toolUse"}}"#,
             #"{"type":"message","id":"r2","parentId":"a2","message":{"role":"toolResult","toolCallId":"c2","toolName":"bash","content":[{"type":"text","text":"/p"}],"isError":false}}"#,
             #"{"type":"message","id":"a3","parentId":"r2","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"stopReason":"stop"}}"#,
@@ -696,6 +696,49 @@ struct PiChatTests {
         #expect(restarted.entries.last?.content == .user(ChatUserMessage(text: "next")))
     }
 
+    /// A session resumed after its process died mid-tool: the prompt typed
+    /// afterwards opens a turn of its own, and the call left without a
+    /// result reads as interrupted, not as running or awaiting approval.
+    @Test func promptAfterResumedToolTurnOpensTurn() {
+        let start = #"{"type":"message","id":"u","parentId":null,"message":{"role":"user","content":"start"}}"#
+        let call =
+            #"{"type":"message","id":"a","parentId":"u","timestamp":"2026-10-15T17:54:17.000Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"c","name":"bash","arguments":{"command":"make"}}],"stopReason":"toolUse"}}"#
+        let result =
+            #"{"type":"message","id":"r","parentId":"a","timestamp":"2026-10-15T17:54:18.000Z","message":{"role":"toolResult","toolCallId":"c","toolName":"bash","content":[{"type":"text","text":"ok"}],"isError":false}}"#
+        func prompt(after parent: String) -> String {
+            #"{"type":"message","id":"n","parentId":""# + parent
+                + #"","timestamp":"2026-10-15T17:56:40.000Z","message":{"role":"user","content":"are you there?"}}"#
+        }
+        for program in [ChatProgram.pi, .omp] {
+            var orphaned = PiTranscriptReducer(program: program)
+            orphaned.append(Self.lines([Self.header, start, call, prompt(after: "a")]))
+            for activity in [ChatAgentActivity.working, .blocked] {
+                let transcript = orphaned.transcript(.init(activity: activity))
+                #expect(transcript.turns.map(\.ending) == [.interrupted, nil])
+                #expect(transcript.entries.last?.content == .user(ChatUserMessage(text: "are you there?")))
+                #expect(transcript.latestPromptOffset == transcript.entries.last?.sourceOffset)
+                #expect(Self.tool("c", in: transcript)?.status == .interrupted)
+                #expect(transcript.pendingRequests.isEmpty)
+            }
+
+            var answered = PiTranscriptReducer(program: program)
+            answered.append(Self.lines([Self.header, start, call, result, prompt(after: "r")]))
+            let resumed = answered.transcript(.init(activity: .working))
+            #expect(resumed.turns.map(\.ending) == [.interrupted, nil])
+            #expect(resumed.entries.last?.content == .user(ChatUserMessage(text: "are you there?")))
+        }
+
+        // Oh My Pi flags its steers, so an unflagged prompt written right
+        // after a tool result is not one.
+        var omp = PiTranscriptReducer(program: .omp)
+        omp.append(
+            Self.lines([
+                Self.header, start, call, result,
+                #"{"type":"message","id":"n","parentId":"r","timestamp":"2026-10-15T17:54:18.001Z","message":{"role":"user","content":"next"}}"#,
+            ]))
+        #expect(omp.transcript(.init(activity: .working)).turns.map(\.ending) == [.interrupted, nil])
+    }
+
     /// Oh My Pi flags a steer: here the text typed into an approval sent by
     /// "deny and send", and a draft queued behind a question.
     @Test func ompSteeringFlagStaysInTurn() throws {
@@ -715,7 +758,7 @@ struct PiChatTests {
 
         // A steer that lands while the call before it still runs leaves it
         // running.
-        var reducer = PiTranscriptReducer()
+        var reducer = PiTranscriptReducer(program: .omp)
         reducer.append(
             Self.lines([
                 Self.header,

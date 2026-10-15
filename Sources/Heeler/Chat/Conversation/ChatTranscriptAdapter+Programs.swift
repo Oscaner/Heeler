@@ -34,7 +34,7 @@ extension ChatTranscriptAdapter {
                 wantsFirstLine: true,
                 joinsCachedHistory: false,
                 makeReducer: { seed in
-                    var reducer = PiTranscriptReducer()
+                    var reducer = PiTranscriptReducer(program: program)
                     if let firstLine = seed.firstLine { reducer.append([firstLine]) }
                     return reducer
                 },

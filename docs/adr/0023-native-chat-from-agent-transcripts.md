@@ -41,9 +41,10 @@ so a Pi/OMP file is identified by its header's session id rather than its
 first bytes, and Chat's sends are confirmed by entry: a rewrite neither
 drops the saved conversation nor confirms a send twice.
 A message that steers a running turn (Oh My Pi's `steering` flag, or a Pi
-prompt right after the turn's tool results or tool-calling reply) shows as
-queued inside that turn instead of interrupting it, and still confirms
-Chat's send.
+prompt written within moments of the turn's tool results) shows as queued
+inside that turn instead of interrupting it, and still confirms Chat's send.
+A prompt typed after resuming a turn whose process died opens a turn of its
+own.
 
 Pi's stock rule editor and OMP's rounded box require a visible software cursor.
 Pi's empty editor is one row between its rules, directly above a footer whose

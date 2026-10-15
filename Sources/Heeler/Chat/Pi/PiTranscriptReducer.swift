@@ -4,7 +4,7 @@ import Foundation
 /// leaf's ancestry, including invisible extension/state entries. File order
 /// alone would resurrect messages abandoned by /tree or a branch switch.
 struct PiTranscriptReducer: ChatTranscriptReducer {
-    static let revision = 5
+    static let revision = 6
 
     private struct Record: Sendable {
         let offset: UInt64
@@ -19,6 +19,13 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
     private var records: [UInt64: Record] = [:]
     private var invalid: Set<UInt64> = []
     private var oversized: Set<UInt64> = []
+    /// Oh My Pi flags every message that steered a running turn; only
+    /// Pi's steers are told apart by when they were written.
+    private let flagsSteers: Bool
+
+    init(program: ChatProgram = .pi) {
+        flagsSteers = program == .omp
+    }
 
     mutating func append(_ lines: [ChatLine]) {
         for line in lines {
@@ -147,9 +154,10 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
         var lastStopReason: String?
         // The latest tool result's text, until the next assistant message.
         var lastToolResultText: String?
-        // The last message was a tool result, or a reply that called tools:
-        // a prompt now is one Pi delivered while the turn ran.
-        var steerable = false
+        // When the latest tool result was written, while it is the last
+        // message: a prompt Pi writes right after it is one it delivered
+        // while the turn ran.
+        var toolResultWrittenAt: Date?
 
         for (position, record) in chain.enumerated() {
             switch record.type {
@@ -180,7 +188,7 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                         Self.skillCommand(prompt).map { ChatUserMessage(text: $0.displayText, command: $0) }
                         ?? ChatUserMessage(text: prompt)
                     openTurn(record, .user(message), prompt: prompt)
-                    steerable = false
+                    toolResultWrittenAt = nil
                 } else {
                     customNotice(record, record.value)
                 }
@@ -191,14 +199,20 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                     let text = Self.text(message["content"])
                     let images = Self.images(message["content"])
                     // A message sent while a turn runs steers it. Oh My Pi
-                    // flags it; Pi writes it as a plain prompt between the
-                    // turn's tool calls and its next reply. A turn whose
-                    // reply broke off unrecorded still ends at a prompt. The
-                    // turn may have opened above the lines read.
+                    // flags it; Pi writes it as a plain prompt the moment
+                    // the turn's tool batch ends, before its next reply. A
+                    // turn whose reply broke off unrecorded, such as one
+                    // resumed after its process died, still ends at a
+                    // prompt. The turn may have opened above the lines read.
                     let isOpen =
                         transcript.turns.last.map { $0.ending == nil }
                         ?? (transcript.needsOlderHistory && transcript.precedingTurnEnd == nil)
-                    let steers = isOpen && (message["steering"] == .bool(true) || steerable)
+                    let delivered =
+                        !flagsSteers
+                        && toolResultWrittenAt.flatMap { result in
+                            Self.date(record).map { $0.timeIntervalSince(result) < Self.steerWriteWindow }
+                        } == true
+                    let steers = isOpen && (message["steering"] == .bool(true) || delivered)
                     let content: ChatEntry.Content
                     let prompt: String
                     if record.isTruncated, text.isEmpty, images == 0 {
@@ -224,7 +238,7 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                     } else {
                         openTurn(record, content, prompt: prompt)
                     }
-                    steerable = false
+                    toolResultWrittenAt = nil
                 case "assistant":
                     let planProposed = lastToolResultText == Self.planReady
                     lastToolResultText = nil
@@ -256,7 +270,7 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                     let stopReason = message["stopReason"]?.stringValue
                     let errorMessage = message["errorMessage"]?.stringValue
                     lastStopReason = stopReason
-                    steerable = stopReason == "toolUse"
+                    toolResultWrittenAt = nil
                     switch stopReason {
                     case "stop", "length": finish(.completed, at: record)
                     case "aborted" where errorMessage == Self.ompSilentAbort:
@@ -308,7 +322,7 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                     }
                     let resultText = Self.text(message["content"]).trimmingCharacters(in: .whitespacesAndNewlines)
                     lastToolResultText = resultText
-                    steerable = true
+                    toolResultWrittenAt = Self.date(record)
                     if message["isError"] == .bool(true) {
                         tool.status =
                             if resultText.hasPrefix(Self.deniedPrefix) || resultText == Self.askCancelled {
@@ -528,6 +542,9 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
     /// or a question dismissed.
     private static let deniedPrefix = "Tool call denied by user:"
     private static let askCancelled = "Ask tool was cancelled by the user"
+    /// How soon after a turn's tool results Pi writes a steer it delivers:
+    /// observed within a millisecond, far below any prompt typed later.
+    private static let steerWriteWindow: TimeInterval = 2
     /// Results of calls the user stopped while they ran.
     private static let abortedResults: Set<String> = ["Command aborted", "Operation aborted"]
 
