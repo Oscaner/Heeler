@@ -32,7 +32,9 @@ Entries reference the pull request that made the change.
   so when a draft in Oh My Pi's prompt would take the keys. A new
   conversation reads as empty until its first reply is saved, instead of as
   missing. Pi takes messages while it works, and a message that steers a
-  running turn shows as queued inside it rather than interrupting it.
+  running turn shows as queued inside it rather than interrupting it. Oh My
+  Pi's own `.omp/skills` and `~/.omp/agent/skills`, and the shared home
+  `~/.agents/skills` and `~/.agent/skills`, appear in its skill list.
   Extends the Chat infrastructure in #425.
   (#464)
 - Chat for Claude Code and Codex Agents: the Agent's conversation as native
