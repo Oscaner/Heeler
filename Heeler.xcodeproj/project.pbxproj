@@ -584,6 +584,7 @@
 		CB8CFB197D7A9D2EFBE06720 /* ChatTranscriptCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A797FB6FAEF48C2B8ABE8171 /* ChatTranscriptCache.swift */; };
 		CBAEF7D1E91053F0B15E2F31 /* PairingCeremonyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F0763484EE05424146492C1 /* PairingCeremonyTests.swift */; };
 		CCEBF66BA9AFE64EDD371A78 /* AttachUserMessageIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85BEE99E7BEFA0D0D985162C /* AttachUserMessageIndex.swift */; };
+		CD1FDAD00677C38CC6910399 /* PiFileChanges.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D4CCEAF1FC716A80E4454B /* PiFileChanges.swift */; };
 		CD2F9C1E4EAFC6C9D94F6FFB /* CodexRecordDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89669281E7DB73D3A6B63BCD /* CodexRecordDecoder.swift */; };
 		CD6468C4FE5F5F67671D33E6 /* HerdrCommandLineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90E77FA4275B5056D4C0808 /* HerdrCommandLineTests.swift */; };
 		CD7F12A6A8D1F064B44879C0 /* CodexRolloutFileName.swift in Sources */ = {isa = PBXBuildFile; fileRef = C02B2098030E5048047D4B29 /* CodexRolloutFileName.swift */; };
@@ -1367,6 +1368,7 @@
 		C90B11BF4D2B2C45635B5EFE /* TerminalThemeSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalThemeSettings.swift; sourceTree = "<group>"; };
 		C91F0473741A92D7EFA40CBA /* NotificationKeyMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationKeyMirror.swift; sourceTree = "<group>"; };
 		C95D54E57FAA5D28C8899229 /* ChangesGitExecGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChangesGitExecGateTests.swift; sourceTree = "<group>"; };
+		C9D4CCEAF1FC716A80E4454B /* PiFileChanges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiFileChanges.swift; sourceTree = "<group>"; };
 		CA62F28156A8CA87234C33BE /* ChangesUntrackedDirectoryRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChangesUntrackedDirectoryRows.swift; sourceTree = "<group>"; };
 		CB90BB1A82BAAD178E1258F3 /* HerdrHostPathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HerdrHostPathTests.swift; sourceTree = "<group>"; };
 		CBC80D00F652CB84103C246F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -2107,6 +2109,7 @@
 		57F708F81AC9E56122876084 /* Pi */ = {
 			isa = PBXGroup;
 			children = (
+				C9D4CCEAF1FC716A80E4454B /* PiFileChanges.swift */,
 				06454AF51B10EBA3B3B212DC /* PiTranscriptReducer.swift */,
 			);
 			path = Pi;
@@ -3116,6 +3119,7 @@
 				DB3815F790623647C0050290 /* PairingScanStore.swift in Sources */,
 				430EDF8111CC397CA9BD2008 /* PairingScanView.swift in Sources */,
 				D08663BD250210835FE7ED49 /* PhotosPickerImageSelection.swift in Sources */,
+				CD1FDAD00677C38CC6910399 /* PiFileChanges.swift in Sources */,
 				2BB95237CF7BF07AA2E79D22 /* PiInputBoxDetector.swift in Sources */,
 				977353630D3F6AB17896900B /* PiTranscriptLocator.swift in Sources */,
 				D502F4B422F9E83DA1CD8573 /* PiTranscriptReducer.swift in Sources */,

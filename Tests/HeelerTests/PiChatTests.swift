@@ -538,6 +538,116 @@ struct PiChatTests {
         #expect(tool.subtitle == "Fixing the typo")
     }
 
+    // MARK: Edit diffs
+
+    private static func toolRow(_ transcript: ChatTranscript) -> ChatToolActivity? {
+        for entry in transcript.entries.reversed() {
+            if case .tool(let tool) = entry.content { return tool }
+        }
+        return nil
+    }
+
+    /// Oh My Pi 18.11.1's free-form edit (live capture 11): the call names
+    /// no file, the result's details carry the path and a numbered diff.
+    private static let ompEdit = [
+        #"{"type":"session","version":3,"id":"01a14045-0053-7439-b93e-c7acce7b7547","timestamp":"2026-10-15T15:53:46.323Z","cwd":"/tmp/heeler-iso-omp2/proj"}"#,
+        #"{"type":"message","id":"5a8eaae0","parentId":null,"message":{"role":"user","content":[{"type":"text","text":"In notes.txt change the line beta to BETA using your edit tool. Then reply: done"}],"attribution":"user"}}"#,
+        #"{"type":"message","id":"c2ed8e36","parentId":"5a8eaae0","message":{"role":"assistant","content":[{"type":"toolCall","id":"call_41d1f7700efc410888b660d57007fce1|ctc_04f80ff35a26c210016ad0f7caddf88191a9d1288be3fc0f5a","name":"edit","arguments":{"input":"*** Begin Patch\n[notes.txt#B6C1]\nPUT 2.=2:\n+BETA\n*** End Patch\n"},"customWireName":"edit"}],"stopReason":"toolUse"}}"#,
+        #"{"type":"custom","customType":"tool_execution_start","data":{"toolCallId":"call_41d1f7700efc410888b660d57007fce1|ctc_04f80ff35a26c210016ad0f7caddf88191a9d1288be3fc0f5a","toolName":"edit"},"id":"7724cd66","parentId":"c2ed8e36"}"#,
+        #"{"type":"message","id":"f4717db2","parentId":"7724cd66","message":{"role":"toolResult","toolCallId":"call_41d1f7700efc410888b660d57007fce1|ctc_04f80ff35a26c210016ad0f7caddf88191a9d1288be3fc0f5a","toolName":"edit","content":[{"type":"text","text":"[notes.txt#F1C1]\n1:alpha\n2:BETA\n3:gamma"}],"details":{"diff":" 1|alpha\n-2|beta\n+2|BETA\n 3|gamma","firstChangedLine":2,"op":"update","path":"/tmp/heeler-iso-omp2/proj/notes.txt","oldText":"alpha\nbeta\ngamma\n","newText":"alpha\nBETA\ngamma\n"},"isError":false}}"#,
+    ]
+
+    @Test func ompEditDiffBecomesFileChanges() throws {
+        var reducer = PiTranscriptReducer()
+        let lines = Self.lines(Self.ompEdit)
+        reducer.append(lines)
+        let tool = try #require(Self.toolRow(reducer.transcript(.init())))
+
+        #expect(tool.kind == .fileEdit)
+        #expect(tool.title == "/tmp/heeler-iso-omp2/proj/notes.txt")
+        #expect(tool.diff == ChatDiffStats(added: 1, removed: 1))
+        let changes = try #require(tool.fileChanges)
+        #expect(changes.directory == "/tmp/heeler-iso-omp2/proj")
+        #expect(changes.files.map { changes.displayPath(of: $0) } == ["notes.txt"])
+        #expect(changes.files.first?.kind == .updated)
+        #expect(
+            changes.files.first?.hunks == [
+                ChatDiffHunk(
+                    oldStart: 1, oldLines: 3, newStart: 1, newLines: 3, lines: [" alpha", "-beta", "+BETA", " gamma"])
+            ])
+        #expect(tool.showsDiffAsOutput)
+
+        // An expanded row decodes the same changes from the result's line.
+        let result = try #require(lines.last)
+        guard case .preview(_, let expanded)? = reducer.output(of: result, for: tool) else {
+            Issue.record("expected the result's output")
+            return
+        }
+        #expect(expanded == changes)
+    }
+
+    @Test func piEditPatchBecomesFileChanges() throws {
+        // Pi 0.85.1 (live capture t03): the call names the file, the result
+        // records a unified patch beside a display-only diff.
+        var reducer = PiTranscriptReducer()
+        let lines = Self.lines([
+            #"{"type":"session","version":3,"id":"01a140af-4fae-7475-af1c-10e55f811a43","cwd":"/private/tmp/heeler-iso-pi3/proj"}"#,
+            #"{"type":"message","id":"u","parentId":null,"message":{"role":"user","content":"Change beta to BETA in notes.txt"}}"#,
+            #"{"type":"message","id":"a","parentId":"u","message":{"role":"assistant","content":[{"type":"toolCall","id":"call-37dafb50-4c0d-467b-8031-c2cbf1eda552-2|fc_2e7392f6-34f5-938f-afc1-7a5117e011f7_0","name":"edit","arguments":{"path":"notes.txt","edits":[{"oldText":"beta","newText":"BETA"}]}}],"stopReason":"toolUse"}}"#,
+            #"{"type":"message","id":"r","parentId":"a","message":{"role":"toolResult","toolCallId":"call-37dafb50-4c0d-467b-8031-c2cbf1eda552-2|fc_2e7392f6-34f5-938f-afc1-7a5117e011f7_0","toolName":"edit","content":[{"type":"text","text":"Successfully replaced 1 block(s) in notes.txt."}],"details":{"diff":" 1 alpha\n-2 beta\n+2 BETA\n 3 gamma","patch":"--- notes.txt\n+++ notes.txt\n@@ -1,3 +1,3 @@\n alpha\n-beta\n+BETA\n gamma\n","firstChangedLine":2},"isError":false}}"#,
+        ])
+        reducer.append(lines)
+        let tool = try #require(Self.toolRow(reducer.transcript(.init())))
+
+        #expect(tool.title == "notes.txt")
+        #expect(tool.diff == ChatDiffStats(added: 1, removed: 1))
+        let changes = try #require(tool.fileChanges)
+        #expect(changes.files.map(\.path) == ["notes.txt"])
+        #expect(
+            changes.files.first?.hunks == [
+                ChatDiffHunk(
+                    oldStart: 1, oldLines: 3, newStart: 1, newLines: 3, lines: [" alpha", "-beta", "+BETA", " gamma"])
+            ])
+        let result = try #require(lines.last)
+        guard case .preview(_, let expanded)? = reducer.output(of: result, for: tool) else {
+            Issue.record("expected the result's output")
+            return
+        }
+        #expect(expanded == changes)
+    }
+
+    @Test func ompNumberedDiffSplitsIntoHunks() {
+        // Two changes far apart, and a blank line before a third: context
+        // and removed lines count the old file, added lines the new one.
+        let diff = [
+            " 1|a", "-2|b", "+2|B", "+3|B2", " 3|c",
+            " 40|x", "-41|y", " 42|z",
+            "",
+            "+60|tail",
+        ].joined(separator: "\n")
+        #expect(
+            PiFileChanges.numberedHunks(diff) == [
+                ChatDiffHunk(oldStart: 1, oldLines: 3, newStart: 1, newLines: 4, lines: [" a", "-b", "+B", "+B2", " c"]),
+                ChatDiffHunk(oldStart: 40, oldLines: 3, newStart: 41, newLines: 2, lines: [" x", "-y", " z"]),
+                ChatDiffHunk(oldStart: 59, oldLines: 0, newStart: 60, newLines: 1, lines: ["+tail"]),
+            ])
+        #expect(PiFileChanges.numberedHunks(" 1|a\n@@ -1 +1 @@") == nil)
+    }
+
+    @Test func ompMultiFileEditListsEachFile() throws {
+        let details: JSONValue = try JSONDecoder().decode(
+            JSONValue.self,
+            from: Data(
+                #"{"diff":"-1|a\n+1|A\n\n+1|new","firstChangedLine":1,"perFileResults":[{"path":"/p/a.txt","op":"update","diff":"-1|a\n+1|A","firstChangedLine":1},{"path":"/p/b.txt","op":"create","diff":"+1|new","snapshotsPruned":true},{"path":"/p/c.txt","op":"delete","diff":""}]}"#
+                    .utf8))
+        let changes = try #require(PiFileChanges.changes(details: details, callPath: nil, directory: "/p"))
+
+        #expect(changes.files.map(\.path) == ["/p/a.txt", "/p/b.txt", "/p/c.txt"])
+        #expect(changes.files.map(\.kind) == [.updated, .created, .deleted])
+        #expect(changes.files.map(\.added) == [1, 1, 0])
+        #expect(PiFileChanges.changes(details: .object([:]), callPath: "/p/a.txt", directory: nil) == nil)
+    }
+
     // MARK: Steering
 
     /// Pi writes a message sent during a turn as a plain prompt once the

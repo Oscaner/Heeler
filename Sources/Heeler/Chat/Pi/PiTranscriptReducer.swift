@@ -4,7 +4,7 @@ import Foundation
 /// leaf's ancestry, including invisible extension/state entries. File order
 /// alone would resurrect messages abandoned by /tree or a branch switch.
 struct PiTranscriptReducer: ChatTranscriptReducer {
-    static let revision = 3
+    static let revision = 4
 
     private struct Record: Sendable {
         let offset: UInt64
@@ -55,9 +55,11 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
         var byID: [String: Record] = [:]
         var leaf: String?
         var title: String?
+        var directory: String?
         for record in ordered {
             if record.type == "session" || record.type == "title" {
                 if let name = record.value["title"]?.stringValue { title = name }
+                if let cwd = record.value["cwd"]?.stringValue { directory = cwd }
                 continue
             }
             guard let id = record.id else { continue }
@@ -87,6 +89,9 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
             title: title, needsOlderHistory: context.windowStart > 0 || missingAncestor,
             diagnostics: ChatTranscriptDiagnostics(invalidLines: invalid.count, oversizedLines: oversized.count))
         var calls: [String: Int] = [:]
+        /// The path each call names in its arguments, which Pi's edit
+        /// result leaves out.
+        var callPaths: [String: String] = [:]
 
         func entryID(_ record: Record, _ suffix: String = "") -> ChatEntryID {
             ChatEntryID("pi:\(record.id ?? String(record.offset))\(suffix)")
@@ -240,6 +245,7 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                             let tool = Self.tool(
                                 name: name, arguments: block["arguments"], callID: callID, activity: context.activity)
                             calls[callID] = transcript.entries.count
+                            callPaths[callID] = block["arguments"]?["path"]?.stringValue
                             transcript.entries.append(
                                 ChatEntry(
                                     id: ChatEntryID("pi:tool:\(callID)"), sourceOffset: record.offset,
@@ -303,6 +309,11 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                     } else {
                         tool.status = .succeeded
                         Self.recordAnswers(message["details"], in: &tool.questions)
+                        if let changes = PiFileChanges.changes(
+                            details: message["details"], callPath: callPaths[callID], directory: directory)
+                        {
+                            Self.show(changes, in: &tool, namedByCall: callPaths[callID] != nil)
+                        }
                     }
                     tool.preview = Self.preview(message)
                     if record.isTruncated {
@@ -361,7 +372,26 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
             record["type"]?.stringValue == "message", let message = record["message"],
             message["role"]?.stringValue == "toolResult", message["toolCallId"]?.stringValue == tool.callID
         else { return nil }
-        return .preview(Self.preview(message))
+        // Pi's path came from the call, which the row's changes kept.
+        let fileChanges =
+            message["isError"] == .bool(true)
+            ? nil
+            : PiFileChanges.changes(
+                details: message["details"], callPath: tool.fileChanges?.files.first?.path,
+                directory: tool.fileChanges?.directory)
+        return .preview(Self.preview(message), fileChanges: fileChanges)
+    }
+
+    /// Lists an edit's files under its row. A call whose arguments named no
+    /// file, such as Oh My Pi's free-form patch, takes its title from them.
+    private static func show(_ changes: ChatFileChanges, in tool: inout ChatToolActivity, namedByCall: Bool) {
+        tool.fileChanges = changes
+        tool.diff = ChatDiffStats(
+            added: changes.files.reduce(0) { $0 + $1.added }, removed: changes.files.reduce(0) { $0 + $1.removed },
+            files: changes.files.count + changes.moreFiles)
+        if !namedByCall, !changes.files.isEmpty {
+            tool.title = String(changes.files.map(\.path).joined(separator: ", ").prefix(500))
+        }
     }
 
     private static func tool(name: String, arguments: JSONValue?, callID: String, activity: ChatAgentActivity)

@@ -36,7 +36,8 @@ Entries reference the pull request that made the change.
   Pi's own `.omp/skills` and `~/.omp/agent/skills`, and the shared home
   `~/.agents/skills` and `~/.agent/skills`, appear in its skill list. When
   Oh My Pi rewrites its session file, Chat keeps the saved conversation and
-  still confirms each sent message once.
+  still confirms each sent message once. Pi and Oh My Pi edits list the
+  files they changed with their diffs.
   Extends the Chat infrastructure in #425.
   (#464)
 - Chat for Claude Code and Codex Agents: the Agent's conversation as native
