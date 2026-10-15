@@ -2,7 +2,9 @@
 
 # 通过 VPS 配置远程访问
 
-当运行 herdr 的 Mac 位于 NAT 之后、Heeler 无法直接连接时，请按本指南配置反向隧道访问。配置完成后的连接路径如下：
+当运行 herdr 的 Mac 位于 NAT 之后、Heeler 无法直接连接时，请按本指南配置反向隧道访问。
+
+配置完成后的连接路径如下：
 
 ```text
 iPhone -> VPS public SSH port -> VPS 127.0.0.1:2222 -> Mac SSH port 22
@@ -38,110 +40,6 @@ VPS 仅对外暴露常规的 SSH 服务端口；`2222` 端口始终绑定在 VPS
 执行命令前请先替换所有全大写占位符，切勿直接粘贴仍含未替换占位符的命令。
 
 如果多台 Mac 共用同一台 VPS，请为每台 Mac 分配不同的 `TUNNEL_PORT`。
-
-## 自动化配置更多桌面客户端
-
-当 VPS 与反向隧道正常运作后，如需让其他 Mac 也能通过该隧道访问，无需重做完整的 15 个步骤。仓库内置的两个脚本可以自动完成客户端配置，同时保证每台电脑使用各自独立、可单独吊销的密钥。
-
-这套自动化脚本采用双端审批流程：
-
-1. 新客户端在本机生成私钥；
-2. 管理员在被暴露的目标 Mac 上仅注册该客户端的公钥。
-
-这样无需将 VPS 管理员私钥或共享客户端私钥复制到每台电脑上。
-
-### 管理员一次性前置条件
-
-**运行位置：被暴露的 Mac**
-
-确保这台 Mac 能通过 SSH 连接到 VPS 管理员账户，且已完成 VPS 主机密钥核验。目标可以是已配置好的别名（如 `vps-admin`）或显式地址（如 `admin@VPS_PUBLIC_IP`）。
-
-远端管理员账户必须是 `root`，或具备免密 `sudo` 权限。一旦发现 VPS 主机密钥未知或发生变更，注册脚本会拒绝执行。
-
-### 配置新的 Mac 客户端
-
-**运行位置：新客户端 Mac（在本仓库检出目录中）**
-
-```bash
-scripts/configure-vps-ssh-client.sh \
-  --profile VPS_NAME \
-  --vps-host VPS_PUBLIC_IP \
-  --vps-port VPS_SSH_PORT \
-  --target-user MAC_USER \
-  --jump-user herdr-jump \
-  --tunnel-port TUNNEL_PORT
-```
-
-该脚本会：
-
-- 若 `~/.ssh/VPS_NAME-client` 不存在则自动创建；
-- 提示设置密钥口令（Passphrase）；
-- 在 SSH 配置中写入受管的 `VPS_NAME-jump` 与 `VPS_NAME-mac` 别名；
-- 校验生成的 OpenSSH 配置语法；
-- 打印公钥指纹；
-- 仅将公钥复制到 macOS 剪贴板。
-
-仅当客户端无法交互式输入口令时才使用 `--no-passphrase`。私钥始终保留在新客户端本机，无需导出。
-
-请通过受信任的渠道将打印出的公钥发给管理员。公钥本身虽不是机密，但批准前仍应核对指纹。
-
-### 一次性批准该客户端
-
-**运行位置：被暴露的 Mac（在本仓库检出目录中）**
-
-如果已通过通用剪贴板（Universal Clipboard）传过来公钥：
-
-```bash
-pbpaste | scripts/manage-vps-ssh-client.sh add \
-  --vps-admin VPS_ADMIN_SSH_DESTINATION \
-  --jump-user herdr-jump \
-  --tunnel-port TUNNEL_PORT
-```
-
-否则请将公钥保存为 `.pub` 文件后运行：
-
-```bash
-scripts/manage-vps-ssh-client.sh add \
-  --vps-admin VPS_ADMIN_SSH_DESTINATION \
-  --jump-user herdr-jump \
-  --tunnel-port TUNNEL_PORT \
-  --public-key-file NEW_CLIENT_PUBLIC_KEY_FILE
-```
-
-这一条命令会：
-
-1. 在 VPS 的 Jump 账户中，将该公钥已有的重复项或未受限项替换为仅允许转发的受限条目；
-2. 在目标 Mac 上，将该公钥已有的重复项或未受限项替换为支持命令执行但禁用 Agent 与 X11 转发的条目；
-3. 保留两端其余无关的授权公钥；
-4. 强制设置正确的文件属主与权限。
-
-脚本会先完成 VPS 端更新，再替换目标 Mac 上的文件；如果 VPS 步骤失败，目标 Mac 的授权保持不变。
-
-### 连接并验证
-
-**运行位置：新客户端 Mac**
-
-```bash
-ssh VPS_NAME-mac
-```
-
-首次连接时 OpenSSH 会先后询问两个主机密钥。请先通过云厂商控制台核对 VPS 指纹，并通过系统设置或本地命令核对目标 Mac 指纹，确认无误后再分别接受。
-
-### 吊销单个客户端
-
-**运行位置：被暴露的 Mac**
-
-在删除客户端私钥前，请保留旧公钥或先将其导出为文件：
-
-```bash
-scripts/manage-vps-ssh-client.sh revoke \
-  --vps-admin VPS_ADMIN_SSH_DESTINATION \
-  --jump-user herdr-jump \
-  --tunnel-port TUNNEL_PORT \
-  --public-key-file OLD_CLIENT_PUBLIC_KEY_FILE
-```
-
-吊销操作会同时从 VPS 和目标 Mac 两个授权点移除该公钥，其他客户端不受影响。
 
 ## 步骤 1：在 Mac 上开启远程登录
 
@@ -613,23 +511,21 @@ tail -n 50 ~/Library/Logs/VPS_NAME-reverse-ssh.error.log
 
 **运行位置：iOS**
 
-填写以下值：
+前往 **Hosts > Add Host**，在 **Routes** 下轻点 **Add Route** 填写隧道与 Jump Host 字段并保存路由，再填写其余 Host 字段：
 
-```text
-Host name: any descriptive name
-Host address: 127.0.0.1
-Host port: TUNNEL_PORT
-Host user: MAC_USER
-Authentication: Device Key
+| 字段 | 值 |
+|---|---|
+| Name | 任意易于识别的名称 |
+| User | `MAC_USER` |
+| Address（在 Route 中） | `127.0.0.1` |
+| Port（在 Route 中） | `TUNNEL_PORT` |
+| Jump Host address（在 Route 中） | `VPS_PUBLIC_IP` |
+| Jump Host port（在 Route 中） | `VPS_SSH_PORT` |
+| Jump Host user（在 Route 中） | `herdr-jump` |
+| Authentication | `Device Key` |
+| herdr Session | 留空 |
 
-Jump Host address: VPS_PUBLIC_IP
-Jump Host port: VPS_SSH_PORT
-Jump Host user: herdr-jump
-
-herdr Session: leave blank
-```
-
-只有填写了 Jump Host address 后，Jump Host port 与 Jump Host user 字段才会显示。如果将 Jump Host user 留空，Heeler 会默认复用 Host user，从而被 VPS 当作未知账户拒绝。
+在路由页面中，只有填写了 Jump Host address 后，Jump Host port 与 Jump Host user 字段才会显示。如果将 Jump Host user 留空，Heeler 会默认复用 Host user，从而被 VPS 当作未知账户拒绝。
 
 将 herdr Session 留空即可使用位于 `~/.config/herdr/herdr.sock` 的默认会话。填写任何值（包括 `default`）都会连接 `~/.config/herdr/sessions/<name>/herdr.sock`。
 
@@ -731,6 +627,110 @@ PubkeyAuthentication yes
 | VPS 主机密钥发生变化 | 外层 SSH 信任 | 先通过云厂商控制台核对指纹，再决定是否接受 |
 | 应用能连上 Mac 但连不上 herdr | Mac 应用层 | 检查 herdr 运行状态、套接字路径以及 `AllowStreamLocalForwarding` |
 
+## 自动化配置更多桌面客户端
+
+当 VPS 与反向隧道正常运作后，如需让其他 Mac 也能通过该隧道访问，无需重做完整的 15 个步骤。仓库内置的两个脚本可以自动完成客户端配置，同时保证每台电脑使用各自独立、可单独吊销的密钥。
+
+这套自动化脚本采用双端审批流程：
+
+1. 新客户端在本机生成私钥；
+2. 管理员在被暴露的目标 Mac 上仅注册该客户端的公钥。
+
+这样无需将 VPS 管理员私钥或共享客户端私钥复制到每台电脑上。
+
+### 管理员一次性前置条件
+
+**运行位置：被暴露的 Mac**
+
+确保这台 Mac 能通过 SSH 连接到 VPS 管理员账户，且已完成 VPS 主机密钥核验。目标可以是已配置好的别名（如 `vps-admin`）或显式地址（如 `admin@VPS_PUBLIC_IP`）。
+
+远端管理员账户必须是 `root`，或具备免密 `sudo` 权限。一旦发现 VPS 主机密钥未知或发生变更，注册脚本会拒绝执行。
+
+### 配置新的 Mac 客户端
+
+**运行位置：新客户端 Mac（在本仓库检出目录中）**
+
+```bash
+scripts/configure-vps-ssh-client.sh \
+  --profile VPS_NAME \
+  --vps-host VPS_PUBLIC_IP \
+  --vps-port VPS_SSH_PORT \
+  --target-user MAC_USER \
+  --jump-user herdr-jump \
+  --tunnel-port TUNNEL_PORT
+```
+
+该脚本会：
+
+- 若 `~/.ssh/VPS_NAME-client` 不存在则自动创建；
+- 提示设置密钥口令（Passphrase）；
+- 在 SSH 配置中写入受管的 `VPS_NAME-jump` 与 `VPS_NAME-mac` 别名；
+- 校验生成的 OpenSSH 配置语法；
+- 打印公钥指纹；
+- 仅将公钥复制到 macOS 剪贴板。
+
+仅当客户端无法交互式输入口令时才使用 `--no-passphrase`。私钥始终保留在新客户端本机，无需导出。
+
+请通过受信任的渠道将打印出的公钥发给管理员。公钥本身虽不是机密，但批准前仍应核对指纹。
+
+### 一次性批准该客户端
+
+**运行位置：被暴露的 Mac（在本仓库检出目录中）**
+
+如果已通过通用剪贴板（Universal Clipboard）传过来公钥：
+
+```bash
+pbpaste | scripts/manage-vps-ssh-client.sh add \
+  --vps-admin VPS_ADMIN_SSH_DESTINATION \
+  --jump-user herdr-jump \
+  --tunnel-port TUNNEL_PORT
+```
+
+否则请将公钥保存为 `.pub` 文件后运行：
+
+```bash
+scripts/manage-vps-ssh-client.sh add \
+  --vps-admin VPS_ADMIN_SSH_DESTINATION \
+  --jump-user herdr-jump \
+  --tunnel-port TUNNEL_PORT \
+  --public-key-file NEW_CLIENT_PUBLIC_KEY_FILE
+```
+
+这一条命令会：
+
+1. 在 VPS 的 Jump 账户中，将该公钥已有的重复项或未受限项替换为仅允许转发的受限条目；
+2. 在目标 Mac 上，将该公钥已有的重复项或未受限项替换为支持命令执行但禁用 Agent 与 X11 转发的条目；
+3. 保留两端其余无关的授权公钥；
+4. 强制设置正确的文件属主与权限。
+
+脚本会先完成 VPS 端更新，再替换目标 Mac 上的文件；如果 VPS 步骤失败，目标 Mac 的授权保持不变。
+
+### 连接并验证
+
+**运行位置：新客户端 Mac**
+
+```bash
+ssh VPS_NAME-mac
+```
+
+首次连接时 OpenSSH 会先后询问两个主机密钥。请先通过云厂商控制台核对 VPS 指纹，并通过系统设置或本地命令核对目标 Mac 指纹，确认无误后再分别接受。
+
+### 吊销单个客户端
+
+**运行位置：被暴露的 Mac**
+
+在删除客户端私钥前，请保留旧公钥或先将其导出为文件：
+
+```bash
+scripts/manage-vps-ssh-client.sh revoke \
+  --vps-admin VPS_ADMIN_SSH_DESTINATION \
+  --jump-user herdr-jump \
+  --tunnel-port TUNNEL_PORT \
+  --public-key-file OLD_CLIENT_PUBLIC_KEY_FILE
+```
+
+吊销操作会同时从 VPS 和目标 Mac 两个授权点移除该公钥，其他客户端不受影响。
+
 ## 添加另一台 VPS
 
 请勿直接覆盖正在正常工作的配置，而应并行搭建新路径：
@@ -740,7 +740,7 @@ PubkeyAuthentication yes
 3. 将现有的 Device Key 公钥行添加到新 VPS 的 Jump 账户。
 4. 在 Mac 上创建新的 SSH 别名与第二个 LaunchAgent。
 5. 验证新的回环监听端口与自动重连恢复。
-6. 在 Heeler 中仅修改 Jump Host 相关字段。
+6. 在 Heeler 中打开该 Host 的路由（或新增一条路由），仅修改 Jump Host 相关字段。
 7. 测试预检与 Attach。
 8. 确认新路径工作正常后，再停止并移除旧路径。
 

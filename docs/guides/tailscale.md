@@ -45,9 +45,9 @@ If you've changed your tailnet's access rules, make sure Heeler can reach the Ma
 
 Add the Host with these values (details in [Connect from Heeler](overlay-networks.md#connect-from-heeler)):
 
-1. Under **Network**, select your Tailscale network.
-2. Tap **Choose from Tailnet…**, keep **Fill In** on **IP Address**, and tap the Mac. (Or tap **Add** beside the Mac on the network's screen.)
-3. Use port `22`, your Mac username, and the sign-in method you picked. Leave **Jump Host** blank.
+1. On the network's screen, tap **Add** beside the Mac to pre-fill its route; or go to **Hosts > Add Host**, tap **Add Route** under **Routes**, select your Tailscale network under **Network**, tap **Choose from Tailnet…** (with **Fill In** on **IP Address**), and pick the Mac.
+2. Keep port `22` and leave **Jump Host** blank on the route, then save the route if you opened **Add Route**.
+3. In **Add Host**, enter your Mac username (`User`) and the sign-in method you picked.
 4. Save, and trust the fingerprint only if it matches the Mac's.
 
 ## 5. Check that it works
