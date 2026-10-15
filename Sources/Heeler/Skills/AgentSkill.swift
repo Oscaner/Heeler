@@ -352,12 +352,20 @@ enum SkillSourceCatalog {
                     layout: .skillDirectories),
             ]
         case .omp:
-            // `/skill:<name>` is always recognised; the plain per-skill
-            // slash command rides a config toggle
-            // (`skills.enableSkillCommands`), so the prefix form is the
-            // safe insertion. omp also inherits `.claude`, `.cursor`, and
-            // friends wholesale — compat roots stay out, like Cursor's.
+            // Skills are invoked `/skill:<name>`; `skills.enableSkillCommands`
+            // (on by default) registers those commands, and turning it off
+            // removes them, so there is no plainer form to fall back to.
+            // Each level lists omp's native root first (`.omp/skills`,
+            // `~/.omp/agent/skills`), then the shared `.agents`/`.agent`
+            // roots, then managed skills, matching omp's own priority.
+            // omp walks ancestor directories up to the repository root;
+            // only the project root itself is probed here. omp also
+            // inherits `.claude`, `.cursor`, and friends wholesale —
+            // compat roots stay out, like Cursor's.
             [
+                SkillSource(
+                    root: .project, relativePath: ".omp/skills",
+                    layout: .skillDirectories, commandPrefix: "/skill:"),
                 SkillSource(
                     root: .project, relativePath: ".agents/skills",
                     layout: .skillDirectories, commandPrefix: "/skill:"),
@@ -366,6 +374,15 @@ enum SkillSourceCatalog {
                     layout: .skillDirectories, commandPrefix: "/skill:"),
                 SkillSource(
                     root: .project, relativePath: ".github/skills",
+                    layout: .skillDirectories, commandPrefix: "/skill:"),
+                SkillSource(
+                    root: .home, relativePath: ".omp/agent/skills",
+                    layout: .skillDirectories, commandPrefix: "/skill:"),
+                SkillSource(
+                    root: .home, relativePath: ".agents/skills",
+                    layout: .skillDirectories, commandPrefix: "/skill:"),
+                SkillSource(
+                    root: .home, relativePath: ".agent/skills",
                     layout: .skillDirectories, commandPrefix: "/skill:"),
                 SkillSource(
                     root: .home, relativePath: ".omp/agent/managed-skills",

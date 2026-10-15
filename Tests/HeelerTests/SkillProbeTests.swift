@@ -308,6 +308,22 @@ struct SkillProbeTests {
         }
     }
 
+    @Test func ompCatalogListsNativeAndHomeAgentRoots() {
+        let sources = SkillSourceCatalog.sources(for: .omp)
+        #expect(sources.allSatisfy { $0.layout == .skillDirectories })
+        #expect(
+            sources.map { "\($0.scope.rawValue):\($0.relativePath)" } == [
+                "project:.omp/skills",
+                "project:.agents/skills",
+                "project:.agent/skills",
+                "project:.github/skills",
+                "global:.omp/agent/skills",
+                "global:.agents/skills",
+                "global:.agent/skills",
+                "global:.omp/agent/managed-skills",
+            ])
+    }
+
     @Test func droidProbesCommandsBeforeSkillsSoTheCommandWinsAClash() {
         let paths = SkillSourceCatalog.sources(for: .droid)
             .filter { $0.root == .project }.map(\.relativePath)
