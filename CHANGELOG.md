@@ -23,9 +23,10 @@ Entries reference the pull request that made the change.
   and holds messages while a turn runs or an approval or question panel is
   open. Pi sends from projects outside the home directory too. Skill
   invocations show as `/name` commands and confirm Chat's sends; Oh My Pi
-  questions keep their options and answers, and denied approvals and
-  dismissed questions read as declined. Extends the Chat infrastructure in
-  #425. (#464)
+  questions keep their options and answers, denied approvals and dismissed
+  questions read as declined, Stop during a Pi tool reads as an interruption,
+  and an Oh My Pi plan proposal reads as ready for review. Extends the Chat
+  infrastructure in #425. (#464)
 - Chat for Claude Code and Codex Agents: the Agent's conversation as native
   rows in the terminal's place, read from the transcript its program writes on
   the Host, with nothing installed there. Chat folds finished turns, groups

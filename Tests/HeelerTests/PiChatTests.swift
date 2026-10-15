@@ -441,6 +441,104 @@ struct PiChatTests {
         #expect(tool.subtitle == "Fixing the typo")
     }
 
+    // MARK: Interruptions, errors and minor records
+
+    @Test func piToolInterruptReadsAsInterrupted() {
+        var reducer = PiTranscriptReducer()
+        reducer.append(
+            Self.lines([
+                Self.header,
+                #"{"type":"message","id":"u","parentId":null,"message":{"role":"user","content":"sleep"}}"#,
+                #"{"type":"message","id":"a","parentId":"u","message":{"role":"assistant","content":[{"type":"toolCall","id":"c","name":"bash","arguments":{"command":"sleep 60"}}],"stopReason":"toolUse"}}"#,
+                #"{"type":"message","id":"r","parentId":"a","message":{"role":"toolResult","toolCallId":"c","toolName":"bash","content":[{"type":"text","text":"Command aborted"}],"isError":true}}"#,
+                #"{"type":"message","id":"e","parentId":"r","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"This operation was aborted"}}"#,
+            ]))
+        let transcript = reducer.transcript(.init())
+        guard case .tool(let tool) = transcript.entries[1].content else {
+            Issue.record("Tool missing")
+            return
+        }
+        #expect(tool.status == .interrupted)
+        #expect(transcript.entries.last?.content == .notice(ChatNotice(kind: .interrupted, title: "Interrupted")))
+        #expect(transcript.turns.last?.ending == .interrupted)
+    }
+
+    @Test func providerErrorStillShowsAgentError() throws {
+        let lines = try ChatFixture.lines("pi/auth-error-skill.jsonl")
+        var reducer = PiTranscriptReducer()
+        reducer.append(Array(lines.prefix(5)))
+        let transcript = reducer.transcript(.init())
+        #expect(
+            transcript.entries.last?.content
+                == .notice(
+                    ChatNotice(
+                        kind: .error, title: "Agent error",
+                        detail:
+                            "OAuth refresh failed for xai: xAI OAuth token refresh failed (HTTP 400): invalid_grant: Invalid or unknown refresh token"
+                    )))
+        #expect(transcript.turns.last?.ending == .failed)
+    }
+
+    @Test func ompPlanProposalShowsPlanReadyNotInterrupted() throws {
+        let transcript = try Self.ompTranscript()
+        let end = try #require(transcript.entries.first { $0.id == ChatEntryID("pi:c2d14183:end") })
+        #expect(end.content == .notice(ChatNotice(kind: .system, title: "Plan ready for review")))
+        #expect(transcript.entries.last?.id == end.id)
+        #expect(transcript.turns.last?.ending == .completed)
+        #expect(transcript.diagnostics.unknownRecordTypes.isEmpty)
+        #expect(!transcript.needsOlderHistory)
+
+        // A silent abort without a plan shows nothing.
+        var reducer = PiTranscriptReducer()
+        reducer.append(
+            Self.lines([
+                Self.header,
+                #"{"type":"message","id":"u","parentId":null,"message":{"role":"user","content":"go"}}"#,
+                #"{"type":"message","id":"e","parentId":"u","message":{"role":"assistant","content":[],"stopReason":"aborted","errorMessage":"__omp.silent_abort__"}}"#,
+            ]))
+        let silent = reducer.transcript(.init())
+        #expect(silent.entries.count == 1)
+        #expect(silent.turns.last?.ending == .completed)
+    }
+
+    @Test func discardedBranchSummaryIsHidden() throws {
+        let transcript = try Self.ompTranscript()
+        #expect(!transcript.entries.contains { $0.id == ChatEntryID("pi:89c4c5bd") })
+
+        var reducer = PiTranscriptReducer()
+        reducer.append(
+            Self.lines([
+                Self.header,
+                #"{"type":"branch_summary","id":"empty","parentId":null,"fromId":"x","summary":""}"#,
+                #"{"type":"branch_summary","id":"kept","parentId":"empty","fromId":"x","summary":"Tried another fix"}"#,
+            ]))
+        #expect(
+            reducer.transcript(.init()).entries.map(\.content)
+                == [.notice(ChatNotice(kind: .system, title: "Branch summary", detail: "Tried another fix"))])
+    }
+
+    @Test func minorRoles() {
+        var reducer = PiTranscriptReducer()
+        reducer.append(
+            Self.lines([
+                Self.header,
+                #"{"type":"session_info","id":"n1","parentId":null,"name":"Named"}"#,
+                #"{"type":"message","id":"d","parentId":"n1","message":{"role":"developer","content":"continue"}}"#,
+                #"{"type":"message","id":"c","parentId":"d","message":{"role":"custom","customType":"note","content":"shown","display":true}}"#,
+                #"{"type":"message","id":"h","parentId":"c","message":{"role":"hookMessage","customType":"hidden","content":"not shown","display":false}}"#,
+                #"{"type":"message","id":"h2","parentId":"h","message":{"role":"hookMessage","customType":"hook","content":[{"type":"text","text":"hook output"}],"display":true}}"#,
+                #"{"type":"session_info","id":"n2","parentId":"h2","name":""}"#,
+            ]))
+        let transcript = reducer.transcript(.init())
+        #expect(
+            transcript.entries.map(\.content) == [
+                .notice(ChatNotice(kind: .hook, title: "note", detail: "shown")),
+                .notice(ChatNotice(kind: .hook, title: "hook", detail: "hook output")),
+            ])
+        #expect(transcript.diagnostics.unknownRecordTypes.isEmpty)
+        #expect(transcript.title == nil)
+    }
+
     @Test func emptyPiEditorPassesButDraftAndPopupDoNot() {
         let rule = String(repeating: "─", count: 40)
         let footer = "~/project (main)\r\n$0.000 0.0%/200k (auto)"

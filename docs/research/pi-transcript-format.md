@@ -75,6 +75,16 @@ fixtures):
   results in `Tool call denied by user: <tool>` and a dismissed question in
   `Ask tool was cancelled by the user`, both `isError`; Chat reads them as
   declined.
+- Pi's Esc during a tool records the result `Command aborted` and then an
+  empty assistant message with `stopReason: error` and `errorMessage: This
+  operation was aborted`. A provider error has the same empty shape, so only
+  that message tells an interruption from an error.
+- OMP's plan proposal records the `write xd://propose` result `Plan ready
+  for review.`, then an empty assistant message with `stopReason: aborted`
+  and `errorMessage: __omp.silent_abort__`. Chat ends the turn normally with a
+  plan-ready notice instead of an interruption.
+- OMP's atomic file rewrite appends a `branch_summary` with an empty
+  `summary` and `details.kind: discarded-entry-branch`, which Chat hides.
 
 ## Input and limits
 

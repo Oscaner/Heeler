@@ -131,20 +131,25 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
         // The last assistant's stop reason says whether the branch's latest
         // turn ended, whatever opened it.
         var lastStopReason: String?
+        // The latest tool result's text, until the next assistant message.
+        var lastToolResultText: String?
 
         for record in chain {
             switch record.type {
             case "session_info", "title_change":
-                transcript.title =
-                    record.value["name"]?.stringValue ?? record.value["title"]?.stringValue ?? transcript.title
+                // Pi clears a session's name with an empty one.
+                if let name = record.value["name"]?.stringValue ?? record.value["title"]?.stringValue {
+                    transcript.title = name.isEmpty ? nil : name
+                }
             case "compaction":
                 add(record, .divider(ChatDivider(kind: .compaction, detail: record.value["summary"]?.stringValue)))
             case "branch_summary":
-                add(
-                    record,
-                    .notice(
-                        ChatNotice(kind: .system, title: "Branch summary", detail: record.value["summary"]?.stringValue)
-                    ))
+                // Oh My Pi's atomic rewrite records the entry it dropped as
+                // an empty summary, which is nothing to show.
+                guard let summary = record.value["summary"]?.stringValue, !summary.isEmpty,
+                    record.value["details"]?["kind"]?.stringValue != "discarded-entry-branch"
+                else { continue }
+                add(record, .notice(ChatNotice(kind: .system, title: "Branch summary", detail: summary)))
             case "reset_boundary":
                 add(record, .notice(ChatNotice(kind: .system, title: "Conversation context cleared")))
             case "custom_message":
@@ -185,6 +190,8 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                         openTurn(record, .user(ChatUserMessage(text: text, imageCount: images)), prompt: text)
                     }
                 case "assistant":
+                    let planProposed = lastToolResultText == Self.planReady
+                    lastToolResultText = nil
                     for (index, block) in Self.blocks(message["content"]).enumerated() {
                         switch block["type"]?.stringValue {
                         case "text":
@@ -210,10 +217,22 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                         }
                     }
                     let stopReason = message["stopReason"]?.stringValue
+                    let errorMessage = message["errorMessage"]?.stringValue
                     lastStopReason = stopReason
                     switch stopReason {
                     case "stop", "length": finish(.completed, at: record)
+                    case "aborted" where errorMessage == Self.ompSilentAbort:
+                        // Oh My Pi ends a turn this way when it hands over to
+                        // its own screen, such as a plan to review.
+                        if planProposed {
+                            add(record, .notice(ChatNotice(kind: .system, title: "Plan ready for review")), ":end")
+                        }
+                        finish(.completed, at: record)
                     case "aborted":
+                        add(record, .notice(ChatNotice(kind: .interrupted, title: "Interrupted")), ":end")
+                        finish(.interrupted, at: record)
+                    case "error" where errorMessage == Self.piAbort:
+                        // Pi records Esc during a tool as an error.
                         add(record, .notice(ChatNotice(kind: .interrupted, title: "Interrupted")), ":end")
                         finish(.interrupted, at: record)
                     case "error":
@@ -238,10 +257,16 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                             activity: context.activity)
                     }
                     let resultText = Self.text(message["content"]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    lastToolResultText = resultText
                     if message["isError"] == .bool(true) {
                         tool.status =
-                            resultText.hasPrefix(Self.deniedPrefix) || resultText == Self.askCancelled
-                            ? .declined : .failed
+                            if resultText.hasPrefix(Self.deniedPrefix) || resultText == Self.askCancelled {
+                                .declined
+                            } else if Self.abortedResults.contains(resultText) {
+                                .interrupted
+                            } else {
+                                .failed
+                            }
                     } else {
                         tool.status = .succeeded
                         Self.recordAnswers(message["details"], in: &tool.questions)
@@ -261,6 +286,10 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                                 id: ChatEntryID("pi:tool:\(callID)"), sourceOffset: record.offset, content: .tool(tool))
                         )
                     }
+                case "custom", "hookMessage":
+                    customNotice(record, message)
+                case "developer":
+                    break
                 case "bashExecution":
                     add(
                         record,
@@ -413,10 +442,19 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
         return nil
     }
 
+    /// What Oh My Pi records for an assistant message that ends a turn
+    /// without an interruption the user made.
+    private static let ompSilentAbort = "__omp.silent_abort__"
+    /// The result of Oh My Pi's plan proposal, before its review screen.
+    private static let planReady = "Plan ready for review."
+    /// Pi's assistant error for a turn the user stopped.
+    private static let piAbort = "This operation was aborted"
     /// Oh My Pi's results for a call the user declined: an approval denied,
     /// or a question dismissed.
     private static let deniedPrefix = "Tool call denied by user:"
     private static let askCancelled = "Ask tool was cancelled by the user"
+    /// Results of calls the user stopped while they ran.
+    private static let abortedResults: Set<String> = ["Command aborted", "Operation aborted"]
 
     private static func blocks(_ content: JSONValue?) -> [JSONValue] {
         if case .array(let blocks) = content { return blocks }
