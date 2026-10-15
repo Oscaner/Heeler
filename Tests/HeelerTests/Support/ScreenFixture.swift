@@ -27,11 +27,34 @@ enum ScreenFixture {
         "codex-14-par-second",
     ]
 
+    static let pi = [
+        "pi-03-trust-1s", "pi-06-empty-editor-119", "pi-08-auth-error-idle", "pi-09-slash-popup",
+        "pi-10-slash-pr-popup", "pi-11-nonempty-after-popup-esc", "pi-12-nonempty-editor",
+        "pi-13-skill-invoked", "pi-14-compact-0.25s", "pi-16-empty-editor-120-attached",
+        "pi-17-empty-editor-40-attached", "pi-19-slash-popup-40", "pi-20-nonempty-40",
+    ]
+
+    static let omp = [
+        "omp-01-startup-empty-119", "omp-02-empty-120-before-first", "omp-03-empty-40-before-first",
+        "omp-05-qa-working-1s", "omp-07-empty-40-after-first", "omp-08-empty-120-after-first",
+        "omp-09-tool-working-3s", "omp-14-slash-popup", "omp-16-compact-space-after-enter",
+        "omp-17-compact-space-pre-enter-150ms", "omp-18-compact-nospace-150ms",
+        "omp-19-compact-nospace-1s", "omp-21-after-exit-shell", "omp-23-approval-a-ctrlq-early",
+        "omp-24-approval-a-dialog", "omp-24-approval-d-typed-abc",
+        "omp-24-approval-e-enter-deny-and-send", "omp-26-approval-b-idle", "omp-27-ask-a-dialog",
+        "omp-27-ask-b-after-digit2", "omp-27-ask-c-after-down", "omp-27-ask-e-idle",
+        "omp-28-ask2-a-dialog", "omp-28-ask2-b-after-enter-q1", "omp-28-ask2-c-submit-page",
+        "omp-28-ask2-e-after-esc-2s", "omp-29-guard-a-draft-while-working",
+        "omp-29-guard-b-ask-with-draft", "omp-29-guard-c-after-enter", "omp-29-guard-f-idle",
+        "omp-30-plan-mode-on", "omp-31-plan-review", "omp-32-plan-after-esc", "omp-33-after-exit-2",
+    ]
+
+    /// The Claude and Codex captures that the dialog and input-box suites walk.
+    /// Pi and Oh My Pi captures stay out so those suites keep their expectations.
     static let all = claude + codex
 
     static func path(_ stem: String) -> String {
-        let program = stem.hasPrefix("codex-") ? "codex" : "claude"
-        return "screens/\(program)/\(stem).ansi"
+        "screens/\(program(stem).rawValue)/\(stem).ansi"
     }
 
     static func text(_ stem: String) throws -> String {
@@ -44,7 +67,10 @@ enum ScreenFixture {
 
     /// The program that drew a capture.
     static func program(_ stem: String) -> ChatProgram {
-        stem.hasPrefix("codex-") ? .codex : .claude
+        if stem.hasPrefix("codex-") { return .codex }
+        if stem.hasPrefix("pi-") { return .pi }
+        if stem.hasPrefix("omp-") { return .omp }
+        return .claude
     }
 
     /// A screen built from raw ANSI rows, for states no capture shows yet.

@@ -55,3 +55,26 @@ capture.
 Scrubbing used the same same-length replacements as above, so every column
 is as captured. The shell prompt on the first row of `claude-00-trust.ansi`
 also had its host name replaced by `probe-host-placeholder-01`.
+
+### Pi and Oh My Pi screens
+
+`screens/pi/pi-*.ansi` and `screens/omp/omp-*.ansi` are visible-screen reads
+taken the same way on 2026-10-15 against isolated herdr 0.9.5 backends: pi
+0.85.1 and Oh My Pi 18.11.1. Each backend had its own socket, but the pane's
+`HOME` pointed at the developer's account so both Agents used a real
+subscription and real settings; no credential file was read or copied. Each
+file keeps the capture's number and name behind the `pi-` or `omp-` prefix.
+
+- Pi's model calls failed authentication, so the pi screens show that error
+  above the editor; `pi-06` also shows the Update Available box and a working
+  directory outside `HOME`.
+- Oh My Pi used the nerd-font status band.
+- Captures are 119, 120 or 40 columns wide; Pi's are 119 unless the name
+  says otherwise, Oh My Pi's 120.
+- The shell rows of `pi-03`, `pi-06`, `omp-21` and `omp-33` keep the probe's
+  `SOCK=`/`HOME=` echo and the shell prompt.
+
+Scrubbing replaced the account name as above and the shell prompt's
+`user@host` with `developer@probe-host-placeholder-01`, both with
+replacements of the same length. These screens are not part of
+`ScreenFixture.all`, which the dialog and input-box suites walk.

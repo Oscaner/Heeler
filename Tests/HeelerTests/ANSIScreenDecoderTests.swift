@@ -130,6 +130,18 @@ struct ANSIScreenDecoderTests {
 
     @Test("Every capture decodes into contiguous runs within its columns", arguments: ScreenFixture.all)
     func everyCapture(stem: String) throws {
+        try expectContiguousRuns(stem)
+    }
+
+    @Test(
+        "Every Pi and Oh My Pi capture decodes into contiguous runs within its columns",
+        arguments: ScreenFixture.pi + ScreenFixture.omp
+    )
+    func everyPiAndOMPCaptureDecodesWithinItsColumns(stem: String) throws {
+        try expectContiguousRuns(stem)
+    }
+
+    private func expectContiguousRuns(_ stem: String) throws {
         let text = try ScreenFixture.text(stem)
         let screen = ANSIScreenDecoder.decode(text)
         #expect(screen.rows.count == text.components(separatedBy: "\r\n").count)
