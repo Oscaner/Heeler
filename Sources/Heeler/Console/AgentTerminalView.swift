@@ -383,15 +383,17 @@ struct AgentTerminalView: View {
     /// The Skills pane's store, or nil when this agent's kind has no skills
     /// source catalog. Captures launch-time context on purpose: the project
     /// root is the worktree checkout or launch cwd, never the live cwd.
+    /// `include` narrows what the store lists.
     static func makeSkillsStore(
-        for agent: ConsoleAgent, console: ConsoleStore
+        for agent: ConsoleAgent, console: ConsoleStore,
+        include: @escaping (AgentSkill) -> Bool = { _ in true }
     ) -> SkillsPaneStore? {
         guard let kind = SupportedAgentKind(rawValue: agent.agent.kind) else { return nil }
         let sources = SkillSourceCatalog.sources(for: kind)
         guard !sources.isEmpty else { return nil }
         let projectRoot = agent.skillsProjectRoot
         return SkillsPaneStore(
-            commandPrefixes: sources.map(\.commandPrefix)
+            commandPrefixes: sources.map(\.commandPrefix), include: include
         ) { [console] forceRefresh in
             try await console.fetchSkills(
                 kind: kind,

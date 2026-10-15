@@ -20,18 +20,33 @@ struct ChatCommand: Identifiable, Equatable, Sendable {
     var id: String { name }
 }
 
-/// Chat's `/` menu for both programs (ADR 0023): the Host's skills plus
+/// Chat's `/` menu for every program (ADR 0023): the Host's skills plus
 /// `/compact`. Commands that open pickers or end sessions are left out;
 /// the terminal still runs them.
 enum ChatCommandMenu {
-    static func commands(skills: [AgentSkill], agentIsIdle: Bool) -> [ChatCommand] {
+    /// The prefix Pi and Oh My Pi invoke a skill with.
+    static let skillCommandPrefix = "/skill:"
+
+    /// Whether Chat offers a skill to a program. Pi and Oh My Pi get only
+    /// their `/skill:` skills: a prompt template is a plain `/name`, which
+    /// runs the built-in command instead when one shares its name.
+    static func offers(_ skill: AgentSkill, for program: ChatProgram) -> Bool {
+        switch program {
+        case .pi, .omp: skill.commandPrefix == skillCommandPrefix
+        case .claude, .codex: true
+        }
+    }
+
+    static func commands(skills: [AgentSkill], agentIsIdle: Bool, program: ChatProgram) -> [ChatCommand] {
         var commands = [
             ChatCommand(
                 name: "compact", summary: "Summarize the conversation to free up context",
                 kind: .compact, isEnabled: agentIsIdle)
         ]
         var names: Set<String> = ["compact"]
-        for skill in skills where names.insert(skill.name).inserted {
+        // Filtered before the dedupe, so a template listed first cannot
+        // hide the skill of the same name.
+        for skill in skills where offers(skill, for: program) && names.insert(skill.name).inserted {
             commands.append(
                 ChatCommand(
                     name: skill.name, summary: skill.description,
@@ -42,13 +57,34 @@ enum ChatCommandMenu {
 
     /// The entries to suggest for a draft, or nil when the menu stays
     /// closed: it opens only while a leading `/` is followed by a partial
-    /// name, before any space.
+    /// name, before any space. A `/skill:` skill also matches when typed in
+    /// that form.
     static func suggestions(for draft: String, in commands: [ChatCommand]) -> [ChatCommand]? {
         guard draft.hasPrefix("/") else { return nil }
         let query = draft.dropFirst()
         guard !query.contains(where: \.isWhitespace), !query.contains("/") else { return nil }
         let needle = query.lowercased()
-        return commands.filter { needle.isEmpty || $0.name.lowercased().hasPrefix(needle) }
+        return commands.filter { command in
+            let typed = skillFormName(needle, of: command) ?? needle
+            return typed.isEmpty || command.name.lowercased().hasPrefix(typed)
+        }
+    }
+
+    /// The command `name` names: its own entry, or a `/skill:` skill typed
+    /// with the prefix.
+    static func command(named name: String, in commands: [ChatCommand]) -> ChatCommand? {
+        commands.first { $0.name == name }
+            ?? commands.first { skillFormName(name, of: $0) == $0.name }
+    }
+
+    /// `name` without the `skill:` it was typed with, when `command` is a
+    /// skill invoked that way.
+    private static func skillFormName(_ name: String, of command: ChatCommand) -> String? {
+        let typedPrefix = skillCommandPrefix.dropFirst()
+        guard command.kind == .skill(prefix: skillCommandPrefix), name.hasPrefix(typedPrefix) else {
+            return nil
+        }
+        return String(name.dropFirst(typedPrefix.count))
     }
 }
 
@@ -142,7 +178,7 @@ struct ChatSendRules: Sendable {
         let name = String(afterSlash.prefix { !$0.isWhitespace })
         // `/usr/bin/env` is a path in prose, not a command.
         if name.contains("/") { return .text }
-        guard let command = commands.first(where: { $0.name == name }) else {
+        guard let command = ChatCommandMenu.command(named: name, in: commands) else {
             return .refused(.unknownCommand(name))
         }
         guard command.isEnabled else {

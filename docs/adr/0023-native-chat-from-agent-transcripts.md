@@ -126,9 +126,12 @@ request, under rules that stand in for the screen the user cannot see:
   shorthand), and 100 lines or more, which open its paste menu.
 - A leading `/` must name an entry of Chat's `/` menu: the Agent's skills from
   the existing Skills probe, and `/compact` while the Agent is idle. The menu
-  offers no interactive or destructive program command. Both programs show
-  `/name`; a Codex skill is sent as `$name`. A leading path is text, and any
-  other leading `/word` is refused with a pointer to the menu or the terminal.
+  offers no interactive or destructive program command. Every program shows
+  `/name`; a Codex skill is sent as `$name`. For Pi and Oh My Pi the menu, and
+  Chat's Skills list, hold only `/skill:` skills, sent as `/skill:name` (typed
+  that way too); prompt templates stay out because one named like a built-in
+  runs the built-in. A leading path is text, and any other leading `/word` is
+  refused with a pointer to the menu or the terminal.
 - Invisible characters are removed and exactly one trailing space is appended,
   so a final `/name` or `@path` cannot leave a completion popup open when
   Enter arrives. Oh My Pi's `/compact` is the exception: it goes without the

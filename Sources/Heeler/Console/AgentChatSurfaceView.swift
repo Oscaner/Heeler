@@ -121,7 +121,12 @@ struct AgentChatSurfaceView: View {
         self.showChanges = showChanges
         self.workspaceDrawer = workspaceDrawer
         self.selectSurface = selectSurface
-        _skills = State(initialValue: AgentTerminalView.makeSkillsStore(for: agent, console: console))
+        // Chat lists only the skills its `/` menu sends, in the menu, the
+        // Skills sheet and the tools keyboard alike.
+        _skills = State(
+            initialValue: AgentTerminalView.makeSkillsStore(for: agent, console: console) {
+                ChatCommandMenu.offers($0, for: program)
+            })
         let paneID = agent.agent.paneID
         let hostID = agent.hostID
         _agentKeys = State(
@@ -631,7 +636,8 @@ struct AgentChatSurfaceView: View {
     private var commands: [ChatCommand] {
         ChatCommandMenu.commands(
             skills: skills?.skills ?? [],
-            agentIsIdle: ChatAgentActivity(agent.agent.status) == .idle)
+            agentIsIdle: ChatAgentActivity(agent.agent.status) == .idle,
+            program: program)
     }
 
     private var skillNames: Set<String> {

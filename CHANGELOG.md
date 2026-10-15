@@ -16,7 +16,10 @@ Entries reference the pull request that made the change.
   paired tool results, current-branch history and compaction boundaries.
   Reads the JSONL session path reported by herdr, including custom session
   directories; unrecognized input surfaces remain available in the terminal.
-  Extends the Chat infrastructure in #425. (#464)
+  Chat's `/` menu and Skills list offer only their skills, sent as
+  `/skill:name`; prompt templates stay in the terminal. Sending refuses Oh My
+  Pi's exit words, `$` Python, Continue and queue shorthands, and pastes of
+  100 lines or more. Extends the Chat infrastructure in #425. (#464)
 - Chat for Claude Code and Codex Agents: the Agent's conversation as native
   rows in the terminal's place, read from the transcript its program writes on
   the Host, with nothing installed there. Chat folds finished turns, groups

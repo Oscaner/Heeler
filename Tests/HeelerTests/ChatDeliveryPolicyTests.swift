@@ -9,7 +9,7 @@ import Testing
 @Suite("Chat delivery policy")
 struct ChatDeliveryPolicyTests {
     private static let rules = ChatSendRules(
-        program: .codex, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true))
+        program: .codex, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: .codex))
 
     /// Codex's composer holding a draft the user typed in the terminal.
     private static func draft(_ text: String) -> ANSIScreen {
@@ -107,7 +107,7 @@ struct ChatComposerEchoesTests {
         program: .codex,
         commands: ChatCommandMenu.commands(
             skills: [AgentSkill(scope: .global, name: "review", description: nil, commandPrefix: "$")],
-            agentIsIdle: true))
+            agentIsIdle: true, program: .codex))
 
     private static func policy(verify: (@MainActor (String) async -> Bool)? = nil) -> ComposerDeliveryPolicy {
         ComposerDeliveryPolicy(

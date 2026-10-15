@@ -30,7 +30,8 @@ struct ChatSendRulesTests {
                 commandPrefix: prefix ?? skillPrefix(program))
         }
         return ChatSendRules(
-            program: program, commands: ChatCommandMenu.commands(skills: skills, agentIsIdle: idle))
+            program: program,
+            commands: ChatCommandMenu.commands(skills: skills, agentIsIdle: idle, program: program))
     }
 
     // MARK: Not sent
@@ -250,6 +251,64 @@ struct ChatSendRulesTests {
     }
 
     // MARK: Menu
+
+    /// A Pi Host's catalog: prompt templates, one named like a built-in
+    /// and one like a skill listed after it, and `/skill:` skills.
+    private static let piCatalog = [
+        AgentSkill(scope: .project, name: "share", description: "A template named like a built-in"),
+        AgentSkill(scope: .project, name: "pdf", description: "A template named like a skill"),
+        AgentSkill(scope: .global, name: "pdf", description: "Read PDFs", commandPrefix: "/skill:"),
+        AgentSkill(scope: .global, name: "deploy", description: nil, commandPrefix: "/skill:"),
+    ]
+
+    private static func catalogRules(_ program: ChatProgram) -> ChatSendRules {
+        ChatSendRules(
+            program: program,
+            commands: ChatCommandMenu.commands(skills: piCatalog, agentIsIdle: true, program: program))
+    }
+
+    @Test(arguments: [ChatProgram.pi, .omp])
+    func piAndOmpOfferOnlySkillCommands(program: ChatProgram) {
+        let commands = Self.catalogRules(program).commands
+
+        #expect(commands.map(\.name) == ["compact", "pdf", "deploy"])
+        #expect(commands.first { $0.name == "pdf" }?.kind == .skill(prefix: "/skill:"))
+    }
+
+    @Test(arguments: [ChatProgram.claude, .codex])
+    func claudeAndCodexOfferEverySkill(program: ChatProgram) {
+        #expect(Self.catalogRules(program).commands.map(\.name) == ["compact", "share", "pdf", "deploy"])
+    }
+
+    @Test(arguments: [ChatProgram.pi, .omp])
+    func aPiTemplateNamedLikeABuiltinIsRefused(program: ChatProgram) {
+        #expect(Self.catalogRules(program).validate("/share") == .unknownCommand("share"))
+    }
+
+    @Test func piSkillSendsInSkillForm() {
+        let rules = Self.catalogRules(.pi)
+
+        #expect(rules.outgoingText("/pdf x") == "/skill:pdf x ")
+        #expect(rules.outgoingText("/deploy") == "/skill:deploy ")
+    }
+
+    @Test(arguments: [ChatProgram.pi, .omp])
+    func aSkillTypedInSkillFormIsFound(program: ChatProgram) {
+        let rules = Self.catalogRules(program)
+
+        #expect(rules.outgoingText("/skill:pdf x") == "/skill:pdf x ")
+        #expect(ChatCommandMenu.suggestions(for: "/skill:", in: rules.commands)?.map(\.name) == ["pdf", "deploy"])
+        #expect(ChatCommandMenu.suggestions(for: "/skill:p", in: rules.commands)?.map(\.name) == ["pdf"])
+        #expect(rules.validate("/skill:share") == .unknownCommand("skill:share"))
+        #expect(rules.validate("/skill:compact") == .unknownCommand("skill:compact"))
+    }
+
+    @Test func aSkillFormIsOnlyReadForSkillCommands() {
+        let rules = Self.rules(.claude)
+
+        #expect(rules.validate("/skill:review") == .unknownCommand("skill:review"))
+        #expect(ChatCommandMenu.suggestions(for: "/skill:", in: rules.commands)?.isEmpty == true)
+    }
 
     @Test func theMenuOpensOnlyOnALeadingSlashBeforeASpace() {
         let commands = Self.rules(.claude).commands
