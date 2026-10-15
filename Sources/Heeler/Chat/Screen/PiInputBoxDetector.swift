@@ -18,7 +18,11 @@ enum PiInputBoxDetector {
             var top = bottom - 1
             while top >= 0, bottom - top <= 12 {
                 let start = rows[top].trimmedText
-                if (isRule && rule(start)) || (isBox && start.hasPrefix("╭") && start.hasSuffix("╮")) { break }
+                if (isRule && (rule(start) || (program == .pi && piWorkingRule(start))))
+                    || (isBox && start.hasPrefix("╭") && start.hasSuffix("╮"))
+                {
+                    break
+                }
                 top -= 1
             }
             guard top >= 0, bottom - top <= 12 else { continue }
@@ -182,5 +186,13 @@ enum PiInputBoxDetector {
 
     private static func rule(_ text: String) -> Bool {
         text.count >= 10 && text.allSatisfy { $0 == "─" }
+    }
+
+    /// Pi's top rule while a turn runs, `── ⠸ Working ───`: a braille
+    /// spinner and a label set into it, which extensions may reword. Enter
+    /// then steers the turn. A scrolled editor's `↑ N more` rule is not
+    /// one, so a draft too long to show never reads as empty.
+    private static func piWorkingRule(_ text: String) -> Bool {
+        text.range(of: "^──+ [\u{2800}-\u{28FF}] .+ ─+$", options: .regularExpression) != nil
     }
 }

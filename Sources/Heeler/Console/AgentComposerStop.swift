@@ -10,7 +10,12 @@ enum AgentInterruptOutcome: Equatable, Sendable {
 
 /// The Composer's trailing button. While the Agent is Working and the draft
 /// is blank it is Stop, which presses Esc in the Agent's program; with text
-/// it stays Send, so a prompt can still queue behind the running turn.
+/// it stays Send, so a prompt can still reach the running turn. Claude Code
+/// and Codex queue it behind the turn; Pi steers the turn with it, and Chat
+/// holds it for Oh My Pi, whose steer can background a running command.
+/// Esc in Pi or Oh My Pi puts a steer the turn has not taken yet, Chat's or
+/// one typed in the terminal, back into the input box, where Chat's next
+/// send waits on it.
 enum AgentComposerPrimaryControl: Equatable {
     case send
     case stop

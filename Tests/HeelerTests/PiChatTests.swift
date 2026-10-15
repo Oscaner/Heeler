@@ -505,6 +505,86 @@ struct PiChatTests {
         #expect(tool.subtitle == "Fixing the typo")
     }
 
+    // MARK: Steering
+
+    /// Pi writes a message sent during a turn as a plain prompt once the
+    /// turn's tool batch ends, before its next reply.
+    @Test func piSteerStaysInRunningTurn() {
+        let rows = [
+            Self.header,
+            #"{"type":"message","id":"u","parentId":null,"message":{"role":"user","content":"start"}}"#,
+            #"{"type":"message","id":"a1","parentId":"u","message":{"role":"assistant","content":[{"type":"toolCall","id":"c1","name":"bash","arguments":{"command":"ls"}}],"stopReason":"toolUse"}}"#,
+            #"{"type":"message","id":"r1","parentId":"a1","message":{"role":"toolResult","toolCallId":"c1","toolName":"bash","content":[{"type":"text","text":"a.txt"}],"isError":false}}"#,
+            #"{"type":"message","id":"s","parentId":"r1","message":{"role":"user","content":"steer"}}"#,
+            #"{"type":"message","id":"a2","parentId":"s","message":{"role":"assistant","content":[{"type":"toolCall","id":"c2","name":"bash","arguments":{"command":"pwd"}}],"stopReason":"toolUse"}}"#,
+            #"{"type":"message","id":"r2","parentId":"a2","message":{"role":"toolResult","toolCallId":"c2","toolName":"bash","content":[{"type":"text","text":"/p"}],"isError":false}}"#,
+            #"{"type":"message","id":"a3","parentId":"r2","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"stopReason":"stop"}}"#,
+        ]
+        var reducer = PiTranscriptReducer()
+        reducer.append(Self.lines(Array(rows.prefix(6))))
+        let running = reducer.transcript(.init(activity: .working))
+        #expect(running.turns.map(\.firstEntryID) == [ChatEntryID("pi:u")])
+        #expect(running.turns.first?.ending == nil)
+        #expect(
+            running.entries.first { $0.id == ChatEntryID("pi:s") }?.content
+                == .user(ChatUserMessage(text: "steer", wasQueued: true)))
+        #expect(running.recordedPrompts.map(\.text) == ["start", "steer"])
+        #expect(running.latestPromptOffset == running.entries.first?.sourceOffset)
+        #expect(Self.tool("c2", in: running)?.status == .running)
+
+        var finished = PiTranscriptReducer()
+        finished.append(Self.lines(rows))
+        let done = finished.transcript(.init())
+        #expect(done.turns.count == 1)
+        #expect(done.turns.first?.ending == .completed)
+
+        // A prompt after a reply that broke off unrecorded opens a turn of
+        // its own.
+        var broken = PiTranscriptReducer()
+        broken.append(
+            Self.lines([
+                Self.header,
+                #"{"type":"message","id":"u","parentId":null,"message":{"role":"user","content":"start"}}"#,
+                #"{"type":"message","id":"a","parentId":"u","message":{"role":"assistant","content":[{"type":"text","text":"partial"}]}}"#,
+                #"{"type":"message","id":"n","parentId":"a","message":{"role":"user","content":"next"}}"#,
+            ]))
+        let restarted = broken.transcript(.init(activity: .working))
+        #expect(restarted.turns.map(\.ending) == [.interrupted, nil])
+        #expect(restarted.entries.last?.content == .user(ChatUserMessage(text: "next")))
+    }
+
+    /// Oh My Pi flags a steer: here the text typed into an approval sent by
+    /// "deny and send", and a draft queued behind a question.
+    @Test func ompSteeringFlagStaysInTurn() throws {
+        let denied = try Self.ompTranscript(through: 18)
+        let steer = try #require(denied.entries.first { $0.id == ChatEntryID("pi:9fb8c963") })
+        #expect(steer.content == .user(ChatUserMessage(text: "abc", wasQueued: true)))
+        #expect(denied.turns.last?.firstEntryID == ChatEntryID("pi:e95de799"))
+        #expect(denied.turns.last?.ending == .completed)
+        #expect(denied.recordedPrompts.last?.text == "abc")
+
+        let full = try Self.ompTranscript()
+        #expect(
+            full.entries.first { $0.id == ChatEntryID("pi:62cc28b8") }?.content
+                == .user(ChatUserMessage(text: "my draft text", wasQueued: true)))
+        #expect(!full.turns.contains { $0.firstEntryID == ChatEntryID("pi:62cc28b8") })
+        #expect(full.turns.first { $0.firstEntryID == ChatEntryID("pi:ceec44cf") }?.ending == .completed)
+
+        // A steer that lands while the call before it still runs leaves it
+        // running.
+        var reducer = PiTranscriptReducer()
+        reducer.append(
+            Self.lines([
+                Self.header,
+                #"{"type":"message","id":"u","parentId":null,"message":{"role":"user","content":"start"}}"#,
+                #"{"type":"message","id":"a","parentId":"u","message":{"role":"assistant","content":[{"type":"toolCall","id":"c","name":"bash","arguments":{"command":"sleep 9"}}],"stopReason":"toolUse"}}"#,
+                #"{"type":"message","id":"s","parentId":"a","message":{"role":"user","content":"hurry","steering":true}}"#,
+            ]))
+        let running = reducer.transcript(.init(activity: .working))
+        #expect(Self.tool("c", in: running)?.status == .running)
+        #expect(running.turns.count == 1)
+    }
+
     // MARK: Interruptions, errors and minor records
 
     @Test func piToolInterruptReadsAsInterrupted() {
@@ -679,6 +759,34 @@ struct PiChatTests {
         #expect(detect("~/app", "$0.000 0.0%/200k").isSendable)
         let twoBlankRows = "\(rule)\r\n\u{1B}[7m \u{1B}[0m\r\n\r\n\(rule)\r\n~/app\r\n$0.000 0.0%/200k"
         #expect(!InputBoxStateDetector.detect(ANSIScreenDecoder.decode(twoBlankRows), program: .pi).isSendable)
+    }
+
+    /// Pi 0.85 sets its spinner into the editor's top rule while a turn
+    /// runs (`── ⠸ Working ───`); Enter then steers the turn. Synthetic:
+    /// no live Working frame was captured.
+    @Test func piWorkingEditorAcceptsSteer() {
+        let rule = String(repeating: "─", count: 40)
+        let working = "── \u{2838} Working " + String(repeating: "─", count: 28)
+        let footer = "~/app (main)\r\n$0.000 0.3%/200k (auto)"
+        func detect(_ rows: String...) -> InputBoxState {
+            InputBoxStateDetector.detect(
+                ANSIScreenDecoder.decode((rows + [footer]).joined(separator: "\r\n")), program: .pi)
+        }
+        let cursor = "\u{1B}[7m \u{1B}[0m"
+        #expect(detect(working, cursor, rule) == .empty(placeholder: nil))
+        #expect(
+            detect(" Steering: hi", " ↳ Option+Up to edit all queued messages", working, cursor, rule)
+                == .empty(placeholder: nil))
+        #expect(detect(working, "more\(cursor)", rule) == .text("more"))
+        // An answer's own rule above the editor is not its top border.
+        #expect(detect(rule, "answer", working, cursor, rule) == .empty(placeholder: nil))
+        // A scrolled editor's rule hides lines of a draft.
+        #expect(!detect("─── ↑ 2 more " + String(repeating: "─", count: 27), cursor, rule).isSendable)
+        // Oh My Pi draws no such rule.
+        #expect(
+            !InputBoxStateDetector.detect(
+                ANSIScreenDecoder.decode([working, cursor, rule, footer].joined(separator: "\r\n")), program: .omp
+            ).isSendable)
     }
 
     @Test func emptyOMPBoxPassesButMultilineDraftDoesNot() {

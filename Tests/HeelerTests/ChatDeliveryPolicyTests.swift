@@ -55,7 +55,16 @@ struct ChatDeliveryPolicyTests {
     @Test func textAlreadyInTheBoxHoldsTheMessage() async throws {
         let preflight = try #require(Self.policy { Self.draft("half typed") }.preflight)
 
-        #expect(await preflight("hello") == .inputNotReady(InputBoxState.text("half typed").holdReason))
+        #expect(await preflight("hello") == .inputNotReady(InputBoxState.text("half typed").holdReason(for: .codex)))
+    }
+
+    /// Esc in Pi and Oh My Pi puts a steer the turn had not taken back into
+    /// the input box, which then holds Chat's next message.
+    @Test func aPiDraftMentionsWhatStopPutBack() {
+        for program in [ChatProgram.pi, .omp] {
+            #expect(InputBoxState.text("steer").holdReason(for: program).contains("Stop puts queued messages back"))
+        }
+        #expect(!InputBoxState.text("draft").holdReason(for: .claude).contains("Stop"))
     }
 
     @Test func anUnreadableScreenHoldsTheMessage() async throws {

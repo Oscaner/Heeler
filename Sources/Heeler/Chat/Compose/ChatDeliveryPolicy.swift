@@ -30,7 +30,7 @@ extension ComposerDeliveryPolicy {
                 switch PreSendGate.check(screen, program: program, activity: activity()) {
                 case .send: return nil
                 case .holdBlocked: return .agentBlocked
-                case .hold(let state): return .inputNotReady(state.holdReason)
+                case .hold(let state): return .inputNotReady(state.holdReason(for: program))
                 }
             },
             verify: { _ in
@@ -55,12 +55,18 @@ extension ComposerDeliveryPolicy {
 extension InputBoxState {
     /// Why Chat holds a message while the input box reads this way. Every
     /// case is one the terminal can resolve.
-    var holdReason: String {
+    func holdReason(for program: ChatProgram) -> String {
         switch self {
         case .empty:
             "The Agent's input box is ready."
         case .text:
-            "The Agent's input box already has text. Send or clear it in the terminal first."
+            switch program {
+            case .claude, .codex:
+                "The Agent's input box already has text. Send or clear it in the terminal first."
+            case .pi, .omp:
+                // Their Esc returns steers the turn has not taken to the box.
+                "The Agent's input box already has text; Stop puts queued messages back there. Send or clear it in the terminal first."
+            }
         case .shellMode:
             "The Agent's input box is in shell mode. Leave it in the terminal first."
         case .disabled(let explanation):

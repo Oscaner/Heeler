@@ -36,11 +36,17 @@ its first reply, so a reported path with no file, or an empty one, is a new
 conversation: Chat shows it as empty, looks again on every poll without
 backing off, and keeps a sent message's echo waiting rather than overdue.
 Once a file was followed or saved on the device, its absence is Not Found.
+A message that steers a running turn (Oh My Pi's `steering` flag, or a Pi
+prompt right after the turn's tool results or tool-calling reply) shows as
+queued inside that turn instead of interrupting it, and still confirms
+Chat's send.
 
 Pi's stock rule editor and OMP's rounded box require a visible software cursor.
 Pi's empty editor is one row between its rules, directly above a footer whose
 working-directory row is followed by a context-usage stats row; any row
-between the editor and that footer is a completion list.
+between the editor and that footer is a completion list. While a turn runs,
+Pi sets a braille spinner and label into the top rule (`── ⠸ Working ───`);
+that editor still takes a message, which steers the turn.
 OMP's status-band composer is recognized by its filled header, percentage
 gauge and `╰─` prompt even when herdr omits the hardware cursor. Only the
 header's idle glyph (`π > ` in the 18.10.4 unicode preset, U+F0D57 in the
@@ -173,7 +179,9 @@ failed request may still have pressed the key, so Stop then says so and works
 again at once. The wait belongs to the Agent's Composer, not to a surface:
 switching between Chat and the terminal, or a rebuilt detail, keeps it. With
 text in the draft the button stays Send, so a prompt still queues behind the
-running turn, and ⌘↩ only ever sends. A send that empties the draft keeps Stop
+running turn (Pi steers the turn with it), and ⌘↩ only ever sends. Esc in Pi
+or Oh My Pi puts a steer the turn has not taken back into the input box, so
+a draft found there says Stop may have left it. A send that empties the draft keeps Stop
 back for a second, so the second tap of a double tap cannot interrupt the turn
 the prompt was meant to queue behind. Stop is not offered while Blocked, where
 Esc answers the dialog and, on Claude Code's folder trust dialog, exits the

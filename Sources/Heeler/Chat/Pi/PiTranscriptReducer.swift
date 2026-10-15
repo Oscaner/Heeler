@@ -4,7 +4,7 @@ import Foundation
 /// leaf's ancestry, including invisible extension/state entries. File order
 /// alone would resurrect messages abandoned by /tree or a branch switch.
 struct PiTranscriptReducer: ChatTranscriptReducer {
-    static let revision = 2
+    static let revision = 3
 
     private struct Record: Sendable {
         let offset: UInt64
@@ -119,6 +119,15 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
             }
             transcript.latestPromptOffset = record.offset
         }
+        /// A prompt that steered the running turn: it stays in that turn,
+        /// and the tools before it keep running.
+        func joinTurn(_ record: Record, _ content: ChatEntry.Content, prompt: String) {
+            add(record, content)
+            if !record.isTruncated {
+                transcript.recordedPrompts.append(
+                    ChatRecordedPrompt(offset: record.offset, text: prompt, entryID: entryID(record)))
+            }
+        }
         func customNotice(_ record: Record, _ value: JSONValue) {
             guard value["display"] == .bool(true) else { return }
             add(
@@ -133,6 +142,9 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
         var lastStopReason: String?
         // The latest tool result's text, until the next assistant message.
         var lastToolResultText: String?
+        // The last message was a tool result, or a reply that called tools:
+        // a prompt now is one Pi delivered while the turn ran.
+        var steerable = false
 
         for record in chain {
             switch record.type {
@@ -163,6 +175,7 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                         Self.skillCommand(prompt).map { ChatUserMessage(text: $0.displayText, command: $0) }
                         ?? ChatUserMessage(text: prompt)
                     openTurn(record, .user(message), prompt: prompt)
+                    steerable = false
                 } else {
                     customNotice(record, record.value)
                 }
@@ -172,23 +185,41 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                 case "user":
                     let text = Self.text(message["content"])
                     let images = Self.images(message["content"])
+                    // A message sent while a turn runs steers it. Oh My Pi
+                    // flags it; Pi writes it as a plain prompt between the
+                    // turn's tool calls and its next reply. A turn whose
+                    // reply broke off unrecorded still ends at a prompt. The
+                    // turn may have opened above the lines read.
+                    let isOpen =
+                        transcript.turns.last.map { $0.ending == nil }
+                        ?? (transcript.needsOlderHistory && transcript.precedingTurnEnd == nil)
+                    let steers = isOpen && (message["steering"] == .bool(true) || steerable)
+                    let content: ChatEntry.Content
+                    let prompt: String
                     if record.isTruncated, text.isEmpty, images == 0 {
-                        openTurn(
-                            record, .notice(ChatNotice(kind: .system, title: "Message exceeds the preview limit")),
-                            prompt: text)
+                        content = .notice(ChatNotice(kind: .system, title: "Message exceeds the preview limit"))
+                        prompt = text
                     } else if let skill = Self.piSkill(text) {
                         // Pi records `/skill:name args` as the skill's block
                         // followed by the arguments.
                         let invocation = ChatCommandInvocation(name: skill.name, arguments: skill.arguments)
-                        let sent =
+                        content = .user(
+                            ChatUserMessage(
+                                text: invocation.displayText, imageCount: images, command: invocation,
+                                wasQueued: steers))
+                        prompt =
                             skill.arguments.isEmpty
                             ? "/skill:\(skill.name)" : "/skill:\(skill.name) \(skill.arguments)"
-                        let user = ChatUserMessage(
-                            text: invocation.displayText, imageCount: images, command: invocation)
-                        openTurn(record, .user(user), prompt: sent)
                     } else {
-                        openTurn(record, .user(ChatUserMessage(text: text, imageCount: images)), prompt: text)
+                        content = .user(ChatUserMessage(text: text, imageCount: images, wasQueued: steers))
+                        prompt = text
                     }
+                    if steers {
+                        joinTurn(record, content, prompt: prompt)
+                    } else {
+                        openTurn(record, content, prompt: prompt)
+                    }
+                    steerable = false
                 case "assistant":
                     let planProposed = lastToolResultText == Self.planReady
                     lastToolResultText = nil
@@ -219,6 +250,7 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                     let stopReason = message["stopReason"]?.stringValue
                     let errorMessage = message["errorMessage"]?.stringValue
                     lastStopReason = stopReason
+                    steerable = stopReason == "toolUse"
                     switch stopReason {
                     case "stop", "length": finish(.completed, at: record)
                     case "aborted" where errorMessage == Self.ompSilentAbort:
@@ -258,6 +290,7 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                     }
                     let resultText = Self.text(message["content"]).trimmingCharacters(in: .whitespacesAndNewlines)
                     lastToolResultText = resultText
+                    steerable = true
                     if message["isError"] == .bool(true) {
                         tool.status =
                             if resultText.hasPrefix(Self.deniedPrefix) || resultText == Self.askCancelled {
