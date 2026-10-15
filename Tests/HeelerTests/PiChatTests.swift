@@ -227,6 +227,70 @@ struct PiChatTests {
         let result = try await PiTranscriptLocator(files: Self.hostFiles([Self.path: Data((header + "\n").utf8)]))
             .locate(reference: .init(program: .pi, sessionID: Self.path), directories: [])
         #expect(result == .failure(.unsupportedVersion(9)))
+        let engine = ChatConversationEngine(
+            reference: .init(program: .omp, sessionID: Self.path),
+            cacheKey: ChatCacheKey(hostID: UUID(), herdrSession: "", program: .omp, conversationID: Self.path),
+            files: Self.hostFiles([Self.path: Data((header + "\n").utf8)]), cache: VolatileChatTranscriptCache(),
+            adapter: try #require(ChatTranscriptAdapter.standard(for: .omp)))
+        #expect(
+            await engine.open(directories: [], context: .init()).phase
+                == .unavailable(.unsupportedFormat("Oh My Pi session version 9")))
+    }
+
+    // MARK: A new conversation's file
+
+    private static let cacheHost = UUID()
+
+    private static func engine(_ program: ChatProgram, files: ChatHostFiles, cache: VolatileChatTranscriptCache)
+        throws -> ChatConversationEngine
+    {
+        ChatConversationEngine(
+            reference: .init(program: program, sessionID: Self.path),
+            cacheKey: ChatCacheKey(hostID: cacheHost, herdrSession: "", program: program, conversationID: Self.path),
+            files: files, cache: cache, adapter: try #require(ChatTranscriptAdapter.standard(for: program)))
+    }
+
+    /// Pi and Oh My Pi report a session's path at startup and write the
+    /// file with the first reply.
+    @Test(arguments: [ChatProgram.pi, .omp])
+    func missingReportedPathIsAwaitingFirstMessage(program: ChatProgram) async throws {
+        let files = Self.hostFiles([:])
+        let result = try await PiTranscriptLocator(files: files).locate(
+            reference: .init(program: program, sessionID: Self.path), directories: ["/project"])
+        #expect(result == .failure(.notWritten))
+        let engine = try Self.engine(program, files: files, cache: VolatileChatTranscriptCache())
+        #expect(
+            await engine.open(directories: ["/project"], context: .init()).phase
+                == .unavailable(.awaitingFirstMessage(program)))
+    }
+
+    @Test func zeroByteFileIsAwaitingFirstMessage() async throws {
+        let files = Self.hostFiles([Self.path: Data()])
+        let engine = try Self.engine(.pi, files: files, cache: VolatileChatTranscriptCache())
+        #expect(await engine.open(directories: [], context: .init()).phase == .unavailable(.awaitingFirstMessage(.pi)))
+        // A UUID names no file to wait for: one not found is missing.
+        let byID = try await PiTranscriptLocator(files: files).locate(
+            reference: .init(program: .pi, sessionID: Self.id), directories: ["/project"])
+        #expect(byID == .failure(.notFound(searchedAll: true)))
+    }
+
+    @Test func aFileShownBeforeThatIsGoneIsNotFound() async throws {
+        let files = VirtualHostFiles()
+        await files.write(
+            Self.header + "\n"
+                + #"{"type":"message","id":"u1","parentId":null,"message":{"role":"user","content":"hello"}}"# + "\n",
+            at: Self.path)
+        let cache = VolatileChatTranscriptCache()
+        let engine = try Self.engine(.pi, files: files.hostFiles(), cache: cache)
+        #expect(await engine.open(directories: [], context: .init()).phase == .following(path: Self.path))
+        await engine.save(force: true)
+        await files.remove(Self.path)
+        #expect(await engine.poll(context: .init()).phase == .unavailable(.notFound(searchedAll: true)))
+
+        // Saved on the device, then gone from the Host, on a later visit.
+        let later = try Self.engine(.pi, files: files.hostFiles(), cache: cache)
+        _ = await later.restore()
+        #expect(await later.open(directories: [], context: .init()).phase == .unavailable(.notFound(searchedAll: true)))
     }
 
     // MARK: Skills, approvals and questions

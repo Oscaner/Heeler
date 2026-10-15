@@ -891,7 +891,7 @@ struct AgentChatStoreTests {
 
     /// A store following a Pi or Oh My Pi session through the production
     /// adapter, and the text Chat sends for `/probe from chat`.
-    private static func skillStore(_ program: ChatProgram) throws -> (
+    private static func skillStore(_ program: ChatProgram, clock: Clock = Clock()) throws -> (
         files: VirtualHostFiles, store: AgentChatStore, path: String, sent: String
     ) {
         let directory = program == .pi ? ".pi" : ".omp"
@@ -908,7 +908,8 @@ struct AgentChatStoreTests {
                 hostID: host, socketLocation: .defaultSession, files: files.hostFiles(), agentInfo: { agent },
                 cache: VolatileChatTranscriptCache(),
                 adapter: try #require(ChatTranscriptAdapter.standard(for: program))),
-            timing: AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)))
+            timing: AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)),
+            now: { clock.now })
         let rules = ChatSendRules(
             program: program,
             commands: [
@@ -951,6 +952,52 @@ struct AgentChatStoreTests {
 
         #expect(sent == "/skill:probe from chat ")
         #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    // MARK: A new Pi or Oh My Pi conversation
+
+    /// Pi and Oh My Pi write a new conversation's file with the first reply;
+    /// until then the Agent is in a conversation with nothing to show.
+    @Test(arguments: [ChatProgram.pi, .omp])
+    func sendWhileAwaitingFirstMessageIsNotOverdue(program: ChatProgram) async throws {
+        let clock = Clock()
+        let (files, store, path, _) = try Self.skillStore(program, clock: clock)
+        await store.step()
+        #expect(store.conversation.phase == .unavailable(.awaitingFirstMessage(program)))
+        let id = UUID()
+        store.updateSends([Self.sent(id, "hello ", delivered: false)])
+        store.updateSends([Self.sent(id, "hello ")])
+
+        clock.now = clock.now.addingTimeInterval(60)
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        await files.write(
+            Self.piHeader + "\n"
+                + #"{"type":"message","id":"u1","parentId":null,"message":{"role":"user","content":"hello"}}"#
+                + "\n", at: path)
+        await store.step()
+
+        #expect(store.conversation.phase == .following(path: path))
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    @Test func fileAppearingAfterFirstTurnIsFollowed() async throws {
+        let clock = Clock()
+        let (files, store, path, _) = try Self.skillStore(.pi, clock: clock)
+        await store.step()
+        await store.step()
+        await store.step()
+
+        // Looked for on every pass, without backing off.
+        #expect(await files.statuses.filter { $0 == path }.count == 3)
+        #expect(store.conversation.phase == .unavailable(.awaitingFirstMessage(.pi)))
+
+        await files.write(Self.piHeader + "\n", at: path)
+        await store.step()
+
+        #expect(store.conversation.phase == .following(path: path))
     }
 
     // MARK: Tool output

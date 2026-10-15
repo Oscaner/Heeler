@@ -2,6 +2,9 @@ import Foundation
 
 enum PiTranscriptUnavailable: Error, Equatable, Sendable {
     case notFound(searchedAll: Bool)
+    /// The reported path holds nothing yet: Pi and OMP name a session's
+    /// file when it starts and write it with the first reply.
+    case notWritten
     case mismatched
     case unsupportedVersion(Int)
 }
@@ -59,7 +62,7 @@ struct PiTranscriptLocator: Sendable {
                 case .success: return .success(path)
                 case .failure(.mismatched): mismatch = true
                 case .failure(.unsupportedVersion(let version)): return .failure(.unsupportedVersion(version))
-                case .failure(.notFound): break
+                case .failure(.notFound), .failure(.notWritten): break
                 }
             }
         }
@@ -74,8 +77,14 @@ struct PiTranscriptLocator: Sendable {
         path.map { $0 == "/" || $0 == "\\" || $0 == ":" ? "-" : String($0) }.joined()
     }
 
+    /// `sessionID` is nil for a path herdr reported, which may not be
+    /// written yet.
     private func verify(path: String, sessionID: String?) async throws -> Result<String, PiTranscriptUnavailable> {
-        guard let status = try await files.status(path), status.kind == .regular, (status.size ?? 0) > 0,
+        let status = try await files.status(path)
+        if sessionID == nil, status == nil || (status?.kind == .regular && status?.size == 0) {
+            return .failure(.notWritten)
+        }
+        guard let status, status.kind == .regular, (status.size ?? 0) > 0,
             let head = try await files.read(path: path, from: 0, to: 64 << 10, chunk: 64 << 10)
         else { return .failure(.notFound(searchedAll: true)) }
         // OMP 18 writes a fixed-width title slot before the session header.

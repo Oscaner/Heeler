@@ -14,6 +14,9 @@ enum ChatUnavailableReason: Equatable, Sendable {
     /// No transcript was found. `searchedAll` is false when the search was
     /// cut short, so the file may still exist.
     case notFound(searchedAll: Bool)
+    /// The program named the transcript's file but writes it only with the
+    /// first reply: the conversation is new, and a message starts it.
+    case awaitingFirstMessage(ChatProgram)
     /// Codex compressed the rollout, which Chat does not read.
     case compressed
     /// A file under the session's name holds another conversation.
@@ -168,6 +171,8 @@ actor ChatConversationEngine {
     private var relocatedDirectory: String?
     private var follower: TranscriptFollower?
     private var reducer: (any ChatTranscriptReducer)?
+    /// A transcript was followed: one missing now has gone, not yet to come.
+    private var hasFollowed = false
     /// The document last restored or saved. Its entries older than the
     /// live window show above it once the window reaches what it covers.
     private var cached: ChatCacheDocument?
@@ -541,9 +546,16 @@ actor ChatConversationEngine {
             {
             case .success(let path): return .found(path)
             case .failure(.notFound(let searchedAll)): return .unavailable(.notFound(searchedAll: searchedAll))
+            case .failure(.notWritten):
+                // A file shown before, or saved on the device, that is gone
+                // now is not a conversation still to start.
+                return .unavailable(
+                    hasFollowed || cached != nil
+                        ? .notFound(searchedAll: true) : .awaitingFirstMessage(reference.program))
             case .failure(.mismatched): return .unavailable(.mismatched)
             case .failure(.unsupportedVersion(let version)):
-                return .unavailable(.unsupportedFormat("Pi session version \(version)"))
+                let name = reference.program == .omp ? "Oh My Pi" : "Pi"
+                return .unavailable(.unsupportedFormat("\(name) session version \(version)"))
             }
         }
     }
@@ -568,6 +580,7 @@ actor ChatConversationEngine {
         }
         self.follower = follower
         self.reducer = reducer
+        hasFollowed = true
         olderUnreadable = false
         needsProjection = true
         update {

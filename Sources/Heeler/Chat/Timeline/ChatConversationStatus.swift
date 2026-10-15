@@ -9,6 +9,7 @@ extension ChatUnavailableReason {
         case .noSession: "Waiting for Conversation"
         case .unidentifiedSession: "Conversation Not Identified"
         case .notFound, .mismatched: "Conversation Not Found"
+        case .awaitingFirstMessage: "No Messages Yet"
         case .compressed: "Conversation Compressed"
         case .unsupportedSession, .unsupportedFormat: "Conversation Not Readable"
         }
@@ -16,7 +17,7 @@ extension ChatUnavailableReason {
 
     var systemImage: String {
         switch self {
-        case .noSession: "bubble.left.and.bubble.right"
+        case .noSession, .awaitingFirstMessage: "bubble.left.and.bubble.right"
         case .notFound, .mismatched: "doc.text.magnifyingglass"
         default: "exclamationmark.bubble"
         }
@@ -29,9 +30,9 @@ extension ChatUnavailableReason {
         case .noSession(.codex):
             "herdr hasn't reported a Codex session ID for this Agent. If this is a new conversation, send the first prompt. Chat will keep checking, and you can continue in the Agent terminal."
         case .noSession(.pi):
-            "herdr hasn't reported a Pi conversation for this Agent. Check the Pi integration on the Host. Chat will keep checking, and you can continue in the Agent terminal."
+            "herdr hasn't reported a Pi conversation for this Agent yet. Pi reports it once it has started, after you answer whether to trust the project folder. If this lasts, check the Pi integration on the Host. Chat will keep checking, and you can continue in the Agent terminal."
         case .noSession(.omp):
-            "herdr hasn't reported an Oh My Pi conversation for this Agent. Check the OMP integration on the Host. Chat will keep checking, and you can continue in the Agent terminal."
+            "herdr hasn't reported an Oh My Pi conversation for this Agent yet. Oh My Pi reports it once it has started. If this lasts, check the OMP integration on the Host. Chat will keep checking, and you can continue in the Agent terminal."
         case .unidentifiedSession:
             "herdr names this Agent's session without an id, which happens after resuming a conversation by name. Chat can't tell which transcript is its own."
         case .unsupportedSession:
@@ -40,6 +41,8 @@ extension ChatUnavailableReason {
             searchedAll
                 ? "Heeler couldn't find this conversation's transcript on the Host. It keeps looking while Chat is open."
                 : "Heeler hasn't found this conversation's transcript yet. It keeps looking while Chat is open."
+        case .awaitingFirstMessage(let program):
+            "\(program.chatName) saves this conversation after its first reply. Send a message to start it."
         case .compressed:
             "Codex compressed this conversation's rollout, which Chat can't read."
         case .mismatched:
@@ -54,6 +57,8 @@ extension ChatUnavailableReason {
         switch self {
         case .noSession:
             "Waiting for the Agent to report its conversation."
+        case .awaitingFirstMessage(let program):
+            "\(program.chatName) saves this conversation after its first reply."
         case .unidentifiedSession, .unsupportedSession:
             "Chat can't follow this conversation now. Showing saved messages."
         case .notFound, .mismatched:
@@ -68,6 +73,31 @@ extension ChatUnavailableReason {
         switch self {
         case .noSession, .notFound, .mismatched: true
         default: false
+        }
+    }
+
+    var isAwaitingFirstMessage: Bool {
+        if case .awaitingFirstMessage = self { true } else { false }
+    }
+
+    /// Whether Chat waits for the program rather than for the user: its
+    /// banner shows progress and offers nothing to do.
+    var isWaiting: Bool {
+        switch self {
+        case .noSession, .awaitingFirstMessage: true
+        default: false
+        }
+    }
+}
+
+extension ChatProgram {
+    /// The program's name in what Chat says about its conversation.
+    var chatName: String {
+        switch self {
+        case .claude: "Claude Code"
+        case .codex: "Codex"
+        case .pi: "Pi"
+        case .omp: "Oh My Pi"
         }
     }
 }
@@ -108,10 +138,12 @@ struct ChatLocatingView: View {
 
 /// A conversation with nothing in it yet.
 struct ChatEmptyConversationView: View {
+    var description = "Messages you and the Agent send show here."
+
     var body: some View {
         ContentUnavailableView(
             "No Messages Yet", systemImage: "bubble.left.and.bubble.right",
-            description: Text("Messages you and the Agent send show here."))
+            description: Text(description))
         .accessibilityIdentifier("chat.empty")
     }
 }

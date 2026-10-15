@@ -699,10 +699,15 @@ final class AgentChatStore {
     }
 
     private func scheduleNextOpen(after snapshot: ChatConversationSnapshot) {
-        if case .following = snapshot.phase {
+        switch snapshot.phase {
+        case .following, .unavailable(.awaitingFirstMessage):
+            // A new conversation's file comes with the first reply, during
+            // a turn that keeps the active pace: look on every pass.
             nextOpen = nil
             failedOpens = 0
             return
+        default:
+            break
         }
         let delays = timing.locateBackoff
         let delay = delays.isEmpty ? 0 : delays[min(failedOpens, delays.count - 1)]
@@ -746,6 +751,10 @@ final class AgentChatStore {
             return entry.sourceOffset
         }
         let date = now()
+        // A new conversation records nothing until the program writes its
+        // file, however long the first reply takes.
+        var isUnwritten = false
+        if case .unavailable(.awaitingFirstMessage) = conversation.phase { isUnwritten = true }
         var statuses: [UUID: SendStatus] = [:]
         var becameOverdue = false
         for send in sends {
@@ -771,7 +780,7 @@ final class AgentChatStore {
             if let match {
                 claimedOffsets.insert(match)
                 statuses[send.id] = .recorded
-            } else if date.timeIntervalSince(deliveredAt) < timing.echoTimeout {
+            } else if isUnwritten || date.timeIntervalSince(deliveredAt) < timing.echoTimeout {
                 statuses[send.id] = .awaiting
             } else if send.generation == conversationGeneration {
                 statuses[send.id] = .overdue

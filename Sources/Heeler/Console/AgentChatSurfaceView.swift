@@ -472,6 +472,9 @@ struct AgentChatSurfaceView: View {
             ChatLocatingView()
         case .empty:
             ChatEmptyConversationView()
+        case .unavailable(let reason) where reason.isAwaitingFirstMessage:
+            // A new conversation: the Composer starts it.
+            ChatEmptyConversationView(description: reason.explanation)
         case .unavailable(let reason):
             ChatUnavailableView(
                 reason: reason,
@@ -533,8 +536,8 @@ struct AgentChatSurfaceView: View {
             banners.append(
                 Banner(
                     id: "unavailable", systemImage: reason.systemImage, text: reason.bannerText,
-                    showsProgress: reason == .noSession(program),
-                    actionTitle: reason == .noSession(program) ? nil : AgentDetailSurface.terminal.showTitle,
+                    showsProgress: reason.isWaiting,
+                    actionTitle: reason.isWaiting ? nil : AgentDetailSurface.terminal.showTitle,
                     action: { showAgentTerminal() }))
         }
         return banners

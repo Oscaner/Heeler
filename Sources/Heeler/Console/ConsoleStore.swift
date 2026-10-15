@@ -1209,12 +1209,7 @@ final class ConsoleStore {
                     let prefetched = await chat.prefetch()
                     guard !Task.isCancelled else { return }
                     let snapshot = chat.conversation
-                    let waiting: Bool = switch snapshot.phase {
-                    case .locating: true
-                    case .unavailable(.noSession), .unavailable(.notFound): true
-                    default: false
-                    }
-                    if !prefetched || snapshot.readFailure != nil || waiting {
+                    if !prefetched || snapshot.readFailure != nil || Self.chatPrefetchWaits(on: snapshot.phase) {
                         chatPrefetched[agent.id] = nil
                         needsRetry = true
                     }
@@ -1224,6 +1219,17 @@ final class ConsoleStore {
                 chatPrefetchTasks[host.id] = nil
                 reconcileChatCache()
             }
+        }
+    }
+
+    /// Whether a prefetch that ended in `phase` looks again in a while: the
+    /// session or its transcript may still appear. A new conversation's file
+    /// comes only with a turn, whose status change prefetches again.
+    nonisolated static func chatPrefetchWaits(on phase: ChatConversationSnapshot.Phase) -> Bool {
+        switch phase {
+        case .locating: true
+        case .unavailable(.noSession), .unavailable(.notFound): true
+        default: false
         }
     }
 

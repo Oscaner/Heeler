@@ -151,6 +151,18 @@ struct ConsoleStoreTests {
         store.setHosts([])
     }
 
+    /// A new Pi or Oh My Pi conversation has no file until its first turn,
+    /// whose status change prefetches again: looking every few seconds in
+    /// between would find nothing.
+    @Test func awaitingFirstMessageDoesNotRetryPrefetch() {
+        #expect(!ConsoleStore.chatPrefetchWaits(on: .unavailable(.awaitingFirstMessage(.pi))))
+        #expect(!ConsoleStore.chatPrefetchWaits(on: .unavailable(.awaitingFirstMessage(.omp))))
+        #expect(ConsoleStore.chatPrefetchWaits(on: .unavailable(.notFound(searchedAll: true))))
+        #expect(ConsoleStore.chatPrefetchWaits(on: .unavailable(.noSession(.pi))))
+        #expect(ConsoleStore.chatPrefetchWaits(on: .locating))
+        #expect(!ConsoleStore.chatPrefetchWaits(on: .following(path: "/p.jsonl")))
+    }
+
     @Test func connectingCachesChatWithoutOpeningItsDetail() async throws {
         let host = Host.fixture()
         let sessionID = "e951205e-24af-4a5e-baa7-3ccbebd2de2c"

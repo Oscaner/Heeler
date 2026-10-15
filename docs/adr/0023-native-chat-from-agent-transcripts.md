@@ -31,6 +31,11 @@ history: that prefix may belong to a branch the user abandoned. Offline cached
 conversations still restore; online earlier history is loaded from the file.
 Custom session directories work when herdr reports the file path. UUID-only
 lookup stays within `.pi/agent/sessions` or `.omp/agent/sessions`.
+Pi and OMP report a new session's path at startup but write the file with
+its first reply, so a reported path with no file, or an empty one, is a new
+conversation: Chat shows it as empty, looks again on every poll without
+backing off, and keeps a sent message's echo waiting rather than overdue.
+Once a file was followed or saved on the device, its absence is Not Found.
 
 Pi's stock rule editor and OMP's rounded box require a visible software cursor.
 Pi's empty editor is one row between its rules, directly above a footer whose
