@@ -75,9 +75,13 @@ taken the same way on 2026-10-15 against isolated herdr 0.9.5 backends: pi
 subscription and real settings; no credential file was read or copied. Each
 file keeps the capture's number and name behind the `pi-` or `omp-` prefix.
 
-- Pi's model calls failed authentication, so the pi screens show that error
+- Pi's model calls failed authentication, so `pi-03` to `pi-20` show that error
   above the editor; `pi-06` also shows the Update Available box and a working
   directory outside `HOME`.
+- `pi-31` to `pi-39` come from a second pi capture on 2026-10-16 after the
+  developer logged in again (numbered here, not by capture), so they show real model turns: the Working
+  rule, queued steers, a retry countdown and compaction. They are 120
+  columns wide except the `-40` ones.
 - Oh My Pi used the nerd-font status band.
 - Captures are 119, 120 or 40 columns wide; Pi's are 119 unless the name
   says otherwise, Oh My Pi's 120.

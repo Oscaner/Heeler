@@ -32,6 +32,9 @@ enum ScreenFixture {
         "pi-10-slash-pr-popup", "pi-11-nonempty-after-popup-esc", "pi-12-nonempty-editor",
         "pi-13-skill-invoked", "pi-14-compact-0.25s", "pi-16-empty-editor-120-attached",
         "pi-17-empty-editor-40-attached", "pi-19-slash-popup-40", "pi-20-nonempty-40",
+        "pi-31-working-empty-120", "pi-32-working-draft-120", "pi-33-retry-countdown-draft",
+        "pi-34-steer-queued-empty", "pi-35-steer-queued-tool", "pi-36-steer-back-in-editor",
+        "pi-37-working-empty-40", "pi-38-working-draft-40", "pi-39-compacting-empty",
     ]
 
     static let omp = [

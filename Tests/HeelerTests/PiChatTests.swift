@@ -980,9 +980,36 @@ struct PiChatTests {
         #expect(!InputBoxStateDetector.detect(ANSIScreenDecoder.decode(twoBlankRows), program: .pi).isSendable)
     }
 
+    /// Live frames with a real model: the editor keeps its cursor cell while
+    /// the top rule carries the spinner (pi-31, pi-37), queued steers sit
+    /// above it (pi-34, pi-35), and a retry countdown or compaction leaves
+    /// a plain rule (pi-33, pi-39). Enter in an empty editor steers the turn.
+    @Test(arguments: [
+        "pi-31-working-empty-120", "pi-34-steer-queued-empty", "pi-35-steer-queued-tool",
+        "pi-37-working-empty-40", "pi-39-compacting-empty",
+    ])
+    func piLiveWorkingEditorIsEmpty(stem: String) throws {
+        let screen = try ScreenFixture.screen(stem)
+        #expect(InputBoxStateDetector.detect(screen, program: .pi) == .empty(placeholder: nil))
+        #expect(PreSendGate.check(screen, program: .pi, activity: .working) == .send)
+    }
+
+    /// A draft typed while Pi works, kept through a retry countdown, or put
+    /// back by Esc with a queued steer would be joined to a sent prompt.
+    @Test(arguments: [
+        ("pi-32-working-draft-120", "draft typed while working"),
+        ("pi-33-retry-countdown-draft", "draft typed while working"),
+        ("pi-36-steer-back-in-editor", "Queued steer: say MANGO."),
+        ("pi-38-working-draft-40", "draft at forty cols"),
+    ])
+    func piLiveDraftsHoldTheSend(stem: String, draft: String) throws {
+        let screen = try ScreenFixture.screen(stem)
+        #expect(InputBoxStateDetector.detect(screen, program: .pi) == .text(draft))
+        #expect(PreSendGate.check(screen, program: .pi, activity: .working) != .send)
+    }
+
     /// Pi 0.85 sets its spinner into the editor's top rule while a turn
-    /// runs (`── ⠸ Working ───`); Enter then steers the turn. Synthetic:
-    /// no live Working frame was captured.
+    /// runs (`── ⠸ Working ───`); Enter then steers the turn.
     @Test func piWorkingEditorAcceptsSteer() {
         let rule = String(repeating: "─", count: 40)
         let working = "── \u{2838} Working " + String(repeating: "─", count: 28)
