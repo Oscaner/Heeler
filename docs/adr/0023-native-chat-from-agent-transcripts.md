@@ -45,8 +45,9 @@ panel resting on the band also holds it. The italic first-message hint on the
 prompt row is not a draft.
 Drafts, completion popups, other editor shapes and extension
 dialogs stay in the terminal; Pi/OMP dialogs do not reuse Claude/Codex option
-digit bindings. Their `/` menu and shell-command refusals use the same Chat
-send rules as the existing adapters.
+digit bindings, and any titled OMP panel ending the screen or resting on the
+band, such as the plan review, holds sending. Their `/` menu and
+shell-command refusals use the same Chat send rules as the existing adapters.
 
 ## Entry and the terminal
 
@@ -195,15 +196,19 @@ changed, waits until the dialog has shown for 150 ms, presses keys through
 `agent.send_keys`, and types text answers (feedback, a plan note, a custom
 answer) through `pane.send_input`. The answer is confirmed when the dialog on
 screen changes, when Claude Code's transcript shows the matching tool result,
-or when Codex leaves Blocked. Staying Blocked proves nothing, because herdr
-stays Blocked while the next queued approval takes the screen. Three seconds
-without effect shows a hint, and nothing is resent. Codex holds an answer to
-its asynchronous question until its next tool call, so the card confirms it by
-Codex's queued-messages notice and shows it as Queued; Chat never works around
-herdr's `agent_blocked` while such a question waits. A dialog the parsers do
-not know gets a generic card with the Agent controls. Answers the transcript
-does not record join the history as Allowed, Declined, Stopped and Answered
-rows.
+or when Codex or Oh My Pi leaves Blocked. Staying Blocked proves nothing,
+because herdr stays Blocked while the next queued approval takes the screen.
+Three seconds without effect shows a hint, and nothing is resent. Codex holds
+an answer to its asynchronous question until its next tool call, so the card
+confirms it by Codex's queued-messages notice and shows it as Queued; Chat
+never works around herdr's `agent_blocked` while such a question waits. Oh My
+Pi's tool approval binds no digits and ignores its approve key for 500 ms
+after it draws, a span that starts before Chat first sees it: Approve presses
+ctrl+q once the panel has shown for 650 ms, and Deny presses Esc, after which
+Oh My Pi goes on with the turn. ctrl+enter is never sent, since without kitty
+keys it reads as Enter. A dialog the parsers do not know gets a generic card
+with the Agent controls. Answers the transcript does not record join the
+history as Allowed, Declined, Stopped and Answered rows.
 
 ## Background Work
 

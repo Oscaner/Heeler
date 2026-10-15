@@ -20,6 +20,8 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
     /// composer. Their text is only in the transcript until expanded.
     case codexAsyncCollapsed
     case codexAsyncQuestion
+    /// Oh My Pi's `Allow tool:` panel, answered by ctrl+q or Esc.
+    case ompApproval
 
     var program: ChatProgram {
         switch self {
@@ -29,6 +31,8 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
         case .codexExec, .codexPatch, .codexNetwork, .codexQuestion, .codexAsyncCollapsed,
             .codexAsyncQuestion:
             .codex
+        case .ompApproval:
+            .omp
         }
     }
 }
@@ -148,7 +152,10 @@ struct DialogFocusState: Sendable, Hashable {
 /// transcript matcher compares with pending requests. Narrow screens and
 /// tall dialogs can cut any of them short; the transcript has the full text.
 struct DialogSubject: Sendable, Hashable {
+    /// Oh My Pi approval: the tool its title names, `bash`.
+    var toolName: String?
     /// Claude Bash and Codex exec: the command, rows joined with spaces.
+    /// Oh My Pi approval: the `Command:` row, its cut-off mark dropped.
     var command: String?
     /// Claude Bash: the description row above the command.
     var commandDescription: String?
@@ -163,7 +170,7 @@ struct DialogSubject: Sendable, Hashable {
     var host: String?
     /// Claude WebFetch: the prompt.
     var prompt: String?
-    /// Codex: the `Reason:` text.
+    /// Codex and Oh My Pi: the `Reason:` text.
     var reason: String?
     /// Codex: the `Environment:` value.
     var environment: String?
@@ -267,7 +274,8 @@ enum BlockedDialogParser {
         switch program {
         case .claude: ClaudeDialogParser.parse(screen)
         case .codex: CodexDialogParser.parse(screen)
-        case .pi, .omp: .none
+        case .omp: OMPDialogParser.parse(screen)
+        case .pi: .none
         }
     }
 }

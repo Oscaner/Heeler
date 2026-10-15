@@ -25,8 +25,10 @@ Entries reference the pull request that made the change.
   invocations show as `/name` commands and confirm Chat's sends; Oh My Pi
   questions keep their options and answers, denied approvals and dismissed
   questions read as declined, Stop during a Pi tool reads as an interruption,
-  and an Oh My Pi plan proposal reads as ready for review. Extends the Chat
-  infrastructure in #425. (#464)
+  and an Oh My Pi plan proposal reads as ready for review. Oh My Pi tool
+  approvals get a native Blocked card: Approve presses ctrl+q once Oh My Pi
+  accepts it, and Deny presses Esc. Extends the Chat infrastructure in #425.
+  (#464)
 - Chat for Claude Code and Codex Agents: the Agent's conversation as native
   rows in the terminal's place, read from the transcript its program writes on
   the Host, with nothing installed there. Chat folds finished turns, groups

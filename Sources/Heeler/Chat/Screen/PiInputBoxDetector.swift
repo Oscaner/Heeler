@@ -91,15 +91,9 @@ enum PiInputBoxDetector {
     /// cannot look empty.
     private static func ompBand(_ screen: ANSIScreen) -> InputBoxState? {
         let rows = screen.rows
-        // herdr pads ANSI rows to the pane width; a trimmed read ends at `╰─`.
-        guard let prompt = rows.indices.last(where: { rows[$0].text.hasPrefix("╰─ ") || rows[$0].text == "╰─" }),
-            prompt > 0
-        else { return nil }
+        guard let prompt = rows.indices.last(where: { isOMPPrompt(rows[$0]) }), prompt > 0 else { return nil }
         let band = rows[prompt - 1]
-        guard band.text.contains("─"),
-            band.text.range(of: #"\d{1,3}%"#, options: .regularExpression) != nil,
-            band.runs.contains(where: { $0.style.background != nil })
-        else { return nil }
+        guard isOMPStatusBand(band) else { return nil }
         let header = band.trimmedText
         let isWorking: Bool
         if ompIdleBands.contains(where: { header.hasPrefix($0) }) {
@@ -133,6 +127,18 @@ enum PiInputBoxDetector {
         return isWorking
             ? .disabled("Oh My Pi is working. Send once it's idle, or steer from the terminal.")
             : .empty(placeholder: nil)
+    }
+
+    /// OMP's unboxed `╰─` prompt row under the status band.
+    static func isOMPPrompt(_ row: ScreenRow) -> Bool {
+        // herdr pads ANSI rows to the pane width; a trimmed read ends at `╰─`.
+        row.text.hasPrefix("╰─ ") || row.text == "╰─"
+    }
+
+    /// OMP's status band: a filled row with rules and a context gauge.
+    static func isOMPStatusBand(_ row: ScreenRow) -> Bool {
+        row.text.contains("─") && row.text.range(of: #"\d{1,3}%"#, options: .regularExpression) != nil
+            && row.runs.contains { $0.style.background != nil }
     }
 
     private static let ompIdleBands = ["π > ", "\u{E0B6} \u{F0D57} "]

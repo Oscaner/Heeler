@@ -334,6 +334,53 @@ struct DialogActionPlannerTests {
         }
     }
 
+    // MARK: Oh My Pi
+
+    @Test("OMP's Approve is ctrl+q alone, confirmed by leaving the panel or Blocked")
+    func ompApprovalApproveSendsCtrlQOnly() throws {
+        let approve = try plan(.choose(ordinal: 1), "omp-24-approval-a-dialog")
+        #expect(approve == DialogActionPlan(steps: [.keys(["ctrl+q"])], confirmation: .fingerprintChangeOrUnblocked))
+        #expect(!approve.focusesComposer)
+        // A draft in the prompt below does not change the keys.
+        #expect(try plan(.choose(ordinal: 1), "omp-24-approval-d-typed-abc") == approve)
+        #expect(HerdrKeyGrammar.accepts("ctrl+q"))
+    }
+
+    @Test("OMP's Deny and Stop are Esc, and the Composer keeps its focus")
+    func ompApprovalDenyAndStopSendEsc() throws {
+        let esc = DialogActionPlan(steps: [.keys(["esc"])], confirmation: .fingerprintChangeOrUnblocked)
+        #expect(try plan(.choose(ordinal: 2), "omp-24-approval-a-dialog") == esc)
+        #expect(try plan(.dismiss, "omp-24-approval-a-dialog") == esc)
+        #expect(throws: DialogPlanError.noSuchOption(3)) { try plan(.choose(ordinal: 3), "omp-24-approval-a-dialog") }
+        #expect(throws: DialogPlanError.unsupported("Oh My Pi takes no note with an approval.")) {
+            try plan(.amend(ordinal: 2, note: "no"), "omp-24-approval-a-dialog")
+        }
+    }
+
+    @Test("No OMP plan sends a digit, Enter or ctrl+enter")
+    func ompPlansNeverContainDigits() throws {
+        for stem in ["omp-23-approval-a-ctrlq-early", "omp-24-approval-a-dialog", "omp-24-approval-d-typed-abc"] {
+            let dialog = try dialog(stem)
+            var actions: [DialogAction] = [
+                .dismiss, .expandQuestions, .skipQuestion, .approvePlan(note: "note"), .submitSelection([1, 2]),
+            ]
+            for ordinal in 0...10 {
+                actions += [
+                    .choose(ordinal: ordinal), .amend(ordinal: ordinal, note: "note"),
+                    .respond(ordinal: ordinal, text: "note"),
+                ]
+            }
+            var keys: [String] = []
+            for action in actions {
+                guard let plan = try? DialogActionPlanner.plan(action, for: dialog) else { continue }
+                #expect(plan.steps.allSatisfy { if case .keys = $0 { true } else { false } }, "\(stem) \(action)")
+                keys += plan.keys
+            }
+            #expect(Set(keys) == ["ctrl+q", "esc"], "\(stem)")
+            #expect(!keys.contains { $0.contains(where: \.isNumber) || $0.contains("enter") }, "\(stem)")
+        }
+    }
+
     // MARK: Generic card, text and keys
 
     @Test("The generic card's buttons press the digits it lists")

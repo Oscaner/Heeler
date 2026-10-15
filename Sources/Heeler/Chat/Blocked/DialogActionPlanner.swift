@@ -17,7 +17,8 @@ enum DialogActionPlanner {
         switch dialog.program {
         case .claude: try ClaudeDialogPlanner(dialog: dialog, toolUseID: toolUseID).plan(action)
         case .codex: try CodexDialogPlanner(dialog: dialog).plan(action)
-        case .pi, .omp: throw .unsupported("Answer this dialog in the Agent terminal.")
+        case .omp: try OMPDialogPlanner(dialog: dialog).plan(action)
+        case .pi: throw .unsupported("Answer this dialog in the Agent terminal.")
         }
     }
 
@@ -318,7 +319,7 @@ private struct CodexDialogPlanner {
         case .codexAsyncQuestion:
             try asyncQuestion(action)
         case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFetch, .claudePlan, .claudeQuestion,
-            .claudeQuestionReview, .claudeWorkspaceTrust:
+            .claudeQuestionReview, .claudeWorkspaceTrust, .ompApproval:
             throw .unsupported("Not a Codex dialog.")
         }
     }

@@ -281,7 +281,94 @@ struct BlockedCardStoreTests {
         #expect(card.dialog.focus.focusedOrdinal == 4)
     }
 
+    // MARK: Oh My Pi
+
+    /// OMP ignores ctrl+q for 500 ms after drawing the approval, so the key
+    /// waits until 650 ms after the panel first showed, and goes once.
+    @Test func anOMPApprovalWaitsOutTheArmBeforeCtrlQ() async throws {
+        let pane = FakePane(try ScreenFixture.screen("omp-24-approval-a-dialog"))
+        await pane.react(to: ["ctrl+q"], with: try ScreenFixture.screen("omp-09-tool-working-3s"))
+        let clock = ManualClock()
+        let store = Self.store(.omp, pane: pane, clock: clock)
+        let request = Self.ompBash("call_1|fc_1", "echo approved-2")
+        store.update(transcript: Self.transcript(pending: [request]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.kind == .ompApproval)
+        #expect(card.request?.callID == "call_1|fc_1")
+        clock.advance(.milliseconds(100))
+
+        await store.perform(.choose(ordinal: 1))
+
+        #expect(await pane.keys == [["ctrl+q"]])
+        // Seen at t0, tapped at t0 + 100 ms: the key went at t0 + 650 ms.
+        #expect(clock.sleeps == [.milliseconds(550)])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        #expect(store.history.calls["call_1|fc_1"] == .allowed)
+    }
+
+    @Test func anOMPApprovalSeenLongAgoSendsAtOnce() async throws {
+        let pane = FakePane(try ScreenFixture.screen("omp-24-approval-a-dialog"))
+        await pane.react(to: ["ctrl+q"], with: try ScreenFixture.screen("omp-09-tool-working-3s"))
+        let clock = ManualClock()
+        let store = Self.store(.omp, pane: pane, clock: clock)
+        store.update(activity: .blocked)
+        await store.refresh()
+        clock.advance(.seconds(2))
+
+        await store.perform(.choose(ordinal: 1))
+
+        #expect(await pane.keys == [["ctrl+q"]])
+        #expect(clock.sleeps.isEmpty)
+        #expect(store.progress == .ready)
+    }
+
+    /// Esc denies the call and OMP goes on; the transcript records the
+    /// denial, so the card keeps nothing.
+    @Test func anOMPDenyIsEscAndNotKeptAsAStop() async throws {
+        let request = Self.ompBash("call_1|fc_1", "echo approved-2")
+        for action in [DialogAction.dismiss, .choose(ordinal: 2)] {
+            let pane = FakePane(try ScreenFixture.screen("omp-24-approval-a-dialog"))
+            await pane.react(to: ["esc"], with: try ScreenFixture.screen("omp-24-approval-e-enter-deny-and-send"))
+            let store = Self.store(.omp, pane: pane)
+            store.update(transcript: Self.transcript(pending: [request]))
+            store.update(activity: .blocked)
+            await store.refresh()
+
+            await store.perform(action)
+
+            #expect(await pane.keys == [["esc"]], "\(action)")
+            #expect(store.progress == .ready, "\(action)")
+            #expect(store.composerFocusRequest == 0, "\(action)")
+            #expect(store.history.isEmpty, "\(action)")
+        }
+    }
+
+    @Test func anOMPPanelHeelerDoesNotKnowGetsTheGenericCardWithoutDigits() async throws {
+        let pane = FakePane(try ScreenFixture.screen("omp-27-ask-a-dialog"))
+        let store = Self.store(.omp, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+
+        guard case .generic(let excerpt) = store.content else {
+            Issue.record("Expected the generic card, got \(store.content)")
+            return
+        }
+        #expect(excerpt.numbered.isEmpty)
+        await store.press(number: 2)
+        #expect(await pane.keys.isEmpty)
+    }
+
     // MARK: Helpers
+
+    private static func ompBash(_ id: String, _ command: String) -> ChatPendingRequest {
+        ChatPendingRequest(entryID: ChatEntryID(id), callID: id, kind: .command, toolName: "bash", summary: command)
+    }
 
     private static func store(_ program: ChatProgram, pane: FakePane, clock: ManualClock = ManualClock()) -> BlockedCardStore {
         BlockedCardStore(
@@ -418,6 +505,16 @@ struct BlockedRequestMatchTests {
         let codex = request(
             "c", "request_user_input", "Pick a color", kind: .question, questions: [ChatQuestion(text: "Pick a color")])
         #expect(BlockedRequestMatch.request(for: try dialog("codex-04-x3-q1"), in: [codex])?.callID == "c")
+    }
+
+    @Test func anOMPApprovalMatchesItsToolAndCommand() throws {
+        let approval = try dialog("omp-24-approval-a-dialog")
+        let requests = [
+            request("a", "bash", "echo approved-1"), request("b", "read", "echo approved-2", kind: .fileRead),
+            request("c|fc", "bash", "echo approved-2 && echo more"),
+        ]
+        #expect(BlockedRequestMatch.request(for: approval, in: requests)?.callID == "c|fc")
+        #expect(BlockedRequestMatch.request(for: approval, in: [request("d", "Bash", "echo approved-2")]) == nil)
     }
 
     @Test func aCodexCommandMatchesInsideItsScript() throws {

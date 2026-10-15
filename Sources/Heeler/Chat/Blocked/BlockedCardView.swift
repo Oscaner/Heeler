@@ -170,6 +170,18 @@ private struct BlockedDialogCard: View {
             }
         case .codexAsyncCollapsed:
             BlockedCardText("Codex asked \(dialog.title). Its turn goes on, and the answers go with its next step.")
+        case .ompApproval:
+            if let reason = subject.reason {
+                BlockedCardText(reason)
+            }
+            if let command = subject.command {
+                BlockedCodeBox(text: card.request?.summary ?? command)
+            }
+            // The other rows OMP gives the tool, such as `Origin:`.
+            let details = dialog.body.filter { !$0.hasPrefix("Command:") && !$0.hasPrefix("Reason:") }
+            ForEach(Array(details.enumerated()), id: \.offset) {
+                BlockedCardText($0.element)
+            }
         case .codexNetwork:
             EmptyView()
         }
@@ -378,8 +390,7 @@ private struct BlockedCollapsedBar: View {
                 .lineLimit(1)
             Spacer(minLength: 8)
             if let dialog, dialog.canStop {
-                // Esc quits Claude Code on the trust dialog.
-                Button(dialog.kind == .claudeWorkspaceTrust ? "Exit Claude Code" : "Stop", role: .destructive) {
+                Button(dialog.stopTitle, role: .destructive) {
                     Task { await store.perform(.dismiss) }
                 }
                 .disabled(store.progress != .ready)
@@ -396,6 +407,7 @@ private extension BlockedDialog {
         switch kind {
         case .claudeQuestion, .codexQuestion, .codexAsyncQuestion: "Question"
         case .codexAsyncCollapsed: "Questions"
+        case .ompApproval: "Allow \(subject.toolName ?? "Tool")"
         default: title.hasSuffix(":") ? String(title.dropLast()) : title
         }
     }
@@ -403,6 +415,16 @@ private extension BlockedDialog {
     /// Whether Esc does something a card can name: the planner refuses it
     /// only on Codex's asynchronous question.
     var canStop: Bool { kind != .codexAsyncQuestion }
+
+    /// What Esc does, for the folded card: it quits Claude Code on the
+    /// trust dialog and only denies an Oh My Pi approval.
+    var stopTitle: String {
+        switch kind {
+        case .claudeWorkspaceTrust: "Exit Claude Code"
+        case .ompApproval: "Deny"
+        default: "Stop"
+        }
+    }
 
     /// Whether the open card offers Esc itself: only when no option
     /// already sends it.

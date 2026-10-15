@@ -41,6 +41,18 @@ struct InputBoxStateDetectorTests {
         #expect(!InputBoxState.unknown("why").isSendable)
     }
 
+    @Test("Oh My Pi: an approval resting on the band is a dialog, with or without a draft", arguments: [
+        "omp-23-approval-a-ctrlq-early", "omp-24-approval-a-dialog", "omp-24-approval-d-typed-abc",
+    ])
+    func ompApprovalWithComposerBelowIsDialog(stem: String) throws {
+        #expect(try state(stem) == .dialog)
+    }
+
+    @Test("Oh My Pi: the plan review is a dialog")
+    func ompPlanReviewIsDialog() throws {
+        #expect(try state("omp-31-plan-review") == .dialog)
+    }
+
     // MARK: Claude, synthetic until captured
 
     /// Claude's box between its rules, with the mode line under it.

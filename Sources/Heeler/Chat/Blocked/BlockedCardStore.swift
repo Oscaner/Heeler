@@ -53,6 +53,10 @@ final class BlockedCardStore {
         /// How long a dialog must have shown before the first key: a key
         /// sent as the dialog draws can land on the screen before it.
         var grace: Duration = .milliseconds(150)
+        /// Oh My Pi ignores ctrl+q for 500 ms after drawing an approval.
+        /// That time starts before Heeler first sees the panel, so waiting
+        /// this long from then is conservative.
+        var approvalArm: Duration = .milliseconds(650)
         /// How long the Agent may be Blocked with no dialog on screen before
         /// the card says it can't read one. herdr reports Blocked a moment
         /// before the program draws its dialog, and a moment after an
@@ -213,7 +217,9 @@ final class BlockedCardStore {
             }
             history.record(.allowed, forCall: id)
         case .dismiss:
-            guard let id = card.request?.callID else { return }
+            // Oh My Pi's Esc denies the call and goes on, as its transcript
+            // records.
+            guard let id = card.request?.callID, dialog.kind != .ompApproval else { return }
             history.record(.stopped, forCall: id)
         case .respond, .approvePlan, .submitSelection, .expandQuestions, .skipQuestion:
             break
@@ -249,7 +255,7 @@ final class BlockedCardStore {
             return
         }
         let toolUseID = program == .claude ? shown.request?.callID : nil
-        await waitOutGrace(for: page.fingerprint)
+        await waitOutGrace(for: page)
         for index in form.questions.indices {
             let stopped =
                 "Heeler stopped at question \(index + 1): the dialog didn't respond the way it expected. "
@@ -388,7 +394,7 @@ final class BlockedCardStore {
             finish(notice: error.message)
             return false
         }
-        await waitOutGrace(for: shown)
+        await waitOutGrace(for: shown, kind: fresh.result.dialog?.kind)
         guard case .sent = await send(plan.steps, to: shown) else { return false }
         return await confirm(plan, on: shown)
     }
@@ -470,9 +476,16 @@ final class BlockedCardStore {
         notice = reason
     }
 
-    private func waitOutGrace(for fingerprint: DialogFingerprint) async {
+    private func waitOutGrace(for dialog: BlockedDialog) async {
+        await waitOutGrace(for: dialog.fingerprint, kind: dialog.kind)
+    }
+
+    /// Waits until the dialog has shown long enough to take a key: the
+    /// grace, or an Oh My Pi approval's arm.
+    private func waitOutGrace(for fingerprint: DialogFingerprint, kind: BlockedDialogKind?) async {
         guard let firstSeen, firstSeen.fingerprint == fingerprint else { return }
-        let wait = firstSeen.at + timing.grace - clock.now()
+        let settle = kind == .ompApproval ? max(timing.grace, timing.approvalArm) : timing.grace
+        let wait = firstSeen.at + settle - clock.now()
         if wait > .zero { try? await clock.sleep(wait) }
     }
 

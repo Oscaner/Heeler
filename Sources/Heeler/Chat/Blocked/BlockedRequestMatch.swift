@@ -36,6 +36,10 @@ enum BlockedRequestMatch {
             return request.toolName == "request_user_input_async"
         case .codexAsyncQuestion:
             return request.toolName == "request_user_input_async" && asks(request, dialog.title)
+        case .ompApproval:
+            // A tool without a `Command:` row matches by its name alone.
+            guard request.toolName == subject.toolName else { return false }
+            return subject.command == nil || begins(request.summary, with: subject.command)
         case .claudeWorkspaceTrust, .codexNetwork:
             return false
         }
