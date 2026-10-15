@@ -34,7 +34,9 @@ Entries reference the pull request that made the change.
   missing. Pi takes messages while it works, and a message that steers a
   running turn shows as queued inside it rather than interrupting it. Oh My
   Pi's own `.omp/skills` and `~/.omp/agent/skills`, and the shared home
-  `~/.agents/skills` and `~/.agent/skills`, appear in its skill list.
+  `~/.agents/skills` and `~/.agent/skills`, appear in its skill list. When
+  Oh My Pi rewrites its session file, Chat keeps the saved conversation and
+  still confirms each sent message once.
   Extends the Chat infrastructure in #425.
   (#464)
 - Chat for Claude Code and Codex Agents: the Agent's conversation as native

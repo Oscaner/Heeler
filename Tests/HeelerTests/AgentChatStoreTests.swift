@@ -891,7 +891,9 @@ struct AgentChatStoreTests {
 
     /// A store following a Pi or Oh My Pi session through the production
     /// adapter, and the text Chat sends for `/probe from chat`.
-    private static func skillStore(_ program: ChatProgram, clock: Clock = Clock()) throws -> (
+    private static func skillStore(
+        _ program: ChatProgram, clock: Clock = Clock(), cache: VolatileChatTranscriptCache = VolatileChatTranscriptCache()
+    ) throws -> (
         files: VirtualHostFiles, store: AgentChatStore, path: String, sent: String
     ) {
         let directory = program == .pi ? ".pi" : ".omp"
@@ -906,7 +908,7 @@ struct AgentChatStoreTests {
             agentID: ConsoleAgent.ID(hostID: host, paneID: agent.paneID), agent: agent, program: program,
             source: AgentChatSource(
                 hostID: host, socketLocation: .defaultSession, files: files.hostFiles(), agentInfo: { agent },
-                cache: VolatileChatTranscriptCache(),
+                cache: cache,
                 adapter: try #require(ChatTranscriptAdapter.standard(for: program))),
             timing: AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)),
             now: { clock.now })
@@ -952,6 +954,91 @@ struct AgentChatStoreTests {
 
         #expect(sent == "/skill:probe from chat ")
         #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    // MARK: Oh My Pi rewrites
+
+    private static func ompMessage(_ id: String, parent: String?, role: String, _ text: String) -> String {
+        let parent = parent.map { #""\#($0)""# } ?? "null"
+        let content =
+            role == "user" ? #""\#(text)""# : #"[{"type":"text","text":"\#(text)"}],"stopReason":"stop""#
+        return #"{"type":"message","id":"\#(id)","parentId":\#(parent),"message":{"role":"\#(role)","content":\#(content)}}"#
+            + "\n"
+    }
+
+    /// The device saved the conversation read further than the file now
+    /// reaches: Oh My Pi rewrote it smaller since. The send's floor from the
+    /// saved document no longer locates its prompt; the entries it showed
+    /// still rule themselves out.
+    @Test func restoredFloorSurvivesRewrite() async throws {
+        let cache = VolatileChatTranscriptCache()
+        let (files, store, path, _) = try Self.skillStore(.omp, cache: cache)
+        await cache.save(
+            ChatCacheDocument(
+                key: ChatCacheKey(
+                    hostID: Self.host, socketLocation: .defaultSession,
+                    reference: ConversationReference(program: .omp, sessionID: path)),
+                adapterRevision: PiTranscriptReducer.revision, transcriptPath: path,
+                head: Data((Self.piHeader + "\n").utf8), coverageStart: 0, coverageEnd: 1 << 20,
+                reachedStart: true, title: nil,
+                entries: [
+                    ChatEntry(
+                        id: ChatEntryID("pi:u1"), sourceOffset: 100, content: .user(ChatUserMessage(text: "again")))
+                ], savedAt: Self.start))
+        await store.step()
+        #expect(store.conversation.isFromCache)
+        #expect(store.conversation.readOffset == 1 << 20)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "again ", delivered: false)])
+        store.updateSends([Self.sent(id, "again ")])
+
+        let titled = Self.piHeader.replacingOccurrences(of: "}", with: #","title":"Again","titleSource":"auto"}"#)
+        await files.write(
+            titled + "\n" + Self.ompMessage("u1", parent: nil, role: "user", "again")
+                + Self.ompMessage("a1", parent: "u1", role: "assistant", "done"), at: path)
+        await store.step()
+
+        #expect(store.conversation.phase == .following(path: path))
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        await files.append(Self.ompMessage("u2", parent: "a1", role: "user", "again"), to: path)
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    /// One recorded copy answers one send even after Oh My Pi rewrites the
+    /// file and every prompt moves.
+    @Test func claimSurvivesRewrite() async throws {
+        let (files, store, path, _) = try Self.skillStore(.omp)
+        let long = Self.ompMessage("f0", parent: nil, role: "assistant", String(repeating: "x", count: 2_000))
+        await files.write(Self.piHeader + "\n" + long, at: path)
+        await store.step()
+        let first = UUID()
+        let second = UUID()
+        store.updateSends([Self.sent(first, "go ", delivered: false), Self.sent(second, "go ", delivered: false)])
+        store.updateSends([Self.sent(first, "go "), Self.sent(second, "go ")])
+
+        let prompt = Self.ompMessage("u1", parent: "f0", role: "user", "go")
+        await files.append(prompt, to: path)
+        await store.step()
+
+        #expect(store.sendStatuses[first] == .recorded)
+        #expect(store.sendStatuses[second] == .awaiting)
+
+        // The rewrite prunes the long reply: the prompt moves up the file.
+        let generation = store.conversation.layoutGeneration
+        await files.write(
+            Self.piHeader + "\n" + Self.ompMessage("f0", parent: nil, role: "assistant", "x") + prompt, at: path)
+        await store.step()
+
+        #expect(store.conversation.layoutGeneration == generation + 1)
+        #expect(store.sendStatuses[second] == .awaiting)
+
+        await files.append(Self.ompMessage("u2", parent: "u1", role: "user", "go"), to: path)
+        await store.step()
+
+        #expect(store.sendStatuses[second] == .recorded)
     }
 
     // MARK: A new Pi or Oh My Pi conversation

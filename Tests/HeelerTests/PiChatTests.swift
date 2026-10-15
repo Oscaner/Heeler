@@ -293,6 +293,39 @@ struct PiChatTests {
         #expect(await later.open(directories: [], context: .init()).phase == .unavailable(.notFound(searchedAll: true)))
     }
 
+    // MARK: Rewrites
+
+    @Test func cacheSurvivesHeaderRewrite() async throws {
+        let slot = #"{"type":"title","v":1,"title":"Echo","source":"auto","pad":"          "}"#
+        let user = #"{"type":"message","id":"u1","parentId":null,"message":{"role":"user","content":"hello"}}"#
+        let answer =
+            #"{"type":"message","id":"a1","parentId":"u1","message":{"role":"assistant","content":[{"type":"text","text":"a reply long enough to prune"}],"stopReason":"stop"}}"#
+        let files = VirtualHostFiles()
+        await files.write([slot, Self.header, user, answer].map { $0 + "\n" }.joined(), at: Self.path)
+        let cache = VolatileChatTranscriptCache()
+        let key = ChatCacheKey(hostID: Self.cacheHost, herdrSession: "", program: .omp, conversationID: Self.path)
+        let engine = try Self.engine(.omp, files: files.hostFiles(), cache: cache)
+        let opened = await engine.open(directories: [], context: .init())
+        await engine.save(force: true)
+        #expect(await cache.load(key) != .miss)
+
+        // Oh My Pi's atomic rewrite fills in the header's title and prunes
+        // the reply: the head and the end both change, the session does not.
+        let titled = Self.header.replacingOccurrences(of: "}", with: #","title":"Echo","titleSource":"auto"}"#)
+        let pruned = #"{"type":"message","id":"a1","parentId":"u1","message":{"role":"assistant","content":[],"stopReason":"stop"}}"#
+        await files.write([slot, titled, user, pruned].map { $0 + "\n" }.joined(), at: Self.path)
+        let rewritten = await engine.poll(context: .init())
+
+        #expect(rewritten.phase == .following(path: Self.path))
+        #expect(rewritten.layoutGeneration == opened.layoutGeneration + 1)
+        #expect(rewritten.transcript.entries.first?.id == ChatEntryID("pi:u1"))
+        guard case .hit(let document) = await cache.load(key) else {
+            Issue.record("expected the saved conversation to survive the rewrite")
+            return
+        }
+        #expect(document.entries.first?.id == ChatEntryID("pi:u1"))
+    }
+
     // MARK: Skills, approvals and questions
 
     private static let skillTurn = [

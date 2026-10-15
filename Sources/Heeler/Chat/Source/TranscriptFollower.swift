@@ -6,9 +6,10 @@ import Foundation
 ///
 /// SFTP version 3 has no inode and whole-second modification times, so the
 /// follower judges identity by content: the file's first bytes and the bytes
-/// just before its read position. Offsets advance by the bytes
-/// actually received, never by a reported length, and a line is handed on
-/// only once its newline has arrived.
+/// just before its read position. For a program that rewrites its first
+/// bytes, `identity` reads the conversation they name instead. Offsets
+/// advance by the bytes actually received, never by a reported length, and
+/// a line is handed on only once its newline has arrived.
 ///
 /// A value type: its owner runs one operation at a time and stores the
 /// result, so at most one read per conversation is in flight.
@@ -63,8 +64,16 @@ struct TranscriptFollower: Sendable {
         case rewritten
     }
 
+    /// Reads the conversation a file holds from its first bytes; nil when
+    /// they name none.
+    typealias Identity = @Sendable (Data) -> String?
+
     let path: String
     let limits: Limits
+    /// Set for a program that rewrites the start of its file, such as a
+    /// title slot or a header it fills in later; otherwise the bytes
+    /// themselves identify the file.
+    let identity: Identity?
     private(set) var framer: JSONLLineFramer
     /// The next byte to read.
     private(set) var readOffset: UInt64 = 0
@@ -80,9 +89,10 @@ struct TranscriptFollower: Sendable {
     private(set) var tailAnchor = Data()
     private(set) var isOpen = false
 
-    init(path: String, limits: Limits = Limits()) {
+    init(path: String, limits: Limits = Limits(), identity: Identity? = nil) {
         self.path = path
         self.limits = limits
+        self.identity = identity
         framer = JSONLLineFramer(startOffset: 0, lineCap: limits.lineCap, prefixCap: limits.prefixCap)
     }
 
@@ -223,13 +233,23 @@ struct TranscriptFollower: Sendable {
         return bytes == tailAnchor
     }
 
-    /// The file no longer continues what was read. If its start still
-    /// matches, it was edited in place (Claude rewrites a transcript to drop
-    /// records); otherwise it is a different file under the same name.
+    /// The file no longer continues what was read. If it still holds the
+    /// same conversation, it was edited in place (Claude rewrites a
+    /// transcript to drop records, Oh My Pi rewrites its whole file);
+    /// otherwise it is a different file under the same name.
     private mutating func reload(_ files: ChatHostFiles) async throws -> Change {
         let previousHead = head
         guard let lines = try await open(files) else { return .missing }
-        return .reset(lines, replaced: !Self.sameStart(previousHead, head))
+        return .reset(lines, replaced: !Self.sameConversation(previousHead, head, identity: identity))
+    }
+
+    /// Whether two heads hold one conversation: by the names `identity`
+    /// reads from them, or by their bytes when it cannot read both.
+    static func sameConversation(_ a: Data?, _ b: Data?, identity: Identity?) -> Bool {
+        if let identity, let a, let b, let first = identity(a), let second = identity(b) {
+            return first == second
+        }
+        return sameStart(a, b)
     }
 
     /// Whether two heads agree over the bytes both have. A file read as

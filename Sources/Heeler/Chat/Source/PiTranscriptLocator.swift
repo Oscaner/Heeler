@@ -69,6 +69,19 @@ struct PiTranscriptLocator: Sendable {
         return .failure(mismatch ? .mismatched : .notFound(searchedAll: searchedAll))
     }
 
+    /// The session id the header names, read from a file's first bytes:
+    /// the conversation's identity across rewrites of the header and of
+    /// the title slot before it. Nil when the header is not in them whole.
+    static func sessionID(inHead head: Data) -> String? {
+        for line in JSONLLineFramer.lines(in: head).prefix(2) {
+            guard let record = try? JSONDecoder().decode(JSONValue.self, from: line.data) else { return nil }
+            if record["type"]?.stringValue == "title" { continue }
+            guard record["type"]?.stringValue == "session" else { return nil }
+            return record["id"]?.stringValue
+        }
+        return nil
+    }
+
     static func projectKey(_ directory: String) -> String {
         "--" + encoded(String(directory.dropFirst())) + "--"
     }

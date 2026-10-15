@@ -123,9 +123,12 @@ final class AgentChatStore {
     @ObservationIgnored private var viewers: Set<UUID> = []
     @ObservationIgnored private var sends: [TrackedSend] = []
     /// Recorded prompts already taken by a send in the current
-    /// conversation: one recorded copy answers one send.
-    @ObservationIgnored private var claimedOffsets: Set<UInt64> = []
+    /// conversation: one recorded copy answers one send. Keyed by entry for
+    /// a program whose entries outlive a rewrite of its file, otherwise by
+    /// offset within one layout of the file.
+    @ObservationIgnored private var claimedPrompts: Set<String> = []
     @ObservationIgnored private var claimedGeneration = 0
+    @ObservationIgnored private var claimedLayout = 0
     @ObservationIgnored private var skillNames: Set<String> = []
     /// Rows expanded before the transcript was open, read once it is.
     @ObservationIgnored private var waitingOutputs: Set<ChatEntryID> = []
@@ -137,10 +140,15 @@ final class AgentChatStore {
     private struct TrackedSend {
         let id: UUID
         let key: String
-        /// The conversation it went into, and how far that had been read:
-        /// the program records the prompt at or after this offset.
+        /// The conversation it went into, how its file was laid out, and
+        /// how far it had been read: while that layout holds, the program
+        /// records the prompt at or after this offset.
         let generation: Int
+        let layout: Int
         let floor: UInt64
+        /// The entries showing when it was sent, none of which can record
+        /// it, wherever a rewrite moves them.
+        let knownEntries: Set<ChatEntryID>
         /// First seen already delivered, so its floor is unknown.
         let isOrphan: Bool
         var deliveredAt: Date?
@@ -328,10 +336,13 @@ final class AgentChatStore {
                 sends[index].deliveredAt = message.isDelivered ? now() : nil
                 if message.isDelivered { noteSent() }
             } else {
+                let transcript = conversation.transcript
+                let knownEntries = Set(transcript.entries.map(\.id) + transcript.recordedPrompts.compactMap(\.entryID))
                 sends.append(
                     TrackedSend(
                         id: message.id, key: source.adapter.echoKey(message.text),
-                        generation: conversationGeneration, floor: conversation.readOffset,
+                        generation: conversationGeneration, layout: conversation.layoutGeneration,
+                        floor: conversation.readOffset, knownEntries: knownEntries,
                         isOrphan: message.isDelivered, deliveredAt: message.isDelivered ? now() : nil))
             }
         }
@@ -736,19 +747,36 @@ final class AgentChatStore {
     /// first out, one to one, equal keys, and only prompts recorded after
     /// the send. A send that went into an earlier conversation, such as the
     /// first prompt that makes Codex report a session, may match anywhere in
-    /// the current one. Conservative on purpose: a wrong match would hide a
-    /// prompt that never arrived.
+    /// the current one, as may one sent before the file was rewritten; an
+    /// entry already showing at the send never matches it. Conservative on
+    /// purpose: a wrong match would hide a prompt that never arrived.
     private func matchSends() {
-        if claimedGeneration != conversationGeneration {
+        let byEntry = source.adapter.echoesByEntry
+        let layout = conversation.layoutGeneration
+        if claimedGeneration != conversationGeneration || (!byEntry && claimedLayout != layout) {
             claimedGeneration = conversationGeneration
-            claimedOffsets = []
+            claimedLayout = layout
+            claimedPrompts = []
+        }
+        struct Candidate {
+            let claim: String
+            let offset: UInt64
+            let entryID: ChatEntryID?
+        }
+        func candidate(offset: UInt64, entryID: ChatEntryID?) -> Candidate? {
+            guard byEntry else { return Candidate(claim: "@\(offset)", offset: offset, entryID: entryID) }
+            return entryID.map { Candidate(claim: $0.rawValue, offset: offset, entryID: $0) }
         }
         let transcript = conversation.transcript
-        let recorded = transcript.recordedPrompts.map { (offset: $0.offset, key: source.adapter.echoKey($0.text)) }
+        let recorded = transcript.recordedPrompts.compactMap { prompt in
+            candidate(offset: prompt.offset, entryID: prompt.entryID).map {
+                (candidate: $0, key: source.adapter.echoKey(prompt.text))
+            }
+        }
         // Codex records no prompt for `/compact`, only the compaction.
-        let compactions = transcript.entries.compactMap { entry -> UInt64? in
+        let compactions = transcript.entries.compactMap { entry -> Candidate? in
             guard case .divider(let divider) = entry.content, divider.kind == .compaction else { return nil }
-            return entry.sourceOffset
+            return candidate(offset: entry.sourceOffset, entryID: entry.id)
         }
         let date = now()
         // A new conversation records nothing until the program writes its
@@ -770,15 +798,19 @@ final class AgentChatStore {
                 statuses[send.id] = .abandoned
                 continue
             }
-            let floor = send.generation == conversationGeneration ? send.floor : 0
-            var match = recorded.first {
-                $0.offset >= floor && $0.key == send.key && !claimedOffsets.contains($0.offset)
-            }?.offset
+            let isSameConversation = send.generation == conversationGeneration
+            let floor = isSameConversation && send.layout == layout ? send.floor : 0
+            func isOpen(_ candidate: Candidate) -> Bool {
+                guard candidate.offset >= floor, !claimedPrompts.contains(candidate.claim) else { return false }
+                guard isSameConversation, let entryID = candidate.entryID else { return true }
+                return !send.knownEntries.contains(entryID)
+            }
+            var match = recorded.first { $0.key == send.key && isOpen($0.candidate) }?.candidate
             if match == nil, send.key == "/compact" {
-                match = compactions.first { $0 >= floor && !claimedOffsets.contains($0) }
+                match = compactions.first(where: isOpen)
             }
             if let match {
-                claimedOffsets.insert(match)
+                claimedPrompts.insert(match.claim)
                 statuses[send.id] = .recorded
             } else if isUnwritten || date.timeIntervalSince(deliveredAt) < timing.echoTimeout {
                 statuses[send.id] = .awaiting

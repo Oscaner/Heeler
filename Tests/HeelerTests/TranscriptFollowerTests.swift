@@ -156,6 +156,53 @@ struct TranscriptFollowerTests {
         }
     }
 
+    /// Oh My Pi's fixed-width title slot, then its session header: the
+    /// shapes an atomic rewrite left behind in a live 18.11.1 session.
+    private static func ompFile(session: String, titled: Bool, body: [String]) -> String {
+        let slot = #"{"type":"title","v":1,"title":"Echo","source":"auto","pad":"\#(String(repeating: " ", count: 40))"}"#
+        let title = titled ? #","title":"Echo","titleSource":"auto""# : ""
+        let header = #"{"type":"session","version":3,"id":"\#(session)","cwd":"/tmp/proj"\#(title)}"#
+        return ([slot, header] + body).map { $0 + "\n" }.joined()
+    }
+
+    @Test func ompTitleSlotRewriteIsNotReplacement() async throws {
+        let session = "01a1404a-2a26-71c1-bacd-82da615e4f8c"
+        let user = #"{"type":"message","id":"u1","parentId":null,"message":{"role":"user","content":"hi"}}"#
+        let pruned = #"{"type":"message","id":"a1","parentId":"u1","message":{"role":"assistant","content":[]}}"#
+        let answer =
+            #"{"type":"message","id":"a1","parentId":"u1","message":{"role":"assistant","content":[{"type":"text","text":"a long answer"}]}}"#
+        let files = VirtualHostFiles()
+        let identity: TranscriptFollower.Identity = { PiTranscriptLocator.sessionID(inHead: $0) }
+        let limits = TranscriptFollower.Limits(headLength: 512)
+        let original = Self.ompFile(session: session, titled: false, body: [user, answer])
+        await files.write(original, at: Self.path)
+        var follower = TranscriptFollower(path: Self.path, limits: limits, identity: identity)
+        var bytewise = TranscriptFollower(path: Self.path, limits: limits)
+        _ = try await follower.open(files.hostFiles())
+        _ = try await bytewise.open(files.hostFiles())
+
+        // The rewrite fills in the header's title and prunes a reply, so
+        // both the first bytes and the end of the file move.
+        await files.write(Self.ompFile(session: session, titled: true, body: [user, pruned]), at: Self.path)
+
+        guard case .reset(_, replaced: false) = try await follower.poll(files.hostFiles()) else {
+            Issue.record("expected an in-place reset")
+            return
+        }
+        guard case .reset(_, replaced: true) = try await bytewise.poll(files.hostFiles()) else {
+            Issue.record("expected the bytes alone to read as another file")
+            return
+        }
+
+        // Another session under the same name is still a replacement.
+        let other = "01a14045-0053-7439-b93e-c7acce7b7547"
+        await files.write(Self.ompFile(session: other, titled: true, body: [user]), at: Self.path)
+        guard case .reset(_, replaced: true) = try await follower.poll(files.hostFiles()) else {
+            Issue.record("expected a replaced reset")
+            return
+        }
+    }
+
     @Test func aMissingFileKeepsStateAndResumesWhenItReturns() async throws {
         var (follower, files, _) = try await Self.makeFollower(Self.lines(0..<4))
         let original = try #require(await files.contents(of: Self.path))

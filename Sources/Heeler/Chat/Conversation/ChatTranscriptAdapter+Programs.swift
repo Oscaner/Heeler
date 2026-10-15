@@ -27,6 +27,8 @@ extension ChatTranscriptAdapter {
                 },
                 echoKey: { codexEchoKey($0) })
         case .pi, .omp:
+            // Oh My Pi rewrites its title slot in place and its whole file
+            // atomically, header included, keeping every entry's id.
             ChatTranscriptAdapter(
                 revision: PiTranscriptReducer.revision,
                 wantsFirstLine: true,
@@ -35,7 +37,9 @@ extension ChatTranscriptAdapter {
                     var reducer = PiTranscriptReducer()
                     if let firstLine = seed.firstLine { reducer.append([firstLine]) }
                     return reducer
-                })
+                },
+                identity: { PiTranscriptLocator.sessionID(inHead: $0) },
+                echoesByEntry: true)
         }
     }
 }

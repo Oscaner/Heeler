@@ -86,6 +86,10 @@ struct ChatConversationSnapshot: Equatable, Sendable {
     /// How far the transcript has been read. A prompt the program records
     /// after a send lands at or after the offset read when it was sent.
     var readOffset: UInt64 = 0
+    /// Bumped when offsets read before may now locate other records: the
+    /// file was rewritten, replaced or moved, or is shorter than the saved
+    /// document read it to.
+    var layoutGeneration = 0
     /// Bumped whenever anything above changes.
     var revision = 0
 }
@@ -114,6 +118,12 @@ struct ChatTranscriptAdapter: Sendable {
     /// What a sent prompt and a recorded one are compared on: the text as
     /// the program records it, which drops what Heeler adds when it sends.
     var echoKey: @Sendable (String) -> String = { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// Names the conversation from the file's first bytes, for a program
+    /// that rewrites them; nil compares the bytes.
+    var identity: TranscriptFollower.Identity?
+    /// Whether a recorded prompt keeps its entry when the program rewrites
+    /// its file, so sends are matched to entries rather than to offsets.
+    var echoesByEntry = false
 }
 
 /// One conversation's transcript on its Host: finds the file, follows it,
@@ -242,7 +252,7 @@ actor ChatConversationEngine {
         do {
             switch try await locate() {
             case .found(let path):
-                var follower = TranscriptFollower(path: path, limits: adapter.limits)
+                var follower = TranscriptFollower(path: path, limits: adapter.limits, identity: adapter.identity)
                 if let lines = try await follower.open(files) {
                     try await start(follower, lines: lines)
                 } else {
@@ -572,10 +582,14 @@ actor ChatConversationEngine {
             stop(.unsupportedFormat(format))
             return
         }
-        if let cached, !TranscriptFollower.sameStart(cached.head, follower.head) {
+        var movedLayout = hasFollowed || snapshot.readOffset > follower.readOffset
+        if let cached,
+            !TranscriptFollower.sameConversation(cached.head, follower.head, identity: adapter.identity)
+        {
             // Another conversation now has this name.
             self.cached = nil
             lastSave = nil
+            movedLayout = true
             await cache.remove(cacheKey)
         }
         self.follower = follower
@@ -587,6 +601,7 @@ actor ChatConversationEngine {
             $0.phase = .following(path: follower.path)
             $0.readFailure = nil
             $0.isFromCache = false
+            if movedLayout { $0.layoutGeneration += 1 }
         }
     }
 
