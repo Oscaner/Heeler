@@ -1,12 +1,14 @@
 # Windows setup
 
 Set up a native Windows Host for Heeler, including SSH login and automatic
-startup of SSH and herdr. Use Windows 11, native herdr 0.9.3 or newer, and a
-Heeler build that includes [native Windows Host support (#399)](https://github.com/ZingerLittleBee/Heeler/issues/399).
+startup of SSH and herdr.
 
-Use the same Windows account for SSH login, herdr, coding agents, and the
-startup task. The examples use the named session `heeler-win-test`; replace
-it consistently if you choose another name.
+## Before you start
+
+- Windows 11 with administrator access.
+- Native herdr 0.9.3 or newer, and a Heeler build that includes [native Windows Host support (#399)](https://github.com/ZingerLittleBee/Heeler/issues/399).
+- Use the same Windows account for SSH login, herdr, coding agents, and the startup task.
+- The examples use the named session `heeler-win-test`; replace it consistently if you choose another name.
 
 ## 1. Enable SSH
 
@@ -112,13 +114,13 @@ ipconfig
 For a local account, use the username shown after the computer name in
 `whoami`. Use the IPv4 address of the active network adapter.
 
-In Heeler, add a Host manually with these values:
+In Heeler, open **Hosts > Add Host**, tap **Add Route** under **Routes** to enter the address and port, then fill in the Host fields:
 
 | Field | Value |
 | --- | --- |
-| Address | The Windows address reachable from your phone |
-| Port | `22`, unless you configured a different SSH port |
-| Username | The Windows account running herdr |
+| User | The Windows account running herdr |
+| Address (in Route) | The Windows address reachable from your phone |
+| Port (in Route) | `22`, unless you configured a different SSH port |
 | Authentication | `Password` |
 | Password | The Windows account password, rather than its Windows Hello PIN |
 | Session name | `heeler-win-test` |
