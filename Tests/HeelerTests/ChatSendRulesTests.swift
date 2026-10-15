@@ -11,13 +11,23 @@ struct ChatSendRulesTests {
         AgentSkill(scope: .global, name: "deploy", description: nil),
     ]
 
+    /// How each program invokes a skill: Pi and Oh My Pi skills are
+    /// `/skill:name`.
+    private static func skillPrefix(_ program: ChatProgram) -> String {
+        switch program {
+        case .claude: "/"
+        case .codex: "$"
+        case .pi, .omp: "/skill:"
+        }
+    }
+
     private static func rules(
         _ program: ChatProgram, idle: Bool = true, prefix: String? = nil
     ) -> ChatSendRules {
         let skills = Self.skills.map {
             AgentSkill(
                 scope: $0.scope, name: $0.name, description: $0.description,
-                commandPrefix: prefix ?? (program == .codex ? "$" : "/"))
+                commandPrefix: prefix ?? skillPrefix(program))
         }
         return ChatSendRules(
             program: program, commands: ChatCommandMenu.commands(skills: skills, agentIsIdle: idle))
@@ -50,6 +60,73 @@ struct ChatSendRulesTests {
         #expect(Self.rules(.claude).validate("please exit the loop") == nil)
     }
 
+    @Test(arguments: ["exit", " QUIT \n", "q", "Exit"])
+    func ompRefusesBareExitWords(draft: String) {
+        guard case .unsafeText = Self.rules(.omp).validate(draft) else {
+            Issue.record("\(draft) was not refused")
+            return
+        }
+    }
+
+    @Test(arguments: ["$ ls", "$$ print(1)", "$\tx", "  $ import os\nos.listdir()"])
+    func ompRefusesPythonPrefix(draft: String) {
+        guard case .unsafeText = Self.rules(.omp).validate(draft) else {
+            Issue.record("\(draft) was not refused")
+            return
+        }
+    }
+
+    @Test(arguments: [".", " c ", "C", "-> x", "=> after this", "->"])
+    func ompRefusesContinueAndQueueShorthand(draft: String) {
+        guard case .unsafeText = Self.rules(.omp).validate(draft) else {
+            Issue.record("\(draft) was not refused")
+            return
+        }
+    }
+
+    @Test(arguments: ["quit smoking", "q?", "$HOME is set", "$5 total", "c'est", "..", "a -> b", "exit the loop"])
+    func ompTakesLookalikesAsText(draft: String) {
+        #expect(Self.rules(.omp).read(draft) == .text)
+    }
+
+    @Test func ompRefusesHundredLinePastes() {
+        let rules = Self.rules(.omp)
+        let lines = { (count: Int) in (1...count).map { "line \($0)" }.joined(separator: "\n") }
+
+        #expect(rules.validate(lines(99)) == nil)
+        #expect(rules.validate(lines(99) + "\n\n  \n") == nil)
+        guard case .unsafeText = rules.validate(lines(100)) else {
+            Issue.record("a 100-line paste was not refused")
+            return
+        }
+        guard case .unsafeText = rules.validate(lines(100).replacingOccurrences(of: "\n", with: "\r\n")) else {
+            Issue.record("a 100-line paste with CRLF breaks was not refused")
+            return
+        }
+    }
+
+    @Test(
+        arguments: [
+            "exit", "q", "$ ls", "$$ print(1)", ".", "c", "-> x", "=> x",
+            (1...150).map { "line \($0)" }.joined(separator: "\n"),
+        ])
+    func piAcceptsWhatOMPRefuses(draft: String) {
+        #expect(Self.rules(.pi).validate(draft) == nil)
+    }
+
+    @Test(arguments: ["q", "$ ls", ".", "-> x"])
+    func claudeAndCodexTakeOMPShorthandsAsText(draft: String) {
+        #expect(Self.rules(.claude).validate(draft) == nil)
+        #expect(Self.rules(.codex).validate(draft) == nil)
+    }
+
+    @Test func claudeExitWordsUnchanged() {
+        #expect(
+            Self.rules(.claude).validate(":wq")
+                == .unsafeText("Sending this would exit Claude Code. Open the terminal to exit."))
+        #expect(Self.rules(.claude).validate("q") == nil)
+    }
+
     @Test func controlBytesAreNeverSent() {
         guard case .unsafeText = Self.rules(.claude).validate("a\u{1B}[201~b") else {
             Issue.record("an escape sequence was not refused")
@@ -78,7 +155,7 @@ struct ChatSendRulesTests {
     func aPickedSkillSendsInTheProgramsOwnForm(program: ChatProgram) {
         let skill = AgentSkill(
             scope: .project, name: "review", description: nil,
-            commandPrefix: program == .codex ? "$" : "/")
+            commandPrefix: Self.skillPrefix(program))
 
         #expect(skill.chatInsertionText == "/review ")
         #expect(
@@ -96,6 +173,27 @@ struct ChatSendRulesTests {
             Issue.record("/compact was sent while the Agent worked")
             return
         }
+    }
+
+    @Test func ompCompactIsSentWithoutATrailingSpace() {
+        let rules = Self.rules(.omp)
+
+        #expect(rules.outgoingText("/compact") == "/compact")
+        #expect(rules.outgoingText("  /compact \n") == "/compact")
+    }
+
+    @Test func ompCompactWithFocusIsRefused() {
+        guard case .commandUnavailable = Self.rules(.omp).validate("/compact keep the API notes") else {
+            Issue.record("/compact with a focus was sent to Oh My Pi")
+            return
+        }
+    }
+
+    @Test func piCompactKeepsTrailingSpaceAndArguments() {
+        let rules = Self.rules(.pi)
+
+        #expect(rules.outgoingText("/compact") == "/compact ")
+        #expect(rules.outgoingText("/compact keep the API notes") == "/compact keep the API notes ")
     }
 
     @Test(arguments: ["/usr/bin/env python3", "/tmp/a.txt is missing"])

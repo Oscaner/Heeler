@@ -120,7 +120,10 @@ request, under rules that stand in for the screen the user cannot see:
 
 - A draft the program would run rather than read is never sent: a leading
   `!`, control bytes, and Claude Code's whole-message `exit`, `quit`, `:q`,
-  `:q!`, `:wq` and `:wq!`.
+  `:q!`, `:wq` and `:wq!`. Oh My Pi also refuses its whole-message `exit`,
+  `quit` and `q` in any case, a leading `$` or `$$` and whitespace (Python),
+  a whole `.` or `c` (Continue), a leading `->` or `=>` (its queue
+  shorthand), and 100 lines or more, which open its paste menu.
 - A leading `/` must name an entry of Chat's `/` menu: the Agent's skills from
   the existing Skills probe, and `/compact` while the Agent is idle. The menu
   offers no interactive or destructive program command. Both programs show
@@ -128,7 +131,9 @@ request, under rules that stand in for the screen the user cannot see:
   other leading `/word` is refused with a pointer to the menu or the terminal.
 - Invisible characters are removed and exactly one trailing space is appended,
   so a final `/name` or `@path` cannot leave a completion popup open when
-  Enter arrives.
+  Enter arrives. Oh My Pi's `/compact` is the exception: it goes without the
+  space, which Oh My Pi would complete to `/compact soft` instead of running
+  it, and with a focus it is refused.
 - Before sending, `agent.read` of the visible screen must show the program's
   input box empty, in its normal mode, with no popup. Anything else, an
   unreadable screen included, sends nothing and says why. Chat never clears

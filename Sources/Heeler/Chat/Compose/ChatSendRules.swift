@@ -63,14 +63,23 @@ extension AgentSkill {
 ///
 /// The text arrives as one bracketed paste and Enter, exactly as if typed,
 /// so anything the program's input box would treat as more than a message
-/// is refused rather than sent: a `!` shell escape, Claude Code's bare exit
-/// words, control bytes, and `/` commands the menu does not offer.
+/// is refused rather than sent: a `!` shell escape, Claude Code's and Oh My
+/// Pi's bare exit words, Oh My Pi's other input shorthands, control bytes,
+/// and `/` commands the menu does not offer.
 struct ChatSendRules: Sendable {
     let program: ChatProgram
     let commands: [ChatCommand]
 
     /// Claude Code runs `/exit` for these whole inputs.
     private static let claudeExitWords: Set<String> = ["exit", "quit", ":q", ":q!", ":wq", ":wq!"]
+
+    /// Oh My Pi quits for these whole inputs, in any case, before the
+    /// conversation's first message; Chat cannot tell whether it has one.
+    private static let ompExitWords: Set<String> = ["exit", "quit", "q"]
+
+    /// Oh My Pi offers a paste of this many lines as an attachment menu,
+    /// whose Enter picks an entry instead of submitting.
+    private static let ompLargePasteLines = 100
 
     enum Reading: Equatable {
         case text
@@ -91,6 +100,10 @@ struct ChatSendRules: Sendable {
         let clean = TerminalTextSafety.normalizingNewlines(Self.removingInvisibles(draft))
         let body: String
         switch read(draft) {
+        case .command(let command, _) where program == .omp && command.kind == .compact:
+            // Oh My Pi completes `/compact ` to `/compact soft ` rather than
+            // running it; without the space, Enter runs it at once.
+            return "/compact"
         case .command(let command, let arguments):
             let prefix =
                 switch command.kind {
@@ -114,8 +127,15 @@ struct ChatSendRules: Sendable {
             return .refused(
                 .unsafeText("A message starting with ! runs a shell command. Open the terminal to run one."))
         }
-        if program == .claude, Self.claudeExitWords.contains(trimmed.lowercased()) {
-            return .refused(.unsafeText("Sending this would exit Claude Code. Open the terminal to exit."))
+        switch program {
+        case .claude:
+            if Self.claudeExitWords.contains(trimmed.lowercased()) {
+                return .refused(.unsafeText("Sending this would exit Claude Code. Open the terminal to exit."))
+            }
+        case .omp:
+            if let refusal = Self.ompRefusal(clean, trimmed: trimmed) { return .refused(refusal) }
+        case .codex, .pi:
+            break
         }
         guard trimmed.hasPrefix("/") else { return .text }
         let afterSlash = trimmed.dropFirst()
@@ -129,7 +149,47 @@ struct ChatSendRules: Sendable {
             return .refused(.commandUnavailable("/\(name) is available once the Agent is idle."))
         }
         let arguments = afterSlash.dropFirst(name.count).trimmingCharacters(in: .whitespacesAndNewlines)
+        if program == .omp, command.kind == .compact, !arguments.isEmpty {
+            // Oh My Pi's `/compact` offers its modes as completions once a
+            // space follows, so a focus would not reach it as typed.
+            return .refused(.commandUnavailable("Add compaction focus in the Agent terminal."))
+        }
         return .command(command, arguments: arguments)
+    }
+
+    /// What Oh My Pi's input box reads as more than a message.
+    private static func ompRefusal(_ clean: String, trimmed: String) -> ComposerRefusal? {
+        let lowered = trimmed.lowercased()
+        if ompExitWords.contains(lowered) {
+            return .unsafeText("Sending this would exit Oh My Pi. Open the terminal to exit.")
+        }
+        if runsPython(trimmed) {
+            return .unsafeText("A message starting with $ runs Python in Oh My Pi. Open the terminal to run it.")
+        }
+        if trimmed == "." || lowered == "c" {
+            return .unsafeText("Oh My Pi reads this as Continue. Open the terminal to continue.")
+        }
+        if trimmed.hasPrefix("->") || trimmed.hasPrefix("=>") {
+            return .unsafeText(
+                "Oh My Pi queues a message starting with -> or => for later. Open the terminal to queue one.")
+        }
+        let lines = trimmingTrailingWhitespace(TerminalTextSafety.normalizingNewlines(clean))
+            .split(separator: "\n", omittingEmptySubsequences: false)
+        if lines.count >= ompLargePasteLines {
+            return .unsafeText(
+                "Oh My Pi opens a menu for pastes of 100 lines or more. "
+                    + "Shorten the message or paste it in the terminal.")
+        }
+        return nil
+    }
+
+    /// Oh My Pi runs `$ code` and `$$ code` as Python, without asking;
+    /// `$HOME` and `$5` stay text.
+    private static func runsPython(_ trimmed: String) -> Bool {
+        guard trimmed.first == "$" else { return false }
+        var rest = trimmed.dropFirst()
+        if rest.first == "$" { rest = rest.dropFirst() }
+        return rest.first?.isWhitespace == true
     }
 
     /// Removes the characters Claude Code strips before it submits, where
