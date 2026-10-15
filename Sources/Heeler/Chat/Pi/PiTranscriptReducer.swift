@@ -4,7 +4,7 @@ import Foundation
 /// leaf's ancestry, including invisible extension/state entries. File order
 /// alone would resurrect messages abandoned by /tree or a branch switch.
 struct PiTranscriptReducer: ChatTranscriptReducer {
-    static let revision = 4
+    static let revision = 5
 
     private struct Record: Sendable {
         let offset: UInt64
@@ -151,7 +151,7 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
         // a prompt now is one Pi delivered while the turn ran.
         var steerable = false
 
-        for record in chain {
+        for (position, record) in chain.enumerated() {
             switch record.type {
             case "session_info", "title_change":
                 // Pi clears a session's name with an empty one.
@@ -280,7 +280,19 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                                 ChatNotice(
                                     kind: .error, title: "Agent error", detail: message["errorMessage"]?.stringValue)),
                             ":end")
-                        finish(.failed, at: record)
+                        // Pi retries a provider error on its own and records
+                        // the retry as the error's reply. Until that is
+                        // written, an Agent still working is retrying.
+                        let next = chain[(position + 1)...].first {
+                            $0.type == "message" || $0.type == "custom_message"
+                        }
+                        if next?.value["message"]?["role"]?.stringValue == "assistant"
+                            || (next == nil && context.activity == .working)
+                        {
+                            lastStopReason = nil
+                        } else {
+                            finish(.failed, at: record)
+                        }
                     default: break
                     }
                 case "toolResult":

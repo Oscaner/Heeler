@@ -766,6 +766,39 @@ struct PiChatTests {
         #expect(transcript.turns.last?.ending == .failed)
     }
 
+    /// Pi retries a connection error on its own: the turn keeps running
+    /// through the countdown, and the retry's reply ends it. Pi's screen
+    /// keeps the error above the answer, and so does Chat.
+    @Test func retriedProviderErrorKeepsTurnRunning() throws {
+        let lines = try ChatFixture.lines("pi/provider-retry.jsonl")
+        let error = ChatNotice(kind: .error, title: "Agent error", detail: "Connection error.")
+        var reducer = PiTranscriptReducer()
+        reducer.append(Array(lines.prefix(5)))
+
+        let retrying = reducer.transcript(.init(activity: .working))
+        #expect(retrying.turns.count == 1)
+        #expect(retrying.turns.last?.ending == nil)
+        #expect(retrying.entries.last?.content == .notice(error))
+
+        // Esc during the countdown records nothing; the Agent goes idle.
+        let cancelled = reducer.transcript(.init(activity: .idle))
+        #expect(cancelled.turns.last?.ending == .failed)
+
+        var finished = PiTranscriptReducer()
+        finished.append(lines)
+        let done = finished.transcript(.init(activity: .idle))
+        #expect(done.turns.count == 1)
+        #expect(done.turns.last?.ending == .completed)
+        #expect(done.entries.contains { $0.content == .notice(error) })
+        #expect(
+            done.entries.last?.content
+                == .assistant(
+                    ChatAssistantMessage(
+                        text:
+                            "Sunlight hits air molecules and shorter blue wavelengths scatter much more than longer red ones. That scattered blue light reaches your eyes from every direction, so the sky looks blue."
+                    )))
+    }
+
     @Test func ompPlanProposalShowsPlanReadyNotInterrupted() throws {
         let transcript = try Self.ompTranscript()
         let end = try #require(transcript.entries.first { $0.id == ChatEntryID("pi:c2d14183:end") })
