@@ -11,12 +11,12 @@ Entries reference the pull request that made the change.
 
 - Collapse the current turn's expanded reasoning and tool details from a
   floating Chat button, bringing its header back into view without adding
-  blank space below a short last turn. Extends #425.
+  blank space below a short last turn. (#464)
 - Extend native Chat to Pi and Oh My Pi Agents, with messages, reasoning,
   paired tool results, current-branch history and compaction boundaries.
   Reads the JSONL session path reported by herdr, including custom session
   directories; unrecognized input surfaces remain available in the terminal.
-  Extends the Chat infrastructure in #425.
+  Extends the Chat infrastructure in #425. (#464)
 - Chat for Claude Code and Codex Agents: the Agent's conversation as native
   rows in the terminal's place, read from the transcript its program writes on
   the Host, with nothing installed there. Chat folds finished turns, groups
@@ -89,7 +89,7 @@ Entries reference the pull request that made the change.
 ### Fixed
 
 - Chat renders Markdown tables as aligned columns with wrapping cells, inline
-  formatting and header styling; wide tables scroll within the message. Extends #425.
+  formatting and header styling; wide tables scroll within the message. (#464)
 - Chat restores a saved conversation when a live Agent temporarily omits its
   session ID, including while the local directory is still loading. (#425)
 - Chat keeps disclosure headers in place while expanding downward, including
