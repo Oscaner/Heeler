@@ -54,6 +54,28 @@ results retain activity-derived running/blocked/interrupted status. Assistant
 extension messages become notices; hidden extension state remains invisible.
 Unknown record types remain tree links and are counted in diagnostics.
 
+Observed on 2026-10-15 with Pi 0.85.1 and Oh My Pi 18.11.1 (the
+`pi/auth-error-skill.jsonl` and `omp/approvals-asks-plan.jsonl` Chat
+fixtures):
+
+- Pi records `/skill:name args` as a user message holding the expanded
+  `<skill name="…" location="…">` block, then a blank line and the
+  arguments, before the model call. Chat parses it as Pi does, shows
+  `/name args`, and matches the echo as `/skill:name args`. OMP records the
+  same invocation as a `custom_message` with `customType: skill-prompt`,
+  `attribution: user` and the submitted text in `details.prompt`; Chat treats
+  it as the turn's prompt and never shows the expanded skill.
+- Whether a call without a result is still running or Blocked follows the
+  stop reason of the branch's last assistant message, whatever opened the
+  turn.
+- OMP `ask` arguments are `questions[{id, question, options[{label,
+  description, preview}], header, multi, recommended}]`; absent fields are
+  JSON null. The result's `details.selectedOptions` holds one question's
+  answer, `details.results[{id, selectedOptions}]` several. A denied approval
+  results in `Tool call denied by user: <tool>` and a dismissed question in
+  `Ask tool was cancelled by the user`, both `isError`; Chat reads them as
+  declined.
+
 ## Input and limits
 
 Pi's standard editor has full-width horizontal rules and a reverse-video

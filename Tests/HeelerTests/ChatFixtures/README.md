@@ -18,6 +18,8 @@ None came from a personal session.
 | `claude/probe2-subagent.jsonl`, `.meta.json` | The background subagent the second probe launched (`agent-a9985bf0a8b4ebbe3`) |
 | `codex/probe1-rollout.jsonl` | First probe: Codex rollout with exec approvals and `request_user_input` |
 | `codex/probe2-rollout.jsonl` | Second probe: paginated rollout with approvals, declines, sync and async questions, interrupted turns and parallel commands |
+| `omp/approvals-asks-plan.jsonl` | Oh My Pi 18.11.1 session from the 2026-10-15 probes below: approved and denied Bash approvals (one denied with a steering message), answered and cancelled `ask` calls, the empty `branch_summary` an atomic rewrite appends, and a plan proposal ending in `__omp.silent_abort__` |
+| `pi/auth-error-skill.jsonl` | Pi 0.85.1 session from the same probes: a provider authentication error and a `/skill:probe-hello world args` invocation recorded as its `<skill>` block |
 
 ## Scrubbing
 
@@ -32,6 +34,12 @@ byte offsets and screen columns stay exactly as captured:
 - the account name to `developer` (so `/Users/developer` and its project-key
   form `-Users-developer`);
 - the probe root `heeler-iso-chat` to `heeler-tmp-chat`.
+
+The two 2026-10-15 sessions were re-serialized as compact JSON without
+`credentialId`, `providerPayload`, `responseId`, `textSignature`,
+`contextSnapshot` and the `credential_pin` hash, with the account name
+replaced as above. Each keeps every line of its session, so tests address
+records by line number.
 
 After adding a capture, check that searching this directory for `/Users/`
 (other than `/Users/developer`), `ghp_`, `Bearer` and e-mail addresses finds

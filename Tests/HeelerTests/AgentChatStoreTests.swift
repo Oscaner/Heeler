@@ -884,6 +884,75 @@ struct AgentChatStoreTests {
         #expect(fixture.store.sendStatuses.isEmpty)
     }
 
+    // MARK: Pi and Oh My Pi skills
+
+    private static let piSession = "01a14046-b00d-75aa-98ce-6267745b012d"
+    private static let piHeader = #"{"type":"session","version":3,"id":"\#(piSession)","cwd":"\#(cwd)"}"#
+
+    /// A store following a Pi or Oh My Pi session through the production
+    /// adapter, and the text Chat sends for `/probe from chat`.
+    private static func skillStore(_ program: ChatProgram) throws -> (
+        files: VirtualHostFiles, store: AgentChatStore, path: String, sent: String
+    ) {
+        let directory = program == .pi ? ".pi" : ".omp"
+        let path = "/home/dev/\(directory)/agent/sessions/--home-dev-proj--/2026-10-15_\(piSession).jsonl"
+        let agent = Agent(
+            terminalID: "term-1", kind: program.rawValue, title: "", status: .idle, workspaceID: "w1",
+            tabID: "t1", paneID: "w1:p1", cwd: cwd, revision: 1,
+            agentSession: AgentSessionInfo(
+                agent: program.rawValue, kind: .path, source: "herdr:\(program.rawValue)", value: path))
+        let files = VirtualHostFiles()
+        let store = AgentChatStore(
+            agentID: ConsoleAgent.ID(hostID: host, paneID: agent.paneID), agent: agent, program: program,
+            source: AgentChatSource(
+                hostID: host, socketLocation: .defaultSession, files: files.hostFiles(), agentInfo: { agent },
+                cache: VolatileChatTranscriptCache(),
+                adapter: try #require(ChatTranscriptAdapter.standard(for: program))),
+            timing: AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)))
+        let rules = ChatSendRules(
+            program: program,
+            commands: [
+                ChatCommand(
+                    name: "probe", summary: nil, kind: .skill(prefix: ChatCommandMenu.skillCommandPrefix),
+                    isEnabled: true)
+            ])
+        return (files, store, path, rules.outgoingText("/probe from chat"))
+    }
+
+    @Test func ompSkillSendIsRecorded() async throws {
+        let (files, store, path, sent) = try Self.skillStore(.omp)
+        await files.write(Self.piHeader + "\n", at: path)
+        await store.step()
+        let id = UUID()
+        store.updateSends([Self.sent(id, sent, delivered: false)])
+        store.updateSends([Self.sent(id, sent)])
+
+        await files.append(
+            #"{"type":"custom_message","customType":"skill-prompt","content":"SKILL BODY","display":true,"details":{"name":"probe","args":"from chat","prompt":"/skill:probe from chat","lineCount":1},"attribution":"user","id":"s1","parentId":null}"#
+                + "\n", to: path)
+        await store.step()
+
+        #expect(sent == "/skill:probe from chat ")
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    @Test func piSkillSendIsRecorded() async throws {
+        let (files, store, path, sent) = try Self.skillStore(.pi)
+        await files.write(Self.piHeader + "\n", at: path)
+        await store.step()
+        let id = UUID()
+        store.updateSends([Self.sent(id, sent, delivered: false)])
+        store.updateSends([Self.sent(id, sent)])
+
+        await files.append(
+            #"{"type":"message","id":"u1","parentId":null,"message":{"role":"user","content":[{"type":"text","text":"<skill name=\"probe\" location=\"/home/dev/.pi/agent/skills/probe/SKILL.md\">\nSKILL BODY\n</skill>\n\nfrom chat"}]}}"#
+                + "\n", to: path)
+        await store.step()
+
+        #expect(sent == "/skill:probe from chat ")
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
     // MARK: Tool output
 
     @Test func anExpandedToolRowReadsItsOutputOnce() async throws {

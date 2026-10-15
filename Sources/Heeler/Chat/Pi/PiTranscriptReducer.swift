@@ -4,7 +4,7 @@ import Foundation
 /// leaf's ancestry, including invisible extension/state entries. File order
 /// alone would resurrect messages abandoned by /tree or a branch switch.
 struct PiTranscriptReducer: ChatTranscriptReducer {
-    static let revision = 1
+    static let revision = 2
 
     private struct Record: Sendable {
         let offset: UInt64
@@ -103,6 +103,34 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                 transcript.precedingTurnEnd = ChatTurnEnd(ending: ending, endedAt: Self.date(record))
             }
         }
+        /// A prompt the user sent: it closes a turn still open and opens
+        /// its own. `prompt` is the text pending-echo matching compares,
+        /// as the program recorded what was sent.
+        func openTurn(_ record: Record, _ content: ChatEntry.Content, prompt: String) {
+            if let last = transcript.turns.indices.last, transcript.turns[last].ending == nil {
+                transcript.turns[last].ending = .interrupted
+                transcript.turns[last].endedAt = Self.date(record)
+            }
+            add(record, content)
+            let id = entryID(record)
+            transcript.turns.append(ChatTurn(firstEntryID: id, startedAt: Self.date(record)))
+            if !record.isTruncated {
+                transcript.recordedPrompts.append(ChatRecordedPrompt(offset: record.offset, text: prompt, entryID: id))
+            }
+            transcript.latestPromptOffset = record.offset
+        }
+        func customNotice(_ record: Record, _ value: JSONValue) {
+            guard value["display"] == .bool(true) else { return }
+            add(
+                record,
+                .notice(
+                    ChatNotice(
+                        kind: .hook, title: value["customType"]?.stringValue ?? "Extension",
+                        detail: Self.text(value["content"]))))
+        }
+        // The last assistant's stop reason says whether the branch's latest
+        // turn ended, whatever opened it.
+        var lastStopReason: String?
 
         for record in chain {
             switch record.type {
@@ -120,35 +148,42 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
             case "reset_boundary":
                 add(record, .notice(ChatNotice(kind: .system, title: "Conversation context cleared")))
             case "custom_message":
-                if record.value["display"] == .bool(true) {
-                    add(
-                        record,
-                        .notice(
-                            ChatNotice(
-                                kind: .hook, title: record.value["customType"]?.stringValue ?? "Extension",
-                                detail: Self.text(record.value["content"]))))
+                // Oh My Pi records `/skill:name` as the expanded skill, with
+                // the prompt as submitted in its details.
+                if record.value["customType"]?.stringValue == "skill-prompt",
+                    record.value["attribution"]?.stringValue != "agent",
+                    let prompt = record.value["details"]?["prompt"]?.stringValue
+                {
+                    let message =
+                        Self.skillCommand(prompt).map { ChatUserMessage(text: $0.displayText, command: $0) }
+                        ?? ChatUserMessage(text: prompt)
+                    openTurn(record, .user(message), prompt: prompt)
+                } else {
+                    customNotice(record, record.value)
                 }
             case "message":
                 guard let message = record.value["message"], let role = message["role"]?.stringValue else { continue }
                 switch role {
                 case "user":
                     let text = Self.text(message["content"])
-                    if let last = transcript.turns.indices.last, transcript.turns[last].ending == nil {
-                        transcript.turns[last].ending = .interrupted
-                        transcript.turns[last].endedAt = Self.date(record)
-                    }
-                    if record.isTruncated, text.isEmpty, Self.images(message["content"]) == 0 {
-                        add(record, .notice(ChatNotice(kind: .system, title: "Message exceeds the preview limit")))
+                    let images = Self.images(message["content"])
+                    if record.isTruncated, text.isEmpty, images == 0 {
+                        openTurn(
+                            record, .notice(ChatNotice(kind: .system, title: "Message exceeds the preview limit")),
+                            prompt: text)
+                    } else if let skill = Self.piSkill(text) {
+                        // Pi records `/skill:name args` as the skill's block
+                        // followed by the arguments.
+                        let invocation = ChatCommandInvocation(name: skill.name, arguments: skill.arguments)
+                        let sent =
+                            skill.arguments.isEmpty
+                            ? "/skill:\(skill.name)" : "/skill:\(skill.name) \(skill.arguments)"
+                        let user = ChatUserMessage(
+                            text: invocation.displayText, imageCount: images, command: invocation)
+                        openTurn(record, .user(user), prompt: sent)
                     } else {
-                        add(record, .user(ChatUserMessage(text: text, imageCount: Self.images(message["content"]))))
+                        openTurn(record, .user(ChatUserMessage(text: text, imageCount: images)), prompt: text)
                     }
-                    let id = entryID(record)
-                    transcript.turns.append(ChatTurn(firstEntryID: id, startedAt: Self.date(record)))
-                    if !record.isTruncated {
-                        transcript.recordedPrompts.append(
-                            ChatRecordedPrompt(offset: record.offset, text: text, entryID: id))
-                    }
-                    transcript.latestPromptOffset = record.offset
                 case "assistant":
                     for (index, block) in Self.blocks(message["content"]).enumerated() {
                         switch block["type"]?.stringValue {
@@ -174,7 +209,9 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                         default: break
                         }
                     }
-                    switch message["stopReason"]?.stringValue {
+                    let stopReason = message["stopReason"]?.stringValue
+                    lastStopReason = stopReason
+                    switch stopReason {
                     case "stop", "length": finish(.completed, at: record)
                     case "aborted":
                         add(record, .notice(ChatNotice(kind: .interrupted, title: "Interrupted")), ":end")
@@ -200,7 +237,15 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                             name: message["toolName"]?.stringValue ?? "Tool", arguments: nil, callID: callID,
                             activity: context.activity)
                     }
-                    tool.status = message["isError"] == .bool(true) ? .failed : .succeeded
+                    let resultText = Self.text(message["content"]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if message["isError"] == .bool(true) {
+                        tool.status =
+                            resultText.hasPrefix(Self.deniedPrefix) || resultText == Self.askCancelled
+                            ? .declined : .failed
+                    } else {
+                        tool.status = .succeeded
+                        Self.recordAnswers(message["details"], in: &tool.questions)
+                    }
                     tool.preview = Self.preview(message)
                     if record.isTruncated {
                         tool.preview?.isTruncated = true
@@ -233,7 +278,7 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
             }
         }
         let latestTurnOffset = transcript.latestPromptOffset ?? context.windowStart
-        let ended = transcript.turns.last.map { $0.ending != nil } ?? (transcript.precedingTurnEnd != nil)
+        let ended = ["stop", "length", "aborted", "error"].contains(lastStopReason)
         for index in transcript.entries.indices {
             guard case .tool(var tool) = transcript.entries[index].content, tool.output == nil else { continue }
             if transcript.entries[index].sourceOffset < latestTurnOffset || ended { tool.status = .interrupted }
@@ -241,7 +286,8 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                 transcript.pendingRequests.append(
                     ChatPendingRequest(
                         entryID: transcript.entries[index].id, callID: tool.callID,
-                        kind: tool.kind, toolName: tool.name, summary: tool.title, detail: tool.subtitle))
+                        kind: tool.kind, toolName: tool.name, summary: tool.title, detail: tool.subtitle,
+                        questions: tool.questions))
             }
             transcript.entries[index].content = .tool(tool)
         }
@@ -271,10 +317,16 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
         case "ask", "ask_user": kind = .question
         default: kind = .other
         }
-        let summary =
+        let questions = kind == .question ? Self.questions(arguments?["questions"]) : []
+        let target =
             arguments?["command"]?.stringValue ?? arguments?["path"]?.stringValue
             ?? arguments?["file_path"]?.stringValue ?? arguments?["pattern"]?.stringValue
-            ?? arguments?["query"]?.stringValue ?? arguments?["url"]?.stringValue ?? name
+            ?? arguments?["query"]?.stringValue ?? arguments?["url"]?.stringValue
+        // A question's Blocked label is its first question. A call with no
+        // target, such as Oh My Pi's free-form edit patch, says what it is
+        // for in `i`.
+        let summary = questions.first?.text ?? target ?? name
+        let subtitle = target == nil && questions.isEmpty ? arguments?["i"]?.stringValue : nil
         let status: ChatToolActivity.Status =
             switch activity {
             case .working: .running
@@ -282,8 +334,89 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
             default: .interrupted
             }
         return ChatToolActivity(
-            kind: kind, name: name, title: String(summary.prefix(500)), status: status, callID: callID)
+            kind: kind, name: name, title: String(summary.prefix(500)), subtitle: subtitle, status: status,
+            questions: questions, callID: callID)
     }
+
+    /// Oh My Pi's `ask` questions. Optional fields arrive as JSON null.
+    private static func questions(_ value: JSONValue?) -> [ChatQuestion] {
+        guard case .array(let items) = value else { return [] }
+        return items.compactMap { item in
+            guard let text = item["question"]?.stringValue else { return nil }
+            var options: [ChatQuestion.Option] = []
+            if case .array(let rows) = item["options"] {
+                options = rows.compactMap { row in
+                    row["label"]?.stringValue.map {
+                        ChatQuestion.Option(label: $0, detail: row["description"]?.stringValue)
+                    }
+                }
+            }
+            var recommended: Int?
+            if case .number(let index) = item["recommended"], let exact = Int(exactly: index),
+                options.indices.contains(exact)
+            {
+                recommended = exact
+            }
+            return ChatQuestion(
+                id: item["id"]?.stringValue, header: item["header"]?.stringValue, text: text, options: options,
+                isMultiSelect: item["multi"] == .bool(true), recommendedIndex: recommended)
+        }
+    }
+
+    /// The options an answered `ask` selected: one question's in
+    /// `selectedOptions`, several questions' in `results` by id.
+    private static func recordAnswers(_ details: JSONValue?, in questions: inout [ChatQuestion]) {
+        func answer(_ value: JSONValue?) -> String? {
+            guard case .array(let selected) = value?["selectedOptions"] else { return nil }
+            let labels = selected.compactMap(\.stringValue)
+            return labels.isEmpty ? nil : labels.joined(separator: ", ")
+        }
+        if case .array(let results) = details?["results"] {
+            for result in results {
+                guard let index = questions.firstIndex(where: { $0.id != nil && $0.id == result["id"]?.stringValue })
+                else { continue }
+                questions[index].answer = answer(result) ?? questions[index].answer
+            }
+        } else if questions.count == 1, let given = answer(details) {
+            questions[0].answer = given
+        }
+    }
+
+    /// Oh My Pi's `skill-prompt` as `/name arguments` when the prompt starts
+    /// with its `/skill:` token; it may also sit mid-sentence.
+    private static func skillCommand(_ prompt: String) -> ChatCommandInvocation? {
+        let prefix = ChatCommandMenu.skillCommandPrefix
+        guard prompt.hasPrefix(prefix) else { return nil }
+        let rest = prompt.dropFirst(prefix.count)
+        let name = rest.prefix { !$0.isWhitespace }
+        guard !name.isEmpty else { return nil }
+        return ChatCommandInvocation(
+            name: String(name),
+            arguments: rest.dropFirst(name.count).trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// Pi's expanded `/skill:name args`, matched as Pi parses it back:
+    /// `^<skill name="([^"]+)" location="([^"]+)">\n([\s\S]*?)\n</skill>(?:\n\n([\s\S]+))?$`.
+    private static func piSkill(_ text: String) -> (name: String, arguments: String)? {
+        guard let header = text.prefixMatch(of: /<skill name="([^"]+)" location="[^"]+">\n/) else { return nil }
+        let name = String(header.output.1)
+        let rest = text[header.range.upperBound...]
+        let closing = "\n</skill>"
+        // The body is the shortest one after which only the arguments follow.
+        var from = rest.startIndex
+        while let range = rest.range(of: closing, range: from..<rest.endIndex) {
+            let after = rest[range.upperBound...]
+            if after.isEmpty { return (name, "") }
+            if after.hasPrefix("\n\n"), !after.dropFirst(2).isEmpty { return (name, String(after.dropFirst(2))) }
+            from = rest.index(after: range.lowerBound)
+        }
+        return nil
+    }
+
+    /// Oh My Pi's results for a call the user declined: an approval denied,
+    /// or a question dismissed.
+    private static let deniedPrefix = "Tool call denied by user:"
+    private static let askCancelled = "Ask tool was cancelled by the user"
 
     private static func blocks(_ content: JSONValue?) -> [JSONValue] {
         if case .array(let blocks) = content { return blocks }

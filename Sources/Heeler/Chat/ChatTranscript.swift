@@ -662,6 +662,9 @@ struct ChatQuestion: Equatable, Codable, Sendable {
     var options: [Option]
     /// Claude's `multiSelect`: the answer may be several options.
     var isMultiSelect: Bool
+    /// The option the Agent recommends, by index, when it names one (Oh
+    /// My Pi's `recommended`).
+    var recommendedIndex: Int?
     var answer: String?
     /// An answer given in Chat that the program holds back: Codex records
     /// an asynchronous answer only once it sends it, after its next tool
@@ -670,19 +673,21 @@ struct ChatQuestion: Equatable, Codable, Sendable {
 
     init(
         id: String? = nil, header: String? = nil, text: String, options: [Option] = [],
-        isMultiSelect: Bool = false, answer: String? = nil
+        isMultiSelect: Bool = false, recommendedIndex: Int? = nil, answer: String? = nil
     ) {
         self.id = id
         self.header = header
         self.text = text
         self.options = options
         self.isMultiSelect = isMultiSelect
+        self.recommendedIndex = recommendedIndex
         self.answer = answer
     }
 
-    // `queuedAnswer` is deliberately absent: decoding leaves it nil.
+    // `queuedAnswer` is deliberately absent: decoding leaves it nil. An
+    // entry cached before `recommendedIndex` decodes without one.
     private enum CodingKeys: String, CodingKey {
-        case id, header, text, options, isMultiSelect, answer
+        case id, header, text, options, isMultiSelect, recommendedIndex, answer
     }
 }
 

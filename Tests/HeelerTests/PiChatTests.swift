@@ -229,6 +229,218 @@ struct PiChatTests {
         #expect(result == .failure(.unsupportedVersion(9)))
     }
 
+    // MARK: Skills, approvals and questions
+
+    private static let skillTurn = [
+        Self.header,
+        #"{"type":"message","id":"u1","parentId":null,"message":{"role":"user","content":"hello"}}"#,
+        #"{"type":"message","id":"a1","parentId":"u1","message":{"role":"assistant","content":[{"type":"text","text":"hi"}],"stopReason":"stop"}}"#,
+        #"{"type":"custom_message","customType":"skill-prompt","content":"[IMPORTANT: User invoked the \"probe\" skill]\n\nSKILL BODY","display":true,"details":{"name":"probe","path":"/home/test/.agents/skills/probe/SKILL.md","args":"from chat","prompt":"/skill:probe from chat","lineCount":3},"attribution":"user","id":"s1","parentId":"a1"}"#,
+        #"{"type":"message","id":"a2","parentId":"s1","message":{"role":"assistant","content":[{"type":"toolCall","id":"call_1|fc_1","name":"bash","arguments":{"i":"Probing","command":"echo probe"}}],"stopReason":"toolUse"}}"#,
+    ]
+
+    @Test func ompSkillPromptOpensTurnAndRecordsPrompt() {
+        var reducer = PiTranscriptReducer()
+        reducer.append(Self.lines(Self.skillTurn))
+        let transcript = reducer.transcript(.init(activity: .working))
+        let invocation = ChatCommandInvocation(name: "probe", arguments: "from chat")
+        #expect(
+            transcript.entries[2].content
+                == .user(ChatUserMessage(text: "/probe from chat", command: invocation)))
+        #expect(transcript.entries[2].id == ChatEntryID("pi:s1"))
+        #expect(transcript.turns.map(\.firstEntryID) == [ChatEntryID("pi:u1"), ChatEntryID("pi:s1")])
+        #expect(transcript.turns.first?.ending == .completed)
+        #expect(transcript.turns.last?.ending == nil)
+        #expect(transcript.recordedPrompts.map(\.text) == ["hello", "/skill:probe from chat"])
+        #expect(transcript.latestPromptOffset == transcript.entries[2].sourceOffset)
+        #expect(!transcript.entries.contains { "\($0.content)".contains("SKILL BODY") })
+        guard case .tool(let tool) = transcript.entries.last?.content else {
+            Issue.record("Tool missing")
+            return
+        }
+        #expect(tool.status == .running)
+    }
+
+    @Test func ompSkillPromptMidSentenceOrWithoutPromptOrFromTheAgent() {
+        func entry(_ fields: String) -> ChatEntry.Content? {
+            var reducer = PiTranscriptReducer()
+            reducer.append(
+                Self.lines([
+                    Self.header,
+                    #"{"type":"custom_message","customType":"skill-prompt","content":"SKILL BODY","display":true,"id":"s","parentId":null,"#
+                        + fields + "}",
+                ]))
+            return reducer.transcript(.init()).entries.first?.content
+        }
+        #expect(
+            entry(#""attribution":"user","details":{"name":"probe","prompt":"please /skill:probe now"}"#)
+                == .user(ChatUserMessage(text: "please /skill:probe now")))
+        #expect(
+            entry(#""attribution":"user","details":{"name":"probe"}"#)
+                == .notice(ChatNotice(kind: .hook, title: "skill-prompt", detail: "SKILL BODY")))
+        #expect(
+            entry(#""attribution":"agent","details":{"name":"probe","prompt":"/skill:probe"}"#)
+                == .notice(ChatNotice(kind: .hook, title: "skill-prompt", detail: "SKILL BODY")))
+    }
+
+    @Test func blockedToolInSkillTurnIsPending() {
+        var reducer = PiTranscriptReducer()
+        reducer.append(Self.lines(Self.skillTurn))
+        let transcript = reducer.transcript(.init(activity: .blocked))
+        guard case .tool(let tool) = transcript.entries.last?.content else {
+            Issue.record("Tool missing")
+            return
+        }
+        #expect(tool.status == .awaitingApproval)
+        #expect(tool.subtitle == nil)
+        #expect(
+            transcript.pendingRequests
+                == [
+                    ChatPendingRequest(
+                        entryID: ChatEntryID("pi:tool:call_1|fc_1"), callID: "call_1|fc_1", kind: .command,
+                        toolName: "bash", summary: "echo probe")
+                ])
+    }
+
+    @Test func piSkillBlockShowsAsCommandAndEchoes() throws {
+        let lines = try ChatFixture.lines("pi/auth-error-skill.jsonl")
+        var reducer = PiTranscriptReducer()
+        reducer.append(lines)
+        let transcript = reducer.transcript(.init())
+        let skill = try #require(transcript.entries.first { $0.id == ChatEntryID("pi:d3d6363a") })
+        let invocation = ChatCommandInvocation(name: "probe-hello", arguments: "world args")
+        #expect(skill.content == .user(ChatUserMessage(text: "/probe-hello world args", command: invocation)))
+        #expect(transcript.recordedPrompts.last?.text == "/skill:probe-hello world args")
+        #expect(transcript.turns.count == 2)
+
+        func content(_ text: String) -> (ChatEntry.Content?, String?) {
+            var reducer = PiTranscriptReducer()
+            let record: JSONValue = .object([
+                "type": .string("message"), "id": .string("u"), "parentId": .null,
+                "message": .object(["role": .string("user"), "content": .string(text)]),
+            ])
+            reducer.append(Self.lines([Self.header, String(decoding: try! JSONEncoder().encode(record), as: UTF8.self)]))
+            let transcript = reducer.transcript(.init())
+            return (transcript.entries.first?.content, transcript.recordedPrompts.first?.text)
+        }
+        let block = "<skill name=\"hello\" location=\"/p/SKILL.md\">\nBody line\n</skill>"
+        #expect(
+            content(block)
+                == (.user(ChatUserMessage(text: "/hello", command: ChatCommandInvocation(name: "hello"))), "/skill:hello"))
+        let multiline = ChatCommandInvocation(name: "hello", arguments: "first\n\nsecond </skill>")
+        #expect(
+            content(block + "\n\nfirst\n\nsecond </skill>")
+                == (
+                    .user(ChatUserMessage(text: multiline.displayText, command: multiline)),
+                    "/skill:hello first\n\nsecond </skill>"
+                ))
+        let unclosed = "<skill name=\"hello\" location=\"/p/SKILL.md\">\nBody line\n\nargs"
+        #expect(content(unclosed) == (.user(ChatUserMessage(text: unclosed)), unclosed))
+    }
+
+    private static func ompTranscript(through line: Int? = nil, activity: ChatAgentActivity = .idle) throws
+        -> ChatTranscript
+    {
+        let lines = try ChatFixture.lines("omp/approvals-asks-plan.jsonl")
+        var reducer = PiTranscriptReducer()
+        reducer.append(Array(lines.prefix(line ?? lines.count)))
+        return reducer.transcript(.init(activity: activity))
+    }
+
+    private static func tool(_ callPrefix: String, in transcript: ChatTranscript) -> ChatToolActivity? {
+        for entry in transcript.entries {
+            if case .tool(let tool) = entry.content, tool.callID?.hasPrefix(callPrefix) == true { return tool }
+        }
+        return nil
+    }
+
+    @Test func ompAskPendingRequestCarriesQuestions() throws {
+        // The two-question ask, Blocked before its result.
+        let transcript = try Self.ompTranscript(through: 37, activity: .blocked)
+        let request = try #require(transcript.pendingRequests.first)
+        #expect(transcript.pendingRequests.count == 1)
+        #expect(request.callID?.contains("|") == true)
+        #expect(request.kind == .question)
+        #expect(request.toolName == "ask")
+        #expect(request.summary == "Pick a fruit")
+        #expect(
+            request.questions
+                == [
+                    ChatQuestion(id: "fruit", text: "Pick a fruit", options: ["apple", "pear"]),
+                    ChatQuestion(id: "size", text: "Pick a size", options: ["small", "large"]),
+                ])
+
+        var reducer = PiTranscriptReducer()
+        reducer.append(
+            Self.lines([
+                Self.header,
+                #"{"type":"message","id":"a","parentId":null,"message":{"role":"assistant","content":[{"type":"toolCall","id":"c","name":"ask","arguments":{"questions":[{"id":"q","question":"Which?","header":"Pick","options":[{"label":"one","description":"First"},{"label":"two"}],"multi":true,"recommended":1}]}}],"stopReason":"toolUse"}}"#,
+            ]))
+        #expect(
+            reducer.transcript(.init(activity: .blocked)).pendingRequests.first?.questions
+                == [
+                    ChatQuestion(
+                        id: "q", header: "Pick", text: "Which?",
+                        options: [ChatQuestion.Option(label: "one", detail: "First"), "two"], isMultiSelect: true,
+                        recommendedIndex: 1)
+                ])
+    }
+
+    @Test func ompDeniedApprovalIsDeclined() throws {
+        let transcript = try Self.ompTranscript(through: 28)
+        #expect(Self.tool("call_adb504f6", in: transcript)?.status == .succeeded)
+        #expect(Self.tool("call_74e0dc7b", in: transcript)?.status == .declined)
+        #expect(Self.tool("call_fd940fe8", in: transcript)?.status == .declined)
+        #expect(transcript.pendingRequests.isEmpty)
+    }
+
+    @Test func ompCancelledAskIsDeclined() throws {
+        let transcript = try Self.ompTranscript(through: 39)
+        let ask = try #require(Self.tool("call_7bfdda8a", in: transcript))
+        #expect(ask.status == .declined)
+        #expect(ask.questions.allSatisfy { $0.answer == nil })
+        #expect(
+            transcript.entries.last?.content == .notice(ChatNotice(kind: .interrupted, title: "Interrupted")))
+        #expect(transcript.turns.last?.ending == .interrupted)
+    }
+
+    @Test func ompAnsweredAskRecordsAnswer() throws {
+        let transcript = try Self.ompTranscript()
+        #expect(
+            Self.tool("call_c20d8fdc", in: transcript)?.questions
+                == [ChatQuestion(id: "fruit", text: "Pick a fruit", options: ["apple", "pear", "plum"], answer: "pear")])
+        #expect(Self.tool("call_a97f9e92", in: transcript)?.questions.first?.answer == "red")
+
+        // Several questions answer by id.
+        var reducer = PiTranscriptReducer()
+        reducer.append(
+            Self.lines([
+                Self.header,
+                #"{"type":"message","id":"a","parentId":null,"message":{"role":"assistant","content":[{"type":"toolCall","id":"c","name":"ask","arguments":{"questions":[{"id":"one","question":"First?","options":[{"label":"x"},{"label":"y"}]},{"id":"two","question":"Second?","options":[{"label":"p"},{"label":"q"}],"multi":true}]}}],"stopReason":"toolUse"}}"#,
+                #"{"type":"message","id":"r","parentId":"a","message":{"role":"toolResult","toolCallId":"c","toolName":"ask","content":[{"type":"text","text":"User answers:\none: y\ntwo: [p, q]"}],"details":{"results":[{"id":"two","selectedOptions":["p","q"]},{"id":"one","selectedOptions":["y"]}]},"isError":false}}"#,
+            ]))
+        guard case .tool(let tool) = reducer.transcript(.init()).entries.last?.content else {
+            Issue.record("Tool missing")
+            return
+        }
+        #expect(tool.questions.map(\.answer) == ["y", "p, q"])
+    }
+
+    @Test func toolWithoutATargetIsSubtitledByItsIntent() {
+        var reducer = PiTranscriptReducer()
+        reducer.append(
+            Self.lines([
+                Self.header,
+                #"{"type":"message","id":"a","parentId":null,"message":{"role":"assistant","content":[{"type":"toolCall","id":"c","name":"edit","arguments":{"input":"*** Begin Patch","i":"Fixing the typo"}}],"stopReason":"toolUse"}}"#,
+            ]))
+        guard case .tool(let tool) = reducer.transcript(.init(activity: .working)).entries.last?.content else {
+            Issue.record("Tool missing")
+            return
+        }
+        #expect(tool.title == "edit")
+        #expect(tool.subtitle == "Fixing the typo")
+    }
+
     @Test func emptyPiEditorPassesButDraftAndPopupDoNot() {
         let rule = String(repeating: "─", count: 40)
         let footer = "~/project (main)\r\n$0.000 0.0%/200k (auto)"
