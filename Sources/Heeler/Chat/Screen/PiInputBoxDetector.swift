@@ -64,36 +64,91 @@ enum PiInputBoxDetector {
             "The \(program == .pi ? "Pi" : "Oh My Pi") input box is not recognized. Continue in the Agent terminal.")
     }
 
-    /// OMP 18.10.4 defaults to a filled status band followed by an unboxed
-    /// `╰─ ` prompt. Its hardware cursor is not part of agent.read's cells.
-    /// Require the normal-mode branded band immediately above the prompt,
-    /// and consume every following row so a multiline draft cannot look empty.
+    /// OMP draws its default composer as a filled status band followed by
+    /// an unboxed `╰─ ` prompt; agent.read omits the hardware cursor. The
+    /// band's leading segment says whether OMP takes a message: idle shows
+    /// `π > ` (18.10.4 unicode preset) or U+E0B6 then U+F0D57 (18.11.1
+    /// nerd preset, plan mode included); a running turn swaps that glyph
+    /// for a braille spinner and elapsed time. Any other band, such as the
+    /// ASCII preset or a focused subagent, stays unrecognized. Approval
+    /// and ask panels sit directly on the band without replacing the
+    /// prompt. Every row after the prompt is consumed so a multiline draft
+    /// cannot look empty.
     private static func ompBand(_ screen: ANSIScreen) -> InputBoxState? {
         let rows = screen.rows
-        guard let prompt = rows.indices.last(where: { rows[$0].text.hasPrefix("╰─ ") }),
+        // herdr pads ANSI rows to the pane width; a trimmed read ends at `╰─`.
+        guard let prompt = rows.indices.last(where: { rows[$0].text.hasPrefix("╰─ ") || rows[$0].text == "╰─" }),
             prompt > 0
         else { return nil }
         let band = rows[prompt - 1]
-        guard band.trimmedText.hasPrefix("π > "), band.text.contains("─"),
+        guard band.text.contains("─"),
             band.text.range(of: #"\d{1,3}%"#, options: .regularExpression) != nil,
             band.runs.contains(where: { $0.style.background != nil })
         else { return nil }
+        let header = band.trimmedText
+        let isWorking: Bool
+        if ompIdleBands.contains(where: { header.hasPrefix($0) }) {
+            isWorking = false
+        } else if ompSpinnerBand(header) {
+            isWorking = true
+        } else {
+            return nil
+        }
+        if prompt > 1, rows[prompt - 2].trimmedText.hasSuffix("╯") {
+            return .overlay(rows[prompt - 2].trimmedText)
+        }
         var lines: [String] = []
         for index in prompt..<rows.count {
             let row = rows[index]
-            let value = index == prompt ? String(row.text.dropFirst(3)) : row.text
+            let value = index == prompt ? String(ompPromptText(row).dropFirst(3)) : row.text
             let text = value.trimmingCharacters(in: .whitespaces)
             guard !text.isEmpty else { continue }
             // Suggestions/hints are not editor continuation rows. Unknown
-            // chrome also stays non-sendable rather than being discarded.
+            // chrome, such as the shell after OMP exits, also stays
+            // non-sendable rather than being discarded.
             if index > prompt, !row.text.hasPrefix("   ") { return .overlay(text) }
             if text == "▏" { continue }
             lines.append(text)
         }
         let draft = lines.joined(separator: "\n")
         if draft.hasPrefix("!") { return .shellMode(draft) }
-        return draft.isEmpty ? .empty(placeholder: nil) : .text(draft)
+        if !draft.isEmpty { return .text(draft) }
+        // Enter while a turn runs steers it, and OMP backgrounds a running
+        // bash command to take the message.
+        return isWorking
+            ? .disabled("Oh My Pi is working. Send once it's idle, or steer from the terminal.")
+            : .empty(placeholder: nil)
     }
+
+    private static let ompIdleBands = ["π > ", "\u{E0B6} \u{F0D57} "]
+
+    private static func ompSpinnerBand(_ header: String) -> Bool {
+        let scalars = Array(header.unicodeScalars.prefix(3))
+        return scalars.count == 3 && scalars[0] == "\u{E0B6}" && scalars[1] == " "
+            && (0x2800...0x28FF).contains(scalars[2].value)
+    }
+
+    /// The prompt row without OMP's right-aligned italic hint: before the
+    /// first message, U+F0636 U+F0312 `to change thinking effort`. Only a
+    /// known hint set apart by at least two blanks is dropped; anything
+    /// else stays part of the draft.
+    private static func ompPromptText(_ row: ScreenRow) -> String {
+        var runs = row.runs
+        while let last = runs.last, last.text.allSatisfy(ScreenRow.isBlank) { runs.removeLast() }
+        guard let hint = runs.last, hint.style.isItalic,
+            hint.text.range(of: #"(?:to change thinking effort|to see \d+ running agents?)\s*$"#,
+                options: .regularExpression) != nil
+        else { return row.text }
+        var body = runs.dropLast().map(\.text).joined()
+        var gap = 0
+        while let last = body.last, ScreenRow.isBlank(last) || ompHintIcons.contains(last) {
+            gap = ScreenRow.isBlank(last) ? gap + 1 : 0
+            body.removeLast()
+        }
+        return gap >= 2 ? body : row.text
+    }
+
+    private static let ompHintIcons: Set<Character> = ["\u{F0636}", "\u{F0312}"]
 
     private static func rule(_ text: String) -> Bool {
         text.count >= 10 && text.allSatisfy { $0 == "─" }

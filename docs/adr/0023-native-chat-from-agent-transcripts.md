@@ -33,8 +33,13 @@ Custom session directories work when herdr reports the file path. UUID-only
 lookup stays within `.pi/agent/sessions` or `.omp/agent/sessions`.
 
 Pi's stock rule editor and OMP's rounded box require a visible software cursor.
-OMP's status-band composer is recognized by its filled normal-mode header,
-percentage gauge and prompt prefix even when herdr omits the hardware cursor.
+OMP's status-band composer is recognized by its filled header, percentage
+gauge and `╰─` prompt even when herdr omits the hardware cursor. Only the
+header's idle glyph (`π > ` in the 18.10.4 unicode preset, U+F0D57 in the
+18.11.1 nerd preset) lets Chat send. A braille spinner there means a turn is
+running, so Chat holds the message rather than steer it; an approval or ask
+panel resting on the band also holds it. The italic first-message hint on the
+prompt row is not a draft.
 Drafts, completion popups, other editor shapes and extension
 dialogs stay in the terminal; Pi/OMP dialogs do not reuse Claude/Codex option
 digit bindings. Their `/` menu and shell-command refusals use the same Chat

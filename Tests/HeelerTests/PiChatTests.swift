@@ -278,6 +278,109 @@ struct PiChatTests {
         #expect(!detect("\(band.replacingOccurrences(of: "π >", with: "π N"))\r\n╰─ ").isSendable)
     }
 
+    // MARK: OMP 18.11.1 nerd band composer
+
+    private static func ompState(_ stem: String) throws -> InputBoxState {
+        InputBoxStateDetector.detect(try ScreenFixture.screen(stem), program: .omp)
+    }
+
+    @Test(arguments: [
+        "omp-01-startup-empty-119", "omp-02-empty-120-before-first", "omp-03-empty-40-before-first",
+        "omp-07-empty-40-after-first", "omp-08-empty-120-after-first", "omp-19-compact-nospace-1s",
+        "omp-26-approval-b-idle", "omp-27-ask-e-idle", "omp-28-ask2-e-after-esc-2s", "omp-29-guard-f-idle",
+        "omp-30-plan-mode-on", "omp-32-plan-after-esc",
+    ])
+    func ompIdleNerdBandIsEmpty(stem: String) throws {
+        let screen = try ScreenFixture.screen(stem)
+        #expect(InputBoxStateDetector.detect(screen, program: .omp) == .empty(placeholder: nil))
+        #expect(PreSendGate.check(screen, program: .omp, activity: .idle) == .send)
+    }
+
+    @Test(arguments: [
+        "omp-01-startup-empty-119", "omp-02-empty-120-before-first", "omp-03-empty-40-before-first",
+    ])
+    func ompFirstMessageHintIsNotADraft(stem: String) throws {
+        let screen = try ScreenFixture.screen(stem)
+        let prompt = try #require(screen.rows.last { $0.text.hasPrefix("╰─ ") })
+        #expect(prompt.text.contains("to change thinking effort"))
+        #expect(InputBoxStateDetector.detect(screen, program: .omp) == .empty(placeholder: nil))
+    }
+
+    @Test(arguments: ["omp-05-qa-working-1s", "omp-09-tool-working-3s"])
+    func ompWorkingBandHoldsWithReason(stem: String) throws {
+        let screen = try ScreenFixture.screen(stem)
+        let state = InputBoxStateDetector.detect(screen, program: .omp)
+        #expect(state == .disabled("Oh My Pi is working. Send once it's idle, or steer from the terminal."))
+        #expect(PreSendGate.check(screen, program: .omp, activity: .working) == .hold(state))
+    }
+
+    @Test(arguments: [
+        ("omp-16-compact-space-after-enter", "/compact soft [focus]"),
+        ("omp-29-guard-a-draft-while-working", "my draft text"),
+    ])
+    func ompDraftsAndGhostTextAreText(stem: String, draft: String) throws {
+        #expect(try Self.ompState(stem) == .text(draft))
+    }
+
+    @Test(arguments: [
+        "omp-14-slash-popup", "omp-17-compact-space-pre-enter-150ms", "omp-18-compact-nospace-150ms",
+        "omp-21-after-exit-shell", "omp-33-after-exit-2",
+    ])
+    func ompPopupsAndShellBelowAreOverlay(stem: String) throws {
+        let state = try Self.ompState(stem)
+        guard case .overlay = state else {
+            Issue.record("\(stem) read as \(state)")
+            return
+        }
+    }
+
+    /// Approval and ask panels keep the band and prompt below them, with or
+    /// without a draft in the prompt.
+    @Test(arguments: [
+        "omp-23-approval-a-ctrlq-early", "omp-24-approval-a-dialog", "omp-24-approval-d-typed-abc",
+        "omp-29-guard-b-ask-with-draft", "omp-29-guard-c-after-enter",
+    ])
+    func ompPanelAboveBandIsNotSendable(stem: String) throws {
+        let screen = try ScreenFixture.screen(stem)
+        let state = InputBoxStateDetector.detect(screen, program: .omp)
+        switch state {
+        case .overlay, .dialog: break
+        default: Issue.record("\(stem) read as \(state)")
+        }
+        #expect(PreSendGate.check(screen, program: .omp, activity: .idle) != .send)
+    }
+
+    @Test func ompPlanReviewIsNotSendable() throws {
+        let screen = try ScreenFixture.screen("omp-31-plan-review")
+        #expect(PreSendGate.check(screen, program: .omp, activity: .idle) != .send)
+    }
+
+    @Test func ompPromptHintsAreDroppedOnlyWhenItalicAndSetApart() {
+        let band =
+            "\u{1B}[38;2;15;18;22m\u{E0B6}\u{1B}[0m\u{1B}[48;2;15;18;22m \u{F0D57} \u{1B}[0m──3%────272K─"
+        func detect(_ prompt: String) -> InputBoxState {
+            InputBoxStateDetector.detect(ANSIScreenDecoder.decode("\(band)\r\n\(prompt)"), program: .omp)
+        }
+        let hint = "to change thinking effort"
+        #expect(detect("╰─") == .empty(placeholder: nil))
+        #expect(detect("╰─ hello      \(hint)") == .text("hello      \(hint)"))
+        #expect(detect("╰─ hello  \(SGR.italic)\(hint)\(SGR.reset)") == .text("hello"))
+        #expect(detect("╰─ hello \(SGR.italic)\(hint)\(SGR.reset)") == .text("hello \(hint)"))
+        #expect(detect("╰─    \u{F0636} \(SGR.italic)to see 2 running agents\(SGR.reset)") == .empty(placeholder: nil))
+        #expect(detect("╰─    \(SGR.italic)something else\(SGR.reset)") == .text("something else"))
+    }
+
+    @Test func ompUnknownBandGlyphsStayUnrecognized() {
+        func detect(_ segment: String) -> InputBoxState {
+            let band = "\u{1B}[48;2;15;18;22m\(segment) project \u{1B}[0m──3%────272K─"
+            return InputBoxStateDetector.detect(ANSIScreenDecoder.decode("\(band)\r\n╰─ "), program: .omp)
+        }
+        #expect(detect("\u{E0B6} \u{2839} 1s") == .disabled("Oh My Pi is working. Send once it's idle, or steer from the terminal."))
+        #expect(!detect("pi >").isSendable)
+        #expect(!detect("\u{E0B6} @ explore").isSendable)
+        #expect(!detect("\u{E0B6} \u{F0D58}").isSendable)
+    }
+
     #if DEBUG && targetEnvironment(simulator)
         @Test(arguments: [ChatProgram.pi, .omp])
         func simulatorSamplesUseProductionLocatorFollowerAndReducer(program: ChatProgram) async throws {

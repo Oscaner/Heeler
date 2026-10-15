@@ -19,7 +19,9 @@ Entries reference the pull request that made the change.
   Chat's `/` menu and Skills list offer only their skills, sent as
   `/skill:name`; prompt templates stay in the terminal. Sending refuses Oh My
   Pi's exit words, `$` Python, Continue and queue shorthands, and pastes of
-  100 lines or more. Extends the Chat infrastructure in #425. (#464)
+  100 lines or more. Chat recognizes Oh My Pi 18.11's nerd-font status band
+  and holds messages while a turn runs or an approval or question panel is
+  open. Extends the Chat infrastructure in #425. (#464)
 - Chat for Claude Code and Codex Agents: the Agent's conversation as native
   rows in the terminal's place, read from the transcript its program writes on
   the Host, with nothing installed there. Chat folds finished turns, groups
