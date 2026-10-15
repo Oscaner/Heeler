@@ -38,6 +38,39 @@ struct ChatMarkdownTests {
         var testDescription: String { name }
     }
 
+    @Test func tablesKeepCoordinatesInlineStylesAndSafeLinks() throws {
+        let source = """
+            | 步骤 | 结果 | 状态 |
+            | :-- | :-: | --: |
+            | A\\|B | **正常** `200` | [site](https://example.com) |
+            | | | |
+            | 结束 | [local](file:///tmp/private) | |
+            | | | |
+            """
+        let block = try #require(ChatMarkdown.blocks(from: source).first)
+        let table = try #require(block.table)
+        #expect(table.columns == [.left, .center, .right])
+        #expect(table.rows.map { $0.map { String($0.characters) } } == [
+            ["步骤", "结果", "状态"], ["A|B", "正常 200", "site"],
+            ["", "", ""], ["结束", "local", ""], ["", "", ""],
+        ])
+        #expect(table.rows[1][1].runs.contains { $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true })
+        #expect(table.rows[1][1].runs.contains { $0.inlinePresentationIntent?.contains(.code) == true })
+        #expect(table.rows[1][2].runs.first?.link == URL(string: "https://example.com"))
+        #expect(table.rows[3][1].runs.allSatisfy { $0.link == nil })
+        #expect(block.text == source)
+    }
+
+    @Test func tablesRetainEmptyHeadersAndDoNotChangeFencedCode() throws {
+        let table = try #require(ChatMarkdown.blocks(from: "| | |\n| - | - |\n| first | second |").first?.table)
+        #expect(table.rows.count == 2)
+        #expect(table.rows[0].allSatisfy { $0.characters.isEmpty })
+        #expect(table.rows[1].map { String($0.characters) } == ["first", "second"])
+        let code = try #require(ChatMarkdown.blocks(from: "```text\n| A | B |\n| - | - |\n```").first)
+        #expect(code.kind == .code(language: "text"))
+        #expect(code.table == nil)
+    }
+
     static let vectors: [Vector] = [
         Vector(
             name: "ATX headings", source: "# One\n## Two\n### Three\n#### Four\n##### Five\n###### Six",

@@ -4,16 +4,18 @@ status: accepted
 
 # Native Chat from the Agent's own transcript
 
-A Claude Code or Codex Agent's detail can show Chat in its terminal's place:
+A Claude Code, Codex, Pi or Oh My Pi Agent's detail can show Chat in its terminal's place:
 the Agent's conversation as native rows, read from the transcript its program
 writes on the Host. Heeler reads that file read-only over SFTP on the Host's
 existing SSH connection, with one adapter per program: Claude Code's project
 JSONL, with its subagent transcripts under `<session>/subagents/`, and Codex's
-rollout in its paginated and legacy forms. Nothing is installed on the Host
+rollout in its paginated and legacy forms, and Pi/Oh My Pi's v2-v3 tree
+JSONL. Nothing is installed on the Host
 and herdr is unchanged. herdr still owns the Agent's identity and Agent
 Status, submission through `agent.prompt`, and keys through `agent.send_keys`;
 its `agent_session` names the transcript by a Claude Code session id or a
-Codex thread id. Other Agents, and every Agent on a native Windows Host, hide
+Codex thread id, or Pi/OMP's exact absolute JSONL path (with UUID lookup for
+older integrations). Other Agents, and every Agent on a native Windows Host, hide
 the entry.
 
 The formats as observed are recorded in
@@ -21,6 +23,22 @@ The formats as observed are recorded in
 [Codex rollouts](../research/codex-rollout-format.md); the herdr behavior Chat
 relies on is in the
 [versioned compatibility notes](../agents/herdr-compatibility.md).
+
+Pi/OMP observations are in [Pi transcripts](../research/pi-transcript-format.md).
+Their adapter follows `parentId` from the latest selected leaf, including
+invisible state records. A live Pi/OMP window never prepends unproven cached
+history: that prefix may belong to a branch the user abandoned. Offline cached
+conversations still restore; online earlier history is loaded from the file.
+Custom session directories work when herdr reports the file path. UUID-only
+lookup stays within `.pi/agent/sessions` or `.omp/agent/sessions`.
+
+Pi's stock rule editor and OMP's rounded box require a visible software cursor.
+OMP's status-band composer is recognized by its filled normal-mode header,
+percentage gauge and prompt prefix even when herdr omits the hardware cursor.
+Drafts, completion popups, other editor shapes and extension
+dialogs stay in the terminal; Pi/OMP dialogs do not reuse Claude/Codex option
+digit bindings. Their `/` menu and shell-command refusals use the same Chat
+send rules as the existing adapters.
 
 ## Entry and the terminal
 
@@ -258,6 +276,22 @@ main-thread turn as the tap. The header keeps its top edge, even while the
 list follows its end; a row folded away under the reader puts its header
 where the row was. Nothing about what is open is saved, and folded rows keep
 their measured heights and what they have open.
+
+A floating Collapse Steps control is available when the reading viewport
+intersects a turn with open reasoning, tools, file diffs or group headers.
+It closes that turn's disclosures together, including remembered child
+disclosures, and leaves other turns alone. A finished turn folds behind its
+header; a running or interrupted turn keeps its narration and compact rows.
+The collapsed header replaces the reader's position where content permits;
+near the end, the offset clamps to the natural content boundary so no artificial
+blank space follows the last row. Jump to Latest resumes following. This action changes
+only presentation; it never stops the Agent.
+
+Markdown tables retain their original source for selection and use Foundation's
+parsed row and column coordinates for display, including empty cells and column
+alignment. Inline formatting and the existing link policy apply inside cells.
+Columns share widths across rows and cells wrap; only a table wider than the
+available space scrolls horizontally within the message.
 
 ## Staging and the tools dock
 

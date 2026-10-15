@@ -26,6 +26,16 @@ extension ChatTranscriptAdapter {
                     return reducer
                 },
                 echoKey: { codexEchoKey($0) })
+        case .pi, .omp:
+            ChatTranscriptAdapter(
+                revision: PiTranscriptReducer.revision,
+                wantsFirstLine: true,
+                joinsCachedHistory: false,
+                makeReducer: { seed in
+                    var reducer = PiTranscriptReducer()
+                    if let firstLine = seed.firstLine { reducer.append([firstLine]) }
+                    return reducer
+                })
         }
     }
 }

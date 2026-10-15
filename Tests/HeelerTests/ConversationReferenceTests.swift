@@ -31,7 +31,7 @@ struct ConversationReferenceTests {
     }
 
     @Test(arguments: [
-        ("herdr:pi", "pi", AgentSessionRefKind.id),
+        ("herdr:pi", "omp", AgentSessionRefKind.id),
         ("herdr:claude", "codex", .id),
         ("custom", "claude", .id),
         ("herdr:claude", "claude", .path),

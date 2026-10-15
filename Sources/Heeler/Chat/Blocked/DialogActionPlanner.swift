@@ -17,6 +17,7 @@ enum DialogActionPlanner {
         switch dialog.program {
         case .claude: try ClaudeDialogPlanner(dialog: dialog, toolUseID: toolUseID).plan(action)
         case .codex: try CodexDialogPlanner(dialog: dialog).plan(action)
+        case .pi, .omp: throw .unsupported("Answer this dialog in the Agent terminal.")
         }
     }
 
@@ -25,6 +26,9 @@ enum DialogActionPlanner {
     static func plan(
         number: Int, for excerpt: GenericDialogExcerpt, program: ChatProgram
     ) throws(DialogPlanError) -> DialogActionPlan {
+        guard program == .claude || program == .codex else {
+            throw .unsupported("Answer this dialog in the Agent terminal.")
+        }
         guard excerpt.numbered[number] != nil else { throw .noSuchOption(number) }
         guard let digit = digitKey(number) else { throw .unsupported("Option \(number) has no digit key.") }
         // Claude draws its text cursor in reverse video. With a field

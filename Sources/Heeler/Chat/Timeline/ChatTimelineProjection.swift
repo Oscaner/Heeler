@@ -10,11 +10,30 @@ import Foundation
 /// A pure function of the built rows, so a header toggles in the same
 /// main-thread turn as the tap and keeps its top edge where it was.
 enum ChatTimelineProjection {
+    /// One turn's disclosure scope, including rows currently hidden by a
+    /// turn or tool-group header. Built alongside the projection so the
+    /// floating collapse action follows the same turn boundaries.
+    struct Trajectory: Sendable {
+        var rowIDs: Set<ChatRowID>
+        var shownIDs: [ChatRowID]
+        var turnHeader: ChatRowID?
+
+        func contains(_ id: ChatRowID) -> Bool {
+            if rowIDs.contains(id) { return true }
+            switch id {
+            case .turn(let entry), .group(let entry), .liveGroup(let entry):
+                return rowIDs.contains(.entry(entry))
+            default: return false
+            }
+        }
+    }
+
     struct Output: Sendable {
         /// What the list shows, with spacing for its own neighbors.
         var rows: [ChatRow]
         /// Each folded row, by the shown header that holds it.
         var owners: [ChatRowID: ChatRowID]
+        var trajectories: [Trajectory] = []
     }
 
     /// Whether the newest turn runs, waits on Background Work, or is done.
@@ -71,7 +90,18 @@ enum ChatTimelineProjection {
             // Rows of a turn whose start is still to load show as they
             // arrive: folded, each page would add nothing to see.
             let isPartial = index == 0 && segments[0].head == nil && segments[0].record == nil && hasOlder
+            let first = output.rows.count
             emit(segments[index], phase: phase, folds: !isPartial, signals: signals, open: open, into: &output)
+            let shown = output.rows[first...]
+            var members = Set(segments[index].body.map(\.id))
+            if let head = segments[index].head { members.insert(head.id) }
+            members.formUnion(shown.map(\.id))
+            output.trajectories.append(Trajectory(
+                rowIDs: members, shownIDs: shown.map(\.id),
+                turnHeader: shown.first(where: {
+                    if case .turnHeader(let header) = $0.content { return header.isFoldable }
+                    return false
+                })?.id))
         }
         output.rows.append(contentsOf: pending)
         for index in output.rows.indices {
