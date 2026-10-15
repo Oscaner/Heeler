@@ -33,6 +33,9 @@ Custom session directories work when herdr reports the file path. UUID-only
 lookup stays within `.pi/agent/sessions` or `.omp/agent/sessions`.
 
 Pi's stock rule editor and OMP's rounded box require a visible software cursor.
+Pi's empty editor is one row between its rules, directly above a footer whose
+working-directory row is followed by a context-usage stats row; any row
+between the editor and that footer is a completion list.
 OMP's status-band composer is recognized by its filled header, percentage
 gauge and `╰─` prompt even when herdr omits the hardware cursor. Only the
 header's idle glyph (`π > ` in the 18.10.4 unicode preset, U+F0D57 in the

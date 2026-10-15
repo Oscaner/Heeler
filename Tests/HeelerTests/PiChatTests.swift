@@ -231,13 +231,80 @@ struct PiChatTests {
 
     @Test func emptyPiEditorPassesButDraftAndPopupDoNot() {
         let rule = String(repeating: "─", count: 40)
+        let footer = "~/project (main)\r\n$0.000 0.0%/200k (auto)"
         func detect(_ text: String) -> InputBoxState {
             InputBoxStateDetector.detect(ANSIScreenDecoder.decode(text), program: .pi)
         }
-        #expect(detect("\(rule)\r\n \u{1B}[7m \u{1B}[0m\r\n\(rule)") == .empty(placeholder: nil))
-        #expect(detect("\(rule)\r\n existing\u{1B}[7m \u{1B}[0m\r\n\(rule)") == .text("existing"))
-        #expect(detect("\(rule)\r\n \u{1B}[7m \u{1B}[0m\r\n\(rule)\r\n❯ /model") == .overlay("❯ /model"))
-        #expect(!detect("\(rule)\r\n\r\n\(rule)").isSendable)
+        #expect(detect("\(rule)\r\n\u{1B}[7m \u{1B}[0m\r\n\(rule)\r\n\(footer)") == .empty(placeholder: nil))
+        #expect(detect("\(rule)\r\nexisting\u{1B}[7m \u{1B}[0m\r\n\(rule)\r\n\(footer)") == .text("existing"))
+        #expect(
+            detect("\(rule)\r\n\u{1B}[7m \u{1B}[0m\r\n\(rule)\r\n❯ /model\r\n\(footer)") == .overlay("❯ /model"))
+        #expect(!detect("\(rule)\r\n\r\n\(rule)\r\n\(footer)").isSendable)
+    }
+
+    // MARK: Pi 0.85.1 editor and footer
+
+    private static func piState(_ stem: String) throws -> InputBoxState {
+        InputBoxStateDetector.detect(try ScreenFixture.screen(stem), program: .pi)
+    }
+
+    /// Pi-06 has the Update notice's rules above the editor and its project
+    /// outside the home directory, so the pwd row starts with `/`; pi-17's
+    /// pwd is cut with `...`; pi-14 compacts while herdr reports idle.
+    @Test(arguments: [
+        "pi-06-empty-editor-119", "pi-08-auth-error-idle", "pi-13-skill-invoked", "pi-14-compact-0.25s",
+        "pi-16-empty-editor-120-attached", "pi-17-empty-editor-40-attached",
+    ])
+    func piEmptyEditorAnywhereIsEmpty(stem: String) throws {
+        let screen = try ScreenFixture.screen(stem)
+        #expect(InputBoxStateDetector.detect(screen, program: .pi) == .empty(placeholder: nil))
+        #expect(PreSendGate.check(screen, program: .pi, activity: .idle) == .send)
+    }
+
+    @Test(arguments: [
+        ("pi-11-nonempty-after-popup-esc", "/pr"), ("pi-12-nonempty-editor", "hello draft text"),
+        ("pi-20-nonempty-40", "a fairly long draft line that will\nwrap at forty columns"),
+    ])
+    func piDraftsAreText(stem: String, draft: String) throws {
+        #expect(try Self.piState(stem) == .text(draft))
+    }
+
+    /// The editor holds `/`, so a draft reading would also hold; what
+    /// matters is that a completion list never passes.
+    @Test(arguments: ["pi-09-slash-popup", "pi-10-slash-pr-popup", "pi-19-slash-popup-40"])
+    func piPopupBetweenBorderAndFooterIsOverlay(stem: String) throws {
+        let screen = try ScreenFixture.screen(stem)
+        let state = InputBoxStateDetector.detect(screen, program: .pi)
+        switch state {
+        case .overlay(let row): #expect(row.hasPrefix("→ "))
+        default: Issue.record("\(stem) read as \(state)")
+        }
+        #expect(PreSendGate.check(screen, program: .pi, activity: .idle) != .send)
+    }
+
+    @Test func piTrustSelectorIsUnknown() throws {
+        let state = try Self.piState("pi-03-trust-1s")
+        guard case .unknown = state else {
+            Issue.record("pi-03 read as \(state)")
+            return
+        }
+    }
+
+    @Test func piFooterIsMatchedByStructure() {
+        let rule = String(repeating: "─", count: 40)
+        let editor = "\(rule)\r\n\u{1B}[7m \u{1B}[0m\r\n\(rule)"
+        func detect(_ below: String...) -> InputBoxState {
+            let rows = [editor] + below
+            return InputBoxStateDetector.detect(ANSIScreenDecoder.decode(rows.joined(separator: "\r\n")), program: .pi)
+        }
+        #expect(detect("/srv/app (main)", "↑12k ↓3.4k R120k W12k CH90.0% $0.12...") == .empty(placeholder: nil))
+        #expect(detect("~/app", "?/200k (auto)    model", "extension status") == .empty(placeholder: nil))
+        #expect(detect("→ compact   Compact the session", "~/app", "$0.000 0.0%/200k") == .overlay("→ compact   Compact the session"))
+        #expect(!detect("~/app").isSendable)
+        #expect(!detect("~/app (mai...", "grok-4.5 • high").isSendable)
+        #expect(detect("~/app", "$0.000 0.0%/200k").isSendable)
+        let twoBlankRows = "\(rule)\r\n\u{1B}[7m \u{1B}[0m\r\n\r\n\(rule)\r\n~/app\r\n$0.000 0.0%/200k"
+        #expect(!InputBoxStateDetector.detect(ANSIScreenDecoder.decode(twoBlankRows), program: .pi).isSendable)
     }
 
     @Test func emptyOMPBoxPassesButMultilineDraftDoesNot() {

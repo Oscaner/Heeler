@@ -1,8 +1,9 @@
 import Foundation
 
-/// Positively recognizes the stock Pi rule editor and OMP's box/band composers.
-/// Custom extension editors, completion lists, Vim cursors and other OMP
-/// composer shapes remain in the terminal rather than guessing Enter's role.
+/// Positively recognizes the stock Pi rule editor above its footer and OMP's
+/// box/band composers. Custom extension editors, completion lists, Vim
+/// cursors and other OMP composer shapes remain in the terminal rather than
+/// guessing Enter's role.
 enum PiInputBoxDetector {
     static func detect(_ screen: ANSIScreen, program: ChatProgram) -> InputBoxState {
         if program == .omp, let band = ompBand(screen) { return band }
@@ -28,14 +29,25 @@ enum PiInputBoxDetector {
                     || (program == .omp && row.text.contains("▏"))
             }
             guard hasCursor else { continue }
-            // Every nonblank row below stock Pi/OMP editors is footer
-            // chrome. Suggestions or an extension popup suspend sending.
-            for row in rows.dropFirst(bottom + 1) where !row.isBlank {
-                let text = row.trimmedText
-                if text.hasPrefix("❯") || text.hasPrefix(">") || text.hasPrefix("/")
-                    || text.lowercased().contains("esc to") || text.lowercased().contains("escape to")
-                {
-                    return .overlay(text)
+            if program == .pi {
+                // Stock Pi's footer is a pwd row then a stats row, right
+                // under the editor; extension statuses may follow. A
+                // completion list draws between the editor and the footer.
+                guard let stats = rows.indices.dropFirst(bottom + 2).first(where: { piStats(rows[$0].trimmedText) })
+                else {
+                    return .unknown("Pi's footer is not recognized. Continue in the Agent terminal.")
+                }
+                if stats != bottom + 2 { return .overlay(rows[bottom + 1].trimmedText) }
+            } else {
+                // Every nonblank row below OMP's editors is footer chrome.
+                // Suggestions or an extension popup suspend sending.
+                for row in rows.dropFirst(bottom + 1) where !row.isBlank {
+                    let text = row.trimmedText
+                    if text.hasPrefix("❯") || text.hasPrefix(">") || text.hasPrefix("/")
+                        || text.lowercased().contains("esc to") || text.lowercased().contains("escape to")
+                    {
+                        return .overlay(text)
+                    }
                 }
             }
             var text: [String] = []
@@ -58,6 +70,9 @@ enum PiInputBoxDetector {
             }
             let draft = text.joined(separator: "\n")
             if draft.hasPrefix("!") { return .shellMode(draft) }
+            // Pi's empty editor is exactly one row; extra blank rows are
+            // newlines the user typed.
+            if draft.isEmpty, program == .pi, input.count != 1 { return .text(draft) }
             return draft.isEmpty ? .empty(placeholder: nil) : .text(draft)
         }
         return .unknown(
@@ -149,6 +164,15 @@ enum PiInputBoxDetector {
     }
 
     private static let ompHintIcons: Set<Character> = ["\u{F0636}", "\u{F0312}"]
+
+    /// Pi's footer stats: context use such as `0.0%/500k` or `?/200k`.
+    /// Narrow panes cut the row with `...`, possibly before the gauge, so
+    /// a cut row starting like the token, cost or gauge fields also counts.
+    private static func piStats(_ text: String) -> Bool {
+        if text.range(of: #"(?:\d+\.\d%|\?)/\d+(?:\.\d+)?[kM]?"#, options: .regularExpression) != nil { return true }
+        guard text.hasSuffix("..."), let first = text.first else { return false }
+        return first.isNumber || "↑↓RWC$?".contains(first)
+    }
 
     private static func rule(_ text: String) -> Bool {
         text.count >= 10 && text.allSatisfy { $0 == "─" }

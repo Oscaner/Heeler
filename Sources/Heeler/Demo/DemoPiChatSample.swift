@@ -35,7 +35,7 @@
         static func screen(forPane pane: String) -> String? {
             switch pane {
             case "mobile:p1":
-                "────────────────────────────────────────\r\n \u{1B}[7m \u{1B}[0m\r\n────────────────────────────────────────\r\n/workspace/heeler"
+                "────────────────────────────────────────\r\n \u{1B}[7m \u{1B}[0m\r\n────────────────────────────────────────\r\n/workspace/heeler\r\n$0.000 1.2%/200k (auto)"
             case "docs:p2": "╭── Ready ──────────────────────────────╮\r\n╰─ ▏                                  ─╯"
             default: nil
             }
