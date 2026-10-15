@@ -22,6 +22,11 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
     case codexAsyncQuestion
     /// Oh My Pi's `Allow tool:` panel, answered by ctrl+q or Esc.
     case ompApproval
+    /// One page of Oh My Pi's `Ask` panel: a single-select question,
+    /// answered with arrow keys and Enter.
+    case ompQuestion
+    /// The `Review answers` page after several Oh My Pi questions.
+    case ompQuestionReview
 
     var program: ChatProgram {
         switch self {
@@ -31,7 +36,7 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
         case .codexExec, .codexPatch, .codexNetwork, .codexQuestion, .codexAsyncCollapsed,
             .codexAsyncQuestion:
             .codex
-        case .ompApproval:
+        case .ompApproval, .ompQuestion, .ompQuestionReview:
             .omp
         }
     }
@@ -135,16 +140,20 @@ struct DialogFocusState: Sendable, Hashable {
     var notesText: String?
     /// Claude: the option whose row Tab turned into a note field.
     var feedbackOrdinal: Int?
+    /// Oh My Pi: the prompt below the question holds a draft, so keys go
+    /// into the draft rather than to the question.
+    var composerDraftGuard: Bool
 
     init(
         focusedOrdinal: Int? = nil, checked: Set<Int> = [], inputText: String? = nil,
-        notesText: String? = nil, feedbackOrdinal: Int? = nil
+        notesText: String? = nil, feedbackOrdinal: Int? = nil, composerDraftGuard: Bool = false
     ) {
         self.focusedOrdinal = focusedOrdinal
         self.checked = checked
         self.inputText = inputText
         self.notesText = notesText
         self.feedbackOrdinal = feedbackOrdinal
+        self.composerDraftGuard = composerDraftGuard
     }
 }
 
@@ -177,9 +186,11 @@ struct DialogSubject: Sendable, Hashable {
     /// Questions: the question text shown on this page.
     var question: String?
     /// Claude's question headers in tab order (`Colors`, `Size`), without
-    /// the Submit tab. A single question shows its one header chip.
+    /// the Submit tab. A single question shows its one header chip. Oh My
+    /// Pi's tabs likewise, shown only for several questions.
     var questionHeaders: [String] = []
-    /// Claude's question review page: question and answer pairs.
+    /// Claude's question review page: question and answer pairs. Oh My
+    /// Pi's names each question by its tab.
     var reviewAnswers: [ReviewAnswer] = []
     /// Claude plan: the plan file from the footer (`~/.claude/plans/…`).
     var planFilePath: String?
@@ -210,7 +221,8 @@ struct BlockedDialog: Sendable, Hashable {
     /// out.
     let body: [String]
     /// Where a multi-page dialog stands: Claude's active question tab or
-    /// `Review your answers`, Codex's `Question 2/2` or async question title.
+    /// `Review your answers`, Codex's `Question 2/2` or async question title,
+    /// Oh My Pi's active question tab or `Review answers`.
     let progress: String?
     let options: [DialogOption]
     /// The zero-based screen rows the dialog covers.

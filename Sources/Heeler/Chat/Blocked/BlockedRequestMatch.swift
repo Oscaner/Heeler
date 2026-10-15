@@ -40,6 +40,10 @@ enum BlockedRequestMatch {
             // A tool without a `Command:` row matches by its name alone.
             guard request.toolName == subject.toolName else { return false }
             return subject.command == nil || begins(request.summary, with: subject.command)
+        case .ompQuestion:
+            return request.toolName == "ask" && asks(request, subject.question ?? dialog.title)
+        case .ompQuestionReview:
+            return request.toolName == "ask"
         case .claudeWorkspaceTrust, .codexNetwork:
             return false
         }

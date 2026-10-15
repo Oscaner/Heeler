@@ -122,6 +122,9 @@ enum DialogPlanError: Error, Sendable, Hashable {
     case unsafeText
     /// A multi-select page needs at least one answer.
     case emptySelection
+    /// Oh My Pi: the prompt below the question holds a draft, which would
+    /// take the keys.
+    case composerDraft
 }
 
 /// A fresh read of the Agent while a card acts, which expectations and

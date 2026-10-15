@@ -10,9 +10,9 @@ import Foundation
 /// below it (an approval, or a question while the prompt holds a draft).
 /// Tool renderings in the history are panels too, but untitled (`╭───╮`) or
 /// with a rule before the title (`╭─── Ask 1 questions`), and never touch the
-/// band. Only a tool approval is a known dialog; any other titled panel holds
-/// sending as an excerpt for the generic card. OMP binds no digits, so the
-/// excerpt offers none.
+/// band. A tool approval and a single-select question are known dialogs; any
+/// other titled panel holds sending as an excerpt for the generic card. OMP
+/// binds no digits, so the excerpt offers none.
 enum OMPDialogParser {
     static func parse(_ screen: ANSIScreen) -> DialogParseResult {
         guard let panel = OMPPanel.bottom(of: screen) else { return .none }
@@ -23,7 +23,7 @@ enum OMPDialogParser {
             return approval(panel, title: title, on: screen)
         }
         if title == "Ask" {
-            return unrecognized(panel, on: screen, "Answer Oh My Pi's question with these keys or in the terminal.")
+            return ask(panel, on: screen)
         }
         return unrecognized(panel, on: screen, "Heeler does not know Oh My Pi's \u{201C}\(title)\u{201D} panel.")
     }
@@ -38,11 +38,11 @@ enum OMPDialogParser {
         guard panel.sections.count > 1, let footer = panel.sections.last else {
             return unrecognized(panel, on: screen, "The approval's keys are not on screen.")
         }
-        let keys = footer.joined(separator: " ")
+        let keys = footer.map(\.text).joined(separator: " ")
         guard keys.contains(" approve"), keys.contains(" deny") else {
             return unrecognized(panel, on: screen, "The approval's keys are not on screen.")
         }
-        let body = panel.sections.dropLast().flatMap { $0 }
+        let body = panel.sections.dropLast().flatMap { $0 }.map(\.text)
         var subject = DialogSubject()
         subject.toolName = String(title.dropFirst(approvalPrefix.count)).trimmingCharacters(in: .whitespaces)
         subject.command = value(of: "Command:", in: body).map { command in
@@ -66,6 +66,138 @@ enum OMPDialogParser {
                 focus: DialogFocusState(), subject: subject))
     }
 
+    /// `Ask`, one page per question. Several questions add a tab row above
+    /// the question (`fruit    size    Submit`, the active tab bold on a
+    /// fill). Below a rule, one row per option, `<pointer> <radio> label`,
+    /// the pointer on the focused one and the typed `Other` last; then the
+    /// key hints. Digits do nothing; arrows move and Enter answers, turning
+    /// to the next tab. The Submit tab reviews the answers above a lone
+    /// `Submit`. While the prompt below holds a draft, the hints ask to
+    /// finish it first and keys go to the draft.
+    ///
+    /// Only the radio glyph seen live is read. Any other row, such as a
+    /// multi-select question's or an option's description, leaves the
+    /// question to the terminal.
+    private static func ask(_ panel: OMPPanel, on screen: ANSIScreen) -> DialogParseResult {
+        let layout = "Heeler doesn't know this question's layout. Answer it with these keys or in the terminal."
+        guard panel.sections.count == 3, let footer = panel.sections[2].first?.text else {
+            return unrecognized(panel, on: screen, layout)
+        }
+        var header = panel.sections[0]
+        var tabs: [String] = []
+        var activeTab: String?
+        if let first = header.first, first.indent >= 2 {
+            tabs = first.text.replacingOccurrences(of: #"\s{2,}"#, with: "\u{1F}", options: .regularExpression)
+                .split(separator: "\u{1F}").map(String.init)
+            activeTab = first.row.runs.first { $0.style.isBold && $0.style.background != nil }
+                .map { $0.text.trimmingCharacters(in: .whitespaces) }
+            guard let activeTab, tabs.contains(activeTab) else { return unrecognized(panel, on: screen, layout) }
+            header.removeFirst()
+        }
+        let question = header.map(\.text).joined(separator: " ")
+        guard !question.isEmpty else { return unrecognized(panel, on: screen, layout) }
+        let isGuarded = footer.hasPrefix(draftGuardFooter)
+        let headers = tabs.last == submitTab ? Array(tabs.dropLast()) : tabs
+        if activeTab == submitTab, question == reviewTitle {
+            guard isGuarded || footer.contains("submit") else { return unrecognized(panel, on: screen, layout) }
+            return review(panel, headers: headers, isGuarded: isGuarded)
+                ?? unrecognized(panel, on: screen, layout)
+        }
+        guard isGuarded || footer.contains("select") else { return unrecognized(panel, on: screen, layout) }
+        var options: [DialogOption] = []
+        for line in panel.sections[1] {
+            guard let (label, isFocused) = choice(line.text) else {
+                return unrecognized(
+                    panel, on: screen,
+                    "Heeler answers only Oh My Pi's single-select questions. Answer this one in the terminal.")
+            }
+            options.append(
+                DialogOption(
+                    ordinal: options.count + 1, number: nil, label: label,
+                    role: label == otherLabel ? .otherText : .answer, isFocused: isFocused))
+        }
+        guard options.contains(where: { $0.role == .answer }) else { return unrecognized(panel, on: screen, layout) }
+        let focused = options.filter(\.isFocused)
+        var subject = DialogSubject()
+        subject.question = question
+        subject.questionHeaders = headers
+        return .dialog(
+            BlockedDialog(
+                kind: .ompQuestion, title: question, sourceSuffix: nil, positionLabel: nil, body: [question],
+                progress: activeTab, options: options, rows: panel.rows,
+                fingerprint: DialogFingerprint(
+                    program: .omp, kind: .ompQuestion, title: question, sourceSuffix: nil, body: [question],
+                    progress: activeTab, options: options),
+                focus: DialogFocusState(
+                    focusedOrdinal: focused.count == 1 ? focused.first?.ordinal : nil, composerDraftGuard: isGuarded),
+                subject: subject))
+    }
+
+    /// `Review answers`: `1. fruit: apple` per question, then `Submit`.
+    private static func review(_ panel: OMPPanel, headers: [String], isGuarded: Bool) -> DialogParseResult? {
+        var answers: [DialogSubject.ReviewAnswer] = []
+        var body: [String] = []
+        var submit: DialogOption?
+        for line in panel.sections[1] {
+            guard submit == nil else { return nil }
+            if let (label, isFocused) = pointed(line.text), label == submitTab {
+                submit = DialogOption(ordinal: 1, number: nil, label: label, role: .submit, isFocused: isFocused)
+            } else if line.text.range(of: #"^\d+\. "#, options: .regularExpression) != nil,
+                let colon = line.text.range(of: ": ")
+            {
+                let name = line.text[..<colon.lowerBound].drop { $0 != " " }.trimmingCharacters(in: .whitespaces)
+                answers.append(
+                    DialogSubject.ReviewAnswer(
+                        question: name, answer: String(line.text[colon.upperBound...])))
+                body.append(line.text)
+            } else {
+                return nil
+            }
+        }
+        guard let submit, !answers.isEmpty, answers.count == headers.count else { return nil }
+        var subject = DialogSubject()
+        subject.questionHeaders = headers
+        subject.reviewAnswers = answers
+        return .dialog(
+            BlockedDialog(
+                kind: .ompQuestionReview, title: reviewTitle, sourceSuffix: nil, positionLabel: nil, body: body,
+                progress: reviewTitle, options: [submit], rows: panel.rows,
+                fingerprint: DialogFingerprint(
+                    program: .omp, kind: .ompQuestionReview, title: reviewTitle, sourceSuffix: nil, body: body,
+                    progress: reviewTitle, options: [submit]),
+                focus: DialogFocusState(
+                    focusedOrdinal: submit.isFocused ? submit.ordinal : nil, composerDraftGuard: isGuarded),
+                subject: subject))
+    }
+
+    /// `<pointer> <radio> label`, or the radio alone off focus.
+    private static func choice(_ text: String) -> (label: String, isFocused: Bool)? {
+        guard let (rest, isFocused) = pointed(text), rest.first == radio else { return nil }
+        let label = rest.dropFirst()
+        guard let space = label.first, ScreenRow.isBlank(space) else { return nil }
+        var trimmed = label.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasSuffix(recommendedSuffix) { trimmed = String(trimmed.dropLast(recommendedSuffix.count)) }
+        return trimmed.isEmpty ? nil : (trimmed, isFocused)
+    }
+
+    /// The row without its focus pointer, and whether it had one.
+    private static func pointed(_ text: String) -> (rest: String, isFocused: Bool)? {
+        guard let first = text.first else { return nil }
+        guard pointers.contains(first) else { return (text, false) }
+        let rest = text.dropFirst()
+        guard let space = rest.first, ScreenRow.isBlank(space) else { return nil }
+        return (rest.trimmingCharacters(in: .whitespaces), true)
+    }
+
+    private static let pointers: Set<Character> = ["\u{F054}", "❯", ">"]
+    /// The unchecked radio of OMP's nerd-font symbols.
+    private static let radio: Character = "\u{F10C}"
+    private static let otherLabel = "Other (type your own)"
+    private static let recommendedSuffix = " (Recommended)"
+    private static let submitTab = "Submit"
+    private static let reviewTitle = "Review answers"
+    private static let draftGuardFooter = "Finish or clear the current prompt to answer"
+
     private static func value(of label: String, in body: [String]) -> String? {
         body.first { $0.hasPrefix(label) }.map {
             String($0.dropFirst(label.count)).trimmingCharacters(in: .whitespaces)
@@ -75,7 +207,8 @@ enum OMPDialogParser {
     /// The panel's rows verbatim. The fingerprint leaves out the key hints,
     /// which change with the prompt's draft, and the focus pointer.
     private static func unrecognized(_ panel: OMPPanel, on screen: ANSIScreen, _ reason: String) -> DialogParseResult {
-        let content = panel.sections.count > 1 ? panel.sections.dropLast().flatMap { $0 } : panel.sections.flatMap { $0 }
+        let sections = panel.sections.count > 1 ? Array(panel.sections.dropLast()) : panel.sections
+        let content = sections.flatMap { $0 }.map(\.text)
         let unpointed = content.map { row in
             String(row.drop { $0 == "\u{F054}" || $0 == "❯" || ScreenRow.isBlank($0) })
         }
@@ -94,9 +227,17 @@ private struct OMPPanel {
     /// The title from the top border, without a countdown such as `(30s)`;
     /// nil when the top border is off screen.
     let title: String?
-    /// The text between the side borders, blank rows dropped, split at each
+    /// The rows between the side borders, blank ones dropped, split at each
     /// `├─…┤` rule.
-    let sections: [[String]]
+    let sections: [[Line]]
+
+    struct Line {
+        /// The text between the side borders, trimmed.
+        let text: String
+        /// Blank cells between the left border and the text.
+        let indent: Int
+        let row: ScreenRow
+    }
 
     /// The lowest panel, when it ends the screen or rests on the status
     /// band. An untitled panel is a tool's rendering, not a dialog.
@@ -113,7 +254,7 @@ private struct OMPPanel {
         } else {
             return nil
         }
-        var sections: [[String]] = [[]]
+        var sections: [[Line]] = [[]]
         var index = bottom - 1
         while index >= 0 {
             let text = rows[index].trimmedText
@@ -121,8 +262,12 @@ private struct OMPPanel {
             if text.hasPrefix("├"), text.hasSuffix("┤") {
                 sections.insert([], at: 0)
             } else if text.hasPrefix("│"), text.hasSuffix("│"), text.count >= 2 {
-                let inner = text.dropFirst().dropLast().trimmingCharacters(in: .whitespaces)
-                if !inner.isEmpty { sections[0].insert(inner, at: 0) }
+                let inner = text.dropFirst().dropLast()
+                let trimmed = inner.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty {
+                    let indent = inner.prefix { ScreenRow.isBlank($0) }.count
+                    sections[0].insert(Line(text: trimmed, indent: indent, row: rows[index]), at: 0)
+                }
             } else {
                 return nil
             }

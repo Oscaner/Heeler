@@ -193,8 +193,9 @@ final class BlockedCardStore {
             guard let dialog = observation.result.dialog else { throw .unsupported(Self.changedMessage) }
             let request = BlockedRequestMatch.request(for: dialog, in: requests)
             answered = BlockedCard(dialog: dialog, request: request)
+            // Claude cards and Oh My Pi questions confirm by the call's result.
             return try DialogActionPlanner.plan(
-                action, for: dialog, toolUseID: program == .claude ? request?.callID : nil)
+                action, for: dialog, toolUseID: program == .claude || program == .omp ? request?.callID : nil)
         }
         if isConfirmed, let answered { record(action, on: answered) }
     }
@@ -596,6 +597,9 @@ extension DialogPlanError {
         case .multilineText: "Use one line. A line break would answer early."
         case .unsafeText: "Remove tabs and control characters. The program would read them as keys."
         case .emptySelection: "Pick at least one answer."
+        case .composerDraft:
+            "Oh My Pi's input box holds a draft, so keys would go into it. Press Enter in the terminal to queue it, "
+                + "or clear it, then answer."
         }
     }
 }

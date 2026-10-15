@@ -3,10 +3,10 @@ import Testing
 
 @testable import Heeler
 
-/// A multi-question ask as Claude Code and Codex draw it, in the captures'
-/// colors and layout, reacting to keys and pastes the way the probes saw.
-/// It reaches states no capture holds, such as focus on every row, so a
-/// question form can be driven page by page.
+/// A multi-question ask as Claude Code, Codex and Oh My Pi draw it, in the
+/// captures' colors and layout, reacting to keys and pastes the way the
+/// probes saw. It reaches states no capture holds, such as focus on every
+/// row, so a question form or Oh My Pi's pages can be driven page by page.
 actor FakeQuestionTUI {
     struct Question: Sendable {
         var header: String
@@ -34,6 +34,11 @@ actor FakeQuestionTUI {
     private var typed: [String?]
     /// Codex: the open notes, nil while closed.
     private var notes: String?
+    /// Oh My Pi: the draft in the prompt below the panel, which takes every
+    /// key but Enter and Esc. Nil while the prompt is empty.
+    private var draft: String?
+    /// Oh My Pi: drafts Enter queued for steering.
+    private(set) var queued: [String] = []
     /// What each question was answered with.
     private(set) var answers: [String?]
     private(set) var state: State = .asking
@@ -69,8 +74,21 @@ actor FakeQuestionTUI {
         drawnAnswers[index] = answer
     }
 
+    /// Oh My Pi: the prompt below holds `text`, typed while the turn ran.
+    func holdDraft(_ text: String) {
+        draft = text
+    }
+
     func read() -> ANSIScreen {
-        ScreenFixture.synthetic(state == .asking ? (program == .claude ? claudeRows() : codexRows()) : doneRows)
+        guard state == .asking else { return ScreenFixture.synthetic(doneRows) }
+        switch program {
+        case .claude: return ScreenFixture.synthetic(claudeRows())
+        case .codex: return ScreenFixture.synthetic(codexRows())
+        case .omp: return ScreenFixture.synthetic(ompRows())
+        case .pi:
+            Issue.record("FakeQuestionTUI does not model Pi")
+            return ScreenFixture.synthetic(doneRows)
+        }
     }
 
     func send(_ keys: [String]) {
@@ -79,7 +97,8 @@ actor FakeQuestionTUI {
             switch program {
             case .claude: claudePress(key)
             case .codex: codexPress(key)
-            case .pi, .omp: Issue.record("FakeQuestionTUI only models Claude and Codex")
+            case .omp: ompPress(key)
+            case .pi: Issue.record("FakeQuestionTUI does not model Pi")
             }
         }
     }
@@ -95,8 +114,11 @@ actor FakeQuestionTUI {
         case .codex:
             // A paste on the highlighted option opens its notes.
             notes = (notes ?? "") + text
-        case .pi, .omp:
-            Issue.record("FakeQuestionTUI only models Claude and Codex")
+        case .omp:
+            // Text goes to the prompt below the panel.
+            draft = (draft ?? "") + text
+        case .pi:
+            Issue.record("FakeQuestionTUI does not model Pi")
         }
     }
 
@@ -369,6 +391,107 @@ actor FakeQuestionTUI {
         R.reset + R.bold + name + R.reset
     }
 
+    // MARK: Oh My Pi
+
+    /// Digits do nothing. Arrows move within the page, Enter answers and
+    /// turns to the next tab (the review after the last), ←/→ and Tab turn
+    /// tabs, Esc cancels. A draft below takes every key but Enter, which
+    /// queues it, and Esc.
+    private func ompPress(_ key: String) {
+        if let held = draft {
+            switch key {
+            case "enter":
+                queued.append(held)
+                draft = nil
+            case "esc": state = .cancelled
+            default: if key.count == 1 { draft = held + key }
+            }
+            return
+        }
+        let isReview = page == questions.count
+        switch key {
+        case "esc": state = .cancelled
+        case "left": if questions.count > 1 { turn(to: max(page - 1, 0)) }
+        case "right", "tab": if questions.count > 1 { turn(to: min(page + 1, questions.count)) }
+        case "up" where !isReview: focus = max(focus - 1, 1)
+        case "down" where !isReview: focus = min(focus + 1, questions[page].options.count + 1)
+        case "enter" where isReview:
+            state = .submitted
+        case "enter":
+            // Enter on Other opens a field this model doesn't draw.
+            guard focus <= questions[page].options.count else { return }
+            answers[page] = questions[page].options[focus - 1]
+            if questions.count == 1 { state = .submitted } else { turn(to: page + 1) }
+        default:
+            break
+        }
+    }
+
+    private func turn(to page: Int) {
+        self.page = page
+        focus = 1
+    }
+
+    private func ompRows() -> [String] {
+        var rows = ["", " Asking.", "", "╭─ Ask " + String(repeating: "─", count: width - 8) + "╮"]
+        if questions.count > 1 {
+            let tabs = questions.map(\.header) + ["Submit"]
+            rows.append(
+                ompRow(
+                    tabs.enumerated().map { index, label in
+                        (index == page ? R.bold + R.ompTab : R.ompInactive, " \(label) ")
+                    }, separator: "  "))
+        }
+        let rule = "├" + String(repeating: "─", count: width - 2) + "┤"
+        var footer: String
+        if page < questions.count {
+            let question = questions[page]
+            rows.append(ompRow([("", drawnTexts[page] ?? question.text)]))
+            rows.append(rule)
+            // The radio seen live; a multi-select page draws another glyph.
+            let mark = question.isMultiSelect ? "\u{F096}" : "\u{F10C}"
+            for (index, label) in (question.options + ["Other (type your own)"]).enumerated() {
+                rows.append(
+                    index + 1 == focus
+                        ? ompRow([(R.ompAccent, "\u{F054} "), (R.ompMuted, mark), ("", " "), (R.ompAccent, label)])
+                        : ompRow([("", "  "), (R.ompMuted, mark), ("", " \(label)")]))
+            }
+            let turn = questions.count > 1 ? "\u{F0312}/←/→ question · " : ""
+            footer = "\u{F0311} select · n note · ↑/↓ move · " + turn + "\u{F12B7} cancel · \u{F0635} H hide"
+        } else {
+            rows.append(ompRow([(R.bold + R.ompAccent, "Review answers")]))
+            rows.append(rule)
+            for (index, question) in questions.enumerated() {
+                let answer = answers[index] ?? ""
+                rows.append(ompRow([(R.ompMuted, "\(index + 1). \(question.header):"), ("", " \(answer)")]))
+            }
+            rows.append(ompRow([]))
+            rows.append(ompRow([(R.ompAccent, "\u{F054} Submit")]))
+            footer = "\u{F0311} submit · ↑/↓ scroll · \u{F12B7} cancel · \u{F0635} H hide"
+        }
+        if draft != nil {
+            footer = "Finish or clear the current prompt to answer · \u{F12B7} cancel · \u{F0635} H hide"
+        }
+        rows += [ompRow([]), ompRow([]), rule, ompRow([("", footer)])]
+        rows.append("╰" + String(repeating: "─", count: width - 2) + "╯")
+        if let draft {
+            // The panel rests on the working band, the prompt below it.
+            let band = R.reset + R.ompBand + " \u{2827} 4s  project " + R.reset + "──4%────272K─"
+            rows += [band, "╰─ " + draft]
+        }
+        return rows
+    }
+
+    /// `│ ` and the styled parts, padded to the panel's right border.
+    private func ompRow(_ parts: [(style: String, text: String)], separator: String = "") -> String {
+        let text = parts.map(\.text).joined(separator: separator)
+        let styled = parts.map { $0.style.isEmpty ? $0.text : $0.style + $0.text + R.reset }
+            .joined(separator: separator)
+        let padding = String(repeating: " ", count: max(width - 3 - text.count, 0))
+        let border = R.reset + R.ompBorder + "│" + R.reset
+        return border + " " + styled + padding + border
+    }
+
     /// The captures' SGR spellings.
     private enum R {
         static let reset = SGR.reset
@@ -382,5 +505,11 @@ actor FakeQuestionTUI {
         static let white = SGR.fg(255, 255, 255)
         static let green = SGR.fg(78, 186, 101)
         static let blue = SGR.fg(99, 168, 248)
+        static let ompBorder = SGR.fg(42, 48, 56)
+        static let ompAccent = SGR.fg(0, 180, 255)
+        static let ompMuted = SGR.fg(107, 114, 128)
+        static let ompInactive = SGR.fg(156, 163, 176)
+        static let ompTab = SGR.bg(0, 130, 179)
+        static let ompBand = SGR.bg(15, 18, 22)
     }
 }

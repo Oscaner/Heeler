@@ -381,6 +381,69 @@ struct DialogActionPlannerTests {
         }
     }
 
+    @Test("An OMP question is answered by one arrow per row, each checked, then Enter")
+    func ompQuestionChoosesByArrowsWithAFocusCheckPerRow() throws {
+        #expect(
+            try plan(.choose(ordinal: 3), "omp-27-ask-a-dialog")
+                == DialogActionPlan(
+                    steps: [
+                        .keys(["down"]), .expect(.focus(ordinal: 2)), .keys(["down"]), .expect(.focus(ordinal: 3)),
+                        .keys(["enter"]),
+                    ], confirmation: .fingerprintChangeOrUnblocked))
+        #expect(
+            try plan(.choose(ordinal: 1), "omp-27-ask-a-dialog", toolUseID: "call_1|fc_1")
+                == DialogActionPlan(steps: [.keys(["enter"])], confirmation: .toolResult(id: "call_1|fc_1")))
+        #expect(
+            try plan(.choose(ordinal: 1), "omp-27-ask-c-after-down").steps
+                == [.keys(["up"]), .expect(.focus(ordinal: 1)), .keys(["enter"])])
+        // Each tab turns to the next, the last to the review, which Enter
+        // submits.
+        #expect(
+            try plan(.choose(ordinal: 2), "omp-28-ask2-a-dialog").steps
+                == [.keys(["down"]), .expect(.focus(ordinal: 2)), .keys(["enter"]), .expect(.page("size"))])
+        #expect(
+            try plan(.choose(ordinal: 1), "omp-28-ask2-b-after-enter-q1").steps
+                == [.keys(["enter"]), .expect(.page("Review answers"))])
+        #expect(
+            try plan(.choose(ordinal: 1), "omp-28-ask2-c-submit-page", toolUseID: "call_2")
+                == DialogActionPlan(steps: [.keys(["enter"])], confirmation: .toolResult(id: "call_2")))
+        // Esc cancels the question and the turn.
+        #expect(
+            try plan(.dismiss, "omp-27-ask-a-dialog")
+                == DialogActionPlan(steps: [.keys(["esc"])], confirmation: .fingerprintChangeOrUnblocked))
+
+        for stem in ["omp-27-ask-a-dialog", "omp-27-ask-c-after-down", "omp-28-ask2-a-dialog", "omp-28-ask2-c-submit-page"] {
+            let dialog = try dialog(stem)
+            for ordinal in 0...6 {
+                guard let plan = try? DialogActionPlanner.plan(.choose(ordinal: ordinal), for: dialog) else { continue }
+                #expect(!plan.keys.contains { $0.contains(where: \.isNumber) }, "\(stem) \(ordinal)")
+                #expect(Set(plan.keys).isSubset(of: ["up", "down", "enter"]), "\(stem) \(ordinal)")
+            }
+        }
+    }
+
+    @Test("A draft in OMP's prompt refuses every answer but Stop")
+    func guardedOMPQuestionRefusesEveryAnswerButStop() throws {
+        let stem = "omp-29-guard-b-ask-with-draft"
+        for action in [DialogAction.choose(ordinal: 1), .choose(ordinal: 2), .choose(ordinal: 3), .respond(ordinal: 3, text: "x")] {
+            #expect(throws: DialogPlanError.composerDraft, "\(action)") { try plan(action, stem) }
+        }
+        #expect(try plan(.dismiss, stem).keys == ["esc"])
+        // Once the draft is queued, the same question answers.
+        #expect(try plan(.choose(ordinal: 2), "omp-29-guard-c-after-enter").keys == ["down", "enter"])
+    }
+
+    @Test("OMP's Other row and notes stay in the terminal")
+    func ompOtherRowNeedsTheTerminal() throws {
+        let message = DialogPlanError.unsupported(
+            "Heeler doesn't type into Oh My Pi's questions. Write your own answer or a note in the terminal.")
+        #expect(throws: message) { try plan(.choose(ordinal: 4), "omp-27-ask-a-dialog") }
+        #expect(throws: message) { try plan(.respond(ordinal: 4, text: "kiwi"), "omp-27-ask-a-dialog") }
+        #expect(throws: message) { try plan(.amend(ordinal: 1, note: "ripe"), "omp-27-ask-a-dialog") }
+        #expect(throws: DialogPlanError.noSuchOption(5)) { try plan(.choose(ordinal: 5), "omp-27-ask-a-dialog") }
+        #expect(throws: DialogPlanError.self) { try plan(.submitSelection([1, 2]), "omp-27-ask-a-dialog") }
+    }
+
     // MARK: Generic card, text and keys
 
     @Test("The generic card's buttons press the digits it lists")

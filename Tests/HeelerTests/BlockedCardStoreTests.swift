@@ -350,7 +350,7 @@ struct BlockedCardStoreTests {
     }
 
     @Test func anOMPPanelHeelerDoesNotKnowGetsTheGenericCardWithoutDigits() async throws {
-        let pane = FakePane(try ScreenFixture.screen("omp-27-ask-a-dialog"))
+        let pane = FakePane(try ScreenFixture.screen("omp-31-plan-review"))
         let store = Self.store(.omp, pane: pane)
         store.update(activity: .blocked)
         await store.refresh()
@@ -364,7 +364,121 @@ struct BlockedCardStoreTests {
         #expect(await pane.keys.isEmpty)
     }
 
+    /// The program keeps drawing the question after Enter; the ask's result
+    /// in the transcript confirms the answer.
+    @Test func anOMPQuestionConfirmsByTheAskResult() async throws {
+        let tui = FakeQuestionTUI(.omp, [Self.fruit])
+        await tui.ignore("enter")
+        let request = Self.ompAsk("call_a|fc_a", [Self.fruit])
+        let box = StoreBox()
+        let store = BlockedCardStore(
+            program: .omp,
+            io: BlockedScreenIO(
+                readScreen: { await tui.read() },
+                sendKeys: { keys in
+                    await tui.send(keys)
+                    guard keys == ["enter"] else { return }
+                    await MainActor.run { box.store?.update(transcript: Self.transcript(resolved: [request])) }
+                },
+                paste: { await tui.paste($0) }),
+            clock: ManualClock().clock)
+        box.store = store
+        store.update(transcript: Self.transcript(pending: [request]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.kind == .ompQuestion)
+        #expect(card.request?.callID == "call_a|fc_a")
+
+        await store.perform(.choose(ordinal: 2))
+
+        #expect(await tui.keys == [["down"], ["enter"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+    }
+
+    /// Each page is its own card: Enter answers it and turns to the next,
+    /// and the review's Submit sends the answers.
+    @Test func anOMPTwoQuestionAskAnswersEachPageThenSubmits() async throws {
+        let questions = [Self.fruit, FakeQuestionTUI.Question(header: "size", text: "Pick a size", options: ["small", "large"])]
+        let tui = FakeQuestionTUI(.omp, questions)
+        let store = Self.store(tui)
+        store.update(transcript: Self.transcript(pending: [Self.ompAsk("call_b", questions)]))
+        store.update(activity: .blocked)
+        await store.refresh()
+
+        for (progress, ordinal) in [("fruit", 2), ("size", 1), ("Review answers", 1)] {
+            guard case .card(let card) = store.content else {
+                Issue.record("Expected a card on \(progress), got \(store.content)")
+                return
+            }
+            #expect(card.dialog.progress == progress)
+            #expect(card.request?.callID == "call_b", "\(progress)")
+            await store.perform(.choose(ordinal: ordinal))
+            #expect(store.progress == .ready, "\(progress)")
+            #expect(store.notice == nil, "\(progress)")
+        }
+
+        #expect(await tui.keys == [["down"], ["enter"], ["enter"], ["enter"]])
+        #expect(await tui.answers == ["pear", "small"])
+        #expect(await tui.state == .submitted)
+        #expect(store.content == .none)
+    }
+
+    @Test func aGuardedQuestionSendsNoKeysAndSaysWhy() async throws {
+        let tui = FakeQuestionTUI(.omp, [Self.fruit])
+        await tui.holdDraft("my draft text")
+        let store = Self.store(tui)
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.focus.composerDraftGuard)
+
+        await store.perform(.choose(ordinal: 1))
+
+        #expect(await tui.keys.isEmpty)
+        #expect(store.progress == .ready)
+        #expect(
+            store.notice
+                == "Oh My Pi's input box holds a draft, so keys would go into it. Press Enter in the terminal to "
+                + "queue it, or clear it, then answer.")
+
+        // Stop still goes: Esc cancels the question.
+        await store.perform(.dismiss)
+        #expect(await tui.keys == [["esc"]])
+        #expect(await tui.state == .cancelled)
+        #expect(await tui.queued.isEmpty)
+    }
+
     // MARK: Helpers
+
+    private static let fruit = FakeQuestionTUI.Question(
+        header: "fruit", text: "Pick a fruit", options: ["apple", "pear", "plum"])
+
+    private static func ompAsk(_ id: String, _ questions: [FakeQuestionTUI.Question]) -> ChatPendingRequest {
+        ChatPendingRequest(
+            entryID: ChatEntryID(id), callID: id, kind: .question, toolName: "ask",
+            summary: questions.first?.text ?? "",
+            questions: questions.map {
+                ChatQuestion(id: $0.header, text: $0.text, options: $0.options.map { ChatQuestion.Option(label: $0) })
+            })
+    }
+
+    private static func store(_ tui: FakeQuestionTUI) -> BlockedCardStore {
+        BlockedCardStore(
+            program: tui.program,
+            io: BlockedScreenIO(
+                readScreen: { await tui.read() },
+                sendKeys: { await tui.send($0) },
+                paste: { await tui.paste($0) }),
+            clock: ManualClock().clock)
+    }
 
     private static func ompBash(_ id: String, _ command: String) -> ChatPendingRequest {
         ChatPendingRequest(entryID: ChatEntryID(id), callID: id, kind: .command, toolName: "bash", summary: command)

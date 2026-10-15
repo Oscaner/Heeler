@@ -4,11 +4,15 @@ import Foundation
 /// no plan sends one.
 struct OMPDialogPlanner {
     let dialog: BlockedDialog
+    /// The matched `ask` call, whose result confirms an answer.
+    var toolUseID: String? = nil
 
     func plan(_ action: DialogAction) throws(DialogPlanError) -> DialogActionPlan {
         switch dialog.kind {
         case .ompApproval:
             try approval(action)
+        case .ompQuestion, .ompQuestionReview:
+            try question(action)
         case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFetch, .claudePlan, .claudeQuestion,
             .claudeQuestionReview, .claudeWorkspaceTrust, .codexExec, .codexPatch, .codexNetwork, .codexQuestion,
             .codexAsyncCollapsed, .codexAsyncQuestion:
@@ -41,4 +45,51 @@ struct OMPDialogPlanner {
     }
 
     private static let deny = DialogActionPlan(steps: [.keys(["esc"])], confirmation: .fingerprintChangeOrUnblocked)
+
+    private var confirmation: ConfirmationRule {
+        toolUseID.map { .toolResult(id: $0) } ?? .fingerprintChangeOrUnblocked
+    }
+
+    /// Digits do nothing on a question: one arrow key per row, each checked,
+    /// then Enter, which answers and turns to the next tab, or submits on
+    /// the review page. Esc cancels the question and ends the turn. While
+    /// the prompt below holds a draft, every key but Esc goes to the draft.
+    private func question(_ action: DialogAction) throws(DialogPlanError) -> DialogActionPlan {
+        if action == .dismiss {
+            return DialogActionPlan(steps: [.keys(["esc"])], confirmation: confirmation)
+        }
+        guard !dialog.focus.composerDraftGuard else { throw .composerDraft }
+        switch action {
+        case .choose(let ordinal):
+            guard let option = dialog.option(ordinal) else { throw .noSuchOption(ordinal) }
+            switch option.role {
+            case .answer, .submit:
+                var builder = StepBuilder(dialog: dialog)
+                try builder.press(option)
+                if option.role == .answer { builder.append(pageTurn()) }
+                return DialogActionPlan(steps: builder.steps, confirmation: confirmation)
+            case .otherText:
+                throw Self.typedAnswer
+            default:
+                throw .noSuchOption(ordinal)
+            }
+        case .respond, .amend:
+            throw Self.typedAnswer
+        case .dismiss, .approvePlan, .submitSelection, .expandQuestions, .skipQuestion:
+            throw .unsupported("The question has no such action.")
+        }
+    }
+
+    private static let typedAnswer = DialogPlanError.unsupported(
+        "Heeler doesn't type into Oh My Pi's questions. Write your own answer or a note in the terminal.")
+
+    /// Answering a tab shows the next one, and after the last the review.
+    private func pageTurn() -> [DialogStep] {
+        let headers = dialog.subject.questionHeaders
+        guard dialog.kind == .ompQuestion, headers.count > 1, let current = dialog.progress,
+            let index = headers.firstIndex(of: current)
+        else { return [] }
+        let next = headers.indices.contains(index + 1) ? headers[index + 1] : "Review answers"
+        return [.expect(.page(next))]
+    }
 }

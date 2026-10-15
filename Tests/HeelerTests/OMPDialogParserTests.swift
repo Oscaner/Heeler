@@ -71,18 +71,133 @@ struct OMPDialogParserTests {
         #expect(excerpt.rows.first?.trimmedText.hasPrefix("╭─ Plan Review ─") == true)
     }
 
-    /// Until Heeler answers OMP's questions, they hold sending as excerpts.
-    @Test(arguments: ["omp-27-ask-a-dialog", "omp-28-ask2-a-dialog", "omp-29-guard-b-ask-with-draft"])
-    func askPanelsAreUnrecognizedForNow(stem: String) throws {
-        let excerpt = try #require(try parse(stem).excerpt, "\(stem)")
-        #expect(excerpt.numbered.isEmpty)
-        #expect(excerpt.rows.first?.trimmedText.hasPrefix("╭─ Ask ─") == true)
+    // MARK: Ask
+
+    @Test func askSingleQuestionFocusStartsOnFirst() throws {
+        let ask = try dialog("omp-27-ask-a-dialog")
+        #expect(ask.kind == .ompQuestion)
+        #expect(ask.program == .omp)
+        #expect(ask.title == "Pick a fruit")
+        #expect(ask.subject.question == "Pick a fruit")
+        #expect(ask.subject.questionHeaders.isEmpty)
+        #expect(ask.progress == nil)
+        #expect(ask.body == ["Pick a fruit"])
+        #expect(ask.rows == 28..<40)
+        #expect(ask.options.map(\.label) == ["apple", "pear", "plum", "Other (type your own)"])
+        #expect(ask.options.map(\.role) == [.answer, .answer, .answer, .otherText])
+        #expect(ask.options.allSatisfy { $0.number == nil && $0.input == nil })
+        #expect(ask.focus == DialogFocusState(focusedOrdinal: 1))
     }
 
-    /// A focus move changes only the pointer, not the excerpt's fingerprint.
-    @Test func anAskExcerptKeepsItsFingerprintAsFocusMoves() throws {
-        let first = try #require(try parse("omp-27-ask-a-dialog").fingerprint)
-        #expect(try parse("omp-27-ask-c-after-down").fingerprint == first)
+    @Test func askFocusMovesWithDown() throws {
+        let first = try dialog("omp-27-ask-a-dialog")
+        let moved = try dialog("omp-27-ask-c-after-down")
+        #expect(moved.focus.focusedOrdinal == 2)
+        #expect(moved.fingerprint == first.fingerprint)
+    }
+
+    /// OMP binds no digits to its options: `2` leaves the panel as it was.
+    @Test func digitDoesNotChangeTheDialog() throws {
+        let first = try dialog("omp-27-ask-a-dialog")
+        let afterDigit = try dialog("omp-27-ask-b-after-digit2")
+        #expect(afterDigit.fingerprint == first.fingerprint)
+        #expect(afterDigit.focus == first.focus)
+    }
+
+    /// Two questions add a tab row; Enter on the first turns to the second.
+    @Test func askTabsAndSecondPage() throws {
+        let fruit = try dialog("omp-28-ask2-a-dialog")
+        #expect(fruit.kind == .ompQuestion)
+        #expect(fruit.subject.questionHeaders == ["fruit", "size"])
+        #expect(fruit.progress == "fruit")
+        #expect(fruit.subject.question == "Pick a fruit")
+        #expect(fruit.options.map(\.label) == ["apple", "pear", "Other (type your own)"])
+        #expect(fruit.focus.focusedOrdinal == 1)
+
+        let size = try dialog("omp-28-ask2-b-after-enter-q1")
+        #expect(size.kind == .ompQuestion)
+        #expect(size.progress == "size")
+        #expect(size.subject.question == "Pick a size")
+        #expect(size.options.map(\.label) == ["small", "large", "Other (type your own)"])
+        #expect(size.focus.focusedOrdinal == 1)
+        #expect(size.fingerprint != fruit.fingerprint)
+    }
+
+    @Test func submitPageIsReview() throws {
+        let review = try dialog("omp-28-ask2-c-submit-page")
+        #expect(review.kind == .ompQuestionReview)
+        #expect(review.title == "Review answers")
+        #expect(review.progress == "Review answers")
+        #expect(review.subject.questionHeaders == ["fruit", "size"])
+        #expect(
+            review.subject.reviewAnswers == [
+                .init(question: "fruit", answer: "apple"), .init(question: "size", answer: "small"),
+            ])
+        #expect(review.options.map(\.label) == ["Submit"])
+        #expect(review.options.map(\.role) == [.submit])
+        #expect(review.focus.focusedOrdinal == 1)
+    }
+
+    /// A draft in the prompt below turns the hints into `Finish or clear the
+    /// current prompt to answer`; Enter in the terminal queues the draft
+    /// and the same question takes keys again.
+    @Test func draftGuardSetsGuardWithoutChangingFingerprint() throws {
+        let guarded = try dialog("omp-29-guard-b-ask-with-draft")
+        let free = try dialog("omp-29-guard-c-after-enter")
+        #expect(guarded.kind == .ompQuestion)
+        #expect(guarded.title == "Pick a color")
+        #expect(guarded.rows == 26..<38)
+        #expect(guarded.focus.composerDraftGuard)
+        #expect(!free.focus.composerDraftGuard)
+        #expect(guarded.focus.focusedOrdinal == free.focus.focusedOrdinal)
+        #expect(guarded.fingerprint == free.fingerprint)
+    }
+
+    @Test func aRecommendedOptionLosesItsMark() {
+        let screen = Self.ask(["Pick a fruit"], options: ["\u{F054} \u{F10C} apple (Recommended)", "  \u{F10C} pear"])
+        let ask = BlockedDialogParser.parse(screen, program: .omp).dialog
+        #expect(ask?.options.map(\.label) == ["apple", "pear"])
+    }
+
+    /// Only the radio seen live is read: a multi-select question's rows, an
+    /// option's description or any other row leaves the question to the
+    /// terminal.
+    @Test(arguments: [
+        ["\u{F054} \u{F096} apple", "  \u{F096} pear"],
+        ["\u{F054} \u{F10C} apple", "    A round fruit", "  \u{F10C} pear"],
+        ["\u{F054}\u{F10C} apple"],
+    ])
+    func optionRowsHeelerDoesNotKnowAreUnrecognized(options: [String]) throws {
+        let screen = Self.ask(["Pick a fruit"], options: options)
+        let excerpt = try #require(BlockedDialogParser.parse(screen, program: .omp).excerpt)
+        #expect(excerpt.numbered.isEmpty)
+        #expect(excerpt.reason.contains("single-select"))
+    }
+
+    @Test func aDrawnMultiSelectQuestionIsUnrecognized() async throws {
+        let tui = FakeQuestionTUI(
+            .omp, [.init(header: "fruit", text: "Pick fruits", options: ["apple", "pear"], isMultiSelect: true)])
+        #expect(BlockedDialogParser.parse(await tui.read(), program: .omp).excerpt != nil)
+    }
+
+    /// The drawn program reads like the captures, page by page.
+    @Test func theDrawnAskReadsLikeTheCaptures() async throws {
+        let tui = FakeQuestionTUI(
+            .omp, [
+                .init(header: "fruit", text: "Pick a fruit", options: ["apple", "pear"]),
+                .init(header: "size", text: "Pick a size", options: ["small", "large"]),
+            ])
+        for (stem, keys) in [
+            ("omp-28-ask2-a-dialog", [String]()), ("omp-28-ask2-b-after-enter-q1", ["enter"]),
+            ("omp-28-ask2-c-submit-page", ["enter"]),
+        ] {
+            if !keys.isEmpty { await tui.send(keys) }
+            let drawn = try #require(BlockedDialogParser.parse(await tui.read(), program: .omp).dialog, "\(stem)")
+            let captured = try dialog(stem)
+            #expect(drawn.fingerprint == captured.fingerprint, "\(stem)")
+            #expect(drawn.focus == captured.focus, "\(stem)")
+            #expect(drawn.subject == captured.subject, "\(stem)")
+        }
     }
 
     /// Idle and working screens with tool renderings in the history, and
@@ -110,6 +225,17 @@ struct OMPDialogParserTests {
     }
 
     // MARK: Helpers
+
+    /// An `Ask` panel with these question and option rows, ending the
+    /// screen.
+    private static func ask(_ question: [String], options: [String]) -> ANSIScreen {
+        let rule = "├" + String(repeating: "─", count: 30) + "┤"
+        let rows =
+            ["Asking…", "╭─ Ask " + String(repeating: "─", count: 24) + "╮"] + question.map { "│ \($0) │" } + [rule]
+            + options.map { "│ \($0) │" } + [rule, "│ \u{F0311} select · ↑/↓ move · \u{F12B7} cancel │"]
+            + ["╰" + String(repeating: "─", count: 30) + "╯"]
+        return ScreenFixture.synthetic(rows)
+    }
 
     private static let band =
         "\u{1B}[48;2;15;18;22m \u{2839} 1m  project \u{1B}[0m──3%────272K─"

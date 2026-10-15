@@ -10,14 +10,15 @@ import Foundation
 /// Heeler never clears it.
 enum DialogActionPlanner {
     /// - Parameter toolUseID: The matched request's `tool_use` id, which
-    ///   lets a Claude card confirm by the request's result.
+    ///   lets a Claude card or an Oh My Pi question confirm by the request's
+    ///   result.
     static func plan(
         _ action: DialogAction, for dialog: BlockedDialog, toolUseID: String? = nil
     ) throws(DialogPlanError) -> DialogActionPlan {
         switch dialog.program {
         case .claude: try ClaudeDialogPlanner(dialog: dialog, toolUseID: toolUseID).plan(action)
         case .codex: try CodexDialogPlanner(dialog: dialog).plan(action)
-        case .omp: try OMPDialogPlanner(dialog: dialog).plan(action)
+        case .omp: try OMPDialogPlanner(dialog: dialog, toolUseID: toolUseID).plan(action)
         case .pi: throw .unsupported("Answer this dialog in the Agent terminal.")
         }
     }
@@ -75,7 +76,7 @@ extension BlockedDialog {
 }
 
 /// Collects steps while tracking where focus will be once they have run.
-private struct StepBuilder {
+struct StepBuilder {
     let dialog: BlockedDialog
     private(set) var steps: [DialogStep] = []
     private(set) var focus: Int?
@@ -319,7 +320,7 @@ private struct CodexDialogPlanner {
         case .codexAsyncQuestion:
             try asyncQuestion(action)
         case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFetch, .claudePlan, .claudeQuestion,
-            .claudeQuestionReview, .claudeWorkspaceTrust, .ompApproval:
+            .claudeQuestionReview, .claudeWorkspaceTrust, .ompApproval, .ompQuestion, .ompQuestionReview:
             throw .unsupported("Not a Codex dialog.")
         }
     }

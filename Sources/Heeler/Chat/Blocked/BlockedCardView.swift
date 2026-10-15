@@ -140,7 +140,7 @@ private struct BlockedDialogCard: View {
             let plan = card.request?.summary ?? ""
             let shown = dialog.body.filter { !$0.hasPrefix("Claude has written up a plan") }
             BlockedPlanBox(text: plan.isEmpty ? shown.joined(separator: "\n") : plan)
-        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion:
+        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion:
             VStack(alignment: .leading, spacing: 4) {
                 // Codex's asynchronous questions name their page by the
                 // question itself.
@@ -153,7 +153,7 @@ private struct BlockedDialogCard: View {
                     .font(.body.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
             }
-        case .claudeQuestionReview:
+        case .claudeQuestionReview, .ompQuestionReview:
             ForEach(Array(subject.reviewAnswers.enumerated()), id: \.offset) { _, pair in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: pair.question)
@@ -189,7 +189,8 @@ private struct BlockedDialogCard: View {
 
     // MARK: Choices
 
-    /// Matches the planner: only Claude asks multi-select questions.
+    /// Matches the planner: only Claude asks multi-select questions here;
+    /// Oh My Pi's stay in the terminal.
     private var isMultiSelect: Bool {
         dialog.kind == .claudeQuestion && dialog.options.contains { $0.role == .next }
     }
@@ -248,6 +249,18 @@ private struct BlockedDialogCard: View {
             Button("Skip Question") { perform(.skipQuestion) }
                 .font(.subheadline)
                 .buttonStyle(.borderless)
+        case .ompQuestion, .ompQuestionReview:
+            VStack(alignment: .leading, spacing: 4) {
+                if dialog.focus.composerDraftGuard {
+                    Text(verbatim: DialogPlanError.composerDraft.message)
+                }
+                if dialog.options.contains(where: { $0.role == .otherText }) {
+                    Text("Type your own answer in the terminal.")
+                }
+                Text("Stop cancels the question and ends Oh My Pi's turn.")
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         default:
             EmptyView()
         }
@@ -405,7 +418,7 @@ private struct BlockedCollapsedBar: View {
 private extension BlockedDialog {
     var cardTitle: String {
         switch kind {
-        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion: "Question"
+        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion: "Question"
         case .codexAsyncCollapsed: "Questions"
         case .ompApproval: "Allow \(subject.toolName ?? "Tool")"
         default: title.hasSuffix(":") ? String(title.dropLast()) : title

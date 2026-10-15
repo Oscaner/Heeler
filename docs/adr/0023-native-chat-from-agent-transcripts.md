@@ -206,7 +206,14 @@ Pi's tool approval binds no digits and ignores its approve key for 500 ms
 after it draws, a span that starts before Chat first sees it: Approve presses
 ctrl+q once the panel has shown for 650 ms, and Deny presses Esc, after which
 Oh My Pi goes on with the turn. ctrl+enter is never sent, since without kitty
-keys it reads as Enter. A dialog the parsers do not know gets a generic card
+keys it reads as Enter. Oh My Pi's single-select question ignores digits, so
+its card moves one arrow key per row, checks the focus after each, and presses
+Enter. Several questions are answered page by page, each page its own card,
+then the review page's Submit; an answer is confirmed by the `ask` result or
+by the next page. While Oh My Pi's prompt holds a draft, keys would go into
+it, so the card answers nothing but Stop and says to queue or clear the draft
+in the terminal. Multi-select questions and typed answers stay in the
+terminal. A dialog the parsers do not know gets a generic card
 with the Agent controls. Answers the transcript does not record join the
 history as Allowed, Declined, Stopped and Answered rows.
 
