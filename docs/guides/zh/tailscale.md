@@ -1,4 +1,4 @@
-<!-- Translated from docs/guides/tailscale.md at 9fe5247e -->
+<!-- Translated from docs/guides/tailscale.md at 7d2aa4fd -->
 
 # 通过 Tailscale 连接 Heeler
 
@@ -94,7 +94,7 @@ chmod 700 "$TS_STATE_DIR"
   --socket="$TS_STATE_DIR/tailscaled.socket"
 ```
 
-请保持**终端 A** 处于打开状态。Tailscale 仅在该窗口打开期间运行。
+请保持**终端 A** 打开，直到完成登录和连接检查。之后如需关闭终端仍保持运行，可配置[自动启动](#5-登录后自动启动可选)。
 
 ### 4. 登录 Mac 节点
 
@@ -118,18 +118,100 @@ TS_STATE_DIR="$HOME/.local/share/heeler-tailscale"
 
 然后继续完成[从 Heeler 加入同一个 tailnet](#3-从-heeler-加入同一个-tailnet)到[验证连接是否正常](#5-验证连接是否正常)的步骤。在[将 Mac 添加为 Host](#4-将-mac-添加为-host)中，通过 **Choose from Tailnet…** 选择 `heeler-mac-userspace`，或直接输入刚才记下的 IPv4 地址。使用 Heeler 期间请保持 Mac 唤醒且**终端 A** 打开。
 
+### 5. 登录后自动启动（可选）
+
+使用用户级 LaunchAgent，让同一个用户态进程在每次登录 Mac 后自动启动，并在进程退出时重新拉起。无需 `sudo`，也不会添加系统 VPN。它沿用上面的状态目录，保留同一个 Tailscale 身份和 IP；除非授权过期，否则无需重新登录。
+
+这是**用户登录后启动**，不是重启后、登录前启动。它无法在 FileVault 解锁界面运行，也不能让休眠中的 Mac 保持可连接。若需要在用户登录前提供无人值守访问，需由管理员另行配置系统级 LaunchDaemon，本教程不涵盖该方式。
+
+先在**终端 A** 中按 **Control-C**。不要同时运行手动进程和 LaunchAgent。
+
+在**终端 B** 中查询绝对路径，并创建 LaunchAgents 目录：
+
+```sh
+brew --prefix tailscale
+printf '%s\n' "$HOME"
+mkdir -p "$HOME/Library/LaunchAgents"
+```
+
+创建 `~/Library/LaunchAgents/dev.heeler.tailscaled.plist`，填入以下内容。将所有 `TAILSCALE_PREFIX` 替换为第一条命令的输出（Apple Silicon 通常为 `/opt/homebrew/opt/tailscale`，Intel 通常为 `/usr/local/opt/tailscale`），将所有 `MAC_HOME` 替换为第二条命令的输出。plist 内必须使用绝对路径，不能使用 `~`、`$HOME` 或 shell 命令。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.heeler.tailscaled</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>TAILSCALE_PREFIX/bin/tailscaled</string>
+        <string>--tun=userspace-networking</string>
+        <string>--statedir=MAC_HOME/.local/share/heeler-tailscale</string>
+        <string>--socket=MAC_HOME/.local/share/heeler-tailscale/tailscaled.socket</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>StandardOutPath</key>
+    <string>MAC_HOME/.local/share/heeler-tailscale/tailscaled.log</string>
+    <key>StandardErrorPath</key>
+    <string>MAC_HOME/.local/share/heeler-tailscale/tailscaled.log</string>
+</dict>
+</plist>
+```
+
+在 Mac 桌面会话的终端中校验并加载：
+
+```sh
+PLIST="$HOME/Library/LaunchAgents/dev.heeler.tailscaled.plist"
+chmod 600 "$PLIST"
+plutil -lint "$PLIST" && launchctl bootstrap "gui/$(id -u)" "$PLIST"
+launchctl print "gui/$(id -u)/dev.heeler.tailscaled"
+```
+
+如果校验失败，先修正 plist 再加载。服务状态应显示 `state = running`。确认 Tailscale 仍已登录，且 IP 与之前记录的一致：
+
+```sh
+"$(brew --prefix tailscale)/bin/tailscale" \
+  --socket="$HOME/.local/share/heeler-tailscale/tailscaled.socket" status
+"$(brew --prefix tailscale)/bin/tailscale" \
+  --socket="$HOME/.local/share/heeler-tailscale/tailscaled.socket" ip -4
+```
+
+现在可以关闭两个终端。再次从 Heeler 检查 Host，然后在重启 Mac 并登录后重复检查。若启动失败，检查上面的 `launchctl print` 输出及日志：
+
+```sh
+tail -n 50 "$HOME/.local/share/heeler-tailscale/tailscaled.log"
+```
+
+如需停止受管进程，应卸载服务，而不是直接结束进程（`KeepAlive` 会将它重新拉起）：
+
+```sh
+launchctl bootout "gui/$(id -u)/dev.heeler.tailscaled"
+```
+
+用上面的 `bootstrap` 命令可重新加载。如需永久关闭自动启动，卸载服务后再删除 plist：
+
+```sh
+rm "$HOME/Library/LaunchAgents/dev.heeler.tailscaled.plist"
+```
+
 ### 停止或移除 Mac 节点
 
-如需停止通过 tailnet 访问这台 Mac，在**终端 A** 中按 **Control-C** 即可。需要恢复时，重新执行[启动 Tailscale](#3-启动-tailscale)。重启 Mac 或注销账户后 Tailscale 也会停止。
+对于手动启动的进程，在**终端 A** 中按 **Control-C** 即可停止 tailnet 访问。需要恢复时，重新执行[启动 Tailscale](#3-启动-tailscale)。重启 Mac 或注销账户后它也会停止。如果已配置自动启动，请改用上面的 `bootout`；除非删除 plist，否则 LaunchAgent 会在下次登录时再次启动。
 
-如需将这台 Mac 从 tailnet 中移除，请在**终端 A** 仍在运行时执行：
+如需将这台 Mac 从 tailnet 中移除，请在进程仍在运行时执行（手动启动或由 LaunchAgent 托管均可）：
 
 ```sh
 "$(brew --prefix tailscale)/bin/tailscale" \
   --socket="$HOME/.local/share/heeler-tailscale/tailscaled.socket" logout
 ```
 
-然后在**终端 A** 中按 **Control-C**，并删除保存的本地状态：
+然后停止进程：如果使用 LaunchAgent，按上文卸载服务并删除 plist；如果是手动启动，在**终端 A** 中按 **Control-C**。完成后再删除保存的本地状态：
 
 ```sh
 rm -rf "$HOME/.local/share/heeler-tailscale"
@@ -146,10 +228,10 @@ rm -rf "$HOME/.local/share/heeler-tailscale"
 | SSH 登录失败 | 请使用 Mac 系统的密钥或账户密码，不要填 Tailscale 账号密码。 |
 | SSH 正常但 herdr 检查失败 | 按[准备 Host](overlay-networks.md#准备-host)重新检查 herdr 状态。 |
 | 显示 **Not signed in** 或 **Signed out** | 在网络列表行上轻点 **Sign In**，或点进该网络后轻点 **Sign In with Browser**。 |
-| 免 VPN 模式：终端 B 无法连接 Tailscale，或显示了另一台机器 | 确保终端 A 仍在运行，并完整复制终端 B 中的命令。 |
+| 免 VPN 模式：终端 B 无法连接 Tailscale，或显示了另一台机器 | 确保终端 A 仍在运行，或检查 LaunchAgent，并使用教程中指定的 socket 路径。 |
 | 免 VPN 模式：Mac 在线但 SSH 超时 | 确认在 Mac 上运行 `nc -vz 127.0.0.1 22` 成功，且访问规则允许 Heeler 访问该 Mac 的 `tcp:22`。 |
 | 免 VPN 模式：Mac 上的其他应用无法访问 tailnet 设备 | 这是预期行为。在此模式下，Mac 本机应用不走 tailnet，但 tailnet 设备仍可连入 Mac。 |
-| 免 VPN 模式：重启后无法连接 | 在终端 A 中重新运行[启动 Tailscale](#3-启动-tailscale)。 |
+| 免 VPN 模式：重启后无法连接 | 若已配置[自动启动](#5-登录后自动启动可选)，先登录 Mac，再检查服务和日志。否则在终端 A 中重新运行[启动 Tailscale](#3-启动-tailscale)。 |
 
 ## 退出登录或移除 Heeler
 
