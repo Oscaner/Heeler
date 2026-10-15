@@ -232,7 +232,7 @@ leaves the detail; a later session discovers whatever its terminal shows anew.
 _Avoid_: recent link, visible link, link history
 
 **Chat**:
-The native conversation a Claude Code or Codex Agent's detail can show in its
+The native conversation a Claude Code, Codex, Pi or Oh My Pi Agent's detail can show in its
 terminal's place, read from the Agent's Transcript. Chat holds no Attach; its
 Composer and draft are the terminal's. Send is one `agent.prompt` request, made
 only after a screen read shows the program's input box empty, and refused for
@@ -246,7 +246,10 @@ _Avoid_: chat mode, conversation view, Monitor (ADR 0012's removed surface)
 **Transcript**:
 The file an Agent's program writes on its Host as its record of the
 conversation: Claude Code's session JSONL, with its subagents' files, or a
-Codex rollout. The session herdr reports names it. Heeler only reads it, over
+Codex rollout, or a Pi/Oh My Pi v2-v3 tree JSONL. For Pi and Oh My Pi, herdr
+normally names the exact absolute file path; a UUID can also locate a session
+under that program's default sessions directory. The session herdr reports
+names it. Heeler only reads it, over
 SFTP, and keeps decoded entries, never tool output, in an on-device cache.
 _Avoid_: log, history file, session file
 

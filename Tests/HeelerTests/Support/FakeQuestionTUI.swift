@@ -1,4 +1,5 @@
 import Foundation
+import Testing
 
 @testable import Heeler
 
@@ -78,6 +79,7 @@ actor FakeQuestionTUI {
             switch program {
             case .claude: claudePress(key)
             case .codex: codexPress(key)
+            case .pi, .omp: Issue.record("FakeQuestionTUI only models Claude and Codex")
             }
         }
     }
@@ -93,6 +95,8 @@ actor FakeQuestionTUI {
         case .codex:
             // A paste on the highlighted option opens its notes.
             notes = (notes ?? "") + text
+        case .pi, .omp:
+            Issue.record("FakeQuestionTUI only models Claude and Codex")
         }
     }
 

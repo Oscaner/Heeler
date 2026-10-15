@@ -6,6 +6,8 @@ import Foundation
 enum ChatProgram: String, Codable, Sendable, CaseIterable {
     case claude
     case codex
+    case pi
+    case omp
 }
 
 /// What herdr last reported the Agent doing. Adapters need it only to tell a

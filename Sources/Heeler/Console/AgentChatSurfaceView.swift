@@ -45,6 +45,8 @@ struct AgentChatSurfaceView: View {
     @State private var surfaceHeight: CGFloat = 0
     @State private var jumpRequest = 0
     @State private var followRequest = 0
+    @State private var collapseRequest = 0
+    @State private var canCollapseTrajectory = false
     @State private var composerKeyboardPresentation: AgentComposerKeyboardPresentation = .hidden
     @State private var isConfirmingClose = false
     @State private var isSelectingPhoto = false
@@ -321,6 +323,11 @@ struct AgentChatSurfaceView: View {
         .overlay(alignment: .bottom) {
             HStack {
                 Spacer(minLength: 0)
+                ChatCollapseTrajectoryButton(
+                    isVisible: presentation == .timeline && timeline.state.isReady && canCollapseTrajectory
+                ) {
+                    collapseRequest += 1
+                }
                 ChatJumpToLatestButton(
                     isVisible: presentation == .timeline && timeline.state.isReady && !isFollowing
                 ) {
@@ -425,6 +432,7 @@ struct AgentChatSurfaceView: View {
         ZStack(alignment: .top) {
             ChatTimelineView(
                 state: timeline.state, jumpRequest: jumpRequest, followRequest: followRequest,
+                collapseRequest: collapseRequest,
                 topObstruction: headerObstruction + bannerHeight, actions: timelineActions)
             .accessibilityHidden(presentation != .timeline)
             if presentation != .timeline {
@@ -596,7 +604,8 @@ struct AgentChatSurfaceView: View {
             loadImage: { [weak chat] path in
                 guard let chat else { throw ChatImagePreviewError.unavailable }
                 return try await chat.readImage(at: path)
-            })
+            },
+            collapseAvailabilityChanged: { canCollapseTrajectory = $0 })
     }
 
     /// What an expanded row whose output was never read says until it can

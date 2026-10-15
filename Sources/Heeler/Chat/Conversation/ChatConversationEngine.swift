@@ -104,6 +104,9 @@ struct ChatTranscriptAdapter: Sendable {
     var limits = TranscriptFollower.Limits()
     /// Whether `makeReducer` needs the file's first line.
     var wantsFirstLine = false
+    /// Tree transcripts must prove ancestry from live records before
+    /// restoring earlier entries: a cached prefix may belong to an old branch.
+    var joinsCachedHistory = true
     var makeReducer: @Sendable (ChatReducerSeed) -> any ChatTranscriptReducer
     /// What a sent prompt and a recorded one are compared on: the text as
     /// the program records it, which drops what Heeler adds when it sends.
@@ -532,6 +535,16 @@ actor ChatConversationEngine {
             case .failure(.compressed): return .unavailable(.compressed)
             case .failure(.mismatched): return .unavailable(.mismatched)
             }
+        case .pi, .omp:
+            switch try await PiTranscriptLocator(files: files).locate(
+                reference: reference, directories: directories)
+            {
+            case .success(let path): return .found(path)
+            case .failure(.notFound(let searchedAll)): return .unavailable(.notFound(searchedAll: searchedAll))
+            case .failure(.mismatched): return .unavailable(.mismatched)
+            case .failure(.unsupportedVersion(let version)):
+                return .unavailable(.unsupportedFormat("Pi session version \(version)"))
+            }
         }
     }
 
@@ -597,7 +610,7 @@ actor ChatConversationEngine {
     /// The saved document when its entries continue the live window without
     /// a gap.
     private func joinedCache(windowStart: UInt64) -> ChatCacheDocument? {
-        guard let cached, windowStart > 0, cached.coverageEnd >= windowStart,
+        guard adapter.joinsCachedHistory, let cached, windowStart > 0, cached.coverageEnd >= windowStart,
             cached.coverageStart < windowStart
         else { return nil }
         return cached

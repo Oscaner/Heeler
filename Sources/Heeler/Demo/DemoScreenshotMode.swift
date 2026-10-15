@@ -12,13 +12,19 @@
         static let hostProblemsArgument = "--demo-host-problems"
         /// Opens Agent details on Chat instead of the terminal.
         static let chatArgument = "--demo-chat"
+        /// Uses Pi and Oh My Pi JSONL samples through the production adapters.
+        static let piChatArgument = "--demo-pi-chat"
+
+        static var showsPiChat: Bool {
+            ProcessInfo.processInfo.arguments.contains(piChatArgument)
+        }
 
         static var showsHostProblems: Bool {
             ProcessInfo.processInfo.arguments.contains(hostProblemsArgument)
         }
 
         static var opensChat: Bool {
-            ProcessInfo.processInfo.arguments.contains(chatArgument)
+            ProcessInfo.processInfo.arguments.contains(chatArgument) || showsPiChat
         }
 
         /// Adds one Host per Heeler plugin state, with notifications already
@@ -404,8 +410,8 @@
                     "mobile:p4": "VoiceOver audit complete. 0 blockers.",
                 ],
                 terminalOutputs: [
-                    "mobile:p1": terminalOutput,
-                    "docs:p2": terminalOutput,
+                    "mobile:p1": DemoPiChatSample.terminalOutput(forPane: "mobile:p1") ?? terminalOutput,
+                    "docs:p2": DemoPiChatSample.terminalOutput(forPane: "docs:p2") ?? terminalOutput,
                     "mobile:p4": terminalOutput,
                     "terminal:mobile:p5": devServerOutput,
                     "terminal:mobile:p6": shellPromptOutput,
@@ -543,7 +549,8 @@
             title: String,
             cwd: String
         ) -> AgentInfo {
-            AgentInfo(
+            let sample = DemoScreenshotMode.showsPiChat ? DemoPiChatSample.identity(forPane: paneID) : nil
+            return AgentInfo(
                 agentStatus: status,
                 focused: false,
                 paneID: paneID,
@@ -551,11 +558,11 @@
                 tabID: "\(workspaceID):t1",
                 terminalID: "terminal:\(paneID)",
                 workspaceID: workspaceID,
-                agent: kind,
+                agent: sample?.kind ?? kind,
                 agentSession: DemoChatSample.session(forPane: paneID),
                 cwd: cwd,
-                name: name,
-                terminalTitleStripped: title)
+                name: sample?.name ?? name,
+                terminalTitleStripped: sample?.title ?? title)
         }
 
         /// A plain shell pane alone in its own tab, as `tab.create` leaves it.

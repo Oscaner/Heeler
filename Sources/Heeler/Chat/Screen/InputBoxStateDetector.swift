@@ -40,6 +40,7 @@ enum InputBoxStateDetector {
         switch program {
         case .claude: return claude(screen)
         case .codex: return codex(screen)
+        case .pi, .omp: return PiInputBoxDetector.detect(screen, program: program)
         }
     }
 
