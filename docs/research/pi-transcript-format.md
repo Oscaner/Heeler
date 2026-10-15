@@ -33,6 +33,20 @@ fixed-width `{type: title, ...}` slot before that header. Locate validates the
 header (including its UUID for UUID lookup). Versions 2 and 3 are supported;
 legacy v1 and unknown future versions show an unavailable explanation.
 
+Neither program writes the file when the session starts (live on Pi 0.85.1
+and OMP 18.11.1 with herdr 0.9.5, 2026-10-15). Pi wrote the session header, model
+and thinking records, the prompt and the first reply in one write; OMP did the same
+with its title slot, a `system-prompt-digest` custom record and a
+`credential_pin`, or wrote at the first `tool_execution_start` when that tool
+needed approval. A Pi session that never got a prompt left no file. OMP
+18.11.1 rewrote its title slot in place (same inode) and appended
+`title_change{source: auto}`. It rewrote the whole file atomically (new inode)
+once, after an answered `ask`: the session header gained `title` and
+`titleSource`, earlier assistant messages gained `errorId: 0`, and an empty
+`branch_summary` was appended. Two turns that re-read the same file appended
+only, unlike 18.10.4. Chat therefore identifies a Pi/OMP file by its header's
+session id, not by its first bytes.
+
 ## Tree and content
 
 Entries have `id`, `parentId`, `timestamp`, and `type`. Replay the last
@@ -54,9 +68,9 @@ results retain activity-derived running/blocked/interrupted status. Assistant
 extension messages become notices; hidden extension state remains invisible.
 Unknown record types remain tree links and are counted in diagnostics.
 
-Observed on 2026-10-15 with Pi 0.85.1 and Oh My Pi 18.11.1 (the
-`pi/auth-error-skill.jsonl` and `omp/approvals-asks-plan.jsonl` Chat
-fixtures):
+Observed live on 2026-10-15 with Pi 0.85.1 and Oh My Pi 18.11.1 on herdr
+0.9.5 (excerpts in the `pi/auth-error-skill.jsonl` and
+`omp/approvals-asks-plan.jsonl` Chat fixtures):
 
 - Pi records `/skill:name args` as a user message holding the expanded
   `<skill name="…" location="…">` block, then a blank line and the
@@ -85,6 +99,32 @@ fixtures):
   plan-ready notice instead of an interruption.
 - OMP's atomic file rewrite appends a `branch_summary` with an empty
   `summary` and `details.kind: discarded-entry-branch`, which Chat hides.
+- Tool-call ids can contain `|` (`call…|fc_…` in both programs with these
+  models). OMP writes a `custom` `tool_execution_start` record before each
+  tool, and a `custom` `session_exit` on `/exit`; neither shows in Chat.
+- OMP marks a message that steered a running turn `steering: true`; that
+  includes text typed into an approval's prompt and sent with Enter, which
+  first records the denied tool result. Pi writes a steer as a plain user
+  message right after the running batch's tool results (0–1 ms apart),
+  timestamped when it was queued; a steer still queued when Esc interrupts
+  the turn is never written.
+- Edits: OMP with an OpenAI Codex model calls `edit` with a free-form
+  `arguments.input` patch (`customWireName: edit`), and its result's
+  `details` hold `path`, `op`, `firstChangedLine`, `oldText`, `newText` and a
+  numbered `diff` without hunk headers (` 1|alpha\n-2|beta\n+2|BETA`). Pi
+  calls `edit` with `{path, edits[{oldText, newText}]}`, and its result's
+  `details` hold `firstChangedLine`, a display `diff` and a unified `patch`.
+  Chat reads both as file changes (`PiFileChanges`).
+- Pi records `/skill:name` without arguments as the `<skill>` block alone,
+  ending at `</skill>`.
+- Pi's retryable provider error (`Connection error.`) records an empty
+  assistant message with `stopReason: error`; the retried reply's `parentId`
+  is that error message, so the error is not the branch's last word. A
+  cancelled retry records nothing.
+- Pi's compaction records `{summary, firstKeptEntryId, tokensBefore,
+  details{readFiles, modifiedFiles}, usage, fromHook: false}`, with
+  `firstKeptEntryId` the last assistant message. `/compact` with nothing to
+  compact records nothing in either program.
 
 ## Input and limits
 
@@ -94,13 +134,37 @@ merged into the bottom border, with a `▏` insertion cursor. OMP 18.10.4 now
 defaults to `band`: a filled status row above an unboxed `╰─ ` prompt
 (`pi-tui/src/components/composer/band.ts`). herdr 0.9.1's visible ANSI
 screen can omit the hardware cursor for this composer.
-The detector requires the normal-mode `π > ` status band, its fill and gauge,
-and reads every following editor row; missing/custom chrome stays unsendable.
-Chat sends only
-after positively reading an empty stock editor. Drafts, completion popups,
-custom editors and unrecognized composer styles require the terminal. Native
-permission-dialog actions are not implemented for Pi/OMP; no generic digit
-option is sent to them. Stop and explicit tools keys retain the existing RPCs.
+
+Live screens (Pi 0.85.1 and OMP 18.11.1 on herdr 0.9.5, now the
+`ChatFixtures/screens/pi` and `screens/omp` fixtures) corrected the earlier
+source reading:
+
+- OMP 18.11.1's nerd preset starts the band at column 0 with U+E0B6; the
+  next segment is U+F0D57 while idle (plan mode included) and a braille
+  spinner with seconds while a turn runs or a dialog is Blocked. Before the
+  first message the prompt row carries an italic right-aligned hint, `to
+  change thinking effort`, which is not a draft. A titled panel such as
+  `╭─ Allow tool: bash ─…╮` rests on the band with the spinner and an empty
+  `╰─` still below it; an `ask` without a draft replaces the composer, and
+  the Plan Review fills the screen with no composer.
+- `/compact ` with a trailing space is completed to `/compact soft ` with grey
+  ghost text and not submitted; only an ANSI read tells the ghost text apart.
+- Pi's footer is a working-directory row (`/private/tmp/...` outside the home
+  directory, cut with `...` at 40 columns) and a stats row such as `$0.000
+  (sub) 0.0%/500k (auto)`, directly under the editor's bottom rule. Its
+  completion list draws between that rule and the footer, and now marks
+  skills and prompt templates `[p]` (project) or `[u]` (user); project
+  templates appear there too. While a turn runs the top rule reads
+  `── ⠸ Working ───` and the empty editor keeps its reverse-video cursor at
+  column 0; a provider-retry countdown keeps a plain rule. Pi's screen uses no
+  private-use glyphs.
+
+ADR 0023 records what Chat makes of these: it sends only after positively
+reading an empty stock editor or an idle OMP band, holds while an OMP turn
+runs, answers OMP's tool approval and single-select `ask` from Blocked cards
+with keys rather than digits, and leaves drafts, completion popups, custom
+editors, other panels and unrecognized composer styles to the terminal. Stop
+and explicit tools keys retain the existing RPCs.
 
 A separate server compatibility constraint applies to herdr 0.9.1: its
 `src/detect/mod.rs` does not recognize the full
@@ -114,9 +178,10 @@ retain identification without changing other panes or bypassing the RPC guard.
 UUID fallback search is bounded and limited to default session roots; custom
 roots need herdr's path reference. External blob-backed content, compressed
 files and nested subagent transcripts are not followed by this adapter.
-Focused tests and Simulator demo use synthetic JSONL through production
-locators/followers/reducers. They do not prove a live Pi/OMP Host's prompt
-delivery or its extension dialogs.
+Focused tests run scrubbed live screens and JSONL excerpts, plus synthetic
+JSONL, through production detectors, parsers, locators, followers and
+reducers; the Simulator demo uses synthetic JSONL only. They do not prove a
+live Pi/OMP Host's prompt delivery or its extension dialogs.
 
 Preview with `--demo-screenshots --demo-pi-chat`; this replaces two existing
 demo Agents with Pi and OMP while keeping the default demo unchanged. Samples

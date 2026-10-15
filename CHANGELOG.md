@@ -13,33 +13,32 @@ Entries reference the pull request that made the change.
   floating Chat button, bringing its header back into view without adding
   blank space below a short last turn. (#464)
 - Extend native Chat to Pi and Oh My Pi Agents, with messages, reasoning,
-  paired tool results, current-branch history and compaction boundaries.
-  Reads the JSONL session path reported by herdr, including custom session
-  directories; unrecognized input surfaces remain available in the terminal.
-  Chat's `/` menu and Skills list offer only their skills, sent as
-  `/skill:name`; prompt templates stay in the terminal. Sending refuses Oh My
-  Pi's exit words, `$` Python, Continue and queue shorthands, and pastes of
-  100 lines or more. Chat recognizes Oh My Pi 18.11's nerd-font status band
-  and holds messages while a turn runs or an approval or question panel is
-  open. Pi sends from projects outside the home directory too. Skill
-  invocations show as `/name` commands and confirm Chat's sends; Oh My Pi
-  questions keep their options and answers, denied approvals and dismissed
-  questions read as declined, Stop during a Pi tool reads as an interruption,
-  and an Oh My Pi plan proposal reads as ready for review. Oh My Pi tool
-  approvals get a native Blocked card: Approve presses ctrl+q once Oh My Pi
-  accepts it, and Deny presses Esc. Oh My Pi's single-select questions get
-  one too, answered with arrow keys page by page through the review, and say
-  so when a draft in Oh My Pi's prompt would take the keys. A new
-  conversation reads as empty until its first reply is saved, instead of as
-  missing. Pi takes messages while it works, and a message that steers a
-  running turn shows as queued inside it rather than interrupting it. Oh My
-  Pi's own `.omp/skills` and `~/.omp/agent/skills`, and the shared home
-  `~/.agents/skills` and `~/.agent/skills`, appear in its skill list. When
-  Oh My Pi rewrites its session file, Chat keeps the saved conversation and
-  still confirms each sent message once. Pi and Oh My Pi edits list the
-  files they changed with their diffs.
-  Extends the Chat infrastructure in #425.
-  (#464)
+  paired tool results, edit diffs, current-branch history and compaction
+  boundaries. Reads the JSONL session path reported by herdr, including custom
+  session directories, and shows a new conversation as empty until its first
+  reply is saved, instead of as missing. Skill invocations show as `/name`
+  commands; Oh My Pi questions keep their options and answers, denied
+  approvals and dismissed questions read as declined, Stop during a Pi tool
+  reads as an interruption, and an Oh My Pi plan proposal reads as ready for
+  review. A message that steers a running turn shows as queued inside it, and
+  an Oh My Pi conversation survives Oh My Pi rewriting its session file.
+  Unrecognized input surfaces remain available in the terminal. Extends the
+  Chat infrastructure in #425. (#464)
+- Send to Pi and Oh My Pi from Chat. Chat recognizes Oh My Pi 18.11's
+  nerd-font status band and Pi's editor in any project directory. Pi takes
+  messages while it works, which steer the turn; for Oh My Pi, Chat holds a
+  message while a turn runs or an approval or question panel is open. Sending
+  refuses Oh My Pi's exit words, `$` Python, Continue and queue shorthands,
+  and pastes of 100 lines or more. The `/` menu and Skills list offer only
+  skills, sent as `/skill:name`, including Oh My Pi's `.omp/skills`,
+  `~/.omp/agent/skills`, `~/.agents/skills` and `~/.agent/skills`; prompt
+  templates stay in the terminal. (#464)
+- Answer Oh My Pi tool approvals and single-select questions from native
+  Blocked cards. Approve presses ctrl+q once Oh My Pi accepts it and Deny
+  presses Esc; questions are answered with arrow keys, page by page through
+  the review, and the card says so when a draft in Oh My Pi's prompt would
+  take the keys. Multi-select questions and typed answers stay in the
+  terminal. (#464)
 - Chat for Claude Code and Codex Agents: the Agent's conversation as native
   rows in the terminal's place, read from the transcript its program writes on
   the Host, with nothing installed there. Chat folds finished turns, groups

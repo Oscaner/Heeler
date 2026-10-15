@@ -36,6 +36,10 @@ its first reply, so a reported path with no file, or an empty one, is a new
 conversation: Chat shows it as empty, looks again on every poll without
 backing off, and keeps a sent message's echo waiting rather than overdue.
 Once a file was followed or saved on the device, its absence is Not Found.
+OMP sometimes rewrites its file atomically, filling in the session header,
+so a Pi/OMP file is identified by its header's session id rather than its
+first bytes, and Chat's sends are confirmed by entry: a rewrite neither
+drops the saved conversation nor confirms a send twice.
 A message that steers a running turn (Oh My Pi's `steering` flag, or a Pi
 prompt right after the turn's tool results or tool-calling reply) shows as
 queued inside that turn instead of interrupting it, and still confirms
@@ -54,11 +58,13 @@ header's idle glyph (`π > ` in the 18.10.4 unicode preset, U+F0D57 in the
 running, so Chat holds the message rather than steer it; an approval or ask
 panel resting on the band also holds it. The italic first-message hint on the
 prompt row is not a draft.
-Drafts, completion popups, other editor shapes and extension
-dialogs stay in the terminal; Pi/OMP dialogs do not reuse Claude/Codex option
-digit bindings, and any titled OMP panel ending the screen or resting on the
-band, such as the plan review, holds sending. Their `/` menu and
-shell-command refusals use the same Chat send rules as the existing adapters.
+Drafts, completion popups and other editor shapes stay in the terminal.
+OMP's tool approval and single-select question get Blocked cards (see Blocked
+cards); any other titled OMP panel ending the screen or resting on the band,
+such as the plan review, holds sending, and Pi's extension dialogs stay in
+the terminal. Neither program reuses Claude/Codex option digit bindings.
+Their `/` menu and shell-command refusals use the same Chat send rules as the
+existing adapters.
 
 ## Entry and the terminal
 
@@ -112,6 +118,11 @@ command than the terminal does, so it may note one the terminal doesn't
 rather than miss one. The terminal hides that command's hunks until its view
 is expanded; Chat's diffs are closed until tapped, so it lists them under the
 note.
+
+Pi and Oh My Pi edits list the files their results record, shown the same
+way: Oh My Pi's numbered diff without hunk headers, one per file under
+`perFileResults` when an edit changed several, and Pi's unified patch, whose
+path comes from the call.
 
 Conversations persist in Caches with Complete file protection: decoded entries
 and read cursors, never tool output or diff lines, which an expanded row
@@ -179,8 +190,11 @@ failed request may still have pressed the key, so Stop then says so and works
 again at once. The wait belongs to the Agent's Composer, not to a surface:
 switching between Chat and the terminal, or a rebuilt detail, keeps it. With
 text in the draft the button stays Send, so a prompt still queues behind the
-running turn (Pi steers the turn with it), and ⌘↩ only ever sends. Esc in Pi
-or Oh My Pi puts a steer the turn has not taken back into the input box, so
+running turn (Pi steers the turn with it), and ⌘↩ only ever sends. Oh My Pi
+is the exception: a steer there can move a running command to the
+background, so while its status band shows a turn running, Chat holds the
+message and says to send once it is idle or steer from the terminal. Esc in
+Pi or Oh My Pi puts a steer the turn has not taken back into the input box, so
 a draft found there says Stop may have left it. A send that empties the draft keeps Stop
 back for a second, so the second tap of a double tap cannot interrupt the turn
 the prompt was meant to queue behind. Stop is not offered while Blocked, where
@@ -225,10 +239,12 @@ Enter. Several questions are answered page by page, each page its own card,
 then the review page's Submit; an answer is confirmed by the `ask` result or
 by the next page. While Oh My Pi's prompt holds a draft, keys would go into
 it, so the card answers nothing but Stop and says to queue or clear the draft
-in the terminal. Multi-select questions and typed answers stay in the
-terminal. A dialog the parsers do not know gets a generic card
-with the Agent controls. Answers the transcript does not record join the
-history as Allowed, Declined, Stopped and Answered rows.
+in the terminal. Stop on an Oh My Pi question presses Esc, which cancels the
+question and ends the turn, and the card says so. Multi-select questions,
+option notes and typed answers stay in the terminal. A dialog the parsers
+do not know gets a generic card with the Agent controls. Answers the
+transcript does not record join the history as Allowed, Declined, Stopped and
+Answered rows.
 
 ## Background Work
 
@@ -403,6 +419,10 @@ no Attach at all.
   [PRIVACY.md](../../PRIVACY.md) describes.
 - Not in this version:
   - Chat on native Windows Hosts, and keyboard operation of cards and menus.
+  - Oh My Pi's multi-select questions, option notes and typed answers, a
+    one-form answer to several questions, and steering a running Oh My Pi
+    turn from Chat. Pi's extension dialogs, and Oh My Pi skills in a
+    project's ancestor directories.
   - The segment before a Codex undo. After one, Chat shows only the turns
     written since; the reducer accepts the earlier segment, but nothing loads
     it yet.
