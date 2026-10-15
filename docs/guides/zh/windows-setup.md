@@ -1,9 +1,14 @@
 <!-- Translated from docs/guides/windows-setup.md at eb67dbec -->
 # Windows 配置
 
-为 Heeler 配置原生 Windows Host，包括 SSH 登录以及 SSH 与 herdr 的开机自启。请使用 Windows 11、原生 herdr 0.9.3 或更高版本，以及包含[原生 Windows Host 支持（#399）](https://github.com/ZingerLittleBee/Heeler/issues/399)的 Heeler 版本。
+为 Heeler 配置原生 Windows Host，包括 SSH 登录以及 SSH 与 herdr 的开机自启。
 
-请使用同一个 Windows 账户进行 SSH 登录、运行 herdr、运行编码智能体（coding agent）以及配置开机自启任务。下文示例使用命名会话 `heeler-win-test`；如果选用其他名称，请保持前后一致。
+## 开始之前
+
+- 具备管理员权限的 Windows 11。
+- 原生 herdr 0.9.3 或更高版本，以及包含[原生 Windows Host 支持（#399）](https://github.com/ZingerLittleBee/Heeler/issues/399)的 Heeler 版本。
+- 请使用同一个 Windows 账户进行 SSH 登录、运行 herdr、运行编程 Agent（coding agent）以及配置开机自启任务。
+- 下文示例使用命名会话 `heeler-win-test`；如果选用其他名称，请保持前后一致。
 
 ## 1. 启用 SSH
 
@@ -75,7 +80,7 @@ herdr remote-api-bridge --check
 herdr --session heeler-win-test
 ```
 
-这会初始化一个工作区（Workspace）和 shell 窗格。请在该会话内进入项目目录并启动配置好的编码智能体。你可以随时分离（detach）herdr 客户端并在稍后重新连接，会话会继续在后台运行。
+这会初始化一个工作区（Workspace）和 shell 窗格。请在该会话内进入项目目录并启动配置好的编程 Agent。你可以随时分离（detach）herdr 客户端并在稍后重新连接，会话会继续在后台运行。
 
 在另一个 PowerShell 窗口中确认该会话正在运行：
 
@@ -94,13 +99,13 @@ ipconfig
 
 对于本地账户，请使用 `whoami` 输出中计算机名称后面的用户名，并使用当前活动网络适配器的 IPv4 地址。
 
-在 Heeler 中按以下信息手动添加 Host：
+在 Heeler 中前往 **Hosts > Add Host**，先在 **Routes** 下轻点 **Add Route** 填写地址和端口并保存，再填写其余 Host 字段：
 
 | 字段 | 值 |
 | --- | --- |
-| Address | 手机可访问到的 Windows 地址 |
-| Port | `22`（除非配置了其他 SSH 端口） |
-| Username | 运行 herdr 的 Windows 账户名 |
+| User | 运行 herdr 的 Windows 账户名 |
+| Address（在 Route 中） | 手机可访问到的 Windows 地址 |
+| Port（在 Route 中） | `22`（除非配置了其他 SSH 端口） |
 | Authentication | `Password` |
 | Password | Windows 账户密码（而非 Windows Hello PIN 码） |
 | Session name | `heeler-win-test` |
@@ -111,7 +116,7 @@ ipconfig
 ssh-keygen -lf "$env:ProgramData\ssh\ssh_host_ed25519_key.pub"
 ```
 
-连接检查应当全部通过，随后控制台（Console）会显示所选会话中的终端（Terminals）和智能体（Agents）。你也可以从另一台设备测试 SSH：
+连接检查应当全部通过，随后控制台（Console）会显示所选会话中的终端（Terminals）和 Agent（Agents）。你也可以从另一台设备测试 SSH：
 
 ```sh
 ssh <username>@<windows-address> "herdr --version"
@@ -161,7 +166,7 @@ $env:USERPROFILE
 
 ### 验证已保存的计划任务
 
-首先检查 `herdr session list --json`。如果 `heeler-win-test` 已在运行，请等到其中的智能体可以安全停止时，先停止该会话再测试计划任务。herdr 会拒绝为同一个会话启动第二个服务端。
+首先检查 `herdr session list --json`。如果 `heeler-win-test` 已在运行，请等到其中的 Agent 可以安全停止时，先停止该会话再测试计划任务。herdr 会拒绝为同一个会话启动第二个服务端。
 
 在任务计划程序中，右键单击 **Herdr Server** 并选择 **运行（Run）**。确认其状态变为 **正在运行（Running）**，然后在 SSH 账户下的 PowerShell 中运行以下检查：
 
@@ -178,10 +183,10 @@ herdr --session heeler-win-test status server --json
 
 ### 重启后验证
 
-当智能体可以停止时，重启 Windows。在登录 Windows 桌面之前，先从 Heeler 发起连接并检查命名会话能否正常加载。登录桌面后，重复上方的服务与 API 检查，确认计划任务处于 **正在运行（Running）** 状态。手动运行成功并不能代替重启后的自启验证。
+当 Agent 可以停止时，重启 Windows。在登录 Windows 桌面之前，先从 Heeler 发起连接并检查命名会话能否正常加载。登录桌面后，重复上方的服务与 API 检查，确认计划任务处于 **正在运行（Running）** 状态。手动运行成功并不能代替重启后的自启验证。
 
 ## 支持的功能与进一步检查
 
-原生 Windows 支持手动 SSH 连接、会话选择、实时智能体（Agents）与终端（Terminals）以及目录浏览。配对（Pairing）、变更（Changes）、技能（Skills）、文件上传和通知注册目前暂不可用。请在连接前保持 herdr 处于运行状态；Heeler 不会自动启动 Windows 服务端。
+原生 Windows 支持手动 SSH 连接、会话选择、实时 Agent（Agents）与终端（Terminals）以及目录浏览。配对（Pairing）、变更（Changes）、技能（Skills）、文件上传和通知注册目前暂不可用。请在连接前保持 herdr 处于运行状态；Heeler 不会自动启动 Windows 服务端。
 
 如需进行终端尺寸调整、滚动、重连、会话隔离和认证方面的验收检查，请使用 [Windows 测试清单](../native-windows-testing.md)。

@@ -43,7 +43,7 @@ VPS 127.0.0.1:2222 -> reverse SSH channel -> Mac 127.0.0.1:22
 1. Heeler 使用自己的 Device Key 向 VPS Jump Host 完成认证。
 2. Jump Host 仅打开到 `127.0.0.1:2222` 的转发通道。
 3. Heeler 通过该转发字节流与 Mac 进行第二次 SSH 握手。
-4. 通过 Mac 认证后，应用经由 SSH 通道访问 herdr 的 Unix 套接字，并通过 SSH PTY 打开 Attach 终端。
+4. 通过 Mac 认证后，应用经由 `direct-streamlocal` 通道访问 herdr 的 Unix 套接字，并通过 SSH PTY 打开 Attach 终端。
 
 虽然外层 SSH 连接与 Mac 到 VPS 的隧道都在 VPS 上终结，但隧道内承载的载荷是另一条端到端加密的 SSH 连接。只要应用正确校验了 Mac 的主机密钥，VPS 最多只能看到连接元数据或中断连接，无法被动窃听 iOS 与 Mac 之间的内层会话内容。
 
@@ -397,18 +397,17 @@ macOS 用户级 LaunchAgent 仅在该用户登录后启动；如果 Mac 重启�
 
 ## 9. 配置 Heeler
 
-创建或编辑 Host：
+在 **Hosts > Add Host** 中，轻点 **Routes** 下的 **Add Route** 填写隧道与 Jump Host 字段并保存路由，再填写其余 Host 字段：
 
-```text
-Host address: 127.0.0.1
-Host port: 2222
-Host user: MAC_USER
-
-Jump Host address: VPS_PUBLIC_IP
-Jump Host port: 22
-Jump Host user: herdr-jump
-Authentication: Device Key
-```
+| 字段 | 值 |
+|---|---|
+| User | `MAC_USER` |
+| Address（在 Route 中） | `127.0.0.1` |
+| Port（在 Route 中） | `2222` |
+| Jump Host address（在 Route 中） | `VPS_PUBLIC_IP` |
+| Jump Host port（在 Route 中） | `22` |
+| Jump Host user（在 Route 中） | `herdr-jump` |
+| Authentication | `Device Key` |
 
 分别独立确认两跳的主机密钥：
 
@@ -502,21 +501,21 @@ sudo ss -ltnp | grep ':2222'
 
 ### 阶段 3：切换 Heeler
 
-在 Heeler 中仅修改 Jump Host 相关字段：
+在 Heeler 中打开该 Host 并轻点 **Edit**，点进 **Routes** 下的路由（或新增一条路由），仅修改 Jump Host 相关字段：
 
-```text
-Jump Host address: NEW_VPS_PUBLIC_IP
-Jump Host port: NEW_VPS_SSH_PORT
-Jump Host user: new restricted Jump account
-```
+| 字段 | 值 |
+|---|---|
+| Jump Host address（在 Route 中） | `NEW_VPS_PUBLIC_IP` |
+| Jump Host port（在 Route 中） | `NEW_VPS_SSH_PORT` |
+| Jump Host user（在 Route 中） | 新的受限 Jump 账户 |
 
-Host 本身的字段保持不变：
+路由目标与 Host 用户保持不变：
 
-```text
-Address: 127.0.0.1
-Port: 2222
-User: MAC_USER
-```
+| 字段 | 值 |
+|---|---|
+| Address（在 Route 中） | `127.0.0.1` |
+| Port（在 Route 中） | `2222` |
+| User | `MAC_USER` |
 
 出现提示时核对并确认新 VPS 的指纹，随后完成应用预检并通过 Attach 打开一个 Agent。至此完成功能切换。
 
