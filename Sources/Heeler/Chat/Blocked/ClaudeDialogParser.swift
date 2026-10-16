@@ -652,7 +652,7 @@ private struct ClaudeDialogReader {
         if runs.contains(where: \.style.isReverse) {
             return readField(runs)
         }
-        if let note = truncatedNote(runs) { return note }
+        if let note = noteWithoutCursor(runs) { return note }
         var detail: String?
         for run in runs {
             if detail != nil {
@@ -716,24 +716,25 @@ private struct ClaudeDialogReader {
         return reading
     }
 
-    /// A note field too long for its row: `No, ` in the accent color, then
-    /// the start of the note cut off with `…`. The cursor cell sits past the
-    /// cut, so the row has no reverse-video cell.
-    private func truncatedNote(_ runs: [ScreenRun]) -> OptionRowReading? {
+    /// The first row of a note too long for its row, which leaves the
+    /// cursor cell out: `No, ` in the accent color, then the note's start,
+    /// wrapped onto the next rows or cut off with `…`.
+    private func noteWithoutCursor(_ runs: [ScreenRun]) -> OptionRowReading? {
         let visible = runs.enumerated().filter { !DialogRowScanner.isBlank($0.element) }
         guard let accent = block.accent, let first = visible.first, first.element.style.foreground == accent,
             visible.count > 1
         else { return nil }
         let label = first.element.text.trimmingCharacters(in: .whitespaces)
         let rest = runs[(first.offset + 1)...]
-        let text = ScreenRow.normalizedSpaces(rest.map(\.text).joined()).trimmingCharacters(in: .whitespaces)
-        guard label.hasSuffix(","), text.count > 1, text.hasSuffix("…"),
-            rest.allSatisfy({ DialogRowScanner.isBlank($0) || $0.style.foreground != accent })
+        guard label.hasSuffix(","),
+            rest.allSatisfy({
+                DialogRowScanner.isBlank($0) || ($0.style.foreground != accent && $0.style.foreground != block.inactive)
+            })
         else { return nil }
         var reading = OptionRowReading()
         reading.feedbackLabel = String(label.dropLast())
         reading.label = String(label.dropLast())
-        reading.field = .typed(text)
+        reading.field = .typed(ScreenRow.normalizedSpaces(rest.map(\.text).joined()).trimmingCharacters(in: .whitespaces))
         return reading
     }
 

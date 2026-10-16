@@ -18,6 +18,7 @@ enum ScreenFixture {
         "claude-27-n1-narrow-bash", "claude-28-n1-narrow-bash-later", "claude-29-c3-after-immediate",
         "claude-30-par-first", "claude-31-par-second", "claude-32-c7-phone-bash-blocked",
         "claude-33-c7-phone-focus-no", "claude-34-c7-phone-tab-on-no", "claude-35-c7-phone-pasted-truncated",
+        "claude-36-c7-phone-yes-blocked", "claude-37-c7-phone-yes-pasted-wrapped",
     ]
 
     static let codex = [

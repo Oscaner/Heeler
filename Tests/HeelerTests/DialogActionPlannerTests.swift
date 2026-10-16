@@ -84,7 +84,7 @@ struct DialogActionPlannerTests {
         "Text typed in the terminal stops every plan but Esc",
         arguments: [
             "claude-05-c1-pasted-feedback", "claude-07-c2-pasted", "claude-13-c4-q2-pasted", "claude-18-c6-pasted",
-            "claude-35-c7-phone-pasted-truncated",
+            "claude-35-c7-phone-pasted-truncated", "claude-37-c7-phone-yes-pasted-wrapped",
         ])
     func typedText(stem: String) throws {
         let dialog = try dialog(stem)
@@ -609,6 +609,19 @@ struct DialogExpectationTests {
         let dialog = try #require(try observe("claude-35-c7-phone-pasted-truncated").result.dialog)
         #expect(dialog.option(4)?.label == "No")
         #expect(dialog.focus.feedbackOrdinal == 4)
+    }
+
+    @Test("A note wrapped at the phone's width, with the cursor on its last row, meets its check")
+    func wrappedNoteOnYes() throws {
+        let bash = try fingerprint("claude-36-c7-phone-yes-blocked")
+        let note = "after it succeeds, reply with the single word created"
+        #expect(try meets(.focus(ordinal: 1), "claude-36-c7-phone-yes-blocked", bash))
+        #expect(try meets(.inputText(note), "claude-37-c7-phone-yes-pasted-wrapped", bash))
+        #expect(try !meets(.inputText("after it succeeds"), "claude-37-c7-phone-yes-pasted-wrapped", bash))
+        let dialog = try #require(try observe("claude-37-c7-phone-yes-pasted-wrapped").result.dialog)
+        #expect(dialog.option(1)?.label == "Yes")
+        #expect(dialog.focus.feedbackOrdinal == 1)
+        #expect(dialog.options.count == 4)
     }
 
     @Test("A check about the same dialog fails once the dialog changed")
