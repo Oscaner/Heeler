@@ -47,6 +47,7 @@ struct AgentChatSurfaceView: View {
     @State private var followRequest = 0
     @State private var collapseRequest = 0
     @State private var canCollapseTrajectory = false
+    @State private var collapseControlHeight: CGFloat = 0
     @State private var composerKeyboardPresentation: AgentComposerKeyboardPresentation = .hidden
     @State private var isConfirmingClose = false
     @State private var isSelectingPhoto = false
@@ -325,23 +326,7 @@ struct AgentChatSurfaceView: View {
 
     private var chatSurface: some View {
         conversation
-        .overlay(alignment: .bottom) {
-            HStack {
-                Spacer(minLength: 0)
-                ChatCollapseTrajectoryButton(
-                    isVisible: presentation == .timeline && timeline.state.isReady && canCollapseTrajectory
-                ) {
-                    collapseRequest += 1
-                }
-                ChatJumpToLatestButton(
-                    isVisible: presentation == .timeline && timeline.state.isReady && !isFollowing
-                ) {
-                    jumpRequest += 1
-                }
-            }
-            .chatContentColumn()
-            .padding(.bottom, 12)
-        }
+        .overlay(alignment: .bottom) { floatingTimelineControls }
         .overlay {
             if let workspaceDrawer {
                 let drawer = keyboardCarryingDrawer(workspaceDrawer).palette(.system)
@@ -431,6 +416,29 @@ struct AgentChatSurfaceView: View {
         .toolbar(.visible, for: .navigationBar)
     }
 
+    /// Over the list's bottom edge, which keeps Collapse Steps' band clear
+    /// of rows while it shows.
+    private var floatingTimelineControls: some View {
+        HStack {
+            Spacer(minLength: 0)
+            ChatCollapseTrajectoryButton(
+                isVisible: presentation == .timeline && timeline.state.isReady && canCollapseTrajectory
+            ) {
+                collapseRequest += 1
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { collapseControlHeight = $0 }
+            ChatJumpToLatestButton(
+                isVisible: presentation == .timeline && timeline.state.isReady && !isFollowing
+            ) {
+                jumpRequest += 1
+            }
+        }
+        .chatContentColumn()
+        .padding(.bottom, Self.floatingControlsBottomPadding)
+    }
+
+    private static let floatingControlsBottomPadding: CGFloat = 12
+
     /// The timeline runs under the back header and the banners, which
     /// float over its top edge; at rest its rows start below them.
     private var conversation: some View {
@@ -438,7 +446,9 @@ struct AgentChatSurfaceView: View {
             ChatTimelineView(
                 state: timeline.state, jumpRequest: jumpRequest, followRequest: followRequest,
                 collapseRequest: collapseRequest,
-                topObstruction: headerObstruction + bannerHeight, actions: timelineActions)
+                topObstruction: headerObstruction + bannerHeight,
+                collapseControlClearance: collapseControlHeight + Self.floatingControlsBottomPadding,
+                actions: timelineActions)
             .accessibilityHidden(presentation != .timeline)
             if presentation != .timeline {
                 GeometryReader { proxy in

@@ -11,6 +11,8 @@ struct ChatTimelineView: UIViewControllerRepresentable {
     var collapseRequest: Int = 0
     /// Height of the chrome floating over the list's top edge.
     var topObstruction: CGFloat = 0
+    /// Height of the Collapse Steps button over the list's bottom edge.
+    var collapseControlClearance: CGFloat = 0
     let actions: ChatTimelineActions
 
     func makeCoordinator() -> Coordinator {
@@ -20,6 +22,7 @@ struct ChatTimelineView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> ChatTimelineController {
         let controller = ChatTimelineController(actions: actions)
         controller.setTopObstruction(topObstruction)
+        controller.setCollapseControlClearance(collapseControlClearance)
         controller.apply(state)
         return controller
     }
@@ -27,6 +30,7 @@ struct ChatTimelineView: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: ChatTimelineController, context: Context) {
         controller.actions = actions
         controller.setTopObstruction(topObstruction)
+        controller.setCollapseControlClearance(collapseControlClearance)
         controller.apply(state)
         let coordinator = context.coordinator
         if coordinator.followRequest != followRequest {

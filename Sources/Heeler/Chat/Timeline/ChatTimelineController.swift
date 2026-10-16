@@ -81,6 +81,10 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
     private var disclosureAnchor: ChatRowID?
     private var reportedFollowing = true
     private var reportedCanCollapse = false
+    /// The floating Collapse Steps button's height above the list's bottom
+    /// edge, and how much of it the bottom inset keeps clear right now.
+    private var collapseControlClearance: CGFloat = 0
+    private var collapseControlReserve: CGFloat = 0
     private var isJumpAnimating = false
     private var hasReportedFirstLayout = false
     /// The older-history state the last automatic request was made in, so
@@ -316,6 +320,29 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         collectionView.setNeedsLayout()
     }
 
+    /// Keeps `height` at the bottom clear of rows while Collapse Steps
+    /// shows, so the button never covers the newest row.
+    func setCollapseControlClearance(_ height: CGFloat) {
+        loadViewIfNeeded()
+        guard collapseControlClearance != height else { return }
+        collapseControlClearance = height
+        reserveCollapseControlRoom()
+    }
+
+    private func reserveCollapseControlRoom() {
+        let reserve = reportedCanCollapse ? collapseControlClearance : 0
+        guard collapseControlReserve != reserve else { return }
+        collapseControlReserve = reserve
+        collectionView.contentInset.bottom = Self.contentInsets.bottom + reserve
+        // Room given back leaves no blank space past the end at rest.
+        if !collectionView.isTracking, !collectionView.isDecelerating,
+            collectionView.contentOffset.y > collectionView.maxOffsetY
+        {
+            collectionView.contentOffset.y = collectionView.maxOffsetY
+        }
+        collectionView.setNeedsLayout()
+    }
+
     private func uniqueIDs(_ rows: [ChatRow]) -> [ChatRowID] {
         var seen = Set<ChatRowID>()
         return rows.map(\.id).filter { seen.insert($0).inserted }
@@ -333,7 +360,10 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
     /// The first open turn actually on screen, rather than the most
     /// recently expanded turn elsewhere in the conversation.
     private var collapseTarget: (trajectory: ChatTimelineProjection.Trajectory, row: ChatRowID)? {
-        let top = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
+        // Making room for the button moves a list at its end up by that
+        // room; the window reaches as far above the top, so making or giving
+        // back the room never changes the answer.
+        let top = collectionView.contentOffset.y + collectionView.adjustedContentInset.top - collapseControlReserve
         let bottom = collectionView.contentOffset.y + collectionView.bounds.height
         for index in layout.geometry.indices(from: top, to: bottom) {
             guard let id = layout.id(at: index), let scope = trajectoryByRow[id] else { continue }
@@ -644,6 +674,7 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         let available = canCollapseTrajectory
         guard available != reportedCanCollapse else { return }
         reportedCanCollapse = available
+        reserveCollapseControlRoom()
         Task { @MainActor [weak self] in
             guard let self, reportedCanCollapse == available else { return }
             actions.collapseAvailabilityChanged(available)

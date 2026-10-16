@@ -806,6 +806,63 @@ struct ChatTimelineControllerTests {
         }
     }
 
+    @Test func floatingCollapseKeepsTheNewestRowClearOfItsButton() async throws {
+        let controller = ChatTimelineController(actions: ChatTimelineActions())
+        let (rows, turns) = await Self.turns(0..<2, steps: 8)
+        let newest = ChatRowID.entry(ChatEntryID("a1"))
+        let clearance: CGFloat = 56
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.setCollapseControlClearance(clearance)
+            controller.apply(Self.foldState(rows, turns: turns))
+            await Self.settle(controller)
+            Self.drag(controller, to: controller.timeline.minOffsetY)
+            controller.toggle(.turn(ChatEntryID("a0")))
+            controller.toggle(.group(ChatEntryID("c0b")))
+            controller.followLatest()
+            await Self.settle(controller)
+            try #require(controller.canCollapseTrajectory)
+            let view = controller.timeline
+            let bottom = try #require(controller.cellFrame(of: newest)).maxY - view.contentOffset.y
+            #expect(bottom <= view.bounds.height - 12 - clearance + 1)
+
+            controller.collapseCurrentTrajectory()
+            await Self.settle(controller)
+            #expect(!controller.canCollapseTrajectory)
+            // The room goes with the button, leaving no blank space past the end.
+            #expect(abs(view.contentOffset.y - view.maxOffsetY) <= 1)
+            #expect(abs(view.contentSize.height + 12 - view.contentOffset.y - view.bounds.height) <= 1)
+        }
+    }
+
+    @Test func makingRoomForFloatingCollapseNeverTakesTheButtonAway() async throws {
+        var availability: [Bool] = []
+        let controller = ChatTimelineController(actions: ChatTimelineActions(
+            collapseAvailabilityChanged: { availability.append($0) }))
+        let (rows, turns) = await Self.turns(0..<2, steps: 8)
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.apply(Self.foldState(rows, turns: turns))
+            await Self.settle(controller)
+            Self.drag(controller, to: controller.timeline.minOffsetY)
+            controller.toggle(.turn(ChatEntryID("a0")))
+            controller.toggle(.group(ChatEntryID("c0b")))
+            controller.followLatest()
+            await Self.settle(controller)
+            try #require(controller.canCollapseTrajectory)
+            await Self.settle(controller)
+            availability = []
+
+            // Room deep enough to push every row but the newest answer
+            // above the top edge once the list follows its end into it.
+            let view = controller.timeline
+            let answer = try #require(controller.cellFrame(of: .entry(ChatEntryID("a1"))))
+            controller.setCollapseControlClearance(view.bounds.height - view.adjustedContentInset.top - answer.height)
+            await Self.settle(controller)
+            #expect(controller.canCollapseTrajectory)
+            #expect(controller.isFollowing)
+            #expect(availability.isEmpty)
+        }
+    }
+
     // MARK: Helpers
 
     private static func foldState(
