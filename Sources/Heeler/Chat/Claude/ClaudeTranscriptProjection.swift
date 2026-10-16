@@ -73,7 +73,7 @@ enum ClaudeTranscriptProjection {
         let imageSources = imageSources(byPosition, indexed: index.records)
         for record in byPosition where !record.isSidechain && record.teamName == nil {
             guard var text = typedText(of: record, indexed: index.records) else { continue }
-            if let sources = imageSources[record.uuid] { text = replacingImagePlaceholders(in: text, with: sources) }
+            if let sources = imageSources[record.uuid] { text = ChatRecordedPrompt.replacingImagePlaceholders(in: text, with: sources) }
             prompts.append(
                 ChatRecordedPrompt(offset: record.byteOffset, text: text, entryID: entryByRecord[record.uuid]))
         }
@@ -123,24 +123,6 @@ enum ClaudeTranscriptProjection {
     private static func isAttachment(_ kind: ClaudeRecord.Kind) -> Bool {
         if case .attachment = kind { return true }
         return false
-    }
-
-    /// `text` with its `[Image #N]` placeholders replaced, in order, by the
-    /// paths the images were pasted as, so it compares with the text Heeler
-    /// sent. Unchanged unless each placeholder has exactly one path.
-    static func replacingImagePlaceholders(in text: String, with paths: [String]) -> String {
-        guard let pattern = try? Regex(#"\[Image #[0-9]+\]"#) else { return text }
-        let placeholders = text.ranges(of: pattern)
-        guard !placeholders.isEmpty, placeholders.count == paths.count else { return text }
-        var result = ""
-        var cursor = text.startIndex
-        for (range, path) in zip(placeholders, paths) {
-            result += text[cursor..<range.lowerBound]
-            result += path
-            cursor = range.upperBound
-        }
-        result += text[cursor...]
-        return result
     }
 
     /// Prompts Claude Code queued while a turn runs and has not delivered:

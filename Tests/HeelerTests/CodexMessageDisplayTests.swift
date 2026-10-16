@@ -273,6 +273,33 @@ struct CodexMessageDisplayTests {
             ])
     }
 
+    @Test("A sent image path matches the `[Image #1]` prompt Codex 0.162.1 recorded for it")
+    func imagePathEchoKey() {
+        let path =
+            "/var/folders/rm/2k0dww5x7w145cb1qctpswr80000gn/T//heeler.5DbKoTwO/stage-2f1aff11-999f-4b82-adda-3813f305f0c1/image.jpg"
+        var builder = CodexRolloutBuilder()
+        builder.turnStarted("t1")
+        builder.item(
+            "t1",
+            [
+                "type": "UserMessage", "id": "u1",
+                "content": [
+                    ["type": "local_image", "path": .string(path)],
+                    [
+                        "type": "text", "text": "[Image #1]",
+                        "text_elements": [["byte_range": ["start": 0, "end": 10], "placeholder": "[Image #1]"]],
+                    ],
+                ],
+            ])
+
+        let transcript = builder.reducer().transcript(idle)
+        #expect(transcript.entries.map(\.content) == [.user(ChatUserMessage(text: "[Image #1]", imageCount: 1))])
+        let prompt = transcript.recordedPrompts.first
+        // Heeler sends the staged path with a trailing space.
+        #expect(prompt.map { codexEchoKey($0.text) } == codexEchoKey(path + " "))
+        #expect(prompt.map { codexEchoKey($0.text) } != codexEchoKey("/tmp/other/image.jpg"))
+    }
+
     @Test("A prompt steered into a running turn is marked queued")
     func steeredPrompt() {
         var builder = CodexRolloutBuilder()

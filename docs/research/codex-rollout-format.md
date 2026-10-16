@@ -515,7 +515,11 @@ Matching a sent prompt to its record follows from this (Not verified):
 - Repeats are common, so matches go first in, first out and one to one,
   never by prefix or similarity.
 - An image-only send records an item with a `local_image` part at the same
-  normalized path and the text `[Image #1]`.
+  normalized path and the text `[Image #1]` (seen live with 0.162.1, whose
+  response-item twin wraps the image in `<image name=[Image #1] path=...>`
+  text parts). Chat puts each `local_image` path back in place of its
+  placeholder before comparing. A path followed by more text is no paste
+  of one path, so it is recorded as plain text.
 
 ## Incremental parsing
 

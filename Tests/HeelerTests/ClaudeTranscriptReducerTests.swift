@@ -437,10 +437,10 @@ struct ClaudeTranscriptReducerTests {
         #expect(ClaudeTranscriptReducer.echoKey(prompt.text) != ClaudeTranscriptReducer.echoKey("/tmp/other/image.jpg"))
 
         #expect(
-            ClaudeTranscriptProjection.replacingImagePlaceholders(in: "[Image #1] and [Image #2]", with: ["/a.png", "/b.png"])
+            ChatRecordedPrompt.replacingImagePlaceholders(in: "[Image #1] and [Image #2]", with: ["/a.png", "/b.png"])
                 == "/a.png and /b.png")
         #expect(
-            ClaudeTranscriptProjection.replacingImagePlaceholders(in: "[Image #1] and [Image #2]", with: ["/a.png"])
+            ChatRecordedPrompt.replacingImagePlaceholders(in: "[Image #1] and [Image #2]", with: ["/a.png"])
                 == "[Image #1] and [Image #2]")
     }
 

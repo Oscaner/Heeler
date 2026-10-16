@@ -837,6 +837,26 @@ struct ChatRecordedPrompt: Equatable, Sendable {
         self.text = text
         self.entryID = entryID
     }
+
+    /// `text` with its `[Image #N]` placeholders replaced, in order, by the
+    /// paths the images were pasted as, so it compares with the text Heeler
+    /// sent. A paste that is only an image path is recorded as `[Image #1]`
+    /// plus the image by Claude Code and Codex alike. Unchanged unless each
+    /// placeholder has exactly one path.
+    static func replacingImagePlaceholders(in text: String, with paths: [String]) -> String {
+        guard let pattern = try? Regex(#"\[Image #[0-9]+\]"#) else { return text }
+        let placeholders = text.ranges(of: pattern)
+        guard !placeholders.isEmpty, placeholders.count == paths.count else { return text }
+        var result = ""
+        var cursor = text.startIndex
+        for (range, path) in zip(placeholders, paths) {
+            result += text[cursor..<range.lowerBound]
+            result += path
+            cursor = range.upperBound
+        }
+        result += text[cursor...]
+        return result
+    }
 }
 
 /// One piece of Background Work: a Subagent or Workflow the program started
