@@ -1151,6 +1151,29 @@ struct AgentChatStoreTests {
         #expect(store.sendStatuses[id] == .discarded)
     }
 
+    /// Text the user added to a returned steer in the terminal hides where
+    /// the steer ends, but the steer is still in the box: neither the read
+    /// before a send nor an idle spell's read discards it.
+    @Test func aReturnedSendTheUserAddedToInTheBoxStaysReturned() async throws {
+        let (_, store, pane, clock, id) = try await Self.stoppedSteer(.pi, text: "Queued steer: say MANGO. ")
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(store.sendStatuses[id] == .returned)
+
+        let edited = try Self.piEditor("Queued steer: say MANGO. and check X")
+        store.inputBoxWasRead(edited)
+        #expect(store.sendStatuses[id] == .returned)
+
+        await pane.show(edited)
+        await Self.nextIdleSpell(store, .pi, clock: clock)
+        #expect(await pane.reads == 2)
+        #expect(store.sendStatuses[id] == .returned)
+
+        // Cleared at last.
+        store.inputBoxWasRead(try Self.piEditor())
+        #expect(store.sendStatuses[id] == .discarded)
+    }
+
     /// Sent from the terminal after all: the box empties before the
     /// transcript has it, and the recorded copy still settles the send.
     @Test func aDiscardedSendTheTranscriptRecordsLaterIsRecorded() async throws {

@@ -927,7 +927,9 @@ final class AgentChatStore {
 
     /// Settles which of `ids` the input box holds. Only an empty box or
     /// one showing text says so; any other state leaves them as they were.
-    /// A returned send the box no longer holds left it undelivered.
+    /// A returned send the box no longer holds left it undelivered, but
+    /// text that shows one of them among more, such as one the user added
+    /// to in the terminal, says nothing about which left.
     private func observeInputBox(_ state: InputBoxState, for ids: Set<UUID>) {
         let box: String
         switch state {
@@ -936,6 +938,8 @@ final class AgentChatStore {
         default: return
         }
         let held = Self.sends(in: box, among: sends.filter { ids.contains($0.id) })
+        let returned = sends.filter { ids.contains($0.id) && returnedSends.contains($0.id) }
+        if held.isEmpty, Self.mentions(box, any: returned) { return }
         let left = returnedSends.intersection(ids).subtracting(held)
         let next = returnedSends.subtracting(ids).union(held)
         guard next != returnedSends else { return }
@@ -950,7 +954,6 @@ final class AgentChatStore {
     /// so spacing says nothing. Text the box holds beyond them, such as a
     /// draft, means none of them can be told apart from it.
     private static func sends(in box: String, among sends: [TrackedSend]) -> Set<UUID> {
-        func squeezed(_ text: String) -> [Character] { Array(text.filter { !$0.isWhitespace }) }
         let target = squeezed(box)
         let texts = sends.map { squeezed($0.text) }
         guard !target.isEmpty else { return [] }
@@ -974,6 +977,18 @@ final class AgentChatStore {
         guard let indices = spell(from: 0, first: 0) else { return [] }
         return Set(indices.map { sends[$0].id })
     }
+
+    /// Whether any of `sends` shows anywhere in `box`, spacing aside.
+    private static func mentions(_ box: String, any sends: [TrackedSend]) -> Bool {
+        let target = String(squeezed(box))
+        return sends.contains { send in
+            let text = String(squeezed(send.text))
+            return !text.isEmpty && target.contains(text)
+        }
+    }
+
+    /// `text` without its whitespace, which the editor's wrapping changes.
+    private static func squeezed(_ text: String) -> [Character] { Array(text.filter { !$0.isWhitespace }) }
 }
 
 extension ChatAgentActivity {
