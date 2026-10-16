@@ -39,6 +39,12 @@ struct ContentView: View {
             liveActivities: app.liveActivities,
             activity: app.activity
         )
+        // Settings › Overlay Networks and the Host form read the catalog here.
+        .environment(app.overlayNetworks)
+        // Settings › Overlay Networks adds a Host from a network's peer.
+        .environment(app.hostStore)
+        // The Hosts list's removal reaches app-wide state.
+        .environment(\.hostRemovalDependencies, app.hostRemoval)
         .environment(\.sceneWindow, window)
         .environment(
             \.agentSceneRouting,

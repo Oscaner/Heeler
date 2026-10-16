@@ -77,6 +77,43 @@ struct AgentComposerActions {
     let renameAgent: () -> Void
     let renameWorkspace: () -> Void
     let closeAgent: () -> Void
+    /// Leaves the Agent the way its edge swipe does: back to the Console
+    /// list, or out to the sidebar beside an iPad's detail column.
+    let backToConsole: () -> Void
+    /// Close Agent's confirmation, set only on the More menu that is on
+    /// screen so the dialog has a single anchor.
+    var closeConfirmation: AgentCloseConfirmation? = nil
+}
+
+/// Close Agent's confirmation, hung off the More button that asked for it:
+/// on iOS 26 the dialog is a popover, and anchored to the whole Agent screen
+/// its arrow pointed at nothing in the middle of the terminal.
+struct AgentCloseConfirmation {
+    let title: String
+    let isPresented: Binding<Bool>
+    let close: () -> Void
+}
+
+extension View {
+    @ViewBuilder
+    func agentCloseConfirmation(_ confirmation: AgentCloseConfirmation?) -> some View {
+        if let confirmation {
+            confirmationDialog(
+                "Close \(confirmation.title)?",
+                isPresented: confirmation.isPresented,
+                titleVisibility: .visible
+            ) {
+                Button("Close Agent", role: .destructive) { confirmation.close() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(
+                    "This closes the pane on the Host and removes the agent everywhere. "
+                        + "This can't be undone.")
+            }
+        } else {
+            self
+        }
+    }
 }
 
 struct AgentComposerLinkPresentation: Equatable {
@@ -247,6 +284,7 @@ struct AgentComposerView: View {
                             .tint(secondaryActionTint)
                             .frame(minWidth: 44, minHeight: 44)
                             .accessibilityHint("Opens Agent actions")
+                            .agentCloseConfirmation(actions.closeConfirmation)
 
                             if let links = linkPresentation {
                                 Button {

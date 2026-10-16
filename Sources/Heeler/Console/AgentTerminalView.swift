@@ -159,8 +159,9 @@ struct AgentTerminalView: View {
     private let console: ConsoleStore
     private let terminal: TerminalSettings
     private let inputMode: AgentInputModeSettings
-    /// Passed through to the new-agent sheet, which keeps its Host picker for
-    /// the Console's own entry point even though this screen pre-selects one.
+    /// The Host catalog. The new-agent sheet keeps its Host picker for the
+    /// Console's own entry point even though this screen pre-selects one, and
+    /// Worktree Details reads this Agent's Host's herdr session from it.
     private let hosts: [Host]
     private let activity: AppActivityCoordinator
     /// Keeps the keyboard up across the terminal rebuild an Agent switch
@@ -655,18 +656,6 @@ struct AgentTerminalView: View {
         ) {
             pasteReviewSheet
         }
-        .confirmationDialog(
-            "Close \(title)?", isPresented: $isConfirmingClose, titleVisibility: .visible
-        ) {
-            Button("Close Agent", role: .destructive) {
-                Task { await performClose() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "This closes the pane on the Host and removes the agent everywhere. "
-                    + "This can't be undone.")
-        }
     }
 
     private var alertSurface: some View {
@@ -930,7 +919,9 @@ struct AgentTerminalView: View {
             softwareKeyboardDismissed: keyboardInset.isSoftwareKeyboardDismissed)
     }
 
-    private var composerActions: AgentComposerActions {
+    /// `anchorsClose` is true for the one input chrome on screen; during the
+    /// Direct-to-Composer handoff both are mounted and Direct Input shows.
+    private func composerActions(anchorsClose: Bool) -> AgentComposerActions {
         AgentComposerActions(
             canBegin: attach.staging.canBegin,
             attachLinkCount: attach.attachLinks.count,
@@ -956,7 +947,19 @@ struct AgentTerminalView: View {
                 } : nil,
             renameAgent: { isRenamingAgent = true },
             renameWorkspace: { isRenamingWorkspace = true },
-            closeAgent: { isConfirmingClose = true })
+            closeAgent: { isConfirmingClose = true },
+            backToConsole: { backToConsole() },
+            closeConfirmation: anchorsClose
+                ? AgentCloseConfirmation(
+                    title: title,
+                    isPresented: $isConfirmingClose,
+                    close: { Task { await performClose() } })
+                : nil)
+    }
+
+    /// The edge swipe's destination, shared with the More menu's entry.
+    private func backToConsole() {
+        if let revealDetailSidebar { revealDetailSidebar() } else { dismiss() }
     }
 
     private func makeWorktreeStore(checkout: RepositoryCheckout) -> WorktreeDetailStore {
@@ -975,6 +978,7 @@ struct AgentTerminalView: View {
             request: request,
             workspaceLabel: agent.workspaceLabel ?? checkout.repoName,
             checkout: checkout,
+            sessionName: hosts.first(where: { $0.id == hostID })?.sessionName ?? "",
             list: { [console] workspaceID in
                 try await console.listWorktrees(
                     forWorkspaceID: workspaceID, on: hostID)
@@ -1025,9 +1029,7 @@ struct AgentTerminalView: View {
         // system's own swipe instead, which follows the finger.
         .overlay(alignment: .leading) {
             if !showsBackButton {
-                AgentEdgeBackGesture {
-                    if let revealDetailSidebar { revealDetailSidebar() } else { dismiss() }
-                }
+                AgentEdgeBackGesture { backToConsole() }
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -1208,7 +1210,7 @@ struct AgentTerminalView: View {
                     isToolsKeyboardPresented: usesDirectToolsKeyboard),
                 interactions: .init(
                     switcher: agentSwitcher,
-                    actions: composerActions,
+                    actions: composerActions(anchorsClose: true),
                     toggleKeyboard: toggleDirectKeyboard,
                     switchKeyboard: directKeyboardSwitchAction,
                     sendQuickKey: sendAgentQuickKey,
@@ -1245,7 +1247,7 @@ struct AgentTerminalView: View {
             keyboardHandoff: keyboardHandoff,
             inheritsKeyboardHandoff: inheritsKeyboardHandoff,
             keyboardHeight: composerKeyboardLayout.availableToolsHeight,
-            actions: composerActions,
+            actions: composerActions(anchorsClose: directToComposerHandoffID == nil),
             attachLinksPopover: attachLinksPopover(from: .composerChip),
             skills: skills,
             keyboardPresentation: $composerKeyboardPresentation,

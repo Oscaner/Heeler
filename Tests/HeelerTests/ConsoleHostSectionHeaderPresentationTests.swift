@@ -232,11 +232,13 @@ struct ConsoleListPresentationRoutingTests {
     @Test func hostIssuePlacementFollowsPresentationMode() {
         #expect(ConsoleHostIssuePlacement(mode: .flat) == .flatIssueRows)
         #expect(ConsoleHostIssuePlacement(mode: .grouped) == .sectionHeaders)
+        #expect(ConsoleHostIssuePlacement(mode: .byWorkspace) == .flatIssueRows)
     }
 
     @Test func presentationModeTitlesAreStableForTheSwitcher() {
         #expect(ConsoleListPresentationMode.flat.title == "All Agents")
         #expect(ConsoleListPresentationMode.grouped.title == "By Host")
+        #expect(ConsoleListPresentationMode.byWorkspace.title == "By Workspace")
     }
 
     @Test func readinessNamesTheInventoryItDescribes() {

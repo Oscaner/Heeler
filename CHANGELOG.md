@@ -15,7 +15,138 @@ Entries reference the pull request that made the change.
   connection and herdr command through them. macOS and Linux Hosts only.
   Such a code without a one-time key waits for you to tap Pair, since
   pairing runs its launcher on the Host. A Pairing Code version this app
-  does not know now asks you to update Heeler. (#430)
+  does not know now asks you to update Heeler. (#432)
+
+### Fixed
+
+- Closing a connection through a Tailscale network no longer risks shutting
+  down an unrelated connection that reused its file descriptor. Tailscale
+  networks now run libtailscale 0.2.0 with Tailscale v1.104.1. (#463)
+
+## [0.1.14] - 2026-10-15
+
+### Added
+
+- Read and search Heeler's connection guides in English or Simplified Chinese
+  on the new documentation site, with navigation for overlay networks, Jump
+  Hosts, Host Routes, and Windows setup, and copy any guide as Markdown. (#442)
+- Group the Agents list By Workspace from its presentation menu. Collapse
+  Workspaces to focus on one project while keeping status counts visible;
+  the choice and collapsed Workspaces persist across launches. (refs #364)
+- Return to the Console from an Agent's More menu. Back to Console does
+  what swiping in from the left edge does, so the way back no longer
+  depends on knowing the gesture; the Agent keeps running on the Host. (#439)
+- Give a Host more than one route — its LAN address for home, say, and an
+  overlay network or Jump Host for everywhere else. Add Route in Edit Host;
+  Heeler tries every route each time it connects and keeps the first that
+  reaches the Host, starting routes over this device's own network a moment
+  ahead, so at home the LAN address wins without an overlay network ever
+  starting. Pairing adds every address the Pairing Code offers. A Host's key
+  is trusted once for all of its routes: another machine answering one of
+  its addresses is refused, and adding an overlay address no longer asks to
+  confirm the key again. (#437)
+- See which route a Host is connected through. Its detail page opens with
+  the connection's status and a Reconnect or Stop button, lists every route
+  with the one in use marked, and when no route reaches the Host shows why
+  each one failed. Edit Host lists routes as rows that each open their own
+  page, and a new Host starts from Add Route. Run Checks Again moves beside
+  the Preflight heading. (#438)
+- Reach a Host through Tailscale, ZeroTier, or EasyTier without turning on a
+  VPN. Add a network in Settings › Overlay Networks, then choose it under
+  Network when editing the Host. Heeler joins the network itself while it is
+  open, and only for its own connections. A network's screen shows this
+  device's addresses and node ID (copyable, for authorizing on ZeroTier) and
+  its peers; Tailscale networks can sign out, ZeroTier networks can orbit
+  moons or use a custom planet of their own (so networks on ZeroTier Central
+  and on self-hosted roots connect side by side), and EasyTier can use a
+  fixed address or take its networks from an EasyTier config server (web
+  console). Several EasyTier networks, manual or from config servers, run
+  side by side, even on the same subnet; a config server may assign up to
+  eight, listed on its network's screen, and a Host reaches the one its
+  address or name is on. A config server must offer EasyTier's encrypted
+  connection unless Require Encryption is turned off for it; the form warns
+  about clear-text and unverified transports. ZeroTier networks that give
+  this device the same address stay apart too, each Host reaching the peer
+  on its own network. A Host address that is not on the tailnet, or that its
+  ZeroTier network has no route to, fails at once instead of waiting for the
+  connection timeout. (#426)
+- Pick a Host from a Tailscale or EasyTier network instead of typing its
+  address: Choose from Tailnet… in the Host form connects the network if
+  needed and lists its peers to search, filling in the peer's IP address
+  (or Tailscale machine name) and a blank Host name; the form then names
+  the chosen machine and the list marks it. Add beside a machine on a
+  network's screen in Settings adds it as a Host too, and machines that
+  already are a Host say so. (#426)
+- A ZeroTier network's screen has Diagnostics: the network's status,
+  addresses, routes, roots and members with their paths, and recent events,
+  with Copy All for reporting a problem. Its peers are listed as members and
+  roots. A device awaiting authorization shows as Waiting and keeps trying
+  until an admin approves it. (#426)
+- Stop waiting for a network that is slow to connect: Connect on a
+  network's screen, Choose from Tailnet…, a Host's checks, and a Host the
+  Console is still connecting each offer Cancel (or Stop Connecting), which
+  returns at once without a timeout error. A ZeroTier network stays joined
+  so a later authorization still applies; a stopped Host stays paused until
+  you reconnect it. (#426)
+
+### Changed
+
+- The solving orb on working Agents draws at 30 frames per second and pauses while it is off screen or Heeler is in the background, so a working Agent keeps the main thread far less busy and the phone cooler; the animation looks the same. (#436)
+- Settings › About › Acknowledgements shows each component's source and, where recorded, its version, and a distributed build names the commit it was made from, with a link to that source. (#426)
+- Redesign Settings › Overlay Networks: each network has a switch to connect or disconnect it (Cancel while it connects, Sign In before its first login), a status card with this device's address to copy, and its machines with Add or Host beside each, searchable. Adding a Tailscale network picks the kind from cards, keeps the coordination server and auth key under Advanced, and goes straight to browser sign-in (or connects with its auth key); Edit, Sign Out and Delete sit in the network's menu. A Tailscale device awaiting admin approval shows Waiting for approval and joins once approved, and the Host form puts Network first once an overlay network exists. ZeroTier and EasyTier networks connect as soon as they are added, keep moons, custom planets, fixed addresses and encryption under Advanced, and show the ZeroTier node ID or EasyTier machine ID to authorize on the status card (ZeroTier creates its node ID on the first connect, not when its form opens, so an unused one no longer sits in the network list); a ZeroTier network waiting for authorization offers Open ZeroTier Central, its roots move to Diagnostics, and an EasyTier config server's networks each list their address and peers, or why they don't run. (#426)
+
+### Fixed
+
+- Removing a Host now ends its Live Activity and forgets its Live Activity
+  setting, and Heeler no longer keeps retrying Live Activity updates for the
+  removed Host. (#444)
+- Removing a connected Host now also stops its notifications to this
+  device: Heeler first takes this device off the Host's notification list,
+  then deletes the Host's Notification Key along with its saved password. If
+  the Host isn't connected, the confirmation says so and suggests connecting
+  first; a Host removed without being reached may keep sending this device
+  generic "Agent update" notifications. (#445)
+- When a Host's Heeler plugin is turned off, the steps on the Host's page
+  now always end with the command that turns it back on: after updating an
+  outdated plugin, which herdr 0.9.4 leaves off, and after removing a copy
+  left under the plugin's former name. That command names the Host's herdr
+  session, so it works when the default session isn't running.
+  Notification settings now say the plugin is missing or turned off and
+  point to the Host's page. (#458)
+- Close Agent and Close Terminal now ask from the More button you tapped,
+  instead of a bubble floating in the middle of the terminal. (#440)
+- New Agent with long Arguments on a macOS Host running herdr 0.9.4 now
+  waits for the new shell to take the launch command instead of failing at
+  once and removing what it created. If the shell never takes it, as with
+  dash, New Agent asks you to shorten the Arguments. (#458)
+- When attaching to an Agent or terminal on a macOS or Linux Host fails
+  because herdr exits, the message now quotes herdr's own error, such as an
+  older herdr earlier on the SSH PATH losing its connection to the server,
+  instead of only an exit status. (#443)
+- On a macOS or Linux Host with herdr 0.9.4, opening an Agent or a Shell
+  Terminal over a slow connection no longer types stray characters into
+  the Agent or shell: Heeler no longer answers the terminal query herdr
+  sends when it attaches, whose late answer herdr passed on as typing.
+  (#458)
+- Start Tailscale browser authorization with one Sign In button and reconnect automatically after returning from the browser. (#426)
+- Show Connected and remove the sign-in prompt when Tailscale browser authorization completes, without requiring another Connect. (#426)
+- Open a Host's connection checks after adding it from an overlay network's peer list, so its SSH host key can be trusted on the first connection. (#426)
+- Agent cards keep a Host's herdr sidebar fields and Agent order when its
+  herdr sidebar settings use the letta agent, the machine field, field
+  rules, or a UTF-8 byte-order mark, instead of falling back to herdr's
+  defaults. Update the Heeler plugin to 0.6.1 on each Host. Sync from
+  plugin no longer blames herdr when the plugin can't read a Host's
+  settings. (#458)
+- Type Korean straight into the terminal with the iOS Korean keyboard:
+  syllables now compose as typed instead of arriving as repeated or loose
+  jamo ("한글 지원", not "한한한글글글글지지지원"), with the software keyboard
+  and a hardware keyboard alike, including after Backspace. (#441)
+- Removing a Worktree that has checked-out submodules now says that the
+  submodules block it, instead of blaming modified or untracked files.
+  Show Changes stays, and Copy Command hands you the herdr command that
+  forces the removal. While herdr is still loading restored Worktrees
+  after a restart, the message gives herdr's own reason instead of
+  saying a worktree change is already underway. (#458)
 
 ## [0.1.13] - 2026-10-07
 

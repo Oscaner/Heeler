@@ -1,8 +1,7 @@
 import Foundation
 
 /// One row of the Console (#8): an Agent joined with its Host identity and
-/// workspace context. The list is flat across Hosts; the workspace is a
-/// context tag only, never a grouping level.
+/// workspace context. The Console can group these rows by Host or Workspace.
 struct ConsoleAgent: Identifiable, Sendable, Equatable {
     /// Pane addresses are unique per herdr session, not across Hosts; the
     /// row identity pairs them.

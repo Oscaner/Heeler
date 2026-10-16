@@ -117,6 +117,65 @@ struct ConsoleStoreTests {
         #expect(await condition(), comment)
     }
 
+    /// #414, the app's removal wiring end to end: the revoke borrows the
+    /// Host's live Console connection, which the catalog change then ends,
+    /// so a revoke attempted after it could no longer reach the Host.
+    @Test func hostRemovalRevokesOverTheConnectionTheCatalogChangeEnds() async throws {
+        let host = Host.fixture()
+        let transport = ScriptedTransport(snapshot: .fixture(agents: []))
+        let console = makeStore(transports: [host.id: transport])
+        defer { console.setHosts([]) }
+        let (defaults, cleanup) = try makePinDefaults()
+        defer { cleanup() }
+        let hostStore = HostStore(defaults: defaults, secrets: InMemorySecretStore())
+        try hostStore.add(host)
+        let token = APNSDeviceToken(hex: "0a1b2c3d", environment: .sandbox)
+        let keys = NotificationKeyStore(secrets: InMemorySecretStore(), mirror: nil)
+        let ceremony = NotificationRegistrationCeremony(keys: keys)
+        let preferences = NotificationPreferencesStore(
+            transports: console, deviceToken: { token }, ceremony: ceremony)
+        preferences.setHosts(hostStore.hosts)
+        let liveActivities = HostLiveActivityCoordinator(
+            controller: FakeLiveActivityController(),
+            preferences: LiveActivityPreferences(defaults: defaults),
+            transports: console,
+            keys: keys,
+            deviceToken: { token },
+            knownHostIDs: { Set(hostStore.hosts.map(\.id)) },
+            hostDisplayName: { _ in host.displayName },
+            isAwaitingSnapshot: { _ in false },
+            connectionStatus: { console.hostStatuses[$0] })
+        console.setHosts(hostStore.hosts)
+        await console.resume()
+        try await waitUntil("the Host should connect") {
+            console.hostStatuses[host.id] == .connected
+        }
+        try await ceremony.register(host: host, deviceToken: token, over: transport)
+        let dependencies = HostRemovalDependencies.app(
+            console: console, notificationPreferences: preferences,
+            liveActivities: liveActivities)
+        let removal = HostRemovalStore(store: hostStore)
+
+        removal.requestRemoval([host.id], dependencies: dependencies)
+        let request = try #require(removal.pendingRequest)
+        #expect(request.deletesNotificationKey)
+        #expect(!request.leavesNotificationsBehind)
+        await removal.confirmRemoval(request, dependencies: dependencies)
+
+        #expect(hostStore.hosts.isEmpty)
+        #expect(removal.errorMessage == nil)
+        #expect(try keys.record(forHost: host.id) == nil)
+        let file = try NotificationRegistrationFile.decode(
+            await transport.notificationRegistration)
+        #expect(file.devices.isEmpty)
+
+        // What the app model's catalog observer does next.
+        console.setHosts(hostStore.hosts)
+        await #expect(throws: (any Error).self) {
+            try await console.withNotificationTransport(for: host.id) { _ in () }
+        }
+    }
+
     @Test func sortBucketsRankBlockedThenDoneThenWorkingThenIdle() {
         #expect(AgentStatus.blocked.consoleSortBucket < AgentStatus.done.consoleSortBucket)
         #expect(AgentStatus.done.consoleSortBucket < AgentStatus.working.consoleSortBucket)
@@ -1733,6 +1792,30 @@ struct ConsoleStoreTests {
         #expect(store.hostLatencies.isEmpty)
     }
 
+    /// The route a Host reached (ADR 0022) is published with `.connected`
+    /// and dropped with the connection, like its latency.
+    @Test func hostRouteIDFollowsTheConnectionThatReachedIt() async throws {
+        let host = Host.fixture()
+        let routeID = try #require(host.routes.first?.id)
+        let transport = ScriptedTransport(snapshot: .fixture(), routeID: routeID)
+        let store = makeStore(transports: [host.id: transport])
+
+        store.setHosts([host])
+        await store.resume()
+        try await waitUntil("the Host should report connected") {
+            store.hostStatuses[host.id] == .connected
+        }
+        #expect(store.hostRouteIDs[host.id] == routeID)
+
+        await store.suspend()
+        try await waitUntil("the Host should report suspended") {
+            store.hostStatuses[host.id] == .suspended
+        }
+        #expect(store.hostRouteIDs[host.id] == nil)
+
+        store.setHosts([])
+    }
+
     /// A latency belongs to the connection that measured it (#236), and the
     /// projection folds both from one ordered source — so every assertion here
     /// is made the instant the status is observable, with nothing waited for
@@ -2230,7 +2313,10 @@ struct ConsoleStoreTests {
         let checkout = try #require(agent.repositoryCheckout)
 
         await transport.setWorktreeRemoveFailure(
-            HerdrAPIError(code: "dirty_worktree_requires_force", message: "dirty"))
+            HerdrAPIError(
+                code: "dirty_worktree_requires_force",
+                message:
+                    "fatal: '/work/one-wt' contains modified or untracked files, use --force to delete it"))
         let rejected = WorktreeRemovalRequest(
             identity: WorktreeIdentity(
                 hostID: host.id, workspaceID: "w1", checkout: checkout))

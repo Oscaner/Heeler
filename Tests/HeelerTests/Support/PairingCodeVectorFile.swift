@@ -4,7 +4,7 @@ import Foundation
 /// source of truth for the envelope across the Node plugin and this app
 /// (ADR 0007). The JSON files are bundled into the test target as resources
 /// so the Swift tests exercise exactly the same cases as the Node tests;
-/// the v2 file (ADR 0021) is consumed by the Swift tests only.
+/// the v2 file (ADR 0023) is consumed by the Swift tests only.
 struct PairingCodeVectorFile: Decodable, Sendable {
     let valid: [Valid]
     let invalid: [Invalid]

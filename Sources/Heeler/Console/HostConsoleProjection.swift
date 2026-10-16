@@ -21,6 +21,9 @@ final class HostConsoleProjection {
     /// connection, mirrored from `EventsSession.currentLatency` so a
     /// measurement never outlives the connection that proved it.
     private(set) var latency: Duration?
+    /// The catalog route the current connection reached, mirrored from
+    /// `EventsSession.currentRouteID` exactly as `latency` is.
+    private(set) var routeID: UUID?
     private(set) var syncError: String?
     private(set) var transportGeneration: UInt64 = 0
     private(set) var sidebarRevision: UInt64 = 0
@@ -180,6 +183,12 @@ final class HostConsoleProjection {
         await session.retry()
     }
 
+    /// Stops a connection attempt the user no longer wants to wait for;
+    /// the Host then reads Paused until a retry or the next foreground.
+    func cancelConnecting() async {
+        await session.cancelConnecting()
+    }
+
     /// Makes the new activation visible on this projection before the
     /// session hops into teardown, so an in-flight resync cannot observe
     /// `.connected` after `currentTransport` is already gone.
@@ -190,6 +199,7 @@ final class HostConsoleProjection {
     private func beginNewActivation() {
         status = .connecting
         latency = nil
+        routeID = nil
         invalidateSnapshot()
         publish()
     }
@@ -595,6 +605,7 @@ final class HostConsoleProjection {
             // a new connection proved before announcing itself is already
             // here when its `.connected` lands.
             latency = session.currentLatency
+            routeID = session.currentRouteID
             switch status {
             case .failed(let failure):
                 standingFailure = failure

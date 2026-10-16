@@ -77,7 +77,7 @@ struct WakeCommandTests {
         }
     }
 
-    /// A herdr endpoint (ADR 0021) wakes through its own launcher: no PATH
+    /// A herdr endpoint (ADR 0023) wakes through its own launcher: no PATH
     /// export, and an injected wake command is ignored.
     @Test func endpointLauncherWakesTheEndpointServer() throws {
         let socketPath = "/Users/ada/Library/Application Support/Example/herdr/herdr.sock"

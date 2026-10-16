@@ -6,7 +6,7 @@ import Testing
 /// Decoder tests for the Pairing Code envelope (#62, #380), driven by the
 /// shared vectors in `plugin/test-vectors/pairing-code-v1.json` — the same
 /// file the Node plugin tests consume, so the two implementations cannot
-/// drift — and the app-only `pairing-code-v2.json` (ADR 0021).
+/// drift — and the app-only `pairing-code-v2.json` (ADR 0023).
 @Suite("Pairing Code envelope")
 struct PairingCodeTests {
     private static let vectors = PairingCodeVectorFile.shared
@@ -75,7 +75,7 @@ struct PairingCodeTests {
     }
 
     /// Only a code that names a launcher without a Bootstrap Key waits for
-    /// the user before pairing (ADR 0021).
+    /// the user before pairing (ADR 0023).
     @Test func onlyEndpointCodesWithoutABootstrapKeyNeedConfirmation() throws {
         var waiting = 0
         for vector in Self.vectors.valid + Self.v2Vectors.valid {

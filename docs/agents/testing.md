@@ -44,11 +44,13 @@ preparation and can miss SwiftUI labels on a clean Simulator (#339).
 | App stores, parsers, SwiftUI hosting | `make test-app TEST_SELECTOR='HeelerTests/<Suite>'` | Selected app behavior on the named candidate and Simulator |
 | Full local app and SSH package suites | `make test` or `make test-ipad` | App tests followed by the separate HeelerSSH test plan |
 | `Packages/HeelerSSH` | `make test-ci-package` | Committed-project package CI lane with disposable SSH fixtures and count gates |
+| `Packages/HeelerOverlay` | `xcodebuild test -scheme HeelerOverlay` in that directory (see its README for the live suites) | Overlay nodes against the heeler-overlay-natives release it pins; not part of `make test` |
 | App transport/fixture integration | `make test-ci-app SIMULATOR_UDID=<UDID>` | Committed-project app CI lane, real-SSH fixture suites, required test counts |
 | Test/tool runners or agent-doc contracts | `make test-tools` | Local tool tests and document checks; no iOS build |
 | CI suite/count/skip guard changes | `make test-ci-guards` | Guard behavior through supplied log fixtures; no native SSH or iOS acceptance |
 | Agent documentation | `make check-agent-docs` | Document pointers and repository navigation invariants |
 | Plugin or relay | `npm test` in its directory | Node behavior; no install step, Node >= 20 |
+| Docs site | `pnpm install --frozen-lockfile` and the other pnpm commands in [its README](../../docs-site/README.md#commands), from `docs-site/` | Markdown pipeline tests, Astro checks, static build, and internal links |
 | Landing | Its `package.json` `check` and `build` scripts | Astro checks and static build |
 
 App `-only-testing:HeelerTests/...` selectors do not select the HeelerSSH package

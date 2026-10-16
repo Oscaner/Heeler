@@ -7,7 +7,7 @@ import VisionKit
 /// a paste path for the same string, the permission prompt, and a usable
 /// denied path. Once a code parses, the pairing ceremony runs immediately —
 /// one scan or paste, no confirmation step, except for a code that names a
-/// launcher without a Bootstrap Key (ADR 0021) — and on success the persisted
+/// launcher without a Bootstrap Key (ADR 0023) — and on success the persisted
 /// Host is handed to `onPaired`, entering the same preflight a manually
 /// added Host does.
 struct PairingScanView: View {

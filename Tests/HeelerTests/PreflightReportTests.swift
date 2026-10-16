@@ -67,6 +67,7 @@ struct PreflightReportTests {
         (.gitTimedOut, .connection),
         (.cancelled, .connection),
         (.channelFailed(detail: "boom"), .connection),
+        (.attachExited(status: 1, output: "herdr: lost connection"), .connection),
         (.eventsChannelAlreadyOpen, .connection),
         (.herdrBinaryNotFound, .herdrInstalled),
         (.herdrLauncherNotFound(path: "/opt/example/bin/herdr"), .herdrInstalled),
@@ -181,7 +182,7 @@ struct PreflightReportTests {
     }
 
     /// Without an endpoint the socket and protocol hints stay byte for byte
-    /// what they were before ADR 0021.
+    /// what they were before ADR 0023.
     @Test func hostsWithoutAnEndpointKeepTheirSocketAndProtocolHints() {
         let path = "/home/dev/.config/herdr/herdr.sock"
         let cases: [(TransportError, PreflightCheck, String)] = [

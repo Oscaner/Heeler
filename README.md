@@ -4,8 +4,8 @@
 
 # Heeler
 
-<a href="https://testflight.apple.com/join/aXSxRn4r"><img src="docs/images/testflight-badge.svg" alt="Available on TestFlight" height="40" /></a>
 <a href="https://apps.apple.com/us/app/heeler-for-herdr/id6797263135"><img src="https://toolbox.marketingtools.apple.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on the App Store" height="40" /></a>
+<a href="https://testflight.apple.com/join/aXSxRn4r"><img src="docs/images/testflight-badge.svg" alt="Available on TestFlight" height="40" /></a>
 
 **A native iOS companion app for [herdr](https://herdr.dev) — an agent-first terminal runtime.**
 
@@ -85,10 +85,16 @@ when it's disabled.
 
 Native Windows Hosts (herdr >= 0.9.3) connect over SSH and are added manually.
 
+For Tailscale, ZeroTier, or EasyTier access, follow the [Overlay Network setup guides](docs/guides/overlay-networks.md). They cover macOS installation, Tailscale without a VPN on the Mac, Heeler configuration, and connection checks. Heeler joins these networks inside the app without an iOS VPN configuration; you need a Heeler version with **Settings > Overlay Networks**.
+
+[View the Heeler setup screenshots](docs/guides/overlay-networks.md#heeler-setup-screenshots) for Tailscale, ZeroTier, and both EasyTier modes.
+
 Unroutable machines can sit behind an SSH Jump Host:
 
 - [Set up remote access step by step](docs/guides/vps-jump-host-setup.md)
 - [Architecture, security boundaries, and the VPS runbook](docs/guides/vps-jump-host.md)
+
+A Host can have several routes, such as its LAN address at home and an overlay network or Jump Host elsewhere: [Reach a Host on several routes](docs/guides/host-routes.md).
 
 ## Installation
 
@@ -112,7 +118,8 @@ herdr plugin action invoke heeler.pair
 Scan the Pairing Code QR it shows and the machine is added as a Host — the
 code carries the addresses, the host key fingerprint, and SSH key enrollment.
 The same [plugin](plugin/README.md) delivers the encrypted notifications once
-you enable them for the Host in the app.
+you enable them for the Host in the app. For every step, the popup's keys, and
+troubleshooting, see the [pairing guide](https://docs.heeler.bybee.dev/pairing).
 
 ## Opening an Agent from another app
 

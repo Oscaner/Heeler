@@ -48,14 +48,16 @@ Native iOS companion app for [herdr](https://herdr.dev), an agent console over S
   over SSH for encrypted notifications; host-key policy is TOFU with fingerprint
   confirmation. Preserve these boundaries when changing authentication.
 - Dependency updates must keep exact pins and review source hashes plus
-  committed XCFramework checksums (`Packages/HeelerSSH` and libghostty-spm).
+  committed XCFramework checksums (`Packages/HeelerSSH`, libghostty-spm, and
+  heeler-overlay-natives).
 - User-visible changes get a `CHANGELOG.md` Unreleased entry referencing the PR;
   internal refactors and test work stay out. Domain term changes update
   `CONTEXT.md`; hard-to-reverse, surprising trade-offs get an ADR.
 - Release work follows [releasing.md](docs/guides/releasing.md): `make publish`
   cuts CHANGELOG and versions and pushes the tag; `release.yml` signs and
   uploads it. `make bump && make testflight` stays a local
-  interim upload. The release runner owns version edits and tags.
+  interim upload. The release runner owns version edits and tags; a failed
+  release that published nothing keeps its version (re-run or re-cut).
 - Commits and PRs carry no attribution trailers or email addresses; local hooks
   and CI enforce the [contribution policy](CONTRIBUTING.md#commit-attribution).
   Commits reference issues with `refs #<n>`; a PR that resolves an issue ends

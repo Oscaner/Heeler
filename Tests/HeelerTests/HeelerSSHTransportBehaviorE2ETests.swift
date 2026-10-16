@@ -396,7 +396,7 @@ struct HeelerSSHTransportBehaviorE2ETests {
         await replacement.end()
     }
 
-    @Test("nonzero Attach exit reports the primary channel failure and wakes input")
+    @Test("nonzero Attach exit reports herdr's exit and last line and wakes input")
     func failedAttachExitFreesChannel() async throws {
         let environment = try #require(HeelerSSHTransportBehaviorEnvironment.current)
         let transport = try await HeelerSSHTransport.connect(settings: environment.directSettings())
@@ -408,9 +408,10 @@ struct HeelerSSHTransportBehaviorE2ETests {
         var output = ""
         try await expectAttachOutput(&iterator, accumulated: &output, contains: "TTY-OK")
         failed.send(Data("__fail__\n".utf8))
+        // The fixture's last line rides along with the status (#431).
         await #expect(
-            throws: TransportError.channelFailed(
-                detail: "attach channel: remote exit status 23")
+            throws: TransportError.attachExited(
+                status: 23, output: "herdr: fixture attach failed")
         ) {
             while try await iterator.next() != nil {}
         }
@@ -906,11 +907,12 @@ struct HeelerSSHTransportBehaviorE2ETests {
         #expect(after - before == 12)
     }
 
-    /// CLAUDE.md's load-bearing herdr 0.7.5 fact: `agent.start` on a pane whose
-    /// shell has not reached its prompt is refused with `agent_pane_busy`, and
-    /// the Transport waits the shell out rather than surfacing it. herdr 0.8.0
-    /// answers asynchronously instead, so nothing live exercises this any more
-    /// — only the fixture can hold the older server's behavior still.
+    /// herdr refuses `agent.start` with `agent_pane_busy` while a startup
+    /// command holds a fresh pane's foreground (live on 0.9.4, fish drew 146
+    /// such refusals before its launch went through at about 2.4 s), and the
+    /// Transport waits the shell out rather than surfacing it. Only the
+    /// fixture holds that window still; see the `agent.start` observation in
+    /// docs/agents/herdr-compatibility.md.
     @Test("agent start waits out a fresh pane's booting shell")
     func agentStartRetriesWhileTheFreshPaneShellBoots() async throws {
         let environment = try #require(HeelerSSHTransportBehaviorEnvironment.current)
@@ -935,6 +937,39 @@ struct HeelerSSHTransportBehaviorE2ETests {
             recorded[0]
                 == #"tab.create {"cwd":"/fixture/\#(token)","focus":false,"label":"fixture","workspace_id":"workspace-1"}"#
         )
+        #expect(!recorded.contains { $0.hasPrefix("pane.close ") })
+    }
+
+    /// herdr 0.9.4 on macOS also refuses a launch line longer than the
+    /// terminal's 1,024-byte canonical input limit until the fresh shell's
+    /// line editor starts, and a booting shell can answer busy and canonical
+    /// in turn. Both refusals share the one wait, and every attempt resends
+    /// the same request, long argument included, to the same pane.
+    @Test("agent start waits out a shell that cannot yet take a long launch line")
+    func agentStartRetriesWhileTheFreshShellIsInCanonicalMode() async throws {
+        let environment = try #require(HeelerSSHTransportBehaviorEnvironment.current)
+        let transport = try await HeelerSSHTransport.connect(
+            settings: environment.directSettings())
+        defer { Task { try? await transport.close() } }
+
+        let token = Self.scriptToken("canon3")
+        let argument = String(repeating: "x", count: 1_100)
+        let agent = try await transport.startAgent(
+            AgentLaunchRequest(
+                kind: "codex",
+                name: "fixture",
+                arguments: [argument],
+                workspaceID: "workspace-1",
+                cwd: "/fixture/\(token)"))
+
+        #expect(agent.paneID == "pane:\(token)")
+        let recorded = try await Self.recordedRequests(from: transport, token: token)
+        // Three refusals, then the launch: four identical requests.
+        let start =
+            #"agent.start {"args":["\#(argument)"],"kind":"codex","name":"fixture","pane_id":"pane:\#(token)"}"#
+        #expect(
+            recorded.filter { $0.hasPrefix("agent.start ") }
+                == Array(repeating: start, count: 4))
         #expect(!recorded.contains { $0.hasPrefix("pane.close ") })
     }
 
@@ -1590,10 +1625,12 @@ struct HeelerSSHTransportBehaviorE2ETests {
         await session.end()
     }
 
-    /// What the `startfails` script answers `agent.start` with. Any code but
-    /// `agent_pane_busy` takes the compensating path, so the fixture uses one
-    /// of its own rather than guessing at herdr's — 0.7.5's refusal of an
-    /// unsupported kind is recorded by its message alone.
+    /// What the `startfails` script answers `agent.start` with. Any refusal
+    /// but the two the shell-readiness wait resends (`agent_pane_busy` and
+    /// herdr 0.9.4's canonical-mode refusal) takes the compensating path at
+    /// once, so the fixture uses a code of its own rather than guessing at
+    /// herdr's: 0.7.5's refusal of an unsupported kind is recorded by its
+    /// message alone.
     private static let refusedStart = HerdrAPIError(
         code: "fixture_agent_start_refused",
         message: "scripted non-retryable agent.start failure")

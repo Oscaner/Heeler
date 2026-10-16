@@ -3,6 +3,10 @@ import Foundation
 /// The app-side abstraction that executes herdr API requests over SSH.
 /// UI code talks to Transport, never to SSH primitives (ADR 0011).
 protocol Transport: Sendable {
+    /// The catalog route this connection reached (ADR 0022); nil where the
+    /// transport does not know one.
+    var routeID: UUID? { get }
+
     /// Verifies the server speaks a protocol version we support and returns
     /// its identity. Must be the first herdr API call on every new connection
     /// path; Host-local session discovery may run before it.
@@ -74,8 +78,9 @@ protocol Transport: Sendable {
     /// resolves the repository from the source workspace's cwd (a non-git cwd
     /// fails with `not_git_worktree`) and returns a new workspace whose root
     /// pane already runs a shell, so this variant skips `tab.create` and
-    /// starts the agent in that pane directly (the `agent_pane_busy`
-    /// readiness retry still applies). `request.workspaceID` is the *source*
+    /// starts the agent in that pane directly (the shell-readiness retry on
+    /// `agent_pane_busy` and on herdr 0.9.4's canonical-mode refusal still
+    /// applies). `request.workspaceID` is the *source*
     /// workspace; the started agent lives in the returned worktree workspace
     /// and surfaces through the normal snapshot/delta machinery.
     func startAgentInNewWorktree(
@@ -86,8 +91,9 @@ protocol Transport: Sendable {
     /// `workspace.create` opens the remote directory as its own Workspace
     /// (no existing Workspace required) and returns a root pane already
     /// running a shell, so this variant skips `tab.create` and starts the
-    /// agent in that pane directly (the `agent_pane_busy` readiness retry
-    /// still applies). `request.workspaceID` is unused; the started agent
+    /// agent in that pane directly (the shell-readiness retry on
+    /// `agent_pane_busy` and on herdr 0.9.4's canonical-mode refusal still
+    /// applies). `request.workspaceID` is unused; the started agent
     /// lives in the returned Workspace and surfaces through the normal
     /// snapshot/delta machinery.
     func startAgentInNewWorkspace(
@@ -127,9 +133,18 @@ protocol Transport: Sendable {
         onDispatched: @escaping @Sendable (WorktreeRemovalRequest) async -> Void
     ) async throws -> WorktreeRemovedResponse
 
-    /// Marks the viewed Agent seen through `agent.focus`. herdr 0.9.0 also
-    /// focuses its Tab and marks every Pane in that Tab seen. Callers must
-    /// refresh the entire Host rather than synthesize a selected-row status.
+    /// Marks the viewed Agent seen through `agent.focus`. herdr makes the
+    /// Agent's Tab the server's active Tab and marks every Pane in it seen.
+    /// It emits no status event for that change, although a Pane-scoped
+    /// `pane.agent_status_changed` subscription still reports the new
+    /// statuses from its own polling. Callers must refresh the entire Host
+    /// rather than synthesize a selected-row status. Later completions in
+    /// that Tab read Idle, not Done, while no herdr client is attached or the
+    /// attached one has focus. On every supported herdr except 0.9.0 the call
+    /// also moves attached herdr clients, and their next keystrokes, to that
+    /// Tab: through the shared view on 0.8.x and earlier, and through the
+    /// client focus projection since 0.9.1. A direct `agent attach` or
+    /// `terminal attach` stays on its terminal.
     func focusAgent(_ target: AgentTarget) async throws
 
     /// Renames an Agent (`agent.rename`): the Console management action
@@ -281,6 +296,8 @@ protocol Transport: Sendable {
 }
 
 extension Transport {
+    var routeID: UUID? { nil }
+
     /// Test doubles and alternative transports that do not expose Host-level
     /// session discovery can opt out without inventing sessions.
     func listSessions() async throws -> [HerdrSession] { [] }
@@ -967,6 +984,15 @@ indirect enum TransportError: Error, Sendable, Equatable {
     /// an unexpected host key. Carries the underlying failure so screens can
     /// reuse the existing guidance while naming the Jump Host as the culprit.
     case jumpHostFailed(TransportError)
+    /// The Host's Overlay Network could not carry the first hop: it is gone,
+    /// not signed in, failed to start, or could not reach the peer. Never
+    /// wrapped in `.jumpHostFailed` — the overlay sits in front of the Jump
+    /// Host, which was never contacted (ADR 0021).
+    case overlayFailed(network: String, reason: OverlayFailure)
+    /// Every one of the Host's routes failed (ADR 0022). Each failure is
+    /// that route's own, named by the route; a Host with a single route
+    /// reports its failure directly instead.
+    case noRouteReached([RouteFailure])
     /// The Jump Host accepted SSH authentication but its server or key policy
     /// prohibits the direct-tcpip channel required to reach the Host.
     case tcpForwardingUnavailable
@@ -997,7 +1023,7 @@ indirect enum TransportError: Error, Sendable, Equatable {
     /// the well-known install prefixes. The API socket can still work — that
     /// is why the Console may list Agents while Attach fails (#206).
     case herdrBinaryNotFound
-    /// The launcher of the Host's herdr endpoint (Pairing Code v2, ADR 0021)
+    /// The launcher of the Host's herdr endpoint (Pairing Code v2, ADR 0023)
     /// could not run: exit 126 or 127, so it is missing, not executable, or
     /// could not start herdr. Carries the launcher's path.
     case herdrLauncherNotFound(path: String)
@@ -1042,6 +1068,12 @@ indirect enum TransportError: Error, Sendable, Equatable {
     /// The channel failed outside the known failure shapes; carries the
     /// underlying description for diagnostics.
     case channelFailed(detail: String)
+    /// The remote attach command exited nonzero. Carries the line herdr last
+    /// printed outside its alternate screen, when there was one, because the
+    /// status alone cannot say which herdr failed or why (#431). A native
+    /// Windows terminal controller's exit carries no line: its stderr is not
+    /// kept, and its stdout is JSON records, not terminal output.
+    case attachExited(status: Int32, output: String?)
     case hostFeatureUnavailable(feature: String)
 
     /// Whether reconnecting without user intervention can plausibly recover.
@@ -1055,7 +1087,7 @@ indirect enum TransportError: Error, Sendable, Equatable {
         // A rejection is retryable because herdr's error codes are open-ended
         // and most of them describe a target that moved, not a broken setup.
         case .sshUnreachable, .timedOut, .cancelled, .channelFailed,
-            .apiRejected:
+            .attachExited, .apiRejected:
             true
         case .authenticationFailed, .tcpForwardingUnavailable,
             .deviceKeyCorrupt, .rsaKeyCorrupt, .rsaSignatureUnsupported,
@@ -1071,7 +1103,46 @@ indirect enum TransportError: Error, Sendable, Equatable {
         // rebooting VPS should reconnect on its own, a rejected key should not.
         case .jumpHostFailed(let underlying):
             underlying.isRetryable
+        // Any route that may come back on its own is worth another race: the
+        // LAN address refused away from home must not stop the overlay route.
+        // A changed key on a route that cannot reach another machine stops
+        // the race, as it stops a single route, until the user decides.
+        case .noRouteReached(let failures):
+            !failures.contains(where: \.isHostKeySecurityFailure)
+                && failures.contains { $0.error.isRetryable }
+        // A peer that is asleep, a slow node, or a device awaiting approval
+        // can recover on its own; a missing network, a sign-in, a malformed
+        // setting, or a start failure that outlasted its retries needs the user.
+        case .overlayFailed(_, let reason):
+            switch reason {
+            case .unreachable, .timedOut, .notReady:
+                true
+            case .notConfigured, .catalogUnreadable, .misconfigured, .loginRequired,
+                .signedOut, .startFailed:
+                false
+            }
         }
+    }
+}
+
+/// One route's failure in `TransportError.noRouteReached`.
+struct RouteFailure: Sendable, Equatable {
+    /// The route as `SSHRoute.label` names it.
+    let route: String
+    /// Whether the route's address may name another machine on the
+    /// device's current network (`SSHRoute.mayNameAnotherMachine`).
+    let mayNameAnotherMachine: Bool
+    let error: TransportError
+    /// The catalog route that failed (`SSHRoute.id`), when known.
+    var routeID: UUID? = nil
+
+    /// A changed host key on a route whose address names the same machine
+    /// wherever the device is: an Overlay Network address, one resolved by a
+    /// Jump Host, or a public address or DNS name. A LAN address can be
+    /// answered by another machine away from home, so its changed key is
+    /// excused.
+    var isHostKeySecurityFailure: Bool {
+        !mayNameAnotherMachine && error.isHostKeySecurityFailure
     }
 }
 
@@ -1081,4 +1152,13 @@ struct HerdrAPIError: Error, Sendable, Equatable {
     /// without pinning the code's JSON type.
     let code: String
     let message: String
+
+    /// herdr 0.9.4's macOS refusal of an `agent.start` whose launch line is
+    /// longer than the terminal's canonical input limit while the fresh
+    /// shell is still in canonical mode. Only "canonical mode" marks it: the
+    /// sibling "could not determine canonical input capacity" is a different
+    /// failure.
+    var isCanonicalModeRefusal: Bool {
+        code == "agent_start_input_failed" && message.contains("canonical mode")
+    }
 }

@@ -20,6 +20,8 @@ final class ConsoleStore {
     private(set) var hostStatuses: [Host.ID: EventsSessionStatus] = [:]
     private(set) var hostStandingFailures: [Host.ID: TransportError] = [:]
     private(set) var hostLatencies: [Host.ID: Duration] = [:]
+    /// The route each connected Host's current connection reached.
+    private(set) var hostRouteIDs: [Host.ID: HostRoute.ID] = [:]
     private(set) var hostSyncErrors: [Host.ID: String] = [:]
     private(set) var hostConnectionGenerations: [Host.ID: UInt64] = [:]
     /// Hosts whose current connection has not produced its first snapshot.
@@ -227,6 +229,14 @@ final class ConsoleStore {
     /// reconnecting, or waiting for their own repair.
     func retryHost(_ id: Host.ID) async {
         await projections[id]?.retry()
+    }
+
+    /// Stops one Host's connection attempt (or its reconnect backoff) at
+    /// once instead of waiting for it to time out; a connected Host is left
+    /// alone. The Host reads Paused until it is retried or the app returns
+    /// to the foreground.
+    func cancelHostConnection(_ id: Host.ID) async {
+        await projections[id]?.cancelConnecting()
     }
 
     /// The returned runner resolves the Host's live projection on every
@@ -761,6 +771,10 @@ final class ConsoleStore {
             uniqueKeysWithValues: current.compactMap { projection in
                 projection.latency.map { (projection.host.id, $0) }
             })
+        hostRouteIDs = Dictionary(
+            uniqueKeysWithValues: current.compactMap { projection in
+                projection.routeID.map { (projection.host.id, $0) }
+            })
         hostSyncErrors = Dictionary(
             uniqueKeysWithValues: current.compactMap { projection in
                 projection.syncError.map { (projection.host.id, $0) }
@@ -959,7 +973,8 @@ extension ConsoleStore {
     static func sshSessionFactory(
         connector: any TransportConnector = SSHTransportConnector(),
         knownHosts: any KnownHostsStore = UserDefaultsKnownHostsStore.shared,
-        credentials: HostCredentialsProvider = HostCredentialsProvider()
+        credentials: HostCredentialsProvider = HostCredentialsProvider(),
+        overlays: OverlayNetworkRuntime = .shared
     ) -> @Sendable (Host, [EventSubscription]) -> EventsSession {
         { host, subscriptions in
             EventsSession(subscriptions: subscriptions) {
@@ -974,7 +989,8 @@ extension ConsoleStore {
                     settings: SSHTransportSettings(
                         host: host,
                         credentials: resolved,
-                        hostKeyPolicy: policy))
+                        hostKeyPolicy: policy,
+                        overlays: overlays))
             }
         }
     }

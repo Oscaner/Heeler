@@ -153,12 +153,25 @@ final class PairingScanStore {
         }
 
         // Only a fully verified ceremony creates a Host (ADR 0007). The
-        // fingerprint pin lands with it, against the address that actually
-        // answered, so preflight connects without a TOFU prompt. The ceremony
-        // result carries no Herdr Endpoint; it comes from the scanned code.
+        // address that answered is its first route and every other candidate
+        // the code offered follows as a route of its own (ADR 0022), so the
+        // Host stays reachable from the networks the user picked them for.
+        // The fingerprint pin lands with it, so preflight connects without a
+        // TOFU prompt whichever route answers.
+        // The Herdr Endpoint comes from the scanned code, not the ceremony.
+        let hostID = UUID()
+        let addresses =
+            [result.address] + code.addresses.filter { $0 != result.address }
         let host = Host(
-            address: result.address, port: result.port, username: result.username,
-            authMethod: .deviceKey, herdrEndpoint: code.endpoint)
+            id: hostID,
+            username: result.username,
+            authMethod: .deviceKey,
+            herdrEndpoint: code.endpoint,
+            routes: addresses.enumerated().map { index, address in
+                // The first route takes the Host's id, as a Host saved
+                // before routes does.
+                HostRoute(id: index == 0 ? hostID : UUID(), address: address, port: result.port)
+            })
         do {
             try catalog.add(host)
         } catch {
@@ -170,8 +183,9 @@ final class PairingScanStore {
                 canRetry: false)
             return
         }
+        let trustKey = HostKeyTrust.hostKey(host.id)
         await knownHosts.setFingerprint(
-            result.hostKeyFingerprint, host: result.address, port: result.port)
+            result.hostKeyFingerprint, host: trustKey.host, port: trustKey.port)
         pairedHost = host
     }
 

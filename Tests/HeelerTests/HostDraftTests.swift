@@ -35,8 +35,8 @@ struct HostDraftTests {
 
         let host = try #require(draft.makeHost())
 
-        #expect(!host.usesJumpHost)
-        #expect(host.jumpAddress.isEmpty)
+        #expect(!host.primaryRoute.usesJumpHost)
+        #expect(host.primaryRoute.jumpAddress.isEmpty)
     }
 
     // The Jump Host port sits in the form even when unused, so an invalid
@@ -63,8 +63,8 @@ struct HostDraftTests {
 
         let host = try #require(draft.makeHost())
 
-        #expect(host.jumpUsername.isEmpty)
-        #expect(host.resolvedJumpUsername == "dev")
+        #expect(host.primaryRoute.jumpUsername.isEmpty)
+        #expect(host.jumpUsername(on: host.primaryRoute) == "dev")
     }
 
     @Test func trimsFieldsOnSave() throws {
@@ -179,10 +179,15 @@ struct HostDraftTests {
         let copy = try #require(draft.makeHost())
 
         #expect(copy.id != original.id)
+        #expect(copy.primaryRoute.id != original.primaryRoute.id)
         #expect(copy == Host(
-            id: copy.id, name: "laya-train copy", address: "100.64.0.7", port: 2201,
-            username: "dev", authMethod: .rsaKey, sessionName: "work",
-            jumpAddress: "jump.example", jumpPort: 2022, jumpUsername: "tunnel"))
+            id: copy.id, name: "laya-train copy", username: "dev", authMethod: .rsaKey,
+            sessionName: "work",
+            routes: [
+                HostRoute(
+                    id: copy.primaryRoute.id, address: "100.64.0.7", port: 2201,
+                    jumpAddress: "jump.example", jumpPort: 2022, jumpUsername: "tunnel")
+            ]))
         #expect(draft.canSave(editing: nil))
     }
 

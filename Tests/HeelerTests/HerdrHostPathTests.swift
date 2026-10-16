@@ -108,7 +108,7 @@ struct HerdrHostPathTests {
     }
 
     /// Today's full strings for a Host without a herdr endpoint, so the
-    /// endpoint branch cannot drift them (ADR 0021).
+    /// endpoint branch cannot drift them (ADR 0023).
     @Test func defaultHerdrCommandsKeepTheirFullStrings() {
         #expect(
             HerdrHostPath.wrappingBareHerdr(SSHTransportSettings.defaultSessionListCommand)
@@ -157,7 +157,7 @@ struct HerdrHostPathTests {
     }
 }
 
-/// The launcher of a Pairing Code v2 herdr endpoint (ADR 0021). Paths carry
+/// The launcher of a Pairing Code v2 herdr endpoint (ADR 0023). Paths carry
 /// spaces, as a macOS app's Application Support directory does.
 @Suite("Herdr endpoint launcher")
 struct HerdrLauncherTests {
@@ -295,12 +295,18 @@ struct HerdrLauncherTests {
             HerdrEndpoint(socketPath: Self.socketPath, executablePath: Self.launcherPath))
         // The endpoint wins over a leftover session name.
         let host = Host(
-            address: "mac.example", username: "ada", sessionName: "work",
-            herdrEndpoint: endpoint)
+            username: "ada", sessionName: "work", herdrEndpoint: endpoint,
+            routes: [
+                HostRoute(address: "mac.local"),
+                HostRoute(address: "127.0.0.1", port: 2222, jumpAddress: "jump.example"),
+            ])
         let launcher = try makeLauncher()
 
         let settings = makeSettings(for: host)
 
+        #expect(settings.routes.map(\.host) == ["mac.local", "127.0.0.1"])
+        #expect(settings.routes.last?.jump?.host == "jump.example")
+        #expect(settings.hostKeyTrust == .host(host.id))
         #expect(settings.socket == .absolutePath(Self.socketPath))
         #expect(settings.herdrLauncher == launcher)
         #expect(settings.sessionListCommand == launcher.sessionListCommand)

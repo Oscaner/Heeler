@@ -52,6 +52,7 @@
         @State private var bannerStore: AgentNotificationBannerStore
         @State private var liveActivities: HostLiveActivityCoordinator
         @State private var activity: AppActivityCoordinator
+        @State private var hostRemoval: HostRemovalDependencies
         @State private var diffLayout = DiffLayoutSettings(defaults: DemoScreenshotFixture.makeDefaults(), offersSideBySide: UIDevice.current.userInterfaceIdiom == .pad)
 
         init() {
@@ -71,6 +72,7 @@
             _bannerStore = State(initialValue: composition.bannerStore)
             _liveActivities = State(initialValue: composition.liveActivities)
             _activity = State(initialValue: composition.activity)
+            _hostRemoval = State(initialValue: composition.hostRemoval)
         }
 
         private var terminal: TerminalSettings {
@@ -97,6 +99,7 @@
             .preferredColorScheme(appearance.preferredColorScheme)
             .environment(\.diffLayoutSettings, diffLayout)
             .environment(\.hostOnboardingDependencies, DemoScreenshotFixture.onboardingDependencies)
+            .environment(\.hostRemovalDependencies, hostRemoval)
             .task {
                 console.setHosts(hosts.hosts)
                 notificationPreferences.setHosts(hosts.hosts)
@@ -128,6 +131,9 @@
         let bannerStore: AgentNotificationBannerStore
         let liveActivities: HostLiveActivityCoordinator
         let activity: AppActivityCoordinator
+        /// The app's removal over the demo stores: its Notification Keys are
+        /// volatile, so removing a demo Host never touches the Keychain.
+        let hostRemoval: HostRemovalDependencies
 
         static func make() -> DemoScreenshotComposition {
             let defaults = DemoScreenshotFixture.makeDefaults()
@@ -152,8 +158,22 @@
             for id in DemoScreenshotFixture.pluginStateLiveActivityHostIDs {
                 liveActivityPreferences.setEnabled(true, for: id)
             }
+            let hosts = HostStore(volatileHosts: DemoScreenshotFixture.hosts)
+            let liveActivities = HostLiveActivityCoordinator(
+                controller: ActivityKitLiveActivityController(),
+                preferences: liveActivityPreferences,
+                transports: console,
+                deviceToken: { nil },
+                // The live catalog, so a demo removal leaves it before
+                // forgetHost runs, as in the app.
+                knownHostIDs: { [weak hosts] in Set(hosts?.hosts.map(\.id) ?? []) },
+                hostDisplayName: { [weak hosts] id in
+                    hosts?.hosts.first(where: { $0.id == id })?.displayName ?? ""
+                },
+                isAwaitingSnapshot: { _ in false },
+                connectionStatus: { _ in .connected })
             return DemoScreenshotComposition(
-                hosts: HostStore(volatileHosts: DemoScreenshotFixture.hosts),
+                hosts: hosts,
                 console: console,
                 terminalThemes: TerminalThemeSettings(defaults: defaults),
                 terminalZoom: TerminalZoomSettings(defaults: defaults),
@@ -169,19 +189,11 @@
                     presentedAgent: { notificationRouter.path.last },
                     triggers: { _ in nil },
                     playSound: {}),
-                liveActivities: HostLiveActivityCoordinator(
-                    controller: ActivityKitLiveActivityController(),
-                    preferences: liveActivityPreferences,
-                    transports: console,
-                    deviceToken: { nil },
-                    knownHostIDs: { Set(DemoScreenshotFixture.hosts.map(\.id)) },
-                    hostDisplayName: { id in
-                        DemoScreenshotFixture.hosts.first(where: { $0.id == id })?.displayName
-                            ?? ""
-                    },
-                    isAwaitingSnapshot: { _ in false },
-                    connectionStatus: { _ in .connected }),
-                activity: AppActivityCoordinator())
+                liveActivities: liveActivities,
+                activity: AppActivityCoordinator(),
+                hostRemoval: HostRemovalDependencies.app(
+                    console: console, notificationPreferences: notificationPreferences,
+                    liveActivities: liveActivities))
         }
     }
 
@@ -231,23 +243,26 @@
         /// One Host per plugin state, named for it. Only with
         /// `DemoScreenshotMode.pluginStatesArgument`.
         static let pluginStates: [(name: String, plugin: Result<HeelerPluginInstallation?, TransportError>)] = [
-            ("Plugin current (0.6.0)", .success(HeelerPluginInstallation(version: "0.6.0"))),
+            ("Plugin current (0.6.1)", .success(HeelerPluginInstallation(version: "0.6.1"))),
             ("Plugin newer than app (0.7.0)", .success(HeelerPluginInstallation(version: "0.7.0"))),
             ("Plugin outdated (0.5.0)", .success(HeelerPluginInstallation(version: "0.5.0"))),
             ("Plugin outdated (0.4.0)", .success(HeelerPluginInstallation(version: "0.4.0"))),
             ("Plugin outdated (0.3.0)", .success(HeelerPluginInstallation(version: "0.3.0"))),
             ("Plugin not installed", .success(nil)),
-            ("Plugin disabled (0.6.0)", .success(HeelerPluginInstallation(version: "0.6.0", isEnabled: false))),
+            ("Plugin disabled (0.6.1)", .success(HeelerPluginInstallation(version: "0.6.1", isEnabled: false))),
             ("Plugin disabled + outdated (0.5.0)",
              .success(HeelerPluginInstallation(version: "0.5.0", isEnabled: false))),
+            ("Plugin under legacy name + current disabled (0.3.0)",
+             .success(HeelerPluginInstallation(
+                pluginID: "herdr-mobile.pairing", version: "0.3.0", disabledCurrentIDSource: .github))),
             ("Plugin under legacy name (0.3.0)",
              .success(HeelerPluginInstallation(pluginID: "herdr-mobile.pairing", version: "0.3.0"))),
-            ("Plugin with legacy leftover (0.6.0)",
-             .success(HeelerPluginInstallation(version: "0.6.0", leftoverLegacyIDs: ["herdr-mobile.pairing"]))),
+            ("Plugin with legacy leftover (0.6.1)",
+             .success(HeelerPluginInstallation(version: "0.6.1", leftoverLegacyIDs: ["herdr-mobile.pairing"]))),
             ("Plugin linked locally (0.5.0)", .success(HeelerPluginInstallation(version: "0.5.0", source: .local))),
-            ("Plugin linked locally (0.6.0)", .success(HeelerPluginInstallation(version: "0.6.0", source: .local))),
+            ("Plugin linked locally (0.6.1)", .success(HeelerPluginInstallation(version: "0.6.1", source: .local))),
             ("Plugin manifest unreadable",
-             .success(HeelerPluginInstallation(version: "0.6.0", hasManifestWarning: true))),
+             .success(HeelerPluginInstallation(version: "0.6.1", hasManifestWarning: true))),
             ("Plugin on Windows", .failure(.hostFeatureUnavailable(feature: "The Heeler plugin"))),
             ("Plugin read failed", .failure(.timedOut)),
         ]
@@ -300,7 +315,8 @@
             guard let profile = profiles[host.id] else {
                 throw TransportError.sshUnreachable(detail: "No demo profile for Host.")
             }
-            return DemoScreenshotTransport(profile: profile, hostID: host.id)
+            return DemoScreenshotTransport(
+                profile: profile, hostID: host.id, routeID: host.routes.last?.id)
         }
 
         /// Only with `DemoScreenshotMode.hostProblemsArgument`.
@@ -308,8 +324,8 @@
             Host(
                 id: stagingHostID,
                 name: "Staging VPS",
-                address: "staging.demo.invalid",
-                username: "deploy"),
+                username: "deploy",
+                routes: stagingRoutes),
             Host(
                 id: piHostID,
                 name: "Raspberry Pi",
@@ -318,14 +334,32 @@
             Host(
                 id: miniHostID,
                 name: "Mac mini",
-                address: "mini.demo.invalid",
-                username: "developer"),
+                username: "developer",
+                routes: [
+                    HostRoute(address: "192.168.1.30"),
+                    HostRoute(
+                        address: "127.0.0.1", port: 2222, jumpAddress: "mini.demo.invalid"),
+                ]),
+        ]
+
+        /// Staging's routes, each failing in its own way.
+        private static let stagingRoutes = [
+            HostRoute(address: "10.0.0.8"),
+            HostRoute(address: "staging.demo.invalid", port: 2222),
         ]
 
         /// How each problem Host fails to connect: Staging keeps retrying,
         /// the Pi stops until the user acts.
         static let connectFailures: [Host.ID: TransportError] = [
-            stagingHostID: .sshUnreachable(detail: "Connection refused."),
+            stagingHostID: .noRouteReached([
+                RouteFailure(
+                    route: "10.0.0.8", mayNameAnotherMachine: true, error: .timedOut,
+                    routeID: stagingRoutes[0].id),
+                RouteFailure(
+                    route: "staging.demo.invalid:2222", mayNameAnotherMachine: false,
+                    error: .sshUnreachable(detail: "Connection refused."),
+                    routeID: stagingRoutes[1].id),
+            ]),
             piHostID: .authenticationFailed,
         ]
 
@@ -600,7 +634,7 @@
         func connect(settings: SSHTransportSettings) async throws -> any Transport {
             guard
                 let host = DemoScreenshotFixture.hosts.first(where: {
-                    $0.address == settings.host
+                    $0.answers(toAddress: settings.host)
                 })
             else {
                 throw TransportError.sshUnreachable(detail: "No demo Host at this address.")
@@ -1162,6 +1196,9 @@
     private actor DemoScreenshotTransport: Transport {
         private let profile: DemoHostProfile
         private let hostID: Host.ID
+        /// The demo always reaches a Host over its last route, so a Host
+        /// with several shows a route other than the primary in use.
+        nonisolated let routeID: UUID?
         private var isClosed = false
         private var eventContinuation: AsyncThrowingStream<HerdrEvent, any Error>.Continuation?
         /// Like the SSH transport, each target admits one live channel.
@@ -1169,9 +1206,10 @@
             TerminalAttachTarget: AsyncThrowingStream<Data, any Error>.Continuation
         ] = [:]
 
-        init(profile: DemoHostProfile, hostID: Host.ID) {
+        init(profile: DemoHostProfile, hostID: Host.ID, routeID: UUID?) {
             self.profile = profile
             self.hostID = hostID
+            self.routeID = routeID
         }
 
         func ping() async throws -> ServerInfo {

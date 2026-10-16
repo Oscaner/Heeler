@@ -7,7 +7,7 @@ import Foundation
 ///
 /// Version 1 carries the SSH coordinates and an optional Bootstrap Key.
 /// Version 2 adds a required Herdr Endpoint (`sock`, `herdr`) for a herdr
-/// outside the user's config home (ADR 0021); only this app decodes it, and
+/// outside the user's config home (ADR 0023); only this app decodes it, and
 /// the plugin keeps emitting version 1. The schema and error taxonomy live in
 /// `plugin/README.md`; the shared test vectors in
 /// `plugin/test-vectors/pairing-code-v1.json` are the single source of truth
@@ -18,7 +18,7 @@ import Foundation
 struct PairingCode: Sendable, Equatable {
     static let prefix = "HERDR-PAIR"
     static let version = 1
-    /// The envelope version that carries a Herdr Endpoint (ADR 0021).
+    /// The envelope version that carries a Herdr Endpoint (ADR 0023).
     static let endpointVersion = 2
 
     /// Candidate addresses in the order the app should try them.
@@ -37,7 +37,7 @@ struct PairingCode: Sendable, Equatable {
     var endpoint: HerdrEndpoint? = nil
 
     /// Whether pairing waits for a Pair tap: a launcher code without a
-    /// Bootstrap Key (ADR 0021).
+    /// Bootstrap Key (ADR 0023).
     var needsConfirmation: Bool { endpoint != nil && bootstrap == nil }
 
     /// The single-use Enrollment credential carried inside a Pairing Code.

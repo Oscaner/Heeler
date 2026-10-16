@@ -83,7 +83,21 @@ command again. Plugin 0.6.0 scopes notifications to the herdr session they
 come from; update it on every Host along with the app (see
 [Updating to 0.6.0](#updating-to-060)). The app's Host details show the
 installed version and offer this command when it is older than the plugin
-the app was built alongside. To inspect notification or pairing failures:
+the app was built alongside.
+
+On herdr 0.9.4, reinstalling a disabled plugin keeps it disabled, where
+herdr 0.9.3 turned it back on. Turn it on afterwards:
+
+```bash
+herdr plugin enable heeler
+```
+
+Unlike `plugin install`, `plugin enable` only works through a running herdr
+session: if the default session is not running, name one that is, for
+example `herdr --session work plugin enable heeler`. For a disabled plugin,
+the app's Host details show the enable command for the Host's session.
+
+To inspect notification or pairing failures:
 
 ```bash
 herdr plugin log list --plugin heeler --limit 20
@@ -217,7 +231,7 @@ depend on key order.
 
 Version 2 pairs a Host whose herdr lives outside the user's own config home,
 such as a desktop app that bundles herdr and runs it with its own
-`XDG_CONFIG_HOME` (ADR 0021). It keeps the v1 envelope, error codes, and
+`XDG_CONFIG_HOME` (ADR 0023). It keeps the v1 envelope, error codes, and
 compatibility rules, and adds two required fields that name that herdr: its
 API socket and a launcher for it.
 
@@ -528,6 +542,16 @@ behavior under an unchanged number, as 0.3.0 and 0.4.0 did.
   Hosts that share a server; after upgrading again, re-check each Host's
   Notifications toggle.
 
+### Updating to 0.6.1
+
+- Plugin 0.6.0 rejected some sidebar settings that herdr 0.9 accepts
+  (`letta`, `machine`, token `rules`, a UTF-8 byte-order mark) and wrote the
+  default layout and sort with a diagnostic. After the update, the next
+  refresh, at server start or the next Agent Status transition, replaces that
+  snapshot without a config edit.
+- A Host whose rows Sync from plugin replaced while 0.6.0 rejected its
+  settings keeps the default fields it saved; sync it again.
+
 ## Sidebar layout snapshot (v1)
 
 `src/sidebar-hook.js` runs through `[[startup]]` at server start and live
@@ -550,6 +574,21 @@ to `notify.json`. It never writes this snapshot to `HERDR_PLUGIN_STATE_DIR`.
 Writes use an exclusive mode **0600** temporary file followed by atomic rename;
 a newly created plugin config directory has mode **0700**.
 
+A UTF-8 byte-order mark is handled as herdr 0.9.4 handles its usual
+placements: a leading U+FEFF is stripped, and a U+FEFF at the start of a
+later line is removed only when the parser's error points at it, after which
+parsing is retried. A U+FEFF that is string data, such as one at a line start
+inside a multi-line string, parses and is kept. herdr 0.9.4 also removes a
+U+FEFF elsewhere in a line, for example after indentation or after `=`, when
+its parser's error points there; the plugin reports `parse_error` for such a
+file.
+
+`smol-toml` implements TOML 1.1, while herdr 0.9.4 reads TOML 1.0, so the
+plugin accepts some files that herdr rejects: a newline or trailing comma
+inside an inline table and the `\e` and `\xHH` string escapes pass here
+although `herdr config check` reports them. `herdr config check` remains the
+authority on whether herdr accepts a file.
+
 ```json
 {
   "v": 1,
@@ -564,7 +603,7 @@ a newly created plugin config directory has mode **0700**.
     "row_gap": 0,
     "rows": [
       [{"token":"state_icon"},{"token":"terminal_title_stripped","fg":"#6c7086","dim":false}],
-      [{"token":"$pin_icon"},{"token":"workspace","dim":true},{"token":"agent"}]
+      [{"token":"$pin_icon"},{"token":"workspace","dim":true,"rules":[{"equals":"scratch","ignore_case":true,"hide":true}]},{"token":"agent"}]
     ],
     "rows_by_agent": {"claude":[[{"token":"terminal_title_stripped"}]]}
   }},
@@ -586,51 +625,84 @@ a newly created plugin config directory has mode **0700**.
 | `diagnostics` | string[] | Empty on success or a missing source. Otherwise `parse_error`, `invalid_token`, `invalid_schema`, or `read_error`. Raw config values and parser excerpts are never included. |
 
 Every token is an object, including TOML string tokens. Builtins are
-`state_icon`, `state_text`, `workspace`, `tab`, `pane`, `agent`,
+`state_icon`, `state_text`, `machine`, `workspace`, `tab`, `pane`, `agent`,
 `terminal_title`, and `terminal_title_stripped`. Custom names must match
 `^\$[A-Za-z0-9_-]{1,32}$` and retain their `$` in the snapshot. A styled TOML
-table accepts only `token`, `fg`, `bold`, and `dim`: `fg` must be `#RGB` or
-`#RRGGBB`; `bold` and `dim` must be booleans. Optional style fields appear
-only when explicitly provided, preserving `false` and the original hex case.
-Other config fields are ignored. This is validation of the exported subset,
-not a substitute for `herdr config check` for unrelated herdr settings.
+table accepts only `token`, `fg`, `bold`, `dim`, and `rules`: `fg` must be
+`#RGB` or `#RRGGBB`; `bold` and `dim` must be booleans. Optional style fields
+appear only when explicitly provided, preserving `false` and the original hex
+case. Other config fields are ignored. This is validation of the exported
+subset, not a substitute for `herdr config check` for unrelated herdr
+settings.
 
-`rows_by_agent` accepts the canonical ids verified against herdr v0.9.0:
+`rules` is an array of at most 16 tables; herdr uses the first rule that
+matches the token's text, and a matching rule with `hide = true` hides the
+token. Every rule has exactly one condition: `equals`, `contains`, or
+`starts_with` with a string, or `gt` or `lt` with a finite integer or float.
+`ignore_case` must be a boolean and is allowed only next to a text condition,
+so even `ignore_case = false` beside `gt` or `lt` is invalid. A rule's `fg`
+follows the token `fg` grammar, and `bold`, `dim`, and `hide` must be
+booleans; any other key is invalid. Rules need a text-valued token, so
+`state_icon` accepts only `rules = []`. herdr 0.9.0 does not accept `hide`,
+which herdr 0.9.1 added.
+
+The snapshot exports each rule with only the fields it gave, in the order
+`equals`, `contains`, `starts_with`, `gt`, `lt`, `ignore_case`, `fg`, `bold`,
+`dim`, `hide`. Thresholds are JSON numbers, so `gt = 80` exports `80`. A
+token with `rules = []` exports no `rules` field. The snapshot version stays
+`1`: Swift readers ignore `rules`, so a rule never restyles or hides a token
+in Heeler.
+
+`rows_by_agent` accepts the 24 canonical ids verified against herdr v0.9.4:
 `pi`, `claude`, `codex`, `gemini`, `cursor`, `devin`, `agy`, `cline`, `omp`,
 `mastracode`, `opencode`, `copilot`, `kimi`, `kiro`, `droid`, `amp`, `grok`,
-`hermes`, `kilo`, `qodercli`, `qwen`, `maki`, and `muse`. Aliases, case
-variations, and unknown ids are invalid. A future herdr release adding
-canonical ids requires updating this validation list and the shared vectors.
+`hermes`, `kilo`, `qodercli`, `qwen`, `letta`, `maki`, and `muse`. Aliases,
+case variations, and unknown ids are invalid. A future herdr release that
+adds canonical ids, built-in agent tokens, styled-token keys, or rule fields
+requires updating the validator, this README and the shared vectors together.
+The validator follows herdr's grammar for these fields but is not a complete
+copy of it: herdr also accepts a few unusual shapes that the plugin rejects
+with `invalid_schema`, such as `ui = []`, `agents = []` under `[ui.sidebar]`,
+or a rule written as an array (`rules = [["x"]]`).
 
-Missing files or fields use herdr defaults: sort `spaces`, `row_gap: 0`,
+Missing files or fields use the snapshot defaults: sort `spaces`, `row_gap: 0`,
 `rows: [[{"token":"state_icon"},{"token":"workspace"},{"token":"tab"}],
-[{"token":"agent"}]]`, and `rows_by_agent: {}`. TOML parse errors, invalid
-tokens, or invalid schema revert the **entire layout and sort** to those
-defaults with a diagnostic. Read errors also produce defaults with a
-diagnostic and are retried at the next invocation.
+[{"token":"agent"}]]`, and `rows_by_agent: {}`. These are not herdr 0.9's
+defaults: herdr 0.9.0 and later put `machine` after `state_icon` in the
+first row, which Heeler does not render, and the snapshot defaults leave it
+out. TOML parse errors, invalid tokens, or invalid schema revert the
+**entire layout and sort** to those defaults with a diagnostic. Read errors
+also produce defaults with a diagnostic and are retried at the next
+invocation.
 
 Both `notify-hook.js` and `activity-hook.js` refresh at the beginning of
 `main()`, before debounce, dedupe, or no-device exits. An unchanged source
-path, existence, and `mtimeMs` reuses the snapshot without reparsing or
-rewriting. A missing/corrupt snapshot is rebuilt. Changes that preserve the
-source mtime are not detected. Snapshot write failures are logged but do not
-prevent the event hooks from delivering notifications.
+path, existence, and `mtimeMs` reuses a snapshot without diagnostics, without
+reparsing or rewriting. A snapshot with diagnostics is parsed again at every
+refresh, so an updated plugin replaces an older plugin's rejection without a
+config edit, and it is rewritten only when the result changes. A
+missing/corrupt snapshot is rebuilt. Other changes that preserve the source
+mtime are not detected. Snapshot write failures are logged but do not prevent
+the event hooks from delivering notifications.
 
 There is no watcher and config reload does not run startup hooks. A config
 edit with no Agent Status transition is picked up at the next transition or
 server start. The snapshot reflects the file on disk, not any live TUI
-`agent.view.set` sort override. Heeler never installs or updates this plugin;
-older installations have no `sidebar.json`, which the app treats as nil
-without a version gate.
+`agent.view.set` sort override. It is this Host's own herdr configuration: a
+herdr client elsewhere that has this Host as a saved machine renders its
+sidebar from that client's own settings, as herdr's configuration docs
+describe. Heeler never installs or updates this plugin; older installations
+have no `sidebar.json`, which the app treats as nil without a version gate.
 
-Swift readers ignore unknown fields and drop individual unknown token names.
-The app resolves whole layouts in this order: the Host's saved user layout,
-the Host's plugin snapshot, Heeler default. There is no global user layout,
-and the default is never offered as a choice. Rows are never merged across
-sources. Its renderer skips `state_icon` and `state_text` because the status
-column already shows Agent Status; `$name` resolves as plain text from
-`AgentInfo.tokens["name"]`. Heeler's Pin is independent. Styles are retained
-in the Swift model; rendering may ignore them (color is ignored by default).
+Swift readers ignore unknown fields and drop individual unknown token names,
+such as `machine`. The app resolves whole layouts in this order: the Host's
+saved user layout, the Host's plugin snapshot, Heeler default. There is no
+global user layout, and the default is never offered as a choice. Rows are
+never merged across sources. Its renderer skips `state_icon` and
+`state_text` because the status column already shows Agent Status; `$name`
+resolves as plain text from `AgentInfo.tokens["name"]`. Heeler's Pin is
+independent. Styles are retained in the Swift model; rendering may ignore
+them (color is ignored by default).
 
 ### Shared test vectors
 
@@ -640,7 +712,10 @@ Its `valid` and `invalid` arrays contain `name`, `toml`, and a full expected
 `snapshot`; invalid entries also contain the expected `error` diagnostic.
 Node asserts normalized layout equality and whole-layout fallback. Swift
 consumes the structured snapshots to assert decoded layout, defaults, and
-diagnostics; it does not parse TOML. Change the contract and vectors together.
+diagnostics, expecting the app to drop token names it does not model, such as
+`machine`, and to ignore `rules`; it does not parse TOML. A U+FEFF in a
+vector is written as the JSON escape `\ufeff`, so it stays visible. Change the
+contract and vectors together.
 
 ## Notify hook
 

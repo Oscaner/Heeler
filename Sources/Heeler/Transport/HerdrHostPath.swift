@@ -115,7 +115,7 @@ enum HerdrHostPath: Sendable {
     }
 }
 
-/// The launcher of a Host's herdr endpoint (Pairing Code v2, ADR 0021): an
+/// The launcher of a Host's herdr endpoint (Pairing Code v2, ADR 0023): an
 /// executable that behaves as `herdr` for the endpoint's socket. Every herdr
 /// exec runs it as a positional argument of a POSIX `/bin/sh -c` body with
 /// `HERDR_SOCKET_PATH` exported, so neither path is spliced into shell

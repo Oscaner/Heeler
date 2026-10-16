@@ -56,7 +56,7 @@ struct PreflightReport: Equatable, Sendable {
     /// hint. `authMethod` steers the credential hint: a rejected device key
     /// and a wrong password have different fixes. `usesHerdrEndpoint` points
     /// the socket and protocol hints at the app that provides the Host's herdr
-    /// endpoint (ADR 0021), whose socket no session name can fix.
+    /// endpoint (ADR 0023), whose socket no session name can fix.
     static func failure(
         _ error: TransportError, authMethod: Host.AuthMethod, usesHerdrEndpoint: Bool = false
     ) -> PreflightReport {
@@ -173,6 +173,11 @@ struct PreflightReport: Equatable, Sendable {
         case .channelFailed(let detail):
             check = .connection
             hint = "The connection failed unexpectedly. (\(detail))"
+        case .attachExited:
+            // Not reachable from a connect+ping preflight; keep the closed
+            // taxonomy total anyway.
+            check = .connection
+            hint = error.presentation.explanation
         case .eventsChannelAlreadyOpen, .terminalChannelAlreadyOpen:
             // Not reachable from a connect+ping preflight; keep the closed
             // taxonomy total anyway.
@@ -193,6 +198,20 @@ struct PreflightReport: Equatable, Sendable {
             // thing to fix, or the user goes and debugs the wrong machine.
             check = .connection
             hint = Self.jumpHostHint(underlying, authMethod: authMethod)
+        case .overlayFailed(let network, let reason):
+            // Like a Jump Host failure, nothing past this device was
+            // contacted; the fix is the overlay, not the Host.
+            check = .connection
+            hint = Self.overlayHint(network: network, reason: reason)
+        case .noRouteReached(let failures):
+            // No route got as far as the Host, so the connection check is
+            // what failed; each route keeps the hint for its own failure.
+            check = .connection
+            hint = failures.map { failure in
+                let routeHint =
+                    Self.failure(failure.error, authMethod: authMethod).failure?.hint ?? ""
+                return "\(failure.route): \(routeHint)"
+            }.joined(separator: "\n")
         }
         return PreflightReport(failure: Failure(check: check, hint: hint))
     }
@@ -240,6 +259,40 @@ struct PreflightReport: Equatable, Sendable {
             "The check was cancelled before it finished."
         default:
             "Could not connect through the Jump Host. (\(String(describing: error)))"
+        }
+    }
+
+    private static func overlayHint(network: String, reason: OverlayFailure) -> String {
+        switch reason {
+        case .notConfigured:
+            "This Host uses an overlay network that no longer exists. Edit the Host and "
+                + "choose another network, or Direct."
+        case .catalogUnreadable:
+            "The saved overlay networks could not be read, so this Host's network is "
+                + "unknown. Update Heeler, then run the checks again."
+        case .notReady(let detail):
+            "Overlay network “\(network)” is not online yet. If it is waiting for "
+                + "approval, authorize this device in the network's admin console, then run "
+                + "the checks again. (\(detail))"
+        case .misconfigured(let detail):
+            "Overlay network “\(network)” is misconfigured. Fix it in Settings › "
+                + "Overlay Networks. (\(detail))"
+        case .loginRequired:
+            "Overlay network “\(network)” needs sign-in. Open the sign-in link, "
+                + "then run the checks again."
+        case .signedOut:
+            "This device is signed out of overlay network “\(network)”. Connect it "
+                + "again in Settings › Overlay Networks, then run the checks again."
+        case .startFailed(let detail):
+            "Overlay network “\(network)” could not start. Check its auth key or "
+                + "secret in Settings › Overlay Networks. (\(detail))"
+        case .unreachable(let detail):
+            "Could not reach the address over overlay network “\(network)”. Check "
+                + "that the machine has joined the network and that the address is its "
+                + "overlay address or name. (\(detail))"
+        case .timedOut:
+            "Overlay network “\(network)” did not connect in time. Check this "
+                + "device's internet connection and try again."
         }
     }
 

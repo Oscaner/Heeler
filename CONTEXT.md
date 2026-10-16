@@ -5,15 +5,57 @@ A native iOS agent console for herdr. One context: the app. Terms owned by herdr
 ## Language
 
 **Host**:
-A remote machine reachable over SSH that runs a herdr server. The unit a user adds, names, and authenticates against.
+A remote machine reachable over SSH that runs a herdr server. The unit a user adds, names, and authenticates against. It is reached on one or more Routes, and its host key is trusted once for all of them.
 _Avoid_: server, machine, connection
+
+**Route**:
+One way to reach a Host: an address and port, optionally resolved from a Jump
+Host, with the first hop optionally carried by an Overlay Network. A Host lists
+its Routes in order; the first is its primary Route, the address shown for it.
+Every connection races the Host's Routes and keeps the first that reaches the
+Host, Routes over the device's own network a moment ahead of the rest — no
+rule picks a Route by Wi-Fi name or location (ADR 0022). A Route that reaches a
+machine presenting another key fails; it is not the Host.
+_Avoid_: path, connection, profile
 
 **Jump Host**:
 An SSH endpoint that forwards a Host connection when the Host is not directly
 reachable from the device. The Host's address and port are resolved from the
 Jump Host, normally through a loopback-only reverse tunnel. The app authenticates
-and verifies host keys independently at both hops.
+and verifies host keys independently at both hops. A Jump Host belongs to one
+Route; other Routes of the same Host may reach it without one.
 _Avoid_: bastion, proxy server
+
+**Overlay Network**:
+A Tailscale, ZeroTier, or EasyTier network the user configures in Settings,
+which Heeler joins with a node running inside the app. It is not a system VPN
+and carries nothing but Heeler's own connections. A Route that names one dials
+its first hop through it: the Host itself, or its Jump Host when one is set,
+addressed by its overlay IP or name. Only the byte stream changes; SSH
+authentication, host-key trust, and every channel are the same as a direct
+connection (ADR 0021). Its secrets stay in the Keychain, and its node runs
+only while the app does. EasyTier networks each run as an instance of their
+own, side by side; ZeroTier networks share one device identity.
+_Avoid_: VPN, tunnel, tailnet (for the general term)
+
+**Config Server**:
+An EasyTier web console that assigns EasyTier networks to a device instead
+of the user typing each network's name, secret, and peers. The device
+identifies itself with the console's user name and a Machine ID Heeler
+keeps; the server knows the network secrets and chooses the peers. One
+Config Server is one Overlay Network however many networks it assigns (up
+to eight); a Host on it reaches the assigned network its address or name is
+on.
+_Avoid_: web client, cloud config
+
+**Planet** and **Moon**:
+ZeroTier root definitions. A ZeroTier Overlay Network's Planet is the set of
+root servers it relies on — ZeroTier's own unless the user imports a custom
+planet file for that network's self-hosted roots. Each network has its own;
+networks with different planets run side by side (the node joins every
+network's roots, so lookups may reach any of them). A Moon is an extra root a
+single ZeroTier network orbits, named by its world ID and seed.
+_Avoid_: root server (for the setting), orbit (as a noun)
 
 **Device Key**:
 The device's SSH identity: an Ed25519 keypair generated on this device. The private key never leaves the Keychain; the public half is what a Host authorizes.
@@ -111,7 +153,7 @@ Changes never modifies the Checkout.
 _Avoid_: diff, source control, Agent's changes, project changes
 
 **Console**:
-The native dashboard surface, split into Agents, Terminals, Hosts, and Settings tabs; the two lists share one Host filter, and each hides its own search field until pulled down. Agents lists Agents across Hosts as either a flat list or a by-Host grouped list with collapsible sections, opening Agent detail; grouping is independent of Agent ordering and Pin priority. Terminals lists ordinary shell Panes as one card per Workspace, By Workspace or nested By Host, opening Shell Terminal. Hosts is Host management. The Console reopens the list tab it last showed. On an iPad beside its sidebar the tabs give way to the sidebar: a switch between the two lists at its top, Hosts and Settings as sheets from its foot, and each list's search behind a button there.
+The native dashboard surface, split into Agents, Terminals, Hosts, and Settings tabs; the two lists share one Host filter, and each hides its own search field until pulled down. Agents lists Agents across Hosts as a flat list or collapsible sections By Host or By Workspace, opening Agent detail. Workspace sections are scoped to their Host and ordered by their first Agent in the existing priority order; Agents keep their relative order within each section. Presentation and collapse choices persist, and search opens matching sections without changing those choices. Terminals lists ordinary shell Panes as one card per Workspace, By Workspace or nested By Host, opening Shell Terminal. Hosts is Host management. The Console reopens the list tab it last showed. On an iPad beside its sidebar the tabs give way to the sidebar: a switch between the two lists at its top, Hosts and Settings as sheets from its foot, and each list's search behind a button there.
 _Avoid_: dashboard, home
 
 **Agent Row Layout**:

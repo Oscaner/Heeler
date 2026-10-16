@@ -19,7 +19,7 @@ struct HostOnboardingDependencies: Sendable {
 /// Drives one Host's onboarding preflight (#14): resolve credentials,
 /// connect (surfacing the TOFU first-connect prompt), discover sessions,
 /// ping the selected session, and render the outcome as the checklist. A
-/// Host with a herdr endpoint (ADR 0021) skips discovery, because its socket
+/// Host with a herdr endpoint (ADR 0023) skips discovery, because its socket
 /// already fixes the session, and must instead prove its launcher answers.
 @MainActor
 @Observable
@@ -44,33 +44,45 @@ final class HostOnboardingStore {
     /// The Heeler plugin as the preflight connection found it. Read after a
     /// passing ping, so an unreachable Host reports `.unavailable`.
     private(set) var pluginStatus: HeelerPluginStatus = .checking
+    /// Set when the last run stopped at an Overlay Network that needs an
+    /// interactive sign-in; the UI offers to open it.
+    private(set) var overlayLoginURL: URL?
 
     let host: Host
 
     @ObservationIgnored private let connector: any TransportConnector
     @ObservationIgnored private let knownHosts: any KnownHostsStore
     @ObservationIgnored private let credentials: HostCredentialsProvider
+    @ObservationIgnored private let overlays: OverlayNetworkRuntime
     /// The transport deliberately has no confirmation timeout (#2); the UI
     /// layer owns it (spec #20). An unanswered candidate is declined.
     @ObservationIgnored private let fingerprintTimeout: Duration
     @ObservationIgnored private var fingerprintDecision: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var fingerprintTimeoutTask: Task<Void, Never>?
+    /// Identifies the prompt `fingerprintDecision` answers.
+    @ObservationIgnored private var fingerprintPrompt: UUID?
+    @ObservationIgnored private var checks: Task<Void, Never>?
+    /// Identifies the run whose trust prompts may still be shown.
+    @ObservationIgnored private var currentRun = UUID()
 
     init(
         host: Host,
         connector: any TransportConnector = SSHTransportConnector(),
         knownHosts: any KnownHostsStore = UserDefaultsKnownHostsStore.shared,
         credentials: HostCredentialsProvider = HostCredentialsProvider(),
+        overlays: OverlayNetworkRuntime = .shared,
         fingerprintTimeout: Duration = .seconds(60)
     ) {
         self.host = host
         self.connector = connector
         self.knownHosts = knownHosts
         self.credentials = credentials
+        self.overlays = overlays
         self.fingerprintTimeout = fingerprintTimeout
     }
 
     /// Runs the preflight once: connect + ping, rendered into `report`.
+    /// `cancelChecks()` (or cancelling the caller) ends it at once.
     func runChecks() async {
         guard phase != .running else { return }
         phase = .running
@@ -80,11 +92,49 @@ final class HostOnboardingStore {
         sessionDiscoveryError = nil
         pluginStatus = .checking
         pendingHostKeyReplacement = nil
-        defer {
+        overlayLoginURL = nil
+        let run = UUID()
+        currentRun = run
+        let task = Task { await self.performChecks(run: run) }
+        checks = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        guard checks == task else { return }
+        checks = nil
+        if task.isCancelled {
+            markCancelled()
+        } else {
             if pluginStatus == .checking { pluginStatus = .unavailable }
             phase = .finished
         }
+    }
 
+    /// Stops a preflight still connecting — through an Overlay Network
+    /// that is slow to come up, say — without waiting for its timeout. The
+    /// checklist then says the check was cancelled.
+    func cancelChecks() {
+        guard phase == .running, let checks else { return }
+        checks.cancel()
+        self.checks = nil
+        markCancelled()
+    }
+
+    private func markCancelled() {
+        currentRun = UUID()
+        // A trust prompt still open is declined, never left dangling.
+        resolveFingerprint(false)
+        report = .failure(TransportError.cancelled, authMethod: host.authMethod)
+        overlayLoginURL = nil
+        if pluginStatus == .checking { pluginStatus = .unavailable }
+        phase = .finished
+    }
+
+    /// The checks themselves. Every write after an await first checks for
+    /// cancellation: a cancelled run may still finish in the background.
+    private func performChecks(run: UUID) async {
         let resolved: SSHCredentials
         do {
             resolved = try credentials.credentials(for: host)
@@ -107,41 +157,59 @@ final class HostOnboardingStore {
         }
 
         let policy = HostKeyPolicy(knownHosts: knownHosts) { [weak self] candidate in
-            await self?.awaitFingerprintDecision(for: candidate) ?? false
+            await self?.awaitFingerprintDecision(for: candidate, run: run) ?? false
         }
         let settings = SSHTransportSettings(
-            host: host, credentials: resolved, hostKeyPolicy: policy)
+            host: host, credentials: resolved, hostKeyPolicy: policy, overlays: overlays)
         do {
             let transport = try await connector.connect(settings: settings)
+            guard !Task.isCancelled else {
+                try? await transport.close()
+                return
+            }
             let launcherFailure: PreflightReport?
             if let endpoint = host.herdrEndpoint {
                 launcherFailure = await launcherProbeFailure(endpoint, over: transport)
             } else {
                 launcherFailure = nil
                 do {
-                    availableSessions = try await transport.listSessions()
+                    let sessions = try await transport.listSessions()
+                    if !Task.isCancelled { availableSessions = sessions }
                 } catch {
-                    sessionDiscoveryError = "Could not discover herdr sessions. You can still enter a session name manually."
+                    if !Task.isCancelled {
+                        sessionDiscoveryError = "Could not discover herdr sessions. You can still enter a session name manually."
+                    }
                 }
+            }
+            guard !Task.isCancelled else {
+                try? await transport.close()
+                return
             }
             if let launcherFailure {
                 report = launcherFailure
             } else {
                 do {
-                    serverInfo = try await transport.ping()
-                    report = .allPassed
-                    // After the report, so the checklist renders first. The run
-                    // still waits for this read (bounded by the request timeout),
-                    // and its failure never fails the preflight.
-                    pluginStatus = await HeelerPluginStatus.read(over: transport)
+                    let info = try await transport.ping()
+                    if !Task.isCancelled {
+                        serverInfo = info
+                        report = .allPassed
+                        // After the report, so the checklist renders first. The
+                        // run still waits for this read (bounded by the request
+                        // timeout), and its failure never fails the preflight.
+                        let plugin = await HeelerPluginStatus.read(over: transport)
+                        if !Task.isCancelled { pluginStatus = plugin }
+                    }
                 } catch {
-                    captureHostKeyReplacement(error)
-                    report = failureReport(error)
+                    if !Task.isCancelled {
+                        captureHostKeyReplacement(error)
+                        report = failureReport(error)
+                    }
                 }
             }
             // Preflight only probes; the Console owns long-lived connections.
             try? await transport.close()
         } catch {
+            guard !Task.isCancelled else { return }
             captureHostKeyReplacement(error)
             report = failureReport(error)
         }
@@ -165,14 +233,39 @@ final class HostOnboardingStore {
     /// confirmation, then immediately proves the new pin by rerunning preflight.
     func trustPresentedHostKey() async {
         guard phase != .running, let replacement = pendingHostKeyReplacement else { return }
-        await knownHosts.setFingerprint(replacement.presented, host: host.address, port: host.port)
+        let key = HostKeyTrust.hostKey(host.id)
+        await knownHosts.setFingerprint(replacement.presented, host: key.host, port: key.port)
         pendingHostKeyReplacement = nil
         await runChecks()
     }
 
     private func captureHostKeyReplacement(_ error: any Error) {
-        guard case let TransportError.hostKeyMismatch(known, presented) = error else { return }
-        pendingHostKeyReplacement = HostKeyReplacement(known: known, presented: presented)
+        switch error {
+        case let TransportError.hostKeyMismatch(known, presented):
+            pendingHostKeyReplacement = HostKeyReplacement(known: known, presented: presented)
+        case TransportError.noRouteReached(let failures):
+            // Every route reaches the same Host, so a changed key is offered
+            // only when the routes that saw one agree on it. A LAN address may
+            // be another machine elsewhere, so when any other route saw a
+            // changed key, only those routes are asked.
+            let mismatches = failures.compactMap {
+                failure -> (mayNameAnotherMachine: Bool, replacement: HostKeyReplacement)? in
+                guard case let .hostKeyMismatch(known, presented) = failure.error else {
+                    return nil
+                }
+                return (
+                    failure.mayNameAnotherMachine,
+                    HostKeyReplacement(known: known, presented: presented))
+            }
+            let sameMachine = mismatches.filter { !$0.mayNameAnotherMachine }
+            let candidates = (sameMachine.isEmpty ? mismatches : sameMachine).map(\.replacement)
+            guard let first = candidates.first, candidates.allSatisfy({ $0 == first }) else {
+                return
+            }
+            pendingHostKeyReplacement = first
+        default:
+            return
+        }
     }
 
     /// Runs an endpoint Host's session list as its launcher probe, before
@@ -190,13 +283,15 @@ final class HostOnboardingStore {
                 hint: "The herdr launcher at \(endpoint.executablePath) did not answer like herdr. "
                     + "(\(detail))")
         } catch {
+            guard !Task.isCancelled else { return nil }
             captureHostKeyReplacement(error)
             return failureReport(error)
         }
     }
 
     private func failureReport(_ error: any Error) -> PreflightReport {
-        if let transportError = error as? TransportError {
+        overlayLoginURL = (error as? TransportError)?.overlayLoginURL
+        return if let transportError = error as? TransportError {
             .failure(
                 transportError, authMethod: host.authMethod,
                 usesHerdrEndpoint: host.herdrEndpoint != nil)
@@ -207,17 +302,31 @@ final class HostOnboardingStore {
         }
     }
 
-    private func awaitFingerprintDecision(for candidate: HostKeyCandidate) async -> Bool {
-        // One connect per run means one candidate at a time; decline a
-        // second defensively instead of leaking the first continuation.
-        guard fingerprintDecision == nil else { return false }
+    private func awaitFingerprintDecision(for candidate: HostKeyCandidate, run: UUID) async -> Bool {
+        // A cancelled run's late handshake never asks the user.
+        guard currentRun == run else { return false }
+        // The transport asks about one key at a time, even while routes
+        // race; decline a second defensively instead of leaking the first
+        // continuation.
+        guard fingerprintDecision == nil, !Task.isCancelled else { return false }
         pendingFingerprint = candidate
-        return await withCheckedContinuation { continuation in
-            fingerprintDecision = continuation
-            fingerprintTimeoutTask = Task { [fingerprintTimeout] in
-                try? await Task.sleep(for: fingerprintTimeout)
-                guard !Task.isCancelled else { return }
-                self.resolveFingerprint(false)
+        let prompt = UUID()
+        fingerprintPrompt = prompt
+        // A route that loses the race is cancelled while its key may still be
+        // on screen; its prompt goes away with it.
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                fingerprintDecision = continuation
+                fingerprintTimeoutTask = Task { [fingerprintTimeout] in
+                    try? await Task.sleep(for: fingerprintTimeout)
+                    guard !Task.isCancelled else { return }
+                    self.resolveFingerprint(false)
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in
+                // Only this prompt: a later one may already be showing.
+                if self.fingerprintPrompt == prompt { self.resolveFingerprint(false) }
             }
         }
     }
@@ -225,6 +334,7 @@ final class HostOnboardingStore {
     private func resolveFingerprint(_ trusted: Bool) {
         guard let decision = fingerprintDecision else { return }
         fingerprintDecision = nil
+        fingerprintPrompt = nil
         fingerprintTimeoutTask?.cancel()
         fingerprintTimeoutTask = nil
         pendingFingerprint = nil
