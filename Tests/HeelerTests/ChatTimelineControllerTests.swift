@@ -72,6 +72,49 @@ struct ChatTimelineControllerTests {
         }
     }
 
+    /// The app applies from inside a SwiftUI update. A pending message whose
+    /// status line appears there once grew to its new height but kept
+    /// drawing only its bubble, so the line stayed blank until something
+    /// else laid the row out.
+    @Test func aRowThatGrowsInsideASwiftUIUpdateDrawsWhatItGrewBy() async throws {
+        let builder = ChatRowBuilder()
+        let entries = Self.entries(0..<6)
+        var echo = ChatPendingEcho(id: UUID(), text: "say KIWI", state: .sent)
+        func timeline(revision: Int) async -> ChatTimelineView {
+            let rows = await builder.rows(for: ChatTimelineInput(entries: entries, pending: [echo]))
+            return ChatTimelineView(
+                state: Self.state(rows, revision: revision), jumpRequest: 0, followRequest: 0,
+                actions: ChatTimelineActions())
+        }
+        let host = UIHostingController(rootView: await timeline(revision: 1))
+        try await withTestWindow(frame: Self.frame, rootViewController: host) { _ in
+            // Waits without laying anything out, which would draw the row.
+            @MainActor func newestCell() async throws -> UICollectionViewCell {
+                for _ in 0..<100 {
+                    if let view = Self.collectionView(in: host.view),
+                        let cell = view.visibleCells.max(by: { $0.frame.maxY < $1.frame.maxY })
+                    {
+                        return cell
+                    }
+                    try await Task.sleep(for: .milliseconds(20))
+                }
+                throw CancellationError()
+            }
+            let before = try await newestCell().bounds.height
+            echo.state = .unconfirmed
+            host.rootView = await timeline(revision: 2)
+            for _ in 0..<100 {
+                if try await newestCell().bounds.height > before { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            try await Task.sleep(for: .milliseconds(200))
+            let cell = try await newestCell()
+            #expect(cell.bounds.height > before)
+            // The status line is the row's bottom; the bubble ends above it.
+            #expect(Self.drawsAnything(in: cell.contentView, bottom: 12))
+        }
+    }
+
     @Test func opensAtTheNewestRowWithVisibleRowsMeasured() async throws {
         let controller = ChatTimelineController(actions: ChatTimelineActions())
         let rows = await ChatRowBuilder().rows(for: ChatTimelineInput(entries: Self.entries(0..<60)))
@@ -996,6 +1039,31 @@ struct ChatTimelineControllerTests {
             }
             last = now
         }
+    }
+
+    private static func collectionView(in view: UIView) -> ChatCollectionView? {
+        if let found = view as? ChatCollectionView { return found }
+        return view.subviews.lazy.compactMap { collectionView(in: $0) }.first
+    }
+
+    /// Whether `view`'s layers draw anything in its bottom `band` points, as
+    /// they are now: rendering a layer lays nothing out.
+    private static func drawsAnything(in view: UIView, bottom band: CGFloat) -> Bool {
+        let width = Int(view.bounds.width.rounded(.up))
+        let height = Int(band)
+        guard width > 0, height > 0,
+            let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return false }
+        // Top-down like UIKit, starting `band` above the bottom edge.
+        context.translateBy(x: 0, y: band)
+        context.scaleBy(x: 1, y: -1)
+        context.translateBy(x: 0, y: band - view.bounds.height)
+        view.layer.render(in: context)
+        guard let data = context.data else { return false }
+        let bytes = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
+        return (0..<(width * height)).contains { bytes[$0 * 4 + 3] > 0 }
     }
 
     private static func screenY(of id: ChatRowID, in controller: ChatTimelineController) -> CGFloat? {

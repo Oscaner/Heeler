@@ -239,6 +239,8 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         }
         var snapshot = projectedSnapshot()
         let changed = changedRows(since: oldRows, in: snapshot)
+        // The layout still holds the shown rows' last heights.
+        let heightsBefore = rowHeights(changed)
         snapshot.reconfigureItems(changed)
         // A row expanded while it ran may have output now, and one a fold
         // gave back may never have read it. The request waits for this
@@ -254,9 +256,41 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
             collectionView.layoutIfNeeded()
             restore(anchor)
         }
+        redrawResizedRows(changed, heightsBefore: heightsBefore)
         forgetMeasurements()
         reportFirstLayoutIfReady()
         noteCollapseAvailability()
+    }
+
+    private func rowHeights(_ ids: [ChatRowID]) -> [ChatRowID: CGFloat] {
+        var heights: [ChatRowID: CGFloat] = [:]
+        for id in ids {
+            if let index = layout.index(of: id) { heights[id] = layout.geometry.height(at: index) }
+        }
+        return heights
+    }
+
+    /// Applies arrive inside a SwiftUI update. A reconfigured row that
+    /// self-sizing then resizes there keeps drawing its old content at the
+    /// new size, so a pending message's new status line stayed blank under
+    /// its bubble until something else laid the row out. Laying the hosted
+    /// row out again once the update is over draws what it holds.
+    private func redrawResizedRows(_ ids: [ChatRowID], heightsBefore: [ChatRowID: CGFloat]) {
+        let resized = ids.filter { id in
+            guard let before = heightsBefore[id], let index = layout.index(of: id) else { return false }
+            return abs(layout.geometry.height(at: index) - before) >= 0.5
+        }
+        guard !resized.isEmpty else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            for id in resized {
+                guard let index = layout.index(of: id),
+                    let cell = collectionView.cellForItem(at: IndexPath(item: index, section: 0))
+                else { continue }
+                cell.contentView.setNeedsLayout()
+                cell.contentView.layoutIfNeeded()
+            }
+        }
     }
 
     /// Folds the applied rows as the open headers say, and makes the
