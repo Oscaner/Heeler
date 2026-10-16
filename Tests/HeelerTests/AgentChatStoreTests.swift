@@ -251,6 +251,18 @@ struct AgentChatStoreTests {
         #expect(lines.map(\.text) == ["The transcript isn't on the Host any more. Showing saved messages."])
     }
 
+    @Test(arguments: [EventsSessionStatus?.none, .suspended])
+    func aNotConnectedBannerClaimsSavedMessagesOnlyWhenThereAreSome(status: EventsSessionStatus?) {
+        let saved = ChatBannerLine.lines(
+            hostStatus: status, conversation: Self.snapshot(.locating, entries: [Self.savedEntry]),
+            hasPendingEchoes: false)
+        #expect(saved.map(\.text) == ["Not connected. Showing saved messages."])
+        for conversation in [nil, Self.snapshot(.locating)] {
+            let lines = ChatBannerLine.lines(hostStatus: status, conversation: conversation, hasPendingEchoes: true)
+            #expect(lines.map(\.text) == ["Not connected."])
+        }
+    }
+
     /// With nothing to show, the unavailable view explains instead.
     @Test func noUnavailableBannerWithoutATimeline() {
         let lines = ChatBannerLine.lines(

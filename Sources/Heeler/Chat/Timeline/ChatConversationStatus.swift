@@ -100,7 +100,7 @@ extension ChatUnavailableReason {
 /// One line over Chat's conversation, before the view adds its action.
 enum ChatBannerLine: Equatable, Identifiable {
     case connecting
-    case notConnected
+    case notConnected(showingSavedMessages: Bool)
     case readFailure(TransportError)
     case unavailable(ChatUnavailableReason, showingSavedMessages: Bool)
 
@@ -121,7 +121,7 @@ enum ChatBannerLine: Equatable, Identifiable {
         switch hostStatus {
         case .connected?: break
         case .connecting?, .reconnecting?: return [.connecting]
-        default: return [.notConnected]
+        default: return [.notConnected(showingSavedMessages: conversation?.transcript.entries.isEmpty == false)]
         }
         guard let conversation else { return [] }
         var lines: [ChatBannerLine] = []
@@ -138,7 +138,8 @@ enum ChatBannerLine: Equatable, Identifiable {
     var text: String {
         switch self {
         case .connecting: "Connecting to the Host…"
-        case .notConnected: "Not connected. Showing saved messages."
+        case .notConnected(let showingSavedMessages):
+            showingSavedMessages ? "Not connected. Showing saved messages." : "Not connected."
         case .readFailure(let failure): "Couldn't read the conversation. \(failure.presentation.explanation)"
         case .unavailable(let reason, let showingSavedMessages):
             reason.bannerText(showingSavedMessages: showingSavedMessages)
