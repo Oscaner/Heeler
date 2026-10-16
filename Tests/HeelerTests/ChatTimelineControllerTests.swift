@@ -785,7 +785,9 @@ struct ChatTimelineControllerTests {
             await Self.settle(controller)
             #expect(!controller.isOpen(header))
             #expect(controller.isOpen(other))
-            #expect(!controller.canCollapseTrajectory)
+            // The other turn, still open, comes into view under the fold.
+            #expect(controller.visibleRowIDs.contains(other))
+            #expect(controller.canCollapseTrajectory)
             #expect(abs(try #require(Self.screenY(of: header, in: controller))
                 - controller.timeline.adjustedContentInset.top) <= 1)
 
@@ -959,6 +961,36 @@ struct ChatTimelineControllerTests {
             await Self.settle(controller)
             #expect(!controller.isOpen(.turn(ChatEntryID("a1"))))
             #expect(controller.isOpen(.turn(ChatEntryID("a0"))) == earlierOpen)
+        }
+    }
+
+    /// A folded turn at the top edge does not hide the open turn under it.
+    @Test func floatingCollapseFindsAnOpenTurnBelowAFoldedOne() async throws {
+        let controller = ChatTimelineController(actions: ChatTimelineActions())
+        let (rows, turns) = await Self.turns(0..<2, steps: 8)
+        let folded = ChatRowID.turn(ChatEntryID("a0"))
+        let open = ChatRowID.turn(ChatEntryID("a1"))
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.apply(Self.foldState(rows, turns: turns))
+            await Self.settle(controller)
+            Self.drag(controller, to: controller.timeline.minOffsetY)
+            controller.toggle(open)
+            controller.toggle(.group(ChatEntryID("c1b")))
+            await Self.settle(controller)
+            let view = controller.timeline
+            for _ in 0..<2 {
+                let frame = try #require(controller.cellFrame(of: folded))
+                Self.drag(controller, to: frame.minY - view.adjustedContentInset.top + 2)
+                await Self.settle(controller)
+            }
+            try #require(controller.visibleRowIDs.prefix(3).contains(folded))
+            try #require(controller.visibleRowIDs.contains(open))
+            #expect(controller.canCollapseTrajectory)
+
+            controller.collapseCurrentTrajectory()
+            await Self.settle(controller)
+            #expect(!controller.isOpen(open))
+            #expect(!controller.canCollapseTrajectory)
         }
     }
 

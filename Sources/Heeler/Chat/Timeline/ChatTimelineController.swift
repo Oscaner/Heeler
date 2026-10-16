@@ -408,12 +408,13 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         for index in layout.geometry.indices(from: top, to: bottom) {
             guard let id = layout.id(at: index), let scope = trajectoryByRow[id] else { continue }
             let trajectory = trajectories[scope]
+            // A folded turn ending at the top edge leaves the open turn
+            // under it in view.
             if trajectory.shownIDs.contains(where: {
                 openHeaders.contains($0) || expanded.contains($0) || expandedFiles[$0]?.isEmpty == false
             }) {
                 return (trajectory, id)
             }
-            return nil
         }
         return nil
     }
