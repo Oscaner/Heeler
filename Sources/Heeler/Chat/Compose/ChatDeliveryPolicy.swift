@@ -64,8 +64,9 @@ extension InputBoxState {
             case .claude, .codex:
                 "The Agent's input box already has text. Send or clear it in the terminal first."
             case .pi, .omp:
-                // Their Esc returns steers the turn has not taken to the box.
-                "The Agent's input box already has text; Stop puts queued messages back there. Send or clear it in the terminal first."
+                // Their Esc returns steers the turn has not taken to the
+                // box, but the text may as well be a draft typed there.
+                "The Agent's input box already has text, such as a draft or a steer that Stop returned. Send or clear it in the terminal first."
             }
         case .shellMode:
             "The Agent's input box is in shell mode. Leave it in the terminal first."

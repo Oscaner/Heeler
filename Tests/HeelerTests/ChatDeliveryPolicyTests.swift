@@ -59,10 +59,14 @@ struct ChatDeliveryPolicyTests {
     }
 
     /// Esc in Pi and Oh My Pi puts a steer the turn had not taken back into
-    /// the input box, which then holds Chat's next message.
+    /// the input box, which then holds Chat's next message; so does a draft
+    /// typed there, with nothing queued.
     @Test func aPiDraftMentionsWhatStopPutBack() {
         for program in [ChatProgram.pi, .omp] {
-            #expect(InputBoxState.text("steer").holdReason(for: program).contains("Stop puts queued messages back"))
+            #expect(
+                InputBoxState.text("steer").holdReason(for: program)
+                    == "The Agent's input box already has text, such as a draft or a steer that Stop returned. Send or clear it in the terminal first."
+            )
         }
         #expect(!InputBoxState.text("draft").holdReason(for: .claude).contains("Stop"))
     }
