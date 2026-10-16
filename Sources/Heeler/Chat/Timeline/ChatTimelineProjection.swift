@@ -365,8 +365,9 @@ enum ChatTimelineProjection {
     // MARK: Summary
 
     /// "Ran 2 commands, Edited 2 files": what the calls did, in a fixed
-    /// order. Files count once per path; a write over an existing file, as
-    /// its recorded change says, counts as an edit.
+    /// order. Files count once per path as the rows show it, relative to
+    /// where the call ran; a write over an existing file, as its recorded
+    /// change says, counts as an edit.
     static func summary(of tools: [ChatToolActivity]) -> String {
         func count(_ kind: ChatToolActivity.Kind) -> Int {
             tools.filter { $0.kind == kind }.count
@@ -384,7 +385,7 @@ enum ChatTimelineProjection {
             }
             if let changes = tool.fileChanges, !changes.files.isEmpty || changes.moreFiles > 0 {
                 for file in changes.files {
-                    paths[verb == .created && file.kind != .created ? .edited : verb, default: []].insert(file.path)
+                    paths[verb == .created && file.kind != .created ? .edited : verb, default: []].insert(changes.displayPath(of: file))
                 }
                 more[verb, default: 0] += changes.moreFiles
             } else {

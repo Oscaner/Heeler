@@ -93,6 +93,9 @@ struct ClaudeRecord: Sendable, Equatable {
     /// On a tool-result record: the denial fields and the reduced
     /// `toolUseResult`.
     var toolResult: ClaudeToolResultDetails?
+    /// On a user or assistant record: the working directory it was
+    /// written in, which a tool call's file paths read relative to.
+    var cwd: String?
 
     var system: ClaudeSystemDetails?
     var attachment: ClaudeAttachmentDetails?
@@ -372,6 +375,7 @@ extension ClaudeRecord {
             sourceToolUseID = raw.sourceToolUseID
             isCompactSummary = (raw.isCompactSummary ?? false) || (raw.isVisibleInTranscriptOnly ?? false)
             interruptedMessageID = raw.interruptedMessageId
+            cwd = raw.cwd
             if blocks.contains(where: { if case .toolResult = $0 { true } else { false } }) {
                 toolResult = ClaudeToolResultDetails(
                     denialKind: raw.toolDenialKind, userFeedback: raw.userFeedback,

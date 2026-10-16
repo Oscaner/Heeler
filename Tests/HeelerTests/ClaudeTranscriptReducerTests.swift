@@ -211,6 +211,8 @@ struct ClaudeTranscriptReducerTests {
                     callID: "toolu_01CV6HHFQmyxCu6gXqLc4vgE"))
     }
 
+    /// The row is titled by the path relative to the record's `cwd`, as
+    /// Codex and Pi rows are; the file change keeps the recorded path.
     @Test("Creating a file counts its lines and opens to them (M L91-L93)")
     func writeCreate() throws {
         let created = ChatFileChange(
@@ -219,7 +221,7 @@ struct ClaudeTranscriptReducerTests {
         #expect(
             Self.tool("tool:toolu_01VAL7noTGaKa2T9YSi4fdXT", in: try Self.transcript())
                 == ChatToolActivity(
-                    kind: .fileWrite, name: "Write", title: "/private/tmp/heeler-tmp-chat2/probe-claude/q.txt",
+                    kind: .fileWrite, name: "Write", title: "q.txt",
                     status: .succeeded, diff: ChatDiffStats(added: 1, removed: 0),
                     fileChanges: ChatFileChanges(files: [created], directory: "/private/tmp/heeler-tmp-chat2/probe-claude"),
                     callID: "toolu_01VAL7noTGaKa2T9YSi4fdXT",

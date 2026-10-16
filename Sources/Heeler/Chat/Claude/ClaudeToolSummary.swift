@@ -13,8 +13,11 @@ struct ClaudeToolSummary: Sendable, Equatable {
         self.subtitle = subtitle
     }
 
-    init(_ use: ClaudeToolUse) {
+    /// `directory` is the call's working directory: a file the call names
+    /// inside it is titled by its path relative to it.
+    init(_ use: ClaudeToolUse, directory: String? = nil) {
         let input = use.input
+        let file = input.filePath.map { ChatFileChanges.displayPath($0, in: directory) } ?? use.name
         switch use.name {
         case "Bash", "PowerShell":
             let command = input.command ?? ""
@@ -24,11 +27,11 @@ struct ClaudeToolSummary: Sendable, Equatable {
                 self.init(kind: .command, title: command)
             }
         case "Edit", "MultiEdit", "NotebookEdit":
-            self.init(kind: .fileEdit, title: input.filePath ?? use.name)
+            self.init(kind: .fileEdit, title: file)
         case "Write":
-            self.init(kind: .fileWrite, title: input.filePath ?? use.name)
+            self.init(kind: .fileWrite, title: file)
         case "Read", "NotebookRead":
-            self.init(kind: .fileRead, title: input.filePath ?? use.name)
+            self.init(kind: .fileRead, title: file)
         case "Glob", "Grep":
             self.init(kind: .search, title: input.pattern ?? use.name, subtitle: input.path)
         case "LS":

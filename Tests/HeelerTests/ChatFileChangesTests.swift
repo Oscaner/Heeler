@@ -61,6 +61,29 @@ struct ChatFileChangesTests {
         #expect(!row.showsDiffAsOutput)
     }
 
+    /// Claude Code records absolute paths; rows read like Codex and Pi rows,
+    /// relative to where the call ran, across the `/tmp` firmlink. A Blocked
+    /// card still matches the screen on the recorded path.
+    @Test func fileRowsAreTitledRelativeToWhereTheCallRan() throws {
+        let jsonl = #"""
+            {"type":"user","uuid":"p1","parentUuid":null,"cwd":"/tmp/proj","message":{"role":"user","content":"Go"},"promptSource":"typed","origin":{"kind":"human"}}
+            {"type":"assistant","uuid":"a1","parentUuid":"p1","cwd":"/tmp/proj","message":{"id":"m1","role":"assistant","content":[{"type":"tool_use","id":"toolu_read","name":"Read","input":{"file_path":"/private/tmp/proj/src/a.swift"}}]},"apiBlockIndex":0}
+            {"type":"user","uuid":"r1","parentUuid":"a1","cwd":"/tmp/proj","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_read","content":"1\tlet a = 1"}]}}
+            {"type":"assistant","uuid":"a2","parentUuid":"r1","cwd":"/tmp/proj","message":{"id":"m2","role":"assistant","content":[{"type":"tool_use","id":"toolu_hosts","name":"Read","input":{"file_path":"/etc/hosts"}}]},"apiBlockIndex":0}
+            {"type":"user","uuid":"r2","parentUuid":"a2","cwd":"/tmp/proj","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_hosts","content":"1\t127.0.0.1 localhost"}]}}
+            {"type":"assistant","uuid":"a3","parentUuid":"r2","cwd":"/tmp/proj","message":{"id":"m3","role":"assistant","content":[{"type":"tool_use","id":"toolu_write","name":"Write","input":{"file_path":"/tmp/proj/new.txt","content":"x"}}]},"apiBlockIndex":0}
+            """#
+        let transcript = ClaudeSample.transcript(jsonl, activity: .blocked)
+        func title(_ id: String) -> String? {
+            guard case .tool(let row) = ClaudeSample.entry(id, in: transcript) else { return nil }
+            return row.title
+        }
+        #expect(title("tool:toolu_read") == "src/a.swift")
+        #expect(title("tool:toolu_hosts") == "/etc/hosts")
+        #expect(title("tool:toolu_write") == "new.txt")
+        #expect(transcript.pendingRequests.map(\.summary) == ["/tmp/proj/new.txt"])
+    }
+
     @Test func aCommandThatFailedListsNothing() throws {
         let row = try #require(
             Self.row(Self.bashTranscript(command: "python3 fix.py", editDiff: Self.threeFiles, isError: true)))

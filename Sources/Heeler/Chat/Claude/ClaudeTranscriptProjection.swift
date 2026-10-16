@@ -340,7 +340,8 @@ private struct Builder {
         case "EnterPlanMode" where status == .succeeded:
             placed = add(entryID, at: record, .notice(ChatNotice(kind: .planMode, title: "Entered plan mode")))
         default:
-            placed = add(entryID, at: record, .tool(toolRow(for: use, status: status, answer: answer)))
+            placed = add(
+                entryID, at: record, .tool(toolRow(for: use, in: record, status: status, answer: answer)))
         }
 
         if placed, let item = backgroundWorkItem(for: use, in: record, result: structured) {
@@ -356,8 +357,10 @@ private struct Builder {
                 planFilePath: use.name == "ExitPlanMode" ? use.input.planFilePath : nil))
     }
 
-    private func toolRow(for use: ClaudeToolUse, status: ChatToolActivity.Status, answer: Answer?) -> ChatToolActivity {
-        let summary = ClaudeToolSummary(use)
+    private func toolRow(
+        for use: ClaudeToolUse, in record: ClaudeRecord, status: ChatToolActivity.Status, answer: Answer?
+    ) -> ChatToolActivity {
+        let summary = ClaudeToolSummary(use, directory: record.cwd)
         var row = ChatToolActivity(
             kind: summary.kind, name: use.name, title: summary.title, subtitle: summary.subtitle, status: status,
             callID: use.id.isEmpty ? nil : use.id)

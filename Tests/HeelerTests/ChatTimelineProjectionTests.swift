@@ -352,6 +352,15 @@ struct ChatTimelineProjectionTests {
         var overwritten = tool(.fileWrite)
         overwritten.fileChanges = ChatFileChanges(files: [ChatFileChange(path: "old", kind: .updated, added: 1, removed: 1, lineCount: 1)])
         #expect(summary([created, overwritten]) == "Edited 1 file, Created 1 file")
+
+        // A failed edit has only its title, relative to where it ran; the
+        // retry that worked records the full path. They are one file.
+        let failed = tool(.fileEdit, title: "c.txt")
+        var retried = tool(.fileEdit, title: "c.txt")
+        retried.fileChanges = ChatFileChanges(
+            files: [ChatFileChange(path: "/private/tmp/p/c.txt", kind: .updated, added: 1, removed: 1, lineCount: 1)],
+            directory: "/tmp/p")
+        #expect(summary([failed, retried]) == "Edited 1 file")
     }
 
     // MARK: Subagents
