@@ -67,6 +67,7 @@ struct HostOnboardingView: View {
             Section("Host") {
                 LabeledContent("Account", value: store.host.username)
                 LabeledContent("Session", value: sessionLine)
+                herdrEndpointRows
                 LabeledContent(
                     "Auth",
                     value: authenticationLabel)
@@ -220,10 +221,22 @@ struct HostOnboardingView: View {
     }
 
     private var sessionLine: String {
+        if let herdrEndpoint = store.host.herdrEndpoint {
+            return herdrEndpoint.session.isEmpty ? "default" : herdrEndpoint.session
+        }
         if case .namedSession(let name) = store.host.socketLocation {
             return name
         }
         return "default"
+    }
+
+    /// Where a Pairing Code v2 Host's herdr lives; nothing for other Hosts.
+    @ViewBuilder
+    private var herdrEndpointRows: some View {
+        if let herdrEndpoint = store.host.herdrEndpoint {
+            LabeledContent("herdr Socket", value: herdrEndpoint.socketPath)
+            LabeledContent("herdr Launcher", value: herdrEndpoint.executablePath)
+        }
     }
 
     /// The Console is dialing this Host, or between automatic retries.
@@ -390,6 +403,7 @@ struct HostOnboardingView: View {
             standingFailure: standingFailure,
             syncIssue: syncIssue,
             isManualReconnectInFlight: isManualReconnectInFlight,
+            usesHerdrEndpoint: store.host.herdrEndpoint != nil,
             itemizesRoutes: !routeStatus.routeFailures.isEmpty)
     }
 
@@ -442,7 +456,8 @@ struct HostOnboardingView: View {
     }
 
     private var pluginPresentation: HeelerPluginPresentation {
-        HeelerPluginPresentation(store.pluginStatus, session: store.host.sessionName)
+        HeelerPluginPresentation(
+            store.pluginStatus, session: store.host.sessionName, endpoint: store.host.herdrEndpoint)
     }
 
     /// The installed version. When the user has something to do on the Host
@@ -757,13 +772,15 @@ struct HostOnboardingConnectionPresentation: Equatable {
         standingFailure: TransportError? = nil,
         syncIssue: String? = nil,
         isManualReconnectInFlight: Bool,
+        usesHerdrEndpoint: Bool = false,
         itemizesRoutes: Bool = false
     ) {
         func whole(_ failure: TransportError) -> String? {
+            let presentation = failure.presentation(usesHerdrEndpoint: usesHerdrEndpoint)
             if itemizesRoutes, case .noRouteReached = failure {
-                return failure.presentation.recoverySuggestion
+                return presentation.recoverySuggestion
             }
-            return failure.presentation.message
+            return presentation.message
         }
         func explanation(_ failure: TransportError) -> String? {
             if itemizesRoutes, case .noRouteReached = failure { return nil }

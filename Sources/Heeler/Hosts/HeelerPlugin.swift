@@ -182,17 +182,25 @@ struct HeelerPluginPresentation: Equatable {
         let notes: [String]
     }
 
-    static let installCommand = HostSetupGuide.pluginInstallCommand
+    static func installCommand(endpoint: HerdrEndpoint?) -> String {
+        guard let endpoint else { return HostSetupGuide.pluginInstallCommand }
+        return HerdrCommandLine.render(
+            session: "", endpoint: endpoint, arguments: HostSetupGuide.pluginInstallArguments)
+    }
 
-    static func uninstallCommand(_ pluginID: String) -> String {
-        "herdr plugin uninstall \(pluginID)"
+    static func uninstallCommand(_ pluginID: String, endpoint: HerdrEndpoint?) -> String {
+        HerdrCommandLine.render(
+            session: "", endpoint: endpoint, arguments: ["plugin", "uninstall", pluginID])
     }
 
     /// `herdr plugin enable` asks a herdr server, so the command names the
     /// session the Host targets: `session` is the Host's session name, blank
     /// for the default session.
-    static func enableCommand(_ pluginID: String, session: String) -> String {
-        HerdrCommandLine.render(session: session, arguments: ["plugin", "enable", pluginID])
+    static func enableCommand(
+        _ pluginID: String, session: String, endpoint: HerdrEndpoint?
+    ) -> String {
+        HerdrCommandLine.render(
+            session: session, endpoint: endpoint, arguments: ["plugin", "enable", pluginID])
     }
     static let reenableNotificationsNote =
         "The current plugin keeps its own registrations, so turn Notifications back on "
@@ -203,7 +211,7 @@ struct HeelerPluginPresentation: Equatable {
 
     /// `session` is the Host's herdr session name, as for `enableCommand`.
     init(
-        _ status: HeelerPluginStatus, session: String,
+        _ status: HeelerPluginStatus, session: String, endpoint: HerdrEndpoint? = nil,
         bundled: PluginVersion = HeelerPluginCompatibility.bundled
     ) {
         switch status {
@@ -222,18 +230,21 @@ struct HeelerPluginPresentation: Equatable {
                 tone: .info,
                 message: "Install the Heeler plugin for notifications, Live Activity updates, "
                     + "and herdr's sidebar fields.",
-                commands: [Self.installCommand],
+                commands: [Self.installCommand(endpoint: endpoint)],
                 notes: [])
         case .installed(let installation):
-            let described = Self.describe(installation, session: session, bundled: bundled)
+            let described = Self.describe(
+                installation, session: session, endpoint: endpoint, bundled: bundled)
             value = described.value
             notice = described.notice
         }
     }
 
     private static func describe(
-        _ installation: HeelerPluginInstallation, session: String, bundled: PluginVersion
+        _ installation: HeelerPluginInstallation, session: String,
+        endpoint: HerdrEndpoint?, bundled: PluginVersion
     ) -> (value: String, notice: Notice?) {
+        let installCommand = Self.installCommand(endpoint: endpoint)
         let version = installation.version.isEmpty ? "Unknown version" : installation.version
         let parsed = installation.parsedVersion
         let isOutdated = parsed.map { $0 < bundled } ?? false
@@ -250,7 +261,8 @@ struct HeelerPluginPresentation: Equatable {
                 // reinstall turns the current plugin on, and `herdr plugin
                 // install` refuses to replace a linked one.
                 let reinstalls = currentSource != .local
-                let enable = enableCommand(SSHTransportSettings.notificationPluginID, session: session)
+                let enable = enableCommand(
+                    SSHTransportSettings.notificationPluginID, session: session, endpoint: endpoint)
                 return (
                     version,
                     Notice(
@@ -260,7 +272,7 @@ struct HeelerPluginPresentation: Equatable {
                             + (reinstalls
                                 ? "install the current plugin and turn it on."
                                 : "turn the current plugin on."),
-                        commands: [uninstallCommand(installation.pluginID)]
+                        commands: [uninstallCommand(installation.pluginID, endpoint: endpoint)]
                             + (reinstalls ? [installCommand, enable] : [enable]),
                         notes: missing + [reenableNotificationsNote]))
             }
@@ -270,11 +282,13 @@ struct HeelerPluginPresentation: Equatable {
                     tone: .warning,
                     message: "This Host runs an old Heeler plugin under its former name. "
                         + "Remove it, then install the current plugin.",
-                    commands: [uninstallCommand(installation.pluginID), installCommand],
+                    commands: [uninstallCommand(installation.pluginID, endpoint: endpoint), installCommand],
                     notes: missing + [reenableNotificationsNote]))
         }
         if !installation.leftoverLegacyIDs.isEmpty {
-            let removals = installation.leftoverLegacyIDs.map(uninstallCommand)
+            let removals = installation.leftoverLegacyIDs.map {
+                uninstallCommand($0, endpoint: endpoint)
+            }
             return (
                 shownValue,
                 Notice(
@@ -297,7 +311,8 @@ struct HeelerPluginPresentation: Equatable {
                         tone: .warning,
                         message: "The Heeler plugin is disabled and out of date: \(parsed) → "
                             + "\(bundled). Update it, then turn it on:",
-                        commands: [installCommand, enableCommand(installation.pluginID, session: session)],
+                        commands: [installCommand, enableCommand(
+                            installation.pluginID, session: session, endpoint: endpoint)],
                         notes: missing))
             }
             return (
@@ -306,7 +321,7 @@ struct HeelerPluginPresentation: Equatable {
                     tone: .warning,
                     message: "The Heeler plugin is disabled, so this Host sends no notifications "
                         + "or Live Activity updates.",
-                    commands: [enableCommand(installation.pluginID, session: session)],
+                    commands: [enableCommand(installation.pluginID, session: session, endpoint: endpoint)],
                     notes: []))
         }
         if installation.hasManifestWarning {

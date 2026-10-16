@@ -152,14 +152,32 @@ struct HostFormView: View {
 
         authenticationSection
 
-        Section {
-            TextField("Session name", text: $draft.sessionName)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-        } header: {
-            Text("herdr Session")
-        } footer: {
-            Text("Leave blank for the default herdr session.")
+        herdrSection
+    }
+
+    /// The session name, or for a Pairing Code v2 Host its endpoint, which
+    /// replaces the session name and is not editable here.
+    @ViewBuilder
+    private var herdrSection: some View {
+        if let herdrEndpoint = draft.herdrEndpoint {
+            Section {
+                LabeledContent("Socket", value: herdrEndpoint.socketPath)
+                LabeledContent("Launcher", value: herdrEndpoint.executablePath)
+            } header: {
+                Text("herdr Endpoint")
+            } footer: {
+                Text("Set by this Host's Pairing Code.")
+            }
+        } else {
+            Section {
+                TextField("Session name", text: $draft.sessionName)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+            } header: {
+                Text("herdr Session")
+            } footer: {
+                Text("Leave blank for the default herdr session.")
+            }
         }
     }
 

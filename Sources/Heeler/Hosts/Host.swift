@@ -96,6 +96,11 @@ struct Host: Identifiable, Codable, Hashable, Sendable {
     /// while this field remains editable for older herdr versions. Blank
     /// means the default herdr session.
     var sessionName: String
+    /// The Host's own herdr endpoint, from a Pairing Code v2 (ADR 0023). When
+    /// set it wins over `sessionName`: every connection uses its socket and
+    /// every herdr exec its launcher. nil keeps the home-relative session
+    /// socket and the `herdr` on the SSH PATH.
+    var herdrEndpoint: HerdrEndpoint?
     /// The ways to reach this Host, in the user's order: never empty. The
     /// first is the primary route, which names the Host where one address
     /// is shown and is what builds without Routes connect to.
@@ -105,6 +110,7 @@ struct Host: Identifiable, Codable, Hashable, Sendable {
     /// still carry it on disk, and leaving it out of the keys both ignores it
     /// on decode and drops it on the Host's next save.
     private enum CodingKeys: String, CodingKey {
+        case herdrEndpoint
         case id, name, username, authMethod, sessionName
         case routes
         // The primary route, flattened as Hosts were saved before Routes
@@ -119,6 +125,7 @@ struct Host: Identifiable, Codable, Hashable, Sendable {
         username: String,
         authMethod: AuthMethod = .deviceKey,
         sessionName: String = "",
+        herdrEndpoint: HerdrEndpoint? = nil,
         routes: [HostRoute]
     ) {
         precondition(!routes.isEmpty, "A Host needs at least one route")
@@ -127,6 +134,7 @@ struct Host: Identifiable, Codable, Hashable, Sendable {
         self.username = username
         self.authMethod = authMethod
         self.sessionName = sessionName
+        self.herdrEndpoint = herdrEndpoint
         self.routes = routes
     }
 
@@ -142,6 +150,7 @@ struct Host: Identifiable, Codable, Hashable, Sendable {
         jumpAddress: String = "",
         jumpPort: Int = 22,
         jumpUsername: String = "",
+        herdrEndpoint: HerdrEndpoint? = nil,
         overlayNetworkID: UUID? = nil
     ) {
         self.init(
@@ -150,6 +159,7 @@ struct Host: Identifiable, Codable, Hashable, Sendable {
             username: username,
             authMethod: authMethod,
             sessionName: sessionName,
+            herdrEndpoint: herdrEndpoint,
             routes: [
                 HostRoute(
                     id: id,
@@ -176,6 +186,9 @@ struct Host: Identifiable, Codable, Hashable, Sendable {
         }
         authMethod = decodedAuthMethod
         sessionName = try container.decodeIfPresent(String.self, forKey: .sessionName) ?? ""
+        // Absent in Hosts saved before Pairing Code v2, and in every Host not
+        // paired from one. The encoder omits nil for those Hosts.
+        herdrEndpoint = try container.decodeIfPresent(HerdrEndpoint.self, forKey: .herdrEndpoint)
         if let routes = try container.decodeIfPresent([HostRoute].self, forKey: .routes),
            !routes.isEmpty
         {
@@ -216,6 +229,7 @@ struct Host: Identifiable, Codable, Hashable, Sendable {
         try container.encode(username, forKey: .username)
         try container.encode(authMethod, forKey: .authMethod)
         try container.encode(sessionName, forKey: .sessionName)
+        try container.encodeIfPresent(herdrEndpoint, forKey: .herdrEndpoint)
         try container.encode(routes, forKey: .routes)
         let primary = primaryRoute
         try container.encode(primary.address, forKey: .address)
@@ -272,9 +286,98 @@ struct Host: Identifiable, Codable, Hashable, Sendable {
         return port == 22 ? "\(username)@\(address)" : "\(username)@\(address):\(port)"
     }
 
-    /// The herdr socket this Host's session name points at.
+    /// The herdr socket this Host targets: its endpoint's socket when it has
+    /// one, otherwise the socket its session name points at.
     var socketLocation: HerdrSocketLocation {
+        if let herdrEndpoint {
+            return .absolutePath(herdrEndpoint.socketPath)
+        }
         let trimmed = sessionName.trimmingCharacters(in: .whitespaces)
         return trimmed.isEmpty ? .defaultSession : .namedSession(trimmed)
+    }
+}
+
+/// A herdr instance a Host runs outside the user's own config home, such as
+/// one bundled inside a desktop app with its own `XDG_CONFIG_HOME`. Carried
+/// by a Pairing Code v2 (`plugin/README.md`, ADR 0023). Both paths are
+/// validated on construction and on decode, so a value always satisfies the
+/// v2 rules.
+struct HerdrEndpoint: Codable, Hashable, Sendable {
+    /// Absolute path of the herdr API socket. Always in herdr's own layout,
+    /// `…/herdr/herdr.sock` or `…/herdr/sessions/<name>/herdr.sock`, so the
+    /// plugin's hooks can name the session it serves (ADR 0020).
+    let socketPath: String
+    /// Absolute path of an executable that behaves as `herdr` for this
+    /// endpoint. It runs as a positional argument of a POSIX `/bin/sh -c`
+    /// body, never spliced into one, and never falls back to PATH.
+    let executablePath: String
+
+    /// The longest socket path every supported Host can bind and connect.
+    /// Attach and wake reach herdr's client socket, named by inserting
+    /// `-client` before `.sock`, so that sibling must fit too: macOS
+    /// `sun_path` holds 104 bytes including the terminating NUL, leaving
+    /// 103 for the client socket and 96 for this one.
+    static let maximumSocketPathUTF8Length = 96
+
+    /// nil when either path breaks the v2 rules: both must be absolute and
+    /// quotable as one remote shell word, and the socket must be in herdr's
+    /// layout and short enough to connect.
+    init?(socketPath: String, executablePath: String) {
+        guard Self.isValidPath(socketPath), Self.isValidPath(executablePath),
+            socketPath.utf8.count <= Self.maximumSocketPathUTF8Length,
+            Self.session(fromSocketPath: socketPath) != nil
+        else { return nil }
+        self.socketPath = socketPath
+        self.executablePath = executablePath
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case socketPath, executablePath
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let socketPath = try container.decode(String.self, forKey: .socketPath)
+        let executablePath = try container.decode(String.self, forKey: .executablePath)
+        guard let endpoint = HerdrEndpoint(socketPath: socketPath, executablePath: executablePath)
+        else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .socketPath, in: container,
+                debugDescription: "Invalid herdr endpoint")
+        }
+        self = endpoint
+    }
+
+    /// The herdr session this endpoint's hooks report: `""` for the default
+    /// session, otherwise the session name.
+    var session: String {
+        Self.session(fromSocketPath: socketPath) ?? ""
+    }
+
+    /// Absolute and quotable as one remote shell word: no `'`, `\`, or
+    /// ASCII control characters (the `RemoteShellPath` rule). Spaces are fine.
+    static func isValidPath(_ path: String) -> Bool {
+        RemoteShellPath.isQuotableAbsolute(path)
+    }
+
+    /// The session a hook whose `HERDR_SOCKET_PATH` is `socketPath` reports,
+    /// mirroring the plugin's `sessionFromSocketPath` (`plugin/src/session.js`)
+    /// and its shared vectors: unset or empty is the default session `""`;
+    /// `…/herdr/sessions/<name>/herdr.sock` with a valid name is `<name>`,
+    /// checked first so a session named `herdr` is not read as the default;
+    /// `…/herdr/herdr.sock` is `""`; any other shape is unknown (nil).
+    static func session(fromSocketPath socketPath: String?) -> String? {
+        guard let socketPath, !socketPath.isEmpty else { return "" }
+        let socketSuffix = "/herdr.sock"
+        if socketPath.hasSuffix(socketSuffix) {
+            let directory = socketPath.dropLast(socketSuffix.count)
+            if let slash = directory.lastIndex(of: "/") {
+                let name = String(directory[directory.index(after: slash)...])
+                if directory[..<slash].hasSuffix("/herdr/sessions"), HerdrSessionName.isValid(name) {
+                    return name
+                }
+            }
+        }
+        return socketPath.hasSuffix("/herdr/herdr.sock") ? "" : nil
     }
 }

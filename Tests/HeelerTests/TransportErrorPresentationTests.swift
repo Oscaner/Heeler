@@ -266,6 +266,7 @@ struct TransportErrorPresentationTests {
             .socketNotFound(path: "/tmp/herdr.sock"),
             .streamLocalOpenFailed(path: "/tmp/herdr.sock"),
             .herdrBinaryNotFound,
+            .herdrLauncherNotFound(path: "/opt/example/bin/herdr"),
             .protocolVersionMismatch(server: 18, supported: 19),
             .homeDirectoryUnresolvable(detail: "echo $HOME failed"),
             .malformedResponse("{"),
@@ -310,6 +311,39 @@ struct TransportErrorPresentationTests {
         #expect(
             presentation.message
                 == "The herdr socket was not found: /tmp/herdr.sock. Check this Host's session.")
+    }
+
+    /// An endpoint Host has no session to fix (ADR 0023). Every other error,
+    /// and every Host without an endpoint, keeps the shared copy.
+    @Test func endpointHostsAreToldToStartTheConfiguredInstance() {
+        let missing = TransportError.socketNotFound(path: "/tmp/herdr/herdr.sock")
+        #expect(
+            missing.presentation(usesHerdrEndpoint: true).message
+                == "The herdr socket was not found: /tmp/herdr/herdr.sock. "
+                + "Start the herdr instance configured for this Host and verify its socket path.")
+        #expect(missing.presentation(usesHerdrEndpoint: false) == missing.presentation)
+        let mismatch = TransportError.protocolVersionMismatch(server: 16, supported: 17)
+        #expect(mismatch.presentation(usesHerdrEndpoint: true) == mismatch.presentation)
+    }
+
+    @Test func missingHerdrLauncherNamesItsPathAndHowToRepairIt() {
+        let failure = TransportError.herdrLauncherNotFound(
+            path: "/Users/ada/Library/Application Support/Example/bin/herdr")
+        #expect(!failure.isRetryable)
+        #expect(!TransportError.jumpHostFailed(failure).isRetryable)
+        let presentation = failure.presentation
+        #expect(presentation.summary == "The herdr launcher could not run")
+        #expect(presentation.detail == "/Users/ada/Library/Application Support/Example/bin/herdr")
+        #expect(
+            presentation.recoverySuggestion
+                == "Check that this launcher exists, is executable, and can start herdr. "
+                + "Pair the Host again if its path changed.")
+        #expect(
+            presentation.message
+                == "The herdr launcher could not run: "
+                + "/Users/ada/Library/Application Support/Example/bin/herdr. "
+                + "Check that this launcher exists, is executable, and can start herdr. "
+                + "Pair the Host again if its path changed.")
     }
 
     @Test func protocolVersionMismatchNamesTheUpdate() {
@@ -358,6 +392,7 @@ struct TransportErrorPresentationTests {
             .streamLocalOpenFailed(path: "/s"),
             .protocolVersionMismatch(server: 18, supported: 19),
             .herdrBinaryNotFound,
+            .herdrLauncherNotFound(path: "/opt/example/bin/herdr"),
             .socketNotFound(path: "/s"),
         ]
         for error in errors {

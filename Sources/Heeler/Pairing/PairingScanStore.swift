@@ -158,6 +158,7 @@ final class PairingScanStore {
         // Host stays reachable from the networks the user picked them for.
         // The fingerprint pin lands with it, so preflight connects without a
         // TOFU prompt whichever route answers.
+        // The Herdr Endpoint comes from the scanned code, not the ceremony.
         let hostID = UUID()
         let addresses =
             [result.address] + code.addresses.filter { $0 != result.address }
@@ -165,6 +166,7 @@ final class PairingScanStore {
             id: hostID,
             username: result.username,
             authMethod: .deviceKey,
+            herdrEndpoint: code.endpoint,
             routes: addresses.enumerated().map { index, address in
                 // The first route takes the Host's id, as a Host saved
                 // before routes does.
@@ -291,7 +293,7 @@ final class PairingScanStore {
             "That QR code is not a herdr Pairing Code."
         case .unsupportedVersion(let found):
             "This Pairing Code uses version \(found), which this app does not "
-                + "understand. Update the app and the pairing plugin so they match."
+                + "understand. Update Heeler, then scan it again."
         case .badEncoding, .badPayload:
             "The Pairing Code could not be read. Regenerate it in herdr and scan again."
         }
@@ -299,11 +301,11 @@ final class PairingScanStore {
 }
 
 extension PairingCode {
-    /// The same Host coordinates without the Bootstrap Key: what a retry
-    /// needs once Enrollment has already landed on the Host.
+    /// The same Host coordinates and Herdr Endpoint without the Bootstrap
+    /// Key: what a retry needs once Enrollment has already landed on the Host.
     fileprivate var withoutBootstrap: PairingCode {
         PairingCode(
             addresses: addresses, port: port, username: username,
-            hostKeyFingerprint: hostKeyFingerprint, bootstrap: nil)
+            hostKeyFingerprint: hostKeyFingerprint, bootstrap: nil, endpoint: endpoint)
     }
 }
