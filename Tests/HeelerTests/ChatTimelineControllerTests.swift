@@ -906,6 +906,62 @@ struct ChatTimelineControllerTests {
         }
     }
 
+    /// Away from the end the room moves no rows, so the probe never reaches
+    /// above the top edge: the button holds still, and Collapse Steps folds
+    /// the open turn on screen rather than one hidden above it.
+    @Test(arguments: [false, true])
+    func floatingCollapseAwayFromTheEndProbesOnlyWhatIsOnScreen(earlierOpen: Bool) async throws {
+        var availability: [Bool] = []
+        let controller = ChatTimelineController(actions: ChatTimelineActions(
+            collapseAvailabilityChanged: { availability.append($0) }))
+        let (rows, turns) = await Self.turns(0..<2, steps: 8)
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.setCollapseControlClearance(56)
+            controller.apply(Self.foldState(rows, turns: turns))
+            await Self.settle(controller)
+            Self.drag(controller, to: controller.timeline.minOffsetY)
+            if earlierOpen {
+                controller.toggle(.turn(ChatEntryID("a0")))
+                controller.toggle(.group(ChatEntryID("c0b")))
+                await Self.settle(controller)
+            }
+            controller.toggle(.turn(ChatEntryID("a1")))
+            controller.toggle(.group(ChatEntryID("c1b")))
+            await Self.settle(controller)
+
+            // The later prompt crosses the top edge, with the earlier turn's
+            // last row inside the button's room above it. Rows measured on
+            // the way move the prompt, so line it up again once there.
+            let view = controller.timeline
+            let prompt = ChatRowID.entry(ChatEntryID("u1"))
+            for _ in 0..<20 where !controller.visibleRowIDs.contains(prompt) {
+                Self.drag(controller, to: view.contentOffset.y + view.bounds.height / 2)
+                await Self.settle(controller)
+            }
+            for _ in 0..<2 {
+                let frame = try #require(controller.cellFrame(of: prompt))
+                Self.drag(controller, to: frame.minY - view.adjustedContentInset.top + 8)
+                await Self.settle(controller)
+            }
+            try #require(controller.visibleRowIDs.first == prompt)
+            try #require(!controller.isFollowing)
+            try #require(view.contentOffset.y < view.maxOffsetY - 56)
+            #expect(controller.canCollapseTrajectory)
+            availability = []
+            for _ in 0..<4 {
+                view.setNeedsLayout()
+                await Self.settle(controller)
+            }
+            #expect(controller.canCollapseTrajectory)
+            #expect(availability.isEmpty)
+
+            controller.collapseCurrentTrajectory()
+            await Self.settle(controller)
+            #expect(!controller.isOpen(.turn(ChatEntryID("a1"))))
+            #expect(controller.isOpen(.turn(ChatEntryID("a0"))) == earlierOpen)
+        }
+    }
+
     // MARK: Helpers
 
     private static func foldState(

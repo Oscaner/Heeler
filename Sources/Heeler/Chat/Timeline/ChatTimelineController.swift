@@ -394,11 +394,17 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
     /// The first open turn actually on screen, rather than the most
     /// recently expanded turn elsewhere in the conversation.
     private var collapseTarget: (trajectory: ChatTimelineProjection.Trajectory, row: ChatRowID)? {
-        // Making room for the button moves a list at its end up by that
-        // room; the window reaches as far above the top, so making or giving
-        // back the room never changes the answer.
-        let top = collectionView.contentOffset.y + collectionView.adjustedContentInset.top - collapseControlReserve
-        let bottom = collectionView.contentOffset.y + collectionView.bounds.height
+        // Making room for the button moves only a list at its end up, by as
+        // far as it rests past the end without that room. Measured from no
+        // later than that end, the window is the same with or without the
+        // room, so making or giving it back never changes the answer; away
+        // from the end it starts at the top edge.
+        let view = collectionView
+        let unreservedEnd = max(
+            view.minOffsetY,
+            view.contentSize.height + view.adjustedContentInset.bottom - collapseControlReserve - view.bounds.height)
+        let top = min(view.contentOffset.y, unreservedEnd) + view.adjustedContentInset.top
+        let bottom = view.contentOffset.y + view.bounds.height
         for index in layout.geometry.indices(from: top, to: bottom) {
             guard let id = layout.id(at: index), let scope = trajectoryByRow[id] else { continue }
             let trajectory = trajectories[scope]
