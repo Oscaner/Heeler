@@ -637,6 +637,17 @@ struct PiChatTests {
         #expect(PiFileChanges.patchPaths("*** Begin Patch\n[not a header]\n[x#]\n*** End Patch").isEmpty)
     }
 
+    /// A V4A context line repeats a file line after one space, and that
+    /// line may look like a hashline header; headers start at column 0.
+    @Test func ompPatchContextLinesAreNeverHeaders() {
+        let patch = [
+            "*** Begin Patch", "*** Update File: config.ini", "@@ [server]", " [server#1]", "-port = 1",
+            "+port = 2", "  *** Delete File: kept.txt", "*** End Patch",
+        ]
+        #expect(PiFileChanges.patchPaths(patch.joined(separator: "\r\n")) == ["config.ini"])
+        #expect(PiFileChanges.patchPaths("[notes.txt#B6C1]  \r\nPUT 2.=2:") == ["notes.txt"])
+    }
+
     @Test func piEditPatchBecomesFileChanges() throws {
         // Pi 0.85.1 (live capture t03): the call names the file, the result
         // records a unified patch beside a display-only diff.

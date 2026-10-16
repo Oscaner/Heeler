@@ -34,12 +34,14 @@ enum PiFileChanges {
 
     /// The files an Oh My Pi free-form edit patch names, in order: hashline
     /// sections open with `[path#HASH]`, and the patch form with `*** Add
-    /// File:`, `*** Update File:` or `*** Delete File:`. A body line starts
-    /// with its operation or sign, so it never reads as a header.
+    /// File:`, `*** Update File:` or `*** Delete File:`. Headers start at
+    /// the line's first column; a body line starts with its operation or
+    /// sign, a context line with a space, so neither reads as a header.
     static func patchPaths(_ input: String) -> [String] {
         var paths: [String] = []
         for line in input.split(whereSeparator: \.isNewline) {
-            let text = line.trimmingCharacters(in: .whitespaces)
+            var text = line
+            while text.last?.isWhitespace == true { text.removeLast() }
             var path: String?
             for header in ["*** Add File:", "*** Update File:", "*** Delete File:"] where text.hasPrefix(header) {
                 path = text.dropFirst(header.count).trimmingCharacters(in: .whitespaces)
