@@ -641,6 +641,14 @@ struct ChatPlan: Equatable, Codable, Sendable {
     /// Feedback with a rejection, or a note added to an approval.
     var note: String?
     var callID: String?
+    /// What the transcript can't tell: an approval given in Chat, or the
+    /// card's Stop, which reads there like a decline. Held in memory only.
+    var cardAnswer: ChatToolActivity.CardAnswer?
+
+    // `cardAnswer` is deliberately absent: decoding leaves it nil.
+    private enum CodingKeys: String, CodingKey {
+        case text, filePath, status, note, callID
+    }
 
     init(
         text: String, filePath: String? = nil, status: ChatToolActivity.Status,

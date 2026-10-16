@@ -884,7 +884,7 @@ private struct ChatPlanRow: View {
                 Text("Plan")
                     .font(.subheadline.weight(.semibold))
                 Spacer(minLength: 0)
-                ChatToolStatusBadge(status: plan.status, exitCode: nil)
+                ChatToolStatusBadge(status: plan.status, exitCode: nil, cardAnswer: plan.cardAnswer)
             }
             .foregroundStyle(.secondary)
             ChatMarkdownView(blocks: blocks)

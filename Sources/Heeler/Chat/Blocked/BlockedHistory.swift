@@ -36,6 +36,12 @@ struct BlockedHistory: Equatable, Sendable {
                 }
                 tool.cardAnswer = answer
                 entry.content = .tool(tool)
+            case .plan(var plan):
+                guard let id = plan.callID, let answer = calls[id], Self.agrees(answer, with: plan.status) else {
+                    break
+                }
+                plan.cardAnswer = answer
+                entry.content = .plan(plan)
             case .questions(var set):
                 var isMarked = false
                 for index in set.questions.indices where set.questions[index].answer == nil {

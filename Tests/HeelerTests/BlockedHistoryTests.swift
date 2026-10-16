@@ -27,6 +27,22 @@ struct BlockedHistoryTests {
         #expect(Self.answer(history, status: .succeeded) == nil)
     }
 
+    @Test func aPlanStoppedOrApprovedOnTheCardIsMarkedLikeACall() {
+        var history = BlockedHistory()
+        history.record(.stopped, forCall: "toolu_stop")
+        history.record(.allowed, forCall: "toolu_go")
+        let plans = [
+            ChatEntry(id: ChatEntryID("plan:1"), sourceOffset: 0, content: .plan(ChatPlan(text: "p", status: .declined, callID: "toolu_stop"))),
+            ChatEntry(id: ChatEntryID("plan:2"), sourceOffset: 0, content: .plan(ChatPlan(text: "q", status: .succeeded, callID: "toolu_go"))),
+            ChatEntry(id: ChatEntryID("plan:3"), sourceOffset: 0, content: .plan(ChatPlan(text: "r", status: .awaitingApproval, callID: "toolu_go"))),
+        ]
+        let answers = history.marking(plans).map { entry -> ChatToolActivity.CardAnswer? in
+            guard case .plan(let plan) = entry.content else { return nil }
+            return plan.cardAnswer
+        }
+        #expect(answers == [.stopped, .allowed, nil])
+    }
+
     @Test func otherCallsAreLeftAlone() {
         var history = BlockedHistory()
         history.record(.allowed, forCall: "toolu_other")
