@@ -162,8 +162,22 @@ private struct ChatUserBubble: View {
                     ChatAttachmentChips(message: message)
                 }
             }
-            .accessibilityLabel(Text("You: ") + Text(verbatim: message.displayText))
+            // One element with one label: a label on the stack alone goes
+            // to each child, and VoiceOver read the text once per chip.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityLabel)
         }
+    }
+
+    /// "You: text", then what the chips say.
+    private var accessibilityLabel: String {
+        var parts = ["You: \(message.displayText)"]
+        if message.imageCount > 0 {
+            parts.append(message.imageCount == 1 ? "1 image" : "\(message.imageCount) images")
+        }
+        parts += message.attachmentLabels
+        if message.wasQueued { parts.append("Queued") }
+        return parts.joined(separator: ", ")
     }
 }
 

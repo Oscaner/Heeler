@@ -1143,6 +1143,34 @@ struct ChatRowViewTests {
             }
         }
     }
+
+    /// VoiceOver reads a user bubble once, chips included. A label set on the
+    /// bubble's stack alone once went to each of its children, so a bubble
+    /// with a Queued chip read "You: …, You: …" and never said Queued.
+    @Test(arguments: [
+        (ChatUserMessage(text: "also say PINEAPPLE", wasQueued: true), "You: also say PINEAPPLE, Queued"),
+        (
+            ChatUserMessage(text: "look", imageCount: 2, attachmentLabels: ["notes.md"]),
+            "You: look, 2 images, notes.md"
+        ),
+        (ChatUserMessage(text: "plain"), "You: plain"),
+    ])
+    func aUserBubbleReadsAsOneLabel(message: ChatUserMessage, expected: String) async throws {
+        let entry = ChatEntry(id: ChatEntryID("user"), sourceOffset: 0, content: .user(message))
+        let rows = await ChatRowBuilder().rows(for: ChatTimelineInput(entries: [entry]))
+        let row = try #require(rows.first { $0.id == .entry(entry.id) })
+        let controller = UIHostingController(
+            rootView: ChatRowView(row: row, isExpanded: false, actions: Self.actions)
+                .frame(width: 402)
+                .fixedSize(horizontal: false, vertical: true))
+        controller.safeAreaRegions = []
+        let window = try await makeTestWindow(
+            frame: CGRect(x: 0, y: 0, width: 402, height: 400), rootViewController: controller)
+        defer { window.isHidden = true }
+        controller.view.layoutIfNeeded()
+        let labels = AccessibilityProbe.labels(in: controller.view).filter { $0.contains("You") }
+        #expect(labels == [expected])
+    }
 }
 
 /// Exercises UIKit's commit callback without completing the animation early.
