@@ -257,7 +257,8 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                                 continue
                             }
                             let tool = Self.tool(
-                                name: name, arguments: block["arguments"], callID: callID, activity: context.activity)
+                                name: name, arguments: block["arguments"], callID: callID, activity: context.activity,
+                                directory: directory)
                             calls[callID] = transcript.entries.count
                             callPaths[callID] = block["arguments"]?["path"]?.stringValue
                             transcript.entries.append(
@@ -318,7 +319,7 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                     } else {
                         tool = Self.tool(
                             name: message["toolName"]?.stringValue ?? "Tool", arguments: nil, callID: callID,
-                            activity: context.activity)
+                            activity: context.activity, directory: directory)
                     }
                     let resultText = Self.text(message["content"]).trimmingCharacters(in: .whitespacesAndNewlines)
                     lastToolResultText = resultText
@@ -409,20 +410,21 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
     }
 
     /// Lists an edit's files under its row. A call whose arguments named no
-    /// file, such as Oh My Pi's free-form patch, takes its title from them.
+    /// path, such as Oh My Pi's free-form patch, takes its title from them,
+    /// read as the list reads them.
     private static func show(_ changes: ChatFileChanges, in tool: inout ChatToolActivity, namedByCall: Bool) {
         tool.fileChanges = changes
         tool.diff = ChatDiffStats(
             added: changes.files.reduce(0) { $0 + $1.added }, removed: changes.files.reduce(0) { $0 + $1.removed },
             files: changes.files.count + changes.moreFiles)
         if !namedByCall, !changes.files.isEmpty {
-            tool.title = String(changes.files.map(\.path).joined(separator: ", ").prefix(500))
+            tool.title = String(changes.files.map { changes.displayPath(of: $0) }.joined(separator: ", ").prefix(500))
         }
     }
 
-    private static func tool(name: String, arguments: JSONValue?, callID: String, activity: ChatAgentActivity)
-        -> ChatToolActivity
-    {
+    private static func tool(
+        name: String, arguments: JSONValue?, callID: String, activity: ChatAgentActivity, directory: String?
+    ) -> ChatToolActivity {
         let kind: ChatToolActivity.Kind
         switch name.lowercased() {
         case "bash", "exec", "python": kind = .command
@@ -436,13 +438,19 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
         default: kind = .other
         }
         let questions = kind == .question ? Self.questions(arguments?["questions"]) : []
+        // Paths read relative to the session's directory, and Oh My Pi's
+        // free-form edit patch names its files only in its headers.
+        let paths =
+            (arguments?["path"]?.stringValue ?? arguments?["file_path"]?.stringValue).map { [$0] }
+            ?? (kind == .fileEdit ? PiFileChanges.patchPaths(arguments?["input"]?.stringValue ?? "") : [])
+        let pathTarget =
+            paths.isEmpty
+            ? nil : paths.map { ChatFileChanges.displayPath($0, in: directory) }.joined(separator: ", ")
         let target =
-            arguments?["command"]?.stringValue ?? arguments?["path"]?.stringValue
-            ?? arguments?["file_path"]?.stringValue ?? arguments?["pattern"]?.stringValue
+            arguments?["command"]?.stringValue ?? pathTarget ?? arguments?["pattern"]?.stringValue
             ?? arguments?["query"]?.stringValue ?? arguments?["url"]?.stringValue
         // A question's Blocked label is its first question. A call with no
-        // target, such as Oh My Pi's free-form edit patch, says what it is
-        // for in `i`.
+        // target says what it is for in `i`.
         let summary = questions.first?.text ?? target ?? name
         let subtitle = target == nil && questions.isEmpty ? arguments?["i"]?.stringValue : nil
         let status: ChatToolActivity.Status =

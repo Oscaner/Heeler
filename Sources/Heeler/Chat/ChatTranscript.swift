@@ -340,10 +340,23 @@ struct ChatFileChanges: Equatable, Codable, Sendable {
     /// How a file's path reads under its call: relative to the directory
     /// the call ran in when inside it, otherwise as recorded.
     func displayPath(of file: ChatFileChange) -> String {
-        guard let directory, !directory.isEmpty else { return file.path }
-        let prefix = directory.hasSuffix("/") ? directory : directory + "/"
-        guard file.path.hasPrefix(prefix), file.path.count > prefix.count else { return file.path }
-        return String(file.path.dropFirst(prefix.count))
+        Self.displayPath(file.path, in: directory)
+    }
+
+    /// `path` relative to `directory` when inside it. macOS reaches `/tmp`
+    /// and `/var` through `/private`, so a program may record either form
+    /// on each side.
+    static func displayPath(_ path: String, in directory: String?) -> String {
+        guard let directory, !directory.isEmpty else { return path }
+        func relative(_ path: String, to directory: String) -> String? {
+            let prefix = directory.hasSuffix("/") ? directory : directory + "/"
+            guard path.hasPrefix(prefix), path.count > prefix.count else { return nil }
+            return String(path.dropFirst(prefix.count))
+        }
+        func unaliased(_ path: String) -> String {
+            path.hasPrefix("/private/") ? String(path.dropFirst("/private".count)) : path
+        }
+        return relative(path, to: directory) ?? relative(unaliased(path), to: unaliased(directory)) ?? path
     }
 
     /// The changes as Copy and Select Text take them: each file's line, then

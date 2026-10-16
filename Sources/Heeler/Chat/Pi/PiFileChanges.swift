@@ -32,6 +32,29 @@ enum PiFileChanges {
 
     // MARK: Oh My Pi
 
+    /// The files an Oh My Pi free-form edit patch names, in order: hashline
+    /// sections open with `[path#HASH]`, and the patch form with `*** Add
+    /// File:`, `*** Update File:` or `*** Delete File:`. A body line starts
+    /// with its operation or sign, so it never reads as a header.
+    static func patchPaths(_ input: String) -> [String] {
+        var paths: [String] = []
+        for line in input.split(whereSeparator: \.isNewline) {
+            let text = line.trimmingCharacters(in: .whitespaces)
+            var path: String?
+            for header in ["*** Add File:", "*** Update File:", "*** Delete File:"] where text.hasPrefix(header) {
+                path = text.dropFirst(header.count).trimmingCharacters(in: .whitespaces)
+            }
+            if path == nil, text.hasPrefix("["), text.hasSuffix("]"), let hash = text.lastIndex(of: "#") {
+                let anchor = text[text.index(after: hash)..<text.index(before: text.endIndex)]
+                if !anchor.isEmpty, anchor.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) {
+                    path = String(text[text.index(after: text.startIndex)..<hash])
+                }
+            }
+            if let path, !path.isEmpty, !paths.contains(path) { paths.append(path) }
+        }
+        return paths
+    }
+
     private static func numberedFile(_ details: JSONValue?) -> ChatFileChange? {
         guard let path = details?["path"]?.stringValue, !path.isEmpty,
             let hunks = numberedHunks(details?["diff"]?.stringValue ?? "")

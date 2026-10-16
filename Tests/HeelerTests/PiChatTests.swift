@@ -564,7 +564,7 @@ struct PiChatTests {
         let tool = try #require(Self.toolRow(reducer.transcript(.init())))
 
         #expect(tool.kind == .fileEdit)
-        #expect(tool.title == "/tmp/heeler-iso-omp2/proj/notes.txt")
+        #expect(tool.title == "notes.txt")
         #expect(tool.diff == ChatDiffStats(added: 1, removed: 1))
         let changes = try #require(tool.fileChanges)
         #expect(changes.directory == "/tmp/heeler-iso-omp2/proj")
@@ -584,6 +584,57 @@ struct PiChatTests {
             return
         }
         #expect(expanded == changes)
+    }
+
+    /// While Oh My Pi waits for approval, the patch's section header names
+    /// the file the result will.
+    @Test func ompPendingEditIsTitledByItsPatchHeader() throws {
+        var reducer = PiTranscriptReducer()
+        reducer.append(Self.lines(Array(Self.ompEdit.prefix(4))))
+        let transcript = reducer.transcript(.init(activity: .blocked))
+        let tool = try #require(Self.toolRow(transcript))
+
+        #expect(tool.status == .awaitingApproval)
+        #expect(tool.title == "notes.txt")
+        #expect(transcript.pendingRequests.map(\.summary) == ["notes.txt"])
+    }
+
+    /// The E2E session ran in `/private/tmp/...` while Oh My Pi recorded
+    /// the edit under `/tmp/...`.
+    @Test func ompEditUnderTheTmpAliasReadsRelative() throws {
+        var reducer = PiTranscriptReducer()
+        var rows = Self.ompEdit
+        rows[0] = rows[0].replacingOccurrences(of: #""cwd":"/tmp/"#, with: #""cwd":"/private/tmp/"#)
+        reducer.append(Self.lines(rows))
+        let tool = try #require(Self.toolRow(reducer.transcript(.init())))
+
+        #expect(tool.title == "notes.txt")
+        let changes = try #require(tool.fileChanges)
+        #expect(changes.files.map { changes.displayPath(of: $0) } == ["notes.txt"])
+    }
+
+    @Test func pathsReadRelativeThroughThePrivateAlias() {
+        #expect(ChatFileChanges.displayPath("/tmp/p/a.txt", in: "/private/tmp/p") == "a.txt")
+        #expect(ChatFileChanges.displayPath("/private/var/p/a.txt", in: "/var/p/") == "a.txt")
+        #expect(ChatFileChanges.displayPath("/private/tmp/p/a.txt", in: "/private/tmp/p") == "a.txt")
+        #expect(ChatFileChanges.displayPath("/tmp/q/a.txt", in: "/private/tmp/p") == "/tmp/q/a.txt")
+        #expect(ChatFileChanges.displayPath("/tmp/p", in: "/private/tmp/p") == "/tmp/p")
+        #expect(ChatFileChanges.displayPath("notes.txt", in: "/tmp/p") == "notes.txt")
+    }
+
+    @Test func ompPatchNamesItsFilesInEitherHeaderForm() {
+        let patch = [
+            "*** Begin Patch", "*** Add File: hello.txt", "+Hello world", "*** Update File: src/app.py",
+            "*** Move to: src/main.py", "@@ def greet():", "-print(\"Hi\")", "+print(\"Hello\")",
+            "*** Delete File: obsolete.txt", "*** End Patch",
+        ]
+        #expect(PiFileChanges.patchPaths(patch.joined(separator: "\n")) == ["hello.txt", "src/app.py", "obsolete.txt"])
+        let hashline = [
+            "*** Begin Patch", "[notes.txt#B6C1]", "PUT 2.=2:", "+[fake.txt#AAAA]", "[src/a b.swift#1F]", "CUT 3",
+            "[notes.txt#C2D3]", "*** End Patch",
+        ]
+        #expect(PiFileChanges.patchPaths(hashline.joined(separator: "\n")) == ["notes.txt", "src/a b.swift"])
+        #expect(PiFileChanges.patchPaths("*** Begin Patch\n[not a header]\n[x#]\n*** End Patch").isEmpty)
     }
 
     @Test func piEditPatchBecomesFileChanges() throws {
