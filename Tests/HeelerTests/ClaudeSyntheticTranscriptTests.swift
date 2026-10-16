@@ -61,6 +61,50 @@ struct ClaudeSyntheticTranscriptTests {
         ])
     }
 
+    @Test("A prompt queued in the running turn shows Queued until Claude Code delivers it")
+    func waitingQueuedPrompt() {
+        // Claude Code 2.1.301 writes the enqueue at once and the delivery
+        // only when the turn can take it.
+        let running = #"""
+            {"type":"user","uuid":"p1","parentUuid":null,"message":{"role":"user","content":"Run the tests"},"promptSource":"typed","origin":{"kind":"human"}}
+            {"type":"assistant","uuid":"a1","parentUuid":"p1","message":{"id":"m1","role":"assistant","content":[{"type":"tool_use","id":"toolu_test","name":"Bash","input":{"command":"make test","description":"Run the tests"}}]},"apiBlockIndex":0}
+            {"type":"queue-operation","operation":"enqueue","timestamp":"2026-10-16T15:39:24.530Z","content":"Also check the README","sessionId":"s1"}
+            """#
+        let (waiting, lines) = Self.read(running, activity: .working)
+        let bubble = ChatEntryID("queued:\(lines[2].offset)")
+        #expect(waiting.entries.map(\.id) == [ChatEntryID("user:p1"), ChatEntryID("tool:toolu_test"), bubble])
+        #expect(
+            waiting.entries.last
+                == ChatEntry(
+                    id: bubble, sourceOffset: lines[2].offset,
+                    content: .user(ChatUserMessage(text: "Also check the README", wasQueued: true))))
+        #expect(waiting.recordedPrompts.last == ChatRecordedPrompt(
+            offset: lines[2].offset, text: "Also check the README", entryID: bubble))
+
+        // Delivered: the bubble its delivery adds replaces it.
+        let delivered = running + "\n" + #"""
+            {"type":"queue-operation","operation":"remove","timestamp":"2026-10-16T15:39:53.049Z","content":"Also check the README","sessionId":"s1"}
+            {"type":"user","uuid":"r1","parentUuid":"a1","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_test","content":"ok"}]},"toolUseResult":{"stdout":"ok","stderr":"","interrupted":false}}
+            {"type":"attachment","uuid":"q1","parentUuid":"r1","attachment":{"type":"queued_command","prompt":"Also check the README","source_uuid":"src1","commandMode":"prompt","origin":{"kind":"human"}}}
+            """#
+        #expect(Self.read(delivered, activity: .working).0.entries.map(\.id.rawValue) == [
+            "user:p1", "tool:toolu_test", "user:src1",
+        ])
+
+        // Taken back into the input box: no bubble.
+        let takenBack = running + "\n" + #"""
+            {"type":"queue-operation","operation":"remove","timestamp":"2026-10-16T15:39:30.000Z","content":"Also check the README","sessionId":"s1"}
+            """#
+        #expect(Self.read(takenBack, activity: .working).0.entries.map(\.id.rawValue) == ["user:p1", "tool:toolu_test"])
+
+        // A turn that ended without delivering it shows none either.
+        let ended = running + "\n" + #"""
+            {"type":"user","uuid":"r1","parentUuid":"a1","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_test","content":"ok"}]},"toolUseResult":{"stdout":"ok","stderr":"","interrupted":false}}
+            {"type":"system","subtype":"turn_duration","uuid":"t1","parentUuid":"r1","durationMs":900}
+            """#
+        #expect(Self.read(ended).0.entries.map(\.id.rawValue) == ["user:p1", "tool:toolu_test"])
+    }
+
     @Test("A queued prompt recorded as a user record shows once")
     func queuedUserRecord() {
         let (transcript, lines) = Self.read(

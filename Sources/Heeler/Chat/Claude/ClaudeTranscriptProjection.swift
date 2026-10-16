@@ -27,11 +27,13 @@ enum ClaudeTranscriptProjection {
         var builder = Builder(
             chain: chain, index: index, role: role, activity: context.activity, transcriptPath: transcriptPath)
         builder.build()
+        let waiting = role == .main ? builder.addWaitingPrompts(waitingEnqueues(index)) : [:]
         return ChatTranscript(
             entries: builder.entries, title: index.title,
             needsOlderHistory: context.windowStart > 0,
             pendingRequests: builder.pendingRequests,
-            recordedPrompts: role == .main ? recordedPrompts(index, entryByRecord: builder.entryByRecord) : [],
+            recordedPrompts: role == .main
+                ? recordedPrompts(index, entryByRecord: builder.entryByRecord, waiting: waiting) : [],
             links: index.links, diagnostics: index.diagnostics,
             backgroundWork: role == .main ? builder.backgroundWork : [],
             latestPromptOffset: builder.latestPromptOffset,
@@ -63,7 +65,8 @@ enum ClaudeTranscriptProjection {
     /// than only the current branch: an echo is matched by where it lands in
     /// the file. Task notifications and other machine input never count.
     static func recordedPrompts(
-        _ index: ClaudeTranscriptIndex, entryByRecord: [String: ChatEntryID]
+        _ index: ClaudeTranscriptIndex, entryByRecord: [String: ChatEntryID],
+        waiting: [UInt64: ChatEntryID] = [:]
     ) -> [ChatRecordedPrompt] {
         var prompts: [ChatRecordedPrompt] = []
         for record in index.recordsByPosition where !record.isSidechain && record.teamName == nil {
@@ -72,7 +75,8 @@ enum ClaudeTranscriptProjection {
                 ChatRecordedPrompt(offset: record.byteOffset, text: text, entryID: entryByRecord[record.uuid]))
         }
         // A queued prompt is recorded first as an enqueue and later as the
-        // record that delivers it; the enqueue points at that record's entry.
+        // record that delivers it; the enqueue points at that record's entry,
+        // or at its waiting bubble until then.
         var enqueued: [ChatRecordedPrompt] = []
         for operation in index.queueOperations.values where operation.operation == "enqueue" {
             guard let content = operation.content, let text = promptText(content) else { continue }
@@ -80,9 +84,38 @@ enum ClaudeTranscriptProjection {
             let delivery = prompts.first {
                 $0.offset > operation.offset && ClaudeTranscriptReducer.echoKey($0.text) == key
             }
-            enqueued.append(ChatRecordedPrompt(offset: operation.offset, text: text, entryID: delivery?.entryID))
+            enqueued.append(
+                ChatRecordedPrompt(
+                    offset: operation.offset, text: text, entryID: delivery?.entryID ?? waiting[operation.offset]))
         }
         return (prompts + enqueued).sorted { $0.offset < $1.offset }
+    }
+
+    /// Prompts Claude Code queued while a turn runs and has not delivered:
+    /// an enqueue with no later prompt of the same text, and no later queue
+    /// operation that takes that text back out. Claude Code writes the
+    /// delivery only when the turn can take it, which can be minutes later.
+    static func waitingEnqueues(_ index: ClaudeTranscriptIndex) -> [(offset: UInt64, text: String)] {
+        let typedKeys = index.recordsByPosition.compactMap { record -> (offset: UInt64, key: String)? in
+            guard !record.isSidechain, record.teamName == nil,
+                let text = typedText(of: record, indexed: index.records)
+            else { return nil }
+            return (record.byteOffset, ClaudeTranscriptReducer.echoKey(text))
+        }
+        let operations = index.queueOperations.values.sorted { $0.offset < $1.offset }
+        func key(_ operation: ClaudeTranscriptIndex.QueueOperation) -> String? {
+            operation.content.flatMap(promptText).map(ClaudeTranscriptReducer.echoKey)
+        }
+        return operations.compactMap { operation in
+            guard operation.operation == "enqueue", let content = operation.content, let text = promptText(content)
+            else { return nil }
+            let enqueued = ClaudeTranscriptReducer.echoKey(text)
+            let isDelivered = typedKeys.contains { $0.offset > operation.offset && $0.key == enqueued }
+            let isTakenBack = operations.contains {
+                $0.offset > operation.offset && $0.operation != "enqueue" && key($0) == enqueued
+            }
+            return isDelivered || isTakenBack ? nil : (operation.offset, text)
+        }
     }
 
     private static func typedText(of record: ClaudeRecord, indexed: [String: ClaudeRecord]) -> String? {
@@ -708,6 +741,24 @@ private struct Builder {
         default:
             break
         }
+    }
+
+    /// Bubbles for prompts queued in the running turn and not delivered
+    /// yet, marked Queued like the bubble their delivery adds; returns their
+    /// entries by enqueue offset.
+    mutating func addWaitingPrompts(_ waiting: [(offset: UInt64, text: String)]) -> [UInt64: ChatEntryID] {
+        guard turnOpen, let opener = turnBoundaries.last else { return [:] }
+        var added: [UInt64: ChatEntryID] = [:]
+        for prompt in waiting where prompt.offset > opener {
+            let id = ChatEntryID("queued:\(prompt.offset)")
+            guard entryIDs.insert(id).inserted else { continue }
+            entries.append(
+                ChatEntry(
+                    id: id, sourceOffset: prompt.offset,
+                    content: .user(ChatUserMessage(text: prompt.text, wasQueued: true))))
+            added[prompt.offset] = id
+        }
+        return added
     }
 
     /// A prompt or notification delivered while a turn was running.
