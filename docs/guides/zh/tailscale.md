@@ -1,4 +1,4 @@
-<!-- Translated from docs/guides/tailscale.md at 7d2aa4fd -->
+<!-- Translated from docs/guides/tailscale.md at 93baae40 -->
 
 # 通过 Tailscale 连接 Heeler
 
@@ -51,6 +51,10 @@ Heeler 会直接加入你的 tailnet，因此手机上无需安装 Tailscale 应
 2. 路由端口保持为 `22`，**Jump Host** 留空；若通过 **Add Route** 进入，轻点保存该路由。
 3. 在 **Add Host** 中填入你的 Mac 用户名（`User`）和所选登录方式。
 4. 保存后，核对指纹与 Mac 一致再轻点信任。
+
+<a href="../images/overlay-networks/tailscale-machines.png"><img src="../images/overlay-networks/tailscale-machines.png" width="300" alt="已连接的 tailnet，上方显示 This device，下方 Machines 列表中服务器旁为 Add，已保存的 Mac 旁为 Host"></a>
+
+请使用 **Machines** 列表中 Mac 的地址，不要使用 **This device** 下的手机地址。图中 Mac 已添加为 Host，因此按钮显示 **Host**；另一台尚未添加的机器仍显示 **Add**。名称与地址已匿名化，轻点图片可放大查看。
 
 ## 5. 验证连接是否正常
 

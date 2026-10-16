@@ -50,6 +50,10 @@ Add the Host with these values (details in [Connect from Heeler](overlay-network
 3. In **Add Host**, enter your Mac username (`User`) and the sign-in method you picked.
 4. Save, and trust the fingerprint only if it matches the Mac's.
 
+<a href="images/overlay-networks/tailscale-machines.png"><img src="images/overlay-networks/tailscale-machines.png" width="300" alt="Connected tailnet showing This device above the Machines list, with Add beside a server and Host beside the saved Mac"></a>
+
+Use the Mac's address under **Machines**, not the phone's address under **This device**. This screenshot shows the Mac after it has been added: its button reads **Host**, while another machine still offers **Add**. Names and addresses have been anonymized. Tap the image to enlarge it.
+
 ## 5. Check that it works
 
 Complete [Verify the connection](overlay-networks.md#verify-the-connection), including a test over cellular. Keep the Mac awake and signed in to Tailscale.
