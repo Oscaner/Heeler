@@ -145,6 +145,18 @@ struct ClaudeDialogParserTests {
         #expect(dialog.focus == DialogFocusState(focusedOrdinal: 1))
     }
 
+    @Test("A question with previews stays on the generic card")
+    func questionWithPreviews() throws {
+        // Claude Code 2.1.301 draws each option's preview beside the list.
+        let result = ClaudeDialogParser.parse(try ScreenFixture.screen("claude-42-c8-phone-question-previews"))
+        guard case .unrecognized(let excerpt) = result else {
+            Issue.record("Expected the generic card, got \(result)")
+            return
+        }
+        #expect(excerpt.reason == "Heeler does not handle questions with previews yet.")
+        #expect(excerpt.numbered == [1: "A", 2: "B"])
+    }
+
     @Test("A multi-select question page")
     func multiSelectQuestion() throws {
         let dialog = try dialog("claude-08-c4-auq-q1")

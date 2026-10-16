@@ -403,17 +403,24 @@ private struct ClaudeDialogReader {
             progress: nil, options: options, top: upper.top ?? lowerRule, scan: scan, subject: subject)
     }
 
+    private static let previewsReason = "Heeler does not handle questions with previews yet."
+
     private func readQuestion(top: Int, tabsRow: Int, tabs: QuestionTabs, firstOption: Int) -> DialogParseResult {
         let titleRows = (tabsRow + 1..<firstOption).drop { rows[$0].isBlank }.prefix { !rows[$0].isBlank }
         let title = joinRows(titleRows.map { rows[$0] })
         let isReview = title == Self.reviewTitle || tabs.active == "Submit"
         guard let scan = scanOptions(from: firstOption, isQuestionPage: !isReview) else {
+            // Claude Code 2.1.301 draws the previews beside the options,
+            // which no option scan reads; its notes hint still names them.
+            if rows[firstOption...].contains(where: { $0.text.contains("to add notes") }) {
+                return unrecognized(from: top, Self.previewsReason)
+            }
             return unrecognized(from: top, "The rows after the options are not a footer.")
         }
         if let problem = scan.problem { return unrecognized(from: top, problem, scan: scan) }
         if let footer = scan.footer, footer.hints.contains(where: { $0.key == "n" && $0.action.hasPrefix("add notes") }) {
             // The preview layout: digits only move focus there.
-            return unrecognized(from: top, "Heeler does not handle questions with previews yet.", scan: scan)
+            return unrecognized(from: top, Self.previewsReason, scan: scan)
         }
         var subject = DialogSubject()
         subject.questionHeaders = tabs.headers

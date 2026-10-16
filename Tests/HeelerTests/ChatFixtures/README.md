@@ -77,6 +77,8 @@ capture.
   only that rule.
   `claude-41` is the second page of a two-question form: it keeps the
   first page's height, so blank rows sit between its footer and that rule.
+  `claude-42` is a question whose options have previews: the preview box
+  beside the options and an `n to add notes` hint in a wrapped footer.
 
 Scrubbing used the same same-length replacements as above, so every column
 is as captured. The shell prompt on the first row of `claude-00-trust.ansi`
