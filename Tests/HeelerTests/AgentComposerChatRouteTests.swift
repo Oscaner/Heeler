@@ -103,6 +103,67 @@ struct AgentComposerChatRouteTests {
         #expect(await transport.agentPromptParams.isEmpty)
     }
 
+    /// The E2E case: Oh My Pi held the draft while it worked, then went
+    /// Idle. The hold described an Agent that has moved on, so it ends.
+    @Test func aHoldOnTheAgentEndsWhenAgentStatusChanges() async {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport, status: .working)
+        store.replaceDraft(with: "next step")
+        let hold = ComposerRefusal.inputNotReady("Oh My Pi is working. Send once it's idle, or steer from the terminal.")
+
+        let result = await store.send(policy: Self.chatPolicy(preflight: { _ in hold }))
+
+        #expect(result == .refused(hold))
+        #expect(store.notice == ComposerNotice(refusal: hold, route: .chat))
+        store.agentStatusDidChange(.idle)
+        #expect(store.notice == nil)
+        #expect(store.draft == "next step")
+    }
+
+    @Test(arguments: [ComposerRefusal.agentBlocked, .commandAwaitsIdle("compact")])
+    func everyHoldOnTheAgentEndsWithItsStatus(_ hold: ComposerRefusal) async {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport, status: .blocked)
+        store.replaceDraft(with: "/compact")
+
+        _ = await store.send(policy: Self.chatPolicy(validate: { _ in hold }))
+
+        #expect(store.notice?.refusal == hold)
+        store.agentStatusDidChange(.working)
+        #expect(store.notice == nil)
+    }
+
+    @Test func aRefusalOfTheTextOutlivesAStatusChangeButNotAnEdit() async {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport, status: .working)
+        store.replaceDraft(with: "exit")
+        let refusal = ComposerRefusal.unsafeText("Sending this would exit Oh My Pi. Open the terminal to exit.")
+
+        _ = await store.send(policy: Self.chatPolicy(validate: { _ in refusal }))
+        store.agentStatusDidChange(.idle)
+
+        #expect(store.notice == ComposerNotice(refusal: refusal, route: .chat))
+        store.applyEditorDraft("exit", selection: NSRange(location: 2, length: 0))
+        #expect(store.notice != nil)
+        store.applyEditorDraft("exit now", selection: NSRange(location: 8, length: 0))
+        #expect(store.notice == nil)
+    }
+
+    @Test func aSendThatGoesEndsTheNotice() async {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport)
+        store.replaceDraft(with: "hello")
+        var held = true
+        let policy = Self.chatPolicy(preflight: { _ in held ? .inputNotReady("The input box has text in it.") : nil })
+
+        _ = await store.send(policy: policy)
+        #expect(store.notice != nil)
+        held = false
+
+        #expect(await store.send(policy: policy) == .deliveredViaPrompt)
+        #expect(store.notice == nil)
+    }
+
     @Test func thePromptCarriesTheOutgoingTextAndTheEchoTheTypedText() async {
         let transport = ScriptedTransport()
         let store = Self.store(transport)

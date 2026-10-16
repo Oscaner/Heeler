@@ -101,6 +101,42 @@ struct ChatDeliveryPolicyTests {
         #expect(await unreadable("hello ") == true)
     }
 
+    /// What the Agent's state held ends with that state, for every program;
+    /// what the rules refuse in the text waits for the text to change.
+    @Test(arguments: ChatProgram.allCases)
+    func holdsOnTheAgentAreTransientAndRefusalsOfTheTextAreNot(program: ChatProgram) async throws {
+        let busy = ChatSendRules(
+            program: program, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: false, program: program))
+        let blocked = try #require(
+            ComposerDeliveryPolicy.chat(rules: busy, activity: { .blocked }, readScreen: { Self.draft("") }).preflight)
+        let unreadable = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: busy, activity: { .working }, readScreen: { throw TransportError.timedOut }
+            ).preflight)
+
+        let holds = [await blocked("hello"), await unreadable("hello"), busy.validate("/compact")]
+        let refusals = [busy.validate("!ls"), busy.validate("/nope")]
+
+        for hold in holds {
+            #expect(try #require(hold).isTransient)
+        }
+        for refusal in refusals {
+            #expect(try #require(refusal).isTransient == false)
+        }
+        for state in [InputBoxState.text("draft"), .disabled("Working."), .overlay("/compact"), .dialog, .unknown("")] {
+            #expect(ComposerRefusal.inputNotReady(state.holdReason(for: program)).isTransient)
+        }
+    }
+
+    @Test func ompRefusalsOfTheTextAreNotTransient() throws {
+        let rules = ChatSendRules(
+            program: .omp, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: .omp))
+
+        for draft in ["exit", "$ print(1)", ".", "-> later", "/compact keep the notes"] {
+            #expect(try #require(rules.validate(draft)).isTransient == false, "\(draft)")
+        }
+    }
+
     @Test func theRulesShapeWhatIsSentAndRefused() {
         let policy = Self.policy { Self.draft("") }
 

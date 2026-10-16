@@ -60,7 +60,15 @@ final class AgentComposerStore: ComposerDraftOperations {
     }
 
     private(set) var messages: [Message] = []
-    private(set) var draft = ""
+    private(set) var draft = "" {
+        didSet {
+            if draft != oldValue { notice = nil }
+        }
+    }
+    /// Why the last Send or Retry was refused. Changing the draft ends it,
+    /// as does the next Send that goes; a transient refusal also ends when
+    /// Agent Status changes, since the Agent it described has moved on.
+    private(set) var notice: ComposerNotice?
     /// UTF-16 caret/selection, matching the Composer text view.
     private(set) var draftSelection = NSRange(location: 0, length: 0)
     /// Stop's wait, per Agent like the draft: the other surface, a rebuilt
@@ -306,6 +314,10 @@ final class AgentComposerStore: ComposerDraftOperations {
 
     @discardableResult
     func send(policy: ComposerDeliveryPolicy = .terminal) async -> SendResult {
+        noting(await sendDraft(policy: policy), route: policy.route)
+    }
+
+    private func sendDraft(policy: ComposerDeliveryPolicy) async -> SendResult {
         guard canSend, !containsPendingPlaceholderInDraft else { return .ignored }
         if let refusal = policy.validate(draft) { return .refused(refusal) }
         let message = Message(
@@ -330,6 +342,10 @@ final class AgentComposerStore: ComposerDraftOperations {
     /// message's own route.
     @discardableResult
     func retry(_ id: Message.ID, policy: ComposerDeliveryPolicy = .terminal) async -> SendResult {
+        noting(await retryMessage(id, policy: policy), route: policy.route)
+    }
+
+    private func retryMessage(_ id: Message.ID, policy: ComposerDeliveryPolicy) async -> SendResult {
         guard let index = messages.firstIndex(where: { $0.id == id }) else { return .ignored }
         guard case .failed = messages[index].state, messages[index].route == policy.route else {
             return .ignored
@@ -345,6 +361,16 @@ final class AgentComposerStore: ComposerDraftOperations {
             return .refused(refusal)
         }
         return await deliver(id, policy: policy)
+    }
+
+    /// Keeps a refusal as the notice; any other outcome ends the last one.
+    private func noting(_ result: SendResult, route: ComposerRoute) -> SendResult {
+        if case .refused(let refusal) = result {
+            notice = ComposerNotice(refusal: refusal, route: route)
+        } else {
+            notice = nil
+        }
+        return result
     }
 
     /// Removes a failed echo and restores all of its text to the draft. If
@@ -369,6 +395,7 @@ final class AgentComposerStore: ComposerDraftOperations {
         agentStatus = status
         statusRevision &+= 1
         stop.agentStatusChanged(to: status)
+        if notice?.refusal.isTransient == true { notice = nil }
         for index in messages.indices {
             guard messages[index].tracksAgentProgress else { continue }
             if status == .working,

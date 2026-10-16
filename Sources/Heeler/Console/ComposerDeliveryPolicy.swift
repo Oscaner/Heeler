@@ -17,7 +17,9 @@ enum ComposerRefusal: Equatable, Sendable {
     case unsafeText(String)
     /// A leading `/command` the menu does not offer.
     case unknownCommand(String)
-    /// A command the menu offers only in another state.
+    /// A command the menu offers only while the Agent is idle.
+    case commandAwaitsIdle(String)
+    /// A command the menu offers, but not in the form typed.
     case commandUnavailable(String)
     /// The Agent's input box is not in a state to take a message.
     case inputNotReady(String)
@@ -30,6 +32,8 @@ enum ComposerRefusal: Equatable, Sendable {
             reason
         case .unknownCommand(let name):
             "/\(name) is not in the menu. Pick a command from the menu, or open the terminal to run it."
+        case .commandAwaitsIdle(let name):
+            "/\(name) is available once the Agent is idle."
         case .commandUnavailable(let reason):
             reason
         case .inputNotReady(let reason):
@@ -40,8 +44,18 @@ enum ComposerRefusal: Equatable, Sendable {
     /// Whether the terminal can do what Chat declined.
     var suggestsTerminal: Bool {
         switch self {
-        case .agentBlocked, .commandUnavailable: false
+        case .agentBlocked, .commandAwaitsIdle, .commandUnavailable: false
         case .unsafeText, .unknownCommand, .inputNotReady: true
+        }
+    }
+
+    /// Whether the refusal was about the Agent's state rather than the text:
+    /// the same draft may go once Agent Status changes, so the notice ends
+    /// then. A refusal of the text itself holds until the text changes.
+    var isTransient: Bool {
+        switch self {
+        case .agentBlocked, .commandAwaitsIdle, .inputNotReady: true
+        case .unsafeText, .unknownCommand, .commandUnavailable: false
         }
     }
 }
@@ -69,9 +83,10 @@ struct ComposerDeliveryPolicy: Sendable {
         validate: { _ in nil }, preflight: nil, verify: nil)
 }
 
-/// A refusal the Composer shows until the draft it refused changes.
+/// A refusal the Composer shows until the draft it refused changes, a later
+/// Send goes, or, for a transient refusal, Agent Status changes.
 struct ComposerNotice: Equatable {
     let refusal: ComposerRefusal
-    /// The draft as it stood after the refusal.
-    let draft: String
+    /// The surface that was refused; only it shows the notice.
+    let route: ComposerRoute
 }

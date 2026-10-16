@@ -182,7 +182,7 @@ struct ChatSendRules: Sendable {
             return .refused(.unknownCommand(name))
         }
         guard command.isEnabled else {
-            return .refused(.commandUnavailable("/\(name) is available once the Agent is idle."))
+            return .refused(.commandAwaitsIdle(name))
         }
         let arguments = afterSlash.dropFirst(name.count).trimmingCharacters(in: .whitespacesAndNewlines)
         if program == .omp, command.kind == .compact, !arguments.isEmpty {

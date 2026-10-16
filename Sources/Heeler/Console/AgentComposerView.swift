@@ -199,8 +199,6 @@ struct AgentComposerView: View {
     /// Presses Esc in the Agent's program for Stop; nil keeps Send.
     var interruptAgent: (@MainActor () async -> AgentInterruptOutcome)? = nil
     @State private var isInputFocused = false
-    /// Why the last Send did not go, until the draft it refused changes.
-    @State private var notice: ComposerNotice?
     /// An explicit dismissal hides suggestions for the current trigger token;
     /// removing the token arms them again.
     @State private var isSuggestionsDismissed = false
@@ -288,8 +286,7 @@ struct AgentComposerView: View {
                 setKeyboardPresentation(.hidden)
             }
         }
-        .onChange(of: store.draft) { _, draft in
-            if let notice, notice.draft != draft { self.notice = nil }
+        .onChange(of: store.draft) { _, _ in
             if commandMenu != nil {
                 if commandSuggestions == nil { isSuggestionsDismissed = false }
                 return
@@ -318,7 +315,7 @@ struct AgentComposerView: View {
             if let failure = latestFailure {
                 failureRow(failure)
             }
-            if let notice, failureIsHidden {
+            if let notice = store.notice, notice.route == sendPolicy.route, failureIsHidden {
                 noticeRow(notice)
             }
             if status == .working, let stopNotice = store.stop.notice {
@@ -619,17 +616,12 @@ struct AgentComposerView: View {
     private var failureIsHidden: Bool { latestFailure == nil }
 
     /// Blocked delivery types into Attach without Enter; the tools keyboard
-    /// is what submits or cancels. A refusal stays as a notice and keeps the
-    /// keyboard where it is.
+    /// is what submits or cancels. A refusal stays as the store's notice and
+    /// keeps the keyboard where it is.
     private func deliverDraft(
         _ deliver: () async -> AgentComposerStore.SendResult
     ) async {
         let result = await deliver()
-        if case .refused(let refusal) = result {
-            notice = ComposerNotice(refusal: refusal, draft: store.draft)
-            return
-        }
-        notice = nil
         guard result == .deliveredViaAttach else { return }
         var transaction = Transaction()
         transaction.disablesAnimations = true

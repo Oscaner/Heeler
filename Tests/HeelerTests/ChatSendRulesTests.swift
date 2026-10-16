@@ -170,7 +170,7 @@ struct ChatSendRulesTests {
 
         #expect(idle.commands.filter { $0.name == "compact" }.map(\.kind) == [.compact])
         #expect(idle.outgoingText("/compact") == "/compact ")
-        guard case .commandUnavailable = busy.validate("/compact") else {
+        guard case .commandAwaitsIdle = busy.validate("/compact") else {
             Issue.record("/compact was sent while the Agent worked")
             return
         }
