@@ -163,6 +163,47 @@ struct AgentComposerChatRouteTests {
         #expect(store.notice == nil)
     }
 
+    /// The hold rests on a screen read while the Agent worked; it went Idle
+    /// before the read came back, so nothing is left to say about it.
+    @Test(arguments: [false, true])
+    func aHoldThatAStatusChangeUnderTheSendEndsShowsNoNotice(retrying: Bool) async throws {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport, status: .working)
+        store.replaceDraft(with: "next step")
+        let hold = ComposerRefusal.inputNotReady("Oh My Pi is working. Send once it's idle, or steer from the terminal.")
+        let policy = Self.chatPolicy(preflight: { _ in
+            store.agentStatusDidChange(.idle)
+            return hold
+        })
+
+        let result: AgentComposerStore.SendResult
+        if retrying {
+            await transport.setAgentPromptFailure(TransportError.sshUnreachable(detail: "offline"))
+            _ = await store.send(policy: Self.chatPolicy())
+            let failed = try #require(store.messages.first)
+            result = await store.retry(failed.id, policy: policy)
+        } else {
+            result = await store.send(policy: policy)
+            #expect(store.draft == "next step")
+        }
+
+        #expect(result == .refused(hold))
+        #expect(store.notice == nil)
+    }
+
+    @Test func aHoldThatAStatusChangeUnderTheSendKeepsStillShows() async {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport, status: .working)
+        store.replaceDraft(with: "hello")
+
+        _ = await store.send(policy: Self.chatPolicy(preflight: { _ in
+            store.agentStatusDidChange(.blocked)
+            return .agentBlocked
+        }))
+
+        #expect(store.notice == ComposerNotice(refusal: .agentBlocked, route: .chat))
+    }
+
     @Test func aRefusalOfTheTextOutlivesAStatusChangeButNotAnEdit() async {
         let transport = ScriptedTransport()
         let store = Self.store(transport, status: .working)

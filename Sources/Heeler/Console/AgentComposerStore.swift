@@ -314,7 +314,8 @@ final class AgentComposerStore: ComposerDraftOperations {
 
     @discardableResult
     func send(policy: ComposerDeliveryPolicy = .terminal) async -> SendResult {
-        noting(await sendDraft(policy: policy), route: policy.route)
+        let revision = statusRevision
+        return noting(await sendDraft(policy: policy), route: policy.route, since: revision)
     }
 
     private func sendDraft(policy: ComposerDeliveryPolicy) async -> SendResult {
@@ -342,7 +343,8 @@ final class AgentComposerStore: ComposerDraftOperations {
     /// message's own route.
     @discardableResult
     func retry(_ id: Message.ID, policy: ComposerDeliveryPolicy = .terminal) async -> SendResult {
-        noting(await retryMessage(id, policy: policy), route: policy.route)
+        let revision = statusRevision
+        return noting(await retryMessage(id, policy: policy), route: policy.route, since: revision)
     }
 
     private func retryMessage(_ id: Message.ID, policy: ComposerDeliveryPolicy) async -> SendResult {
@@ -364,8 +366,12 @@ final class AgentComposerStore: ComposerDraftOperations {
     }
 
     /// Keeps a refusal as the notice; any other outcome ends the last one.
-    private func noting(_ result: SendResult, route: ComposerRoute) -> SendResult {
-        if case .refused(let refusal) = result {
+    /// A refusal may rest on a screen read before Agent Status changed under
+    /// the Send; when that change ends it, it shows no notice.
+    private func noting(_ result: SendResult, route: ComposerRoute, since revision: UInt64) -> SendResult {
+        if case .refused(let refusal) = result,
+            revision == statusRevision || !refusal.endsWhenStatusBecomes(agentStatus)
+        {
             notice = ComposerNotice(refusal: refusal, route: route)
         } else {
             notice = nil
