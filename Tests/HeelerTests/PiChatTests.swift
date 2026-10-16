@@ -620,6 +620,16 @@ struct PiChatTests {
         #expect(ChatFileChanges.displayPath("/tmp/q/a.txt", in: "/private/tmp/p") == "/tmp/q/a.txt")
         #expect(ChatFileChanges.displayPath("/tmp/p", in: "/private/tmp/p") == "/tmp/p")
         #expect(ChatFileChanges.displayPath("notes.txt", in: "/tmp/p") == "notes.txt")
+        #expect(ChatFileChanges.displayPath("/private/etc/p/a.conf", in: "/etc/p") == "a.conf")
+    }
+
+    /// Only macOS's firmlinked roots have a `/private` twin. On a Linux
+    /// Host `/private/data` and `/data` are unrelated directories.
+    @Test func otherPrivatePathsKeepTheirPrefix() {
+        #expect(ChatFileChanges.displayPath("/private/data/p/a.txt", in: "/data/p") == "/private/data/p/a.txt")
+        #expect(ChatFileChanges.displayPath("/data/p/a.txt", in: "/private/data/p") == "/data/p/a.txt")
+        #expect(ChatFileChanges.displayPath("/private/data/p/a.txt", in: "/private/data/p") == "a.txt")
+        #expect(ChatFileChanges.displayPath("/private/tmpfiles/a.txt", in: "/tmpfiles") == "/private/tmpfiles/a.txt")
     }
 
     @Test func ompPatchNamesItsFilesInEitherHeaderForm() {

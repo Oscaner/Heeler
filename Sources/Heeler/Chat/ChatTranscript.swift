@@ -343,9 +343,10 @@ struct ChatFileChanges: Equatable, Codable, Sendable {
         Self.displayPath(file.path, in: directory)
     }
 
-    /// `path` relative to `directory` when inside it. macOS reaches `/tmp`
-    /// and `/var` through `/private`, so a program may record either form
-    /// on each side.
+    /// `path` relative to `directory` when inside it. macOS firmlinks
+    /// `/tmp`, `/var` and `/etc` to the same roots under `/private`, so a
+    /// program may record either form on each side. No other `/private`
+    /// path has a second spelling, here or on any other Host.
     static func displayPath(_ path: String, in directory: String?) -> String {
         guard let directory, !directory.isEmpty else { return path }
         func relative(_ path: String, to directory: String) -> String? {
@@ -354,7 +355,11 @@ struct ChatFileChanges: Equatable, Codable, Sendable {
             return String(path.dropFirst(prefix.count))
         }
         func unaliased(_ path: String) -> String {
-            path.hasPrefix("/private/") ? String(path.dropFirst("/private".count)) : path
+            for root in ["/private/tmp", "/private/var", "/private/etc"]
+            where path == root || path.hasPrefix(root + "/") {
+                return String(path.dropFirst("/private".count))
+            }
+            return path
         }
         return relative(path, to: directory) ?? relative(unaliased(path), to: unaliased(directory)) ?? path
     }
