@@ -222,6 +222,17 @@ struct AgentChatStoreTests {
         #expect(text.contains("any more") == showingSaved)
     }
 
+    /// A file under the session's name was read and holds another
+    /// conversation, so Heeler did find it: the banner says what the
+    /// unavailable view says, not that nothing was found yet.
+    @Test(arguments: [true, false])
+    func aMismatchedTranscriptBannerSaysItHoldsAnotherConversation(showingSaved: Bool) {
+        let text = ChatUnavailableReason.mismatched.bannerText(showingSavedMessages: showingSaved)
+        #expect(text.hasPrefix(ChatUnavailableReason.mismatched.explanation))
+        #expect(text.contains("Showing saved messages") == showingSaved)
+        #expect(!text.contains("hasn't found"))
+    }
+
     @Test func aFailedSessionQueryIsVisibleAndRetryClearsItWithoutReadingFiles() async throws {
         let fixture = Fixture(session: nil)
         await fixture.server.fail(with: .channelFailed(detail: "agent.get failed"))

@@ -64,10 +64,12 @@ extension ChatUnavailableReason {
             "\(program.chatName) saves this conversation after its first reply."
         case .unidentifiedSession, .unsupportedSession:
             "Chat can't follow this conversation now.\(saved)"
-        case .notFound, .mismatched:
+        case .notFound:
             showingSavedMessages
                 ? "The transcript isn't on the Host any more.\(saved)"
                 : "Heeler hasn't found this conversation's transcript yet."
+        case .mismatched:
+            "The transcript under this session's name holds another conversation.\(saved)"
         case .compressed, .unsupportedFormat:
             "Chat can't read this transcript now.\(saved)"
         }
