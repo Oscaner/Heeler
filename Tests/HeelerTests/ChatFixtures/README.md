@@ -61,6 +61,10 @@ capture.
   through `codex-14` were read at 40×30.
 - `claude-27`, `-28`, `-30` and `-31` keep the live rendering residue after
   option 4 (`No` followed by a stale grey `r you`).
+- `claude-32` through `claude-35` come from Claude Code 2.1.301 on herdr
+  0.9.5 (2026-10-17), read at the phone's 62×41 grid: a Bash dialog with
+  the `Tip:` line, focus on `No`, Tab on `No`, and a pasted note too long
+  for its row, cut off with `…` and no cursor cell.
 
 Scrubbing used the same same-length replacements as above, so every column
 is as captured. The shell prompt on the first row of `claude-00-trust.ansi`

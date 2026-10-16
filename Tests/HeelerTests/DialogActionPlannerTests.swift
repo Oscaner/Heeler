@@ -84,6 +84,7 @@ struct DialogActionPlannerTests {
         "Text typed in the terminal stops every plan but Esc",
         arguments: [
             "claude-05-c1-pasted-feedback", "claude-07-c2-pasted", "claude-13-c4-q2-pasted", "claude-18-c6-pasted",
+            "claude-35-c7-phone-pasted-truncated",
         ])
     func typedText(stem: String) throws {
         let dialog = try dialog(stem)
@@ -592,6 +593,22 @@ struct DialogExpectationTests {
         #expect(try meets(.inputText(note), "claude-05-c1-pasted-feedback", bash))
         #expect(try !meets(.inputText(note), "claude-04-c1-tab-on-no", bash))
         #expect(try !meets(.inputText("Do not create it"), "claude-05-c1-pasted-feedback", bash))
+    }
+
+    @Test("A note cut off at the phone's width still meets its check")
+    func truncatedNoteOnNo() throws {
+        let bash = try fingerprint("claude-32-c7-phone-bash-blocked")
+        let note = "Do not create it; reply with the single word skipped"
+        #expect(try meets(.focus(ordinal: 4), "claude-33-c7-phone-focus-no", bash))
+        #expect(try meets(.feedbackMode(ordinal: 4), "claude-34-c7-phone-tab-on-no", bash))
+        #expect(try !meets(.feedbackMode(ordinal: 4), "claude-35-c7-phone-pasted-truncated", bash))
+        #expect(try meets(.inputText(note), "claude-35-c7-phone-pasted-truncated", bash))
+        let other = "Do not create it; reply with one word"
+        #expect(try !meets(.inputText(other), "claude-35-c7-phone-pasted-truncated", bash))
+        #expect(try !meets(.inputText("Do not"), "claude-35-c7-phone-pasted-truncated", bash))
+        let dialog = try #require(try observe("claude-35-c7-phone-pasted-truncated").result.dialog)
+        #expect(dialog.option(4)?.label == "No")
+        #expect(dialog.focus.feedbackOrdinal == 4)
     }
 
     @Test("A check about the same dialog fails once the dialog changed")

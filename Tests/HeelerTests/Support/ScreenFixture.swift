@@ -16,7 +16,8 @@ enum ScreenFixture {
         "claude-21-c6-after", "claude-22-c7-edit", "claude-23-c7-after-esc",
         "claude-24-c8-webfetch", "claude-25-c8-after-digit3", "claude-26-c10-subagent-ask",
         "claude-27-n1-narrow-bash", "claude-28-n1-narrow-bash-later", "claude-29-c3-after-immediate",
-        "claude-30-par-first", "claude-31-par-second",
+        "claude-30-par-first", "claude-31-par-second", "claude-32-c7-phone-bash-blocked",
+        "claude-33-c7-phone-focus-no", "claude-34-c7-phone-tab-on-no", "claude-35-c7-phone-pasted-truncated",
     ]
 
     static let codex = [

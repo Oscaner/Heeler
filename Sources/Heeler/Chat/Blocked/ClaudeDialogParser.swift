@@ -652,6 +652,7 @@ private struct ClaudeDialogReader {
         if runs.contains(where: \.style.isReverse) {
             return readField(runs)
         }
+        if let note = truncatedNote(runs) { return note }
         var detail: String?
         for run in runs {
             if detail != nil {
@@ -712,6 +713,27 @@ private struct ClaudeDialogReader {
         let field = FieldText.read(runs)
         reading.field = field
         if case .placeholder(let text) = field { reading.label = text }
+        return reading
+    }
+
+    /// A note field too long for its row: `No, ` in the accent color, then
+    /// the start of the note cut off with `…`. The cursor cell sits past the
+    /// cut, so the row has no reverse-video cell.
+    private func truncatedNote(_ runs: [ScreenRun]) -> OptionRowReading? {
+        let visible = runs.enumerated().filter { !DialogRowScanner.isBlank($0.element) }
+        guard let accent = block.accent, let first = visible.first, first.element.style.foreground == accent,
+            visible.count > 1
+        else { return nil }
+        let label = first.element.text.trimmingCharacters(in: .whitespaces)
+        let rest = runs[(first.offset + 1)...]
+        let text = ScreenRow.normalizedSpaces(rest.map(\.text).joined()).trimmingCharacters(in: .whitespaces)
+        guard label.hasSuffix(","), text.count > 1, text.hasSuffix("…"),
+            rest.allSatisfy({ DialogRowScanner.isBlank($0) || $0.style.foreground != accent })
+        else { return nil }
+        var reading = OptionRowReading()
+        reading.feedbackLabel = String(label.dropLast())
+        reading.label = String(label.dropLast())
+        reading.field = .typed(text)
         return reading
     }
 

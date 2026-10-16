@@ -169,8 +169,15 @@ extension DialogExpectation {
         case .feedbackMode(let ordinal):
             return focus.focusedOrdinal == ordinal && focus.feedbackOrdinal == ordinal && focus.inputText == nil
         case .inputText(let text):
-            // Wrapping moves spaces around, so compare without them.
-            return focus.inputText.map(DialogRowScanner.comparable) == DialogRowScanner.comparable(text)
+            guard let shown = focus.inputText else { return false }
+            // Wrapping moves spaces around, so compare without them. A note
+            // too long for its row shows only its start, cut off with `…`.
+            let expected = DialogRowScanner.comparable(text)
+            if shown.hasSuffix("…"), !expected.hasSuffix("…") {
+                let start = DialogRowScanner.comparable(String(shown.dropLast()))
+                return !start.isEmpty && expected.hasPrefix(start)
+            }
+            return DialogRowScanner.comparable(shown) == expected
         case .notes(let text):
             return focus.notesText.map(DialogRowScanner.comparable) == DialogRowScanner.comparable(text)
         case .checked(let ordinals):
