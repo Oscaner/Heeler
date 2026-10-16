@@ -70,7 +70,8 @@ final class AgentChatStore {
         /// Overdue, and its text sits in the idle Agent's input box: Pi
         /// and Oh My Pi put a steer the turn had not taken back there when
         /// Esc stops the turn, and never record it. A recorded copy still
-        /// wins.
+        /// wins, and a later read of the box that no longer finds it makes
+        /// it overdue again.
         case returned
         /// Unrecorded and no longer worth an echo: it went into an earlier
         /// conversation, or was sent before this store was watching.
@@ -130,14 +131,19 @@ final class AgentChatStore {
     /// The Chat views on screen; the conversation is followed while any is.
     @ObservationIgnored private var viewers: Set<UUID> = []
     @ObservationIgnored private var sends: [TrackedSend] = []
-    /// Sends found back in the input box, which stay `.returned` until the
-    /// transcript records them.
+    /// Sends the input box was last seen holding, which stay `.returned`
+    /// until the transcript records them or a later read of the box no
+    /// longer finds them.
     @ObservationIgnored private var returnedSends: Set<UUID> = []
     /// Sends already looked for in the input box since the Agent last
     /// turned idle: each idle spell reads the screen once for them.
     @ObservationIgnored private var returnChecked: Set<UUID> = []
     /// When herdr last reported the Agent idle, while it still is.
     @ObservationIgnored private var idleSince: Date?
+    /// When herdr last reported a turn starting. Esc puts back only the
+    /// steers queued in the turn it stops, so sends delivered before this
+    /// are never looked for in the box.
+    @ObservationIgnored private var turnStartedAt: Date?
     /// Recorded prompts already taken by a send in the current
     /// conversation: one recorded copy answers one send. Keyed by entry for
     /// a program whose entries outlive a rewrite of its file, otherwise by
@@ -194,7 +200,11 @@ final class AgentChatStore {
         conversation = ChatConversationSnapshot()
         blocked = BlockedCardStore(program: program, io: source.screen)
         blocked.update(activity: ChatAgentActivity(agent.status))
-        if ChatAgentActivity(agent.status) == .idle { idleSince = now() }
+        switch ChatAgentActivity(agent.status) {
+        case .idle: idleSince = now()
+        case .working: turnStartedAt = now()
+        default: break
+        }
         followReference()
     }
 
@@ -385,6 +395,7 @@ final class AgentChatStore {
         let sessionChanged = next.agentSession != agent.agentSession
         let identityChanged = !sameIdentity(agent, next)
         let bindingReturned = isAwaitingSession && next.agentSession != nil
+        let previous = ChatAgentActivity(agent.status)
         agent = next
         if sessionChanged || identityChanged || bindingReturned {
             sessionRecordRevision += 1
@@ -392,8 +403,11 @@ final class AgentChatStore {
             wake()
         }
         guard statusChanged else { return }
-        blocked.update(activity: ChatAgentActivity(next.status))
-        idleSince = ChatAgentActivity(next.status) == .idle ? now() : nil
+        let activity = ChatAgentActivity(next.status)
+        blocked.update(activity: activity)
+        idleSince = activity == .idle ? now() : nil
+        // Answering a dialog resumes the turn it interrupted.
+        if activity == .working, previous != .working, previous != .blocked { turnStartedAt = now() }
         returnChecked = []
         // A turn starting or ending is when a session changes (`/clear`,
         // `/resume`) and when a missing transcript appears.
@@ -860,29 +874,88 @@ final class AgentChatStore {
     /// Esc in Pi or Oh My Pi puts the steers its turn had not taken back
     /// into the input box, and the transcript never records them. Once the
     /// Agent has been idle a moment, the screen is read once for the sends
-    /// still overdue; one whose text the box holds reads as not delivered.
-    /// Only Pi's and Oh My Pi's Esc is known to hand steers back.
+    /// still overdue from the turn that just ended, and for the sends
+    /// already found there, which the user may have sent or cleared in the
+    /// terminal since. Only Pi's and Oh My Pi's Esc is known to hand steers
+    /// back.
     private func checkReturnedSends() async {
         guard program == .pi || program == .omp, let idleSince,
             now().timeIntervalSince(idleSince) >= timing.returnCheckDelay
         else { return }
-        let candidates = sends.filter { sendStatuses[$0.id] == .overdue && !returnChecked.contains($0.id) }
-        guard !candidates.isEmpty else { return }
-        returnChecked.formUnion(candidates.map(\.id))
-        guard let screen = try? await source.screen.readScreen(), !Task.isCancelled,
-            self.idleSince == idleSince,
-            case .text(let draft) = InputBoxStateDetector.detect(screen, program: program)
-        else { return }
-        // The editor wraps and trims what it shows; spacing says nothing.
-        func squeezed(_ text: String) -> String { text.filter { !$0.isWhitespace } }
-        let box = squeezed(draft)
-        let returned = candidates.filter { send in
-            let text = squeezed(send.text)
-            return !text.isEmpty && box.contains(text)
+        let candidates = sends.filter { send in
+            guard !returnChecked.contains(send.id) else { return false }
+            switch sendStatuses[send.id] {
+            case .returned:
+                return true
+            case .overdue:
+                guard let deliveredAt = send.deliveredAt, let turnStartedAt else { return false }
+                return deliveredAt >= turnStartedAt
+            default:
+                return false
+            }
         }
-        guard !returned.isEmpty else { return }
-        returnedSends.formUnion(returned.map(\.id))
+        guard !candidates.isEmpty else { return }
+        let ids = Set(candidates.map(\.id))
+        returnChecked.formUnion(ids)
+        guard let screen = try? await source.screen.readScreen(), !Task.isCancelled,
+            self.idleSince == idleSince
+        else { return }
+        observeInputBox(InputBoxStateDetector.detect(screen, program: program), for: ids)
+    }
+
+    /// A read of the Agent's screen made for another reason, such as the
+    /// check before a send: a send it no longer finds in the input box
+    /// stops reading as returned. It never finds new ones.
+    func inputBoxWasRead(_ screen: ANSIScreen) {
+        guard program == .pi || program == .omp, !returnedSends.isEmpty else { return }
+        observeInputBox(InputBoxStateDetector.detect(screen, program: program), for: returnedSends)
+    }
+
+    /// Settles which of `ids` the input box holds. Only an empty box or
+    /// one showing text says so; any other state leaves them as they were.
+    private func observeInputBox(_ state: InputBoxState, for ids: Set<UUID>) {
+        let box: String
+        switch state {
+        case .text(let draft): box = draft
+        case .empty: box = ""
+        default: return
+        }
+        let held = Self.sends(in: box, among: sends.filter { ids.contains($0.id) })
+        let next = returnedSends.subtracting(ids).union(held)
+        guard next != returnedSends else { return }
+        returnedSends = next
         matchSends()
+    }
+
+    /// The sends, oldest first, whose texts make up all of `box`. Pi
+    /// returns every queued steer at once, joined by blank lines in the
+    /// order they were sent; the editor also wraps and trims what it shows,
+    /// so spacing says nothing. Text the box holds beyond them, such as a
+    /// draft, means none of them can be told apart from it.
+    private static func sends(in box: String, among sends: [TrackedSend]) -> Set<UUID> {
+        func squeezed(_ text: String) -> [Character] { Array(text.filter { !$0.isWhitespace }) }
+        let target = squeezed(box)
+        let texts = sends.map { squeezed($0.text) }
+        guard !target.isEmpty else { return [] }
+        var dead: Set<Int> = []
+        // Indices of the sends that spell `target` from `start` on, using
+        // only sends from `first` on.
+        func spell(from start: Int, first: Int) -> [Int]? {
+            if start == target.count { return [] }
+            let key = start * (texts.count + 1) + first
+            guard !dead.contains(key) else { return nil }
+            for index in first..<texts.count where !texts[index].isEmpty {
+                let end = start + texts[index].count
+                guard end <= target.count, target[start..<end].elementsEqual(texts[index]),
+                    let rest = spell(from: end, first: index + 1)
+                else { continue }
+                return [index] + rest
+            }
+            dead.insert(key)
+            return nil
+        }
+        guard let indices = spell(from: 0, first: 0) else { return [] }
+        return Set(indices.map { sends[$0].id })
     }
 }
 

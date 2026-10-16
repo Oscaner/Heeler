@@ -655,13 +655,17 @@ struct AgentChatSurfaceView: View {
         let paneID = agent.agent.paneID
         let hostID = agent.hostID
         let agentID = agent.id
+        let chat = chat
         return .chat(
             rules: sendRules,
             activity: { [console] in
                 ChatAgentActivity(console.agents.first { $0.id == agentID }?.agent.status)
             },
             readScreen: { [console] in
-                try await console.readAgentScreen(paneID, on: hostID)
+                let screen = try await console.readAgentScreen(paneID, on: hostID)
+                // A steer shown as returned may since have left the box.
+                chat?.inputBoxWasRead(screen)
+                return screen
             })
     }
 

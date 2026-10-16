@@ -981,31 +981,60 @@ struct AgentChatStoreTests {
             return screen
         }
 
+        func show(_ screen: ANSIScreen) {
+            self.screen = screen
+        }
+
         nonisolated var io: BlockedScreenIO {
             BlockedScreenIO(
                 readScreen: { await self.read() }, sendKeys: { _ in }, paste: { _ in })
         }
     }
 
-    /// A steer sent while Pi works, then Esc before the turn takes it: Pi
+    /// Pi's idle editor (pi-36) holding `lines`, or empty.
+    private static func piEditor(_ lines: String...) throws -> ANSIScreen {
+        let text = try ScreenFixture.text("pi-36-steer-back-in-editor")
+        return ANSIScreenDecoder.decode(
+            text.replacingOccurrences(of: "Queued steer: say MANGO.", with: lines.joined(separator: "\r\n")))
+    }
+
+    /// Steers sent while Pi works, then Esc before the turn takes them: Pi
     /// puts the text back in its editor (pi-36) and never records it.
-    private static func stoppedSteer(
-        _ program: ChatProgram, text: String
-    ) async throws -> (files: VirtualHostFiles, store: AgentChatStore, pane: Pane, clock: Clock, id: UUID) {
+    private static func stoppedSteers(
+        _ program: ChatProgram, texts: [String], screen: ANSIScreen? = nil
+    ) async throws -> (files: VirtualHostFiles, store: AgentChatStore, pane: Pane, clock: Clock, ids: [UUID]) {
         let clock = Clock()
-        let pane = Pane(try ScreenFixture.screen("pi-36-steer-back-in-editor"))
+        let pane = Pane(try screen ?? ScreenFixture.screen("pi-36-steer-back-in-editor"))
         let (files, store, path, _) = try Self.skillStore(program, clock: clock, screen: pane.io)
         await files.write(Self.piHeader + "\n" + Self.ompMessage("u1", parent: nil, role: "user", "go"), at: path)
         await store.step()
         store.agentDidChange(Self.piAgent(program, status: .working))
-        let id = UUID()
-        store.updateSends([Self.sent(id, text, delivered: false)])
-        store.updateSends([Self.sent(id, text)])
+        let messages = texts.map { (id: UUID(), text: $0) }
+        store.updateSends(messages.map { Self.sent($0.id, $0.text, delivered: false) })
+        store.updateSends(messages.map { Self.sent($0.id, $0.text) })
         clock.now = clock.now.addingTimeInterval(10)
         await store.step()
-        #expect(store.sendStatuses[id] == .overdue)
+        for message in messages {
+            #expect(store.sendStatuses[message.id] == .overdue)
+        }
         store.agentDidChange(Self.piAgent(program, status: .idle))
-        return (files, store, pane, clock, id)
+        return (files, store, pane, clock, messages.map(\.id))
+    }
+
+    private static func stoppedSteer(
+        _ program: ChatProgram, text: String, screen: ANSIScreen? = nil
+    ) async throws -> (files: VirtualHostFiles, store: AgentChatStore, pane: Pane, clock: Clock, id: UUID) {
+        let (files, store, pane, clock, ids) = try await stoppedSteers(program, texts: [text], screen: screen)
+        return (files, store, pane, clock, try #require(ids.first))
+    }
+
+    /// One idle spell passes and herdr reports the next turn ending.
+    private static func nextIdleSpell(_ store: AgentChatStore, _ program: ChatProgram, clock: Clock) async {
+        store.agentDidChange(Self.piAgent(program, status: .working))
+        await store.step()
+        store.agentDidChange(Self.piAgent(program, status: .idle))
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
     }
 
     @Test func aSteerStopPutBackInTheEditorIsReturnedUntilRecorded() async throws {
@@ -1029,6 +1058,87 @@ struct AgentChatStoreTests {
         await store.step()
 
         #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    /// The box must hold the send and nothing else: a short send found
+    /// inside an unrelated draft is not the steer Esc put back.
+    @Test func aShortSendInsideALongerDraftStaysOverdue() async throws {
+        let (_, store, pane, clock, id) = try await Self.stoppedSteer(.pi, text: "say ")
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .overdue)
+    }
+
+    /// Pi puts every queued steer back at once, a blank line between each.
+    @Test func severalSteersStopPutBackTogetherAreAllReturned() async throws {
+        let (_, store, pane, clock, ids) = try await Self.stoppedSteers(
+            .pi, texts: ["say KIWI ", "say MANGO. ", "say LIME "],
+            screen: try Self.piEditor("say KIWI", "", "say LIME"))
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+
+        #expect(await pane.reads == 1)
+        #expect(ids.map { store.sendStatuses[$0] } == [.returned, .overdue, .returned])
+    }
+
+    /// Esc puts back only the steers of the turn it stops. A send overdue
+    /// from an earlier turn is not looked for again, whatever the box
+    /// shows later.
+    @Test func anOverdueSendFromAnEarlierTurnIsNotLookedForAgain() async throws {
+        let (_, store, pane, clock, id) = try await Self.stoppedSteer(
+            .pi, text: "Queued steer: say MANGO. ", screen: try Self.piEditor())
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .overdue)
+
+        await pane.show(try ScreenFixture.screen("pi-36-steer-back-in-editor"))
+        await Self.nextIdleSpell(store, .pi, clock: clock)
+
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .overdue)
+    }
+
+    /// A returned send is an observation: once the user clears the box in
+    /// the terminal, the next idle spell's read makes it overdue again.
+    @Test func aReturnedSendTheBoxNoLongerHoldsIsOverdueAgain() async throws {
+        let (_, store, pane, clock, id) = try await Self.stoppedSteer(.pi, text: "Queued steer: say MANGO. ")
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(store.sendStatuses[id] == .returned)
+
+        // Still there a spell later.
+        await Self.nextIdleSpell(store, .pi, clock: clock)
+        #expect(await pane.reads == 2)
+        #expect(store.sendStatuses[id] == .returned)
+
+        await pane.show(try Self.piEditor())
+        await Self.nextIdleSpell(store, .pi, clock: clock)
+
+        #expect(await pane.reads == 3)
+        #expect(store.sendStatuses[id] == .overdue)
+    }
+
+    /// The read before a send also shows whether the box still holds a
+    /// returned send, without a read of its own.
+    @Test func aReadBeforeASendDropsAReturnedSendTheBoxNoLongerHolds() async throws {
+        let (_, store, pane, clock, id) = try await Self.stoppedSteer(.pi, text: "Queued steer: say MANGO. ")
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(store.sendStatuses[id] == .returned)
+
+        store.inputBoxWasRead(try ScreenFixture.screen("pi-36-steer-back-in-editor"))
+        #expect(store.sendStatuses[id] == .returned)
+
+        store.inputBoxWasRead(try Self.piEditor("a draft of my own"))
+        await store.step()
+
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .overdue)
     }
 
     @Test func anOverdueSendTheEditorDoesNotHoldStaysOverdue() async throws {
