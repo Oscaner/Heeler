@@ -542,20 +542,29 @@ private struct ClaudeDialogReader {
 
         var footerRows: [ScreenRow] = []
         var index = row
+        var sawSessionRule = false
+        // Claude Code 2.1.301 draws a rule under the dialog that carries the
+        // session's name (`──── create-q-txt-probe ─`): right under the
+        // footer, or under blank rows when a later question page keeps the
+        // first page's height. The input box's own top rule looks the same,
+        // but its prompt row follows, so the rows below aren't blank.
+        func skipSessionRule() {
+            guard !sawSessionRule, index < rows.count,
+                DialogRowScanner.isLabeledRule(rows[index], of: "─", minimumWidth: fullWidth)
+            else { return }
+            sawSessionRule = true
+            index += 1
+        }
         while index < rows.count, rows[index].isBlank { index += 1 }
         while index < rows.count, !rows[index].isBlank {
-            if DialogRowScanner.isLabeledRule(rows[index], of: "─", minimumWidth: fullWidth) {
-                // Claude Code 2.1.301 draws a rule under the dialog that
-                // carries the session's name (`──── create-q-txt-probe ─`).
-                // The input box's own top rule looks the same, but its
-                // prompt row follows, so the rows below aren't blank.
-                index += 1
-                break
-            }
+            skipSessionRule()
+            if sawSessionRule { break }
             guard isInactiveRow(rows[index]) else { return nil }
             footerRows.append(rows[index])
             index += 1
         }
+        while index < rows.count, rows[index].isBlank { index += 1 }
+        skipSessionRule()
         guard rows[index...].allSatisfy(\.isBlank) else { return nil }
         if !footerRows.isEmpty {
             let footer = ClaudeFooter(rows: footerRows)

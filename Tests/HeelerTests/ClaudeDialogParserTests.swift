@@ -132,6 +132,19 @@ struct ClaudeDialogParserTests {
         #expect(dialog.focus == DialogFocusState(focusedOrdinal: 1))
     }
 
+    @Test("A later question page with blank rows above the session's rule")
+    func laterQuestionPageOverAPaddedLabeledRule() throws {
+        // The second of two questions keeps the first page's height, so
+        // four blank rows separate its footer from the rule.
+        let dialog = try dialog("claude-41-c8-phone-question2-padded-rule")
+        #expect(dialog.kind == .claudeQuestion)
+        #expect(dialog.title == "Which size?")
+        #expect(dialog.progress == "Size")
+        #expect(dialog.options.map(\.label) == ["Small", "Large", "Type something.", "Chat about this"])
+        #expect(dialog.options.map(\.role) == [.answer, .answer, .otherText, .chat])
+        #expect(dialog.focus == DialogFocusState(focusedOrdinal: 1))
+    }
+
     @Test("A multi-select question page")
     func multiSelectQuestion() throws {
         let dialog = try dialog("claude-08-c4-auq-q1")
