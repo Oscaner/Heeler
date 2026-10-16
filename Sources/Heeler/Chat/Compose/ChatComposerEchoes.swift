@@ -48,8 +48,10 @@ enum ChatComposerEchoes {
                 case .awaiting, .recorded, .abandoned: state = .sent
                 }
             case .undelivered:
-                guard status != nil else { return nil }
-                state = .notDelivered
+                // The store's later look at the input box outranks the
+                // check after the send.
+                guard let status else { return nil }
+                state = status == .discarded ? .discarded : .notDelivered
             case .failed(let detail):
                 guard message.id == latest else { return nil }
                 state = .failed(detail)

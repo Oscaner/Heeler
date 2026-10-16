@@ -245,6 +245,23 @@ struct ChatComposerEchoesTests {
         #expect(echoes.map(\.state) == [.notDelivered])
     }
 
+    /// Text left in the input box that the user cleared there since: what
+    /// the Chat store last saw in the box outranks the check after the send.
+    @Test func textClearedFromTheInputBoxSinceShowsAsDiscarded() async throws {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport)
+        store.replaceDraft(with: "stuck")
+        await store.send(policy: Self.policy(verify: { _ in false }))
+        try await waitUntil("the verify task should mark the message") {
+            store.messages.first?.state == .undelivered
+        }
+        let id = try #require(store.messages.first?.id)
+
+        let echoes = ChatComposerEchoes.pending(store.messages, statuses: [id: .discarded])
+
+        #expect(echoes.map(\.state) == [.discarded])
+    }
+
     /// A steer Esc put back in Pi's or Oh My Pi's input box.
     @Test func aSendFoundBackInTheInputBoxShowsAsNotDelivered() async throws {
         let transport = ScriptedTransport()
