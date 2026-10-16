@@ -135,11 +135,10 @@ private struct BlockedDialogCard: View {
                 BlockedCardText(prompt)
             }
         case .claudePlan:
-            // Without the call, the screen's rows, less the question the
-            // options answer.
-            let plan = card.request?.summary ?? ""
+            // The call's Markdown unless the screen shows another plan; the
+            // screen's rows leave out the question the options answer.
             let shown = dialog.body.filter { !$0.hasPrefix("Claude has written up a plan") }
-            BlockedPlanBox(text: plan.isEmpty ? shown.joined(separator: "\n") : plan)
+            BlockedPlanBox(text: BlockedRequestMatch.claudePlanText(call: card.request?.summary, shownRows: shown))
         case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion:
             VStack(alignment: .leading, spacing: 4) {
                 // Codex's asynchronous questions name their page by the

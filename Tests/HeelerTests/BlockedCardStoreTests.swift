@@ -626,6 +626,26 @@ struct BlockedRequestMatchTests {
         #expect(BlockedRequestMatch.request(for: try dialog("codex-04-x3-q1"), in: [codex])?.callID == "c")
     }
 
+    @Test func aPlanCardShowsTheCallsPlanOnlyWhenTheScreenAgrees() throws {
+        // Claude Code 2.1.301, phone width: Write to the plan file and
+        // ExitPlanMode in one message; the call holds the previous plan.
+        let dialog = try dialog("claude-38-c8-phone-plan-stale-call")
+        #expect(dialog.kind == .claudePlan)
+        let shown = dialog.body.filter { !$0.hasPrefix("Claude has written up a plan") }
+        let plan = { (name: String) in
+            "# Plan: create \(name)\n\n## Context\nThe user wants a file `\(name)` in "
+                + "`/private/tmp/heeler-iso-4h/proj-claude-b` containing the single word `probe`.\n\n## Steps\n"
+                + "1. Use the Write tool to create `/private/tmp/heeler-iso-4h/proj-claude-b/\(name)` with the "
+                + "content `probe`.\n2. Verify with the Read tool that the file contains exactly `probe`.\n\n"
+                + "## Verification\nRead `\(name)` and confirm it holds only the word `probe`.\n"
+        }
+        #expect(BlockedRequestMatch.claudePlanText(call: plan("q.txt"), shownRows: shown) == plan("q.txt"))
+        let stale = BlockedRequestMatch.claudePlanText(call: plan("p2.txt"), shownRows: shown)
+        #expect(stale == shown.joined(separator: "\n"))
+        #expect(stale.contains("Plan: create q.txt"))
+        #expect(BlockedRequestMatch.claudePlanText(call: nil, shownRows: shown) == stale)
+    }
+
     @Test func anOMPApprovalMatchesItsToolAndCommand() throws {
         let approval = try dialog("omp-24-approval-a-dialog")
         let requests = [

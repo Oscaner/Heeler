@@ -67,6 +67,10 @@ capture.
   for its row, cut off with `…` and no cursor cell; then another Bash
   dialog and a note on `Yes` wrapped onto a second row, with the cursor
   cell only on that row.
+- `claude-38` is a 2.1.301 plan dialog at the same grid whose call
+  recorded the previous plan: Claude wrote the plan file and called
+  ExitPlanMode in one message, and `input.plan` kept the file as it was
+  before the Write.
 
 Scrubbing used the same same-length replacements as above, so every column
 is as captured. The shell prompt on the first row of `claude-00-trust.ansi`

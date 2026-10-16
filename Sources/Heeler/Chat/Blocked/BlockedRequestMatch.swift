@@ -51,6 +51,27 @@ enum BlockedRequestMatch {
 
     /// The screen's text is the request's, or its start where the dialog
     /// was cut off. Wrapping moves spaces, so they do not count.
+    /// The plan a Claude card shows: the call's Markdown when it agrees
+    /// with the plan rows on screen, else those rows. Claude Code 2.1.301
+    /// records `input.plan` from the plan file as it stood before a Write
+    /// sent in the same message, so the call can hold the previous plan
+    /// while the dialog asks about the new one. Rows compare by letters and
+    /// digits only, so Markdown, wrapping and bullets don't count.
+    static func claudePlanText(call: String?, shownRows: [String]) -> String {
+        let shown = shownRows.joined(separator: "\n")
+        guard let call, !call.isEmpty else { return shown }
+        let recorded = lettersAndDigits(call)
+        let disagrees = shownRows.contains { row in
+            let text = lettersAndDigits(row)
+            return text.count >= 8 && !recorded.contains(text)
+        }
+        return disagrees ? shown : call
+    }
+
+    private static func lettersAndDigits(_ text: String) -> String {
+        String(String.UnicodeScalarView(text.lowercased().unicodeScalars.filter(CharacterSet.alphanumerics.contains)))
+    }
+
     private static func begins(_ full: String, with shown: String?) -> Bool {
         let start = DialogRowScanner.comparable(shown ?? "")
         return !start.isEmpty && DialogRowScanner.comparable(full).hasPrefix(start)
