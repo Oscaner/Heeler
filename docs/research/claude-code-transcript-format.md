@@ -384,6 +384,13 @@ fixture captures them yet.
   `sessionUrl`, `description`, `prompt` and `outputFile` (2.1.292, the Agent
   tool's result text); it was not observed. A `teammate_spawned` result is a
   teammate on a mailbox, not background work, and Chat does not list it.
+  Its messages reach the lead as user records (2.1.301): the line
+  "Another Claude session sent a message:", one `<teammate-message
+  teammate_id="w2" …>` block per message, then a paragraph of advice to the
+  model. A block whose body is `{"type":"idle_notification","from",…,
+  "result"}` is the teammate finishing. The terminal lists them as
+  "› Message from @w2" and "⏺ Teammate @w2 finished" over the result; Chat
+  shows one system notice per record in the same words.
 - **Workflow.** The `Workflow` call's input is `{script}`. Its result is
   `toolUseResult{status: "async_launched", taskId, taskType:
   "local_workflow", workflowName, runId, summary, transcriptDir,

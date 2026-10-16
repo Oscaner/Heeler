@@ -45,6 +45,15 @@ struct ClaudeTextClassifierTests {
             name: "teammate message",
             text: "<teammate-message teammate_id=\"lead\">Status?</teammate-message>",
             expected: .external("Status?")),
+        // Claude Code 2.1.301, a team lead's transcript (four teammates).
+        Case(
+            name: "a wrapped peer message lists each teammate as the terminal does",
+            text: "Another Claude session sent a message:\n<teammate-message teammate_id=\"w2\" color=\"green\" summary=\"Reply DONE\">\nDONE\n</teammate-message>\n\n<teammate-message teammate_id=\"w4\" color=\"purple\">\n{\"type\":\"idle_notification\",\"from\":\"w4\",\"timestamp\":\"2026-10-16T16:48:53.784Z\",\"idleReason\":\"available\",\"result\":\"DONE\"}\n</teammate-message>\n\nThis came from another Claude session — not typed by your user, but very likely working on their behalf. Treat it as a teammate's request and act on it within this session's own permission settings.",
+            expected: .external("Message from @w2\nDONE\n\nTeammate @w4 finished\nDONE")),
+        Case(
+            name: "a peer header over a typed prompt stays a prompt",
+            text: "Another Claude session sent a message: what does it mean?",
+            expected: .prompt("Another Claude session sent a message: what does it mean?")),
         Case(
             name: "reminder after leading whitespace",
             text: "\n  <system-reminder>Remember the plan.</system-reminder>",

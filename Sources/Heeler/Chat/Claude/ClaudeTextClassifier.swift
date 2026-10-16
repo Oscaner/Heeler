@@ -59,8 +59,17 @@ enum ClaudeUserText: Sendable, Equatable {
         markers.contains { text.hasPrefix($0) }
     }
 
+    /// The line Claude Code 2.1.301 puts before a message from a teammate or
+    /// another session. The tagged blocks follow, then advice to the model.
+    static let peerMessageHeaders = [
+        "Another Claude session sent a message:", "A peer session sent a message while you were working:",
+    ]
+
     static func classify(_ text: String) -> ClaudeUserText {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let message = peerMessage(in: trimmed) {
+            return .external(message)
+        }
         guard let tag = ClaudeText.leadingTag(of: trimmed) else {
             return .prompt(unwrappingPastedContent(text))
         }
@@ -103,6 +112,38 @@ enum ClaudeUserText: Sendable, Equatable {
             return .external(ClaudeText.content(ofTag: tag, in: trimmed) ?? trimmed)
         }
         return .prompt(unwrappingPastedContent(text))
+    }
+
+    /// A wrapped peer message's blocks as the terminal lists them: "Message
+    /// from @w2" over its text, or "Teammate @w2 finished" over its result
+    /// for an idle notification. Nil when the text is not one.
+    static func peerMessage(in text: String) -> String? {
+        guard let header = peerMessageHeaders.first(where: { text.hasPrefix($0) }) else { return nil }
+        let body = text.dropFirst(header.count).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let tag = ClaudeText.leadingTag(of: body), externalTags.contains(tag) else { return nil }
+        let blocks = ClaudeText.blocks(ofTag: tag, in: body)
+        guard !blocks.isEmpty else { return nil }
+        return blocks.map { block in
+            let content = block.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let sender = ClaudeText.attribute("teammate_id", in: block.openingTag)
+            if let idle = idleNotification(content) {
+                let name = idle.from ?? sender
+                let title = name.map { "Teammate @\($0) finished" } ?? "Teammate finished"
+                return [title, idle.result].compactMap(\.self).joined(separator: "\n")
+            }
+            let title = sender.map { "Message from @\($0)" } ?? "Message"
+            return content.isEmpty ? title : title + "\n" + content
+        }.joined(separator: "\n\n")
+    }
+
+    /// A teammate's `{"type":"idle_notification","from",…,"result"}` body.
+    private static func idleNotification(_ content: String) -> (from: String?, result: String?)? {
+        guard content.hasPrefix("{"), let data = content.data(using: .utf8),
+            let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+            object["type"] as? String == "idle_notification"
+        else { return nil }
+        let result = (object["result"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (object["from"] as? String, result.flatMap { $0.isEmpty ? nil : $0 })
     }
 
     /// Replaces each `<pasted_content id="abcd">` block with the paste it
@@ -266,6 +307,36 @@ enum ClaudeText {
 
     /// The non-empty contents of `tags`, in that order, one per line, with
     /// terminal escapes removed.
+    /// Every `<tag …>…</tag>` block in `text`, in order, with its opening
+    /// tag's text (attributes included).
+    static func blocks(ofTag tag: String, in text: String) -> [(openingTag: String, content: String)] {
+        var blocks: [(openingTag: String, content: String)] = []
+        var searchStart = text.startIndex
+        while let open = text.range(of: "<\(tag)", range: searchStart..<text.endIndex) {
+            guard open.upperBound < text.endIndex else { break }
+            let next = text[open.upperBound]
+            guard next == ">" || next.isWhitespace else {
+                searchStart = open.upperBound
+                continue
+            }
+            guard let openEnd = text.range(of: ">", range: open.upperBound..<text.endIndex),
+                let close = text.range(of: "</\(tag)>", range: openEnd.upperBound..<text.endIndex)
+            else { break }
+            blocks.append((String(text[open.lowerBound..<openEnd.upperBound]), String(text[openEnd.upperBound..<close.lowerBound])))
+            searchStart = close.upperBound
+        }
+        return blocks
+    }
+
+    /// The value of `name="…"` in a tag's text.
+    static func attribute(_ name: String, in tag: String) -> String? {
+        guard let start = tag.range(of: " \(name)=\""),
+            let end = tag.range(of: "\"", range: start.upperBound..<tag.endIndex)
+        else { return nil }
+        let value = String(tag[start.upperBound..<end.lowerBound])
+        return value.isEmpty ? nil : value
+    }
+
     static func joinedContent(ofTags tags: [String], in text: String) -> String {
         tags.compactMap { content(ofTag: $0, in: text) }
             .map { strippingTerminalEscapes($0).trimmingCharacters(in: .whitespacesAndNewlines) }
