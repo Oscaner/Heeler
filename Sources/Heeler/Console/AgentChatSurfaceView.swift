@@ -545,7 +545,8 @@ struct AgentChatSurfaceView: View {
         if case .unavailable(let reason) = chat.conversation.phase, presentation == .timeline {
             banners.append(
                 Banner(
-                    id: "unavailable", systemImage: reason.systemImage, text: reason.bannerText,
+                    id: "unavailable", systemImage: reason.systemImage,
+                    text: reason.bannerText(showingSavedMessages: !chat.conversation.transcript.entries.isEmpty),
                     showsProgress: reason.isWaiting,
                     actionTitle: reason.isWaiting ? nil : AgentDetailSurface.terminal.showTitle,
                     action: { showAgentTerminal() }))

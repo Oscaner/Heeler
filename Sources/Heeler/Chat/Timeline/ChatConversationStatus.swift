@@ -52,19 +52,24 @@ extension ChatUnavailableReason {
         }
     }
 
-    /// One line for a banner over messages this device kept.
-    var bannerText: String {
-        switch self {
+    /// One line for a banner over the timeline. `showingSavedMessages` is
+    /// false when the timeline holds only messages sent from this device,
+    /// as with a new conversation whose transcript isn't written yet.
+    func bannerText(showingSavedMessages: Bool) -> String {
+        let saved = showingSavedMessages ? " Showing saved messages." : ""
+        return switch self {
         case .noSession:
             "Waiting for the Agent to report its conversation."
         case .awaitingFirstMessage(let program):
             "\(program.chatName) saves this conversation after its first reply."
         case .unidentifiedSession, .unsupportedSession:
-            "Chat can't follow this conversation now. Showing saved messages."
+            "Chat can't follow this conversation now.\(saved)"
         case .notFound, .mismatched:
-            "The transcript isn't on the Host any more. Showing saved messages."
+            showingSavedMessages
+                ? "The transcript isn't on the Host any more.\(saved)"
+                : "Heeler hasn't found this conversation's transcript yet."
         case .compressed, .unsupportedFormat:
-            "Chat can't read this transcript now. Showing saved messages."
+            "Chat can't read this transcript now.\(saved)"
         }
     }
 

@@ -214,6 +214,14 @@ struct AgentChatStoreTests {
         #expect(reason.offersRetry)
     }
 
+    @Test(arguments: [true, false])
+    func aMissingTranscriptBannerClaimsSavedMessagesOnlyWhenThereAreSome(showingSaved: Bool) {
+        let text = ChatUnavailableReason.notFound(searchedAll: true)
+            .bannerText(showingSavedMessages: showingSaved)
+        #expect(text.contains("Showing saved messages") == showingSaved)
+        #expect(text.contains("any more") == showingSaved)
+    }
+
     @Test func aFailedSessionQueryIsVisibleAndRetryClearsItWithoutReadingFiles() async throws {
         let fixture = Fixture(session: nil)
         await fixture.server.fail(with: .channelFailed(detail: "agent.get failed"))
