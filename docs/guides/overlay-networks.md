@@ -82,6 +82,10 @@ To fill in the address on the route page, Tailscale offers **Choose from Tailnet
 
 ## Verify the connection
 
+<a href="images/overlay-networks/networks-connected.png"><img src="images/overlay-networks/networks-connected.png" width="420" alt="Overlay Networks list with three connected networks and their switches on"></a>
+
+**Connected** here means Heeler has joined the network, not that a Host is using it. Follow the checks below to verify the Host's route. Network names have been anonymized; you only need the network you chose, not all three. Tap the image to enlarge it.
+
 1. The network shows **Connected** in **Settings > Overlay Networks**.
 2. Open the Host from **Hosts** and check which route is marked **In Use** under **Routes**. Confirm it uses the overlay network you are testing. If another route wins, this connection does not verify the overlay route. See [which route is in use](host-routes.md#see-which-route-is-in-use).
 3. The Host checks pass and the session's Agents or Terminals load.
