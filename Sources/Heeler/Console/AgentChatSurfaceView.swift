@@ -524,34 +524,26 @@ struct AgentChatSurfaceView: View {
     }
 
     private var bannerContent: [Banner] {
-        var banners: [Banner] = []
-        let status = console.hostStatuses[agent.hostID]
-        switch status {
-        case .connected?:
-            break
-        case .connecting?, .reconnecting?:
-            banners.append(Banner(id: "host", systemImage: "wifi", text: "Connecting to the Host…", showsProgress: true))
-        default:
-            banners.append(Banner(id: "host", systemImage: "wifi.slash", text: "Not connected. Showing saved messages."))
+        let lines = ChatBannerLine.lines(
+            hostStatus: console.hostStatuses[agent.hostID], conversation: chat?.conversation,
+            hasPendingEchoes: !pendingEchoes.isEmpty)
+        return lines.map { line in
+            var banner = Banner(
+                id: line.id, systemImage: line.systemImage, text: line.text, showsProgress: line.showsProgress)
+            switch line {
+            case .connecting, .notConnected:
+                break
+            case .readFailure:
+                banner.actionTitle = "Retry"
+                banner.action = { chat?.retry() }
+            case .unavailable(let reason, _):
+                if !reason.isWaiting {
+                    banner.actionTitle = AgentDetailSurface.terminal.showTitle
+                    banner.action = { showAgentTerminal() }
+                }
+            }
+            return banner
         }
-        guard status == .connected, let chat else { return banners }
-        if let failure = chat.conversation.readFailure {
-            banners.append(
-                Banner(
-                    id: "read", systemImage: "exclamationmark.triangle",
-                    text: "Couldn't read the conversation. \(failure.presentation.explanation)",
-                    actionTitle: "Retry", action: { chat.retry() }))
-        }
-        if case .unavailable(let reason) = chat.conversation.phase, presentation == .timeline {
-            banners.append(
-                Banner(
-                    id: "unavailable", systemImage: reason.systemImage,
-                    text: reason.bannerText(showingSavedMessages: !chat.conversation.transcript.entries.isEmpty),
-                    showsProgress: reason.isWaiting,
-                    actionTitle: reason.isWaiting ? nil : AgentDetailSurface.terminal.showTitle,
-                    action: { showAgentTerminal() }))
-        }
-        return banners
     }
 
     // MARK: Conversation
@@ -568,7 +560,7 @@ struct AgentChatSurfaceView: View {
     private var presentation: Presentation {
         guard let chat else { return .disconnected }
         let conversation = chat.conversation
-        if !conversation.transcript.entries.isEmpty || !pendingEchoes.isEmpty { return .timeline }
+        if conversation.showsTimeline(hasPendingEchoes: !pendingEchoes.isEmpty) { return .timeline }
         switch conversation.phase {
         case .locating: return .locating
         case .following: return .empty

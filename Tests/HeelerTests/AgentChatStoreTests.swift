@@ -222,6 +222,42 @@ struct AgentChatStoreTests {
         #expect(text.contains("any more") == showingSaved)
     }
 
+    private static func snapshot(
+        _ phase: ChatConversationSnapshot.Phase, entries: [ChatEntry] = []
+    ) -> ChatConversationSnapshot {
+        var snapshot = ChatConversationSnapshot(phase: phase)
+        snapshot.transcript.entries = entries
+        return snapshot
+    }
+
+    private static let savedEntry = ChatEntry(
+        id: ChatEntryID("e0"), sourceOffset: 0, content: .assistant(ChatAssistantMessage(text: "hello")))
+
+    /// A first prompt sent before the program writes its transcript: the
+    /// timeline holds only the echo, and nothing is saved.
+    @Test func aBannerOverOnlyASentEchoDoesNotClaimSavedMessages() {
+        let lines = ChatBannerLine.lines(
+            hostStatus: .connected, conversation: Self.snapshot(.unavailable(.notFound(searchedAll: true))),
+            hasPendingEchoes: true)
+        #expect(lines == [.unavailable(.notFound(searchedAll: true), showingSavedMessages: false)])
+        #expect(lines.map(\.text) == ["Heeler hasn't found this conversation's transcript yet."])
+    }
+
+    @Test func aBannerOverKeptEntriesSaysTheyAreSaved() {
+        let lines = ChatBannerLine.lines(
+            hostStatus: .connected,
+            conversation: Self.snapshot(.unavailable(.notFound(searchedAll: true)), entries: [Self.savedEntry]),
+            hasPendingEchoes: false)
+        #expect(lines.map(\.text) == ["The transcript isn't on the Host any more. Showing saved messages."])
+    }
+
+    /// With nothing to show, the unavailable view explains instead.
+    @Test func noUnavailableBannerWithoutATimeline() {
+        let lines = ChatBannerLine.lines(
+            hostStatus: .connected, conversation: Self.snapshot(.unavailable(.mismatched)), hasPendingEchoes: false)
+        #expect(lines.isEmpty)
+    }
+
     /// A file under the session's name was read and holds another
     /// conversation, so Heeler did find it: the banner says what the
     /// unavailable view says, not that nothing was found yet.

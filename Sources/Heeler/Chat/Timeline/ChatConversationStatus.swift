@@ -97,6 +97,80 @@ extension ChatUnavailableReason {
     }
 }
 
+/// One line over Chat's conversation, before the view adds its action.
+enum ChatBannerLine: Equatable, Identifiable {
+    case connecting
+    case notConnected
+    case readFailure(TransportError)
+    case unavailable(ChatUnavailableReason, showingSavedMessages: Bool)
+
+    var id: String {
+        switch self {
+        case .connecting, .notConnected: "host"
+        case .readFailure: "read"
+        case .unavailable: "unavailable"
+        }
+    }
+
+    /// The lines over the conversation, top to bottom. `conversation` is nil
+    /// while there is no Chat to read. Saved messages are transcript entries
+    /// this device kept; messages sent from it and not yet recorded are not.
+    static func lines(
+        hostStatus: EventsSessionStatus?, conversation: ChatConversationSnapshot?, hasPendingEchoes: Bool
+    ) -> [ChatBannerLine] {
+        switch hostStatus {
+        case .connected?: break
+        case .connecting?, .reconnecting?: return [.connecting]
+        default: return [.notConnected]
+        }
+        guard let conversation else { return [] }
+        var lines: [ChatBannerLine] = []
+        if let failure = conversation.readFailure { lines.append(.readFailure(failure)) }
+        if case .unavailable(let reason) = conversation.phase,
+            conversation.showsTimeline(hasPendingEchoes: hasPendingEchoes)
+        {
+            lines.append(
+                .unavailable(reason, showingSavedMessages: !conversation.transcript.entries.isEmpty))
+        }
+        return lines
+    }
+
+    var text: String {
+        switch self {
+        case .connecting: "Connecting to the Host…"
+        case .notConnected: "Not connected. Showing saved messages."
+        case .readFailure(let failure): "Couldn't read the conversation. \(failure.presentation.explanation)"
+        case .unavailable(let reason, let showingSavedMessages):
+            reason.bannerText(showingSavedMessages: showingSavedMessages)
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .connecting: "wifi"
+        case .notConnected: "wifi.slash"
+        case .readFailure: "exclamationmark.triangle"
+        case .unavailable(let reason, _): reason.systemImage
+        }
+    }
+
+    var showsProgress: Bool {
+        switch self {
+        case .connecting: true
+        case .unavailable(let reason, _): reason.isWaiting
+        case .notConnected, .readFailure: false
+        }
+    }
+}
+
+extension ChatConversationSnapshot {
+    /// Whether the timeline is up rather than a placeholder: it has entries,
+    /// or messages sent from this device the program hasn't recorded yet.
+    func showsTimeline(hasPendingEchoes: Bool) -> Bool {
+        !transcript.entries.isEmpty || hasPendingEchoes
+    }
+}
+
 extension ChatProgram {
     /// The program's name in what Chat says about its conversation.
     var chatName: String {
