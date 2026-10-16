@@ -1402,8 +1402,9 @@ struct ConsoleView: View {
     @ViewBuilder
     private var flatAgentListRows: some View {
         agentHostIssueRows
+        let qualifiers = agentTitleQualifiers
         ForEach(filteredAgents) { agent in
-            agentRow(agent)
+            agentRow(agent, qualifier: qualifiers[agent.id])
                 // Right under an iPad sidebar's bar, a rule over the
                 // first row would crowd it.
                 .listRowSeparator(
@@ -1416,10 +1417,13 @@ struct ConsoleView: View {
     @ViewBuilder
     private var workspaceAgentListRows: some View {
         agentHostIssueRows
+        let qualifiers = agentTitleQualifiers
         ForEach(workspaceSections) { section in
             Section {
                 if !section.isCollapsed {
-                    ForEach(section.agents) { agent in agentRow(agent) }
+                    ForEach(section.agents) { agent in
+                        agentRow(agent, qualifier: qualifiers[agent.id])
+                    }
                 }
             } header: {
                 ConsoleWorkspaceSectionHeader(section: section) {
@@ -1436,6 +1440,7 @@ struct ConsoleView: View {
 
     @ViewBuilder
     private var groupedAgentListRows: some View {
+        let qualifiers = agentTitleQualifiers
         ForEach(hostSections) { section in
             let opensDetail = connectionDetail(for: section.hostID) != nil
             Section {
@@ -1446,7 +1451,7 @@ struct ConsoleView: View {
                         ConsoleHostIssueRow(issue: issue) { openHostIssue($0) }
                     }
                     ForEach(section.agents) { agent in
-                        agentRow(agent)
+                        agentRow(agent, qualifier: qualifiers[agent.id])
                     }
                 }
             } header: {
@@ -1465,14 +1470,15 @@ struct ConsoleView: View {
         }
     }
 
-    private func agentRow(_ agent: ConsoleAgent) -> some View {
+    private func agentRow(_ agent: ConsoleAgent, qualifier: String?) -> some View {
         NavigationLink(value: ConsoleSelection.agent(agent.id)) {
             AgentCardView(
                 agent: agent,
                 layout: console.rowLayout(for: agent.hostID),
                 isPinned: console.pins.isPinned(
                     hostID: agent.hostID, paneID: agent.agent.paneID),
-                changes: console.rowChanges.store(for: agent))
+                changes: console.rowChanges.store(for: agent),
+                qualifier: qualifier)
             .modifier(ConsoleRowSelectionContent())
         }
         // The list reads what it shows: a row on screen reads its Agent's
@@ -1517,7 +1523,8 @@ struct ConsoleView: View {
                     agent: agent,
                     layout: console.rowLayout(for: agent.hostID),
                     isPinned: console.pins.isPinned(
-                        hostID: agent.hostID, paneID: agent.agent.paneID))
+                        hostID: agent.hostID, paneID: agent.agent.paneID),
+                    qualifier: qualifier)
             })
         .modifier(
             AgentWindowDrag(
@@ -1695,16 +1702,27 @@ struct ConsoleView: View {
         }
     }
 
+    private var hostFilteredAgents: [ConsoleAgent] {
+        guard let hostFilter else { return console.chatDisplayAgents }
+        return console.chatDisplayAgents.filter { $0.hostID == hostFilter }
+    }
+
     private var filteredAgents: [ConsoleAgent] {
-        let hostFiltered: [ConsoleAgent]
-        if let hostFilter {
-            hostFiltered = console.chatDisplayAgents.filter { $0.hostID == hostFilter }
-        } else {
-            hostFiltered = console.chatDisplayAgents
-        }
+        let hostFiltered = hostFilteredAgents
         let needle = agentSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return hostFiltered }
         return hostFiltered.filter { $0.matchesAgentSearch(needle) }
+    }
+
+    /// Program names for rows whose cards would otherwise read the same.
+    /// Judged before the search, so a row's title does not change as the
+    /// user types.
+    private var agentTitleQualifiers: [ConsoleAgent.ID: String] {
+        AgentTitleQualifier.qualifiers(for: hostFilteredAgents) { agent in
+            let card = AgentCardPresentation(
+                agent: agent, layout: console.rowLayout(for: agent.hostID))
+            return .init(title: card.headline, namesAgent: card.namesAgent(inFirst: card.rows.count))
+        }
     }
 
     /// Host issues shown in the list: all of them, or the filtered Host's

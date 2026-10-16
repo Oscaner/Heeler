@@ -805,10 +805,9 @@ struct AgentChatSurfaceView: View {
 
     private var agentSwitcher: TerminalAgentSwitcher {
         TerminalAgentSwitcher(
-            items: console.chatDisplayAgents.map {
-                TerminalAgentSwitcherItem(
-                    agent: $0, pins: console.pins, layout: console.rowLayout(for: $0.hostID))
-            },
+            items: TerminalAgentSwitcherItem.items(
+                for: console.chatDisplayAgents, pins: console.pins,
+                layout: { console.rowLayout(for: $0) }),
             selectedID: agent.id,
             onSelect: switchToAgent,
             onTogglePin: { id in

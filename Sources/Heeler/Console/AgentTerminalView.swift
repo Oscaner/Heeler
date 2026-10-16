@@ -857,10 +857,9 @@ struct AgentTerminalView: View {
 
     private var agentSwitcher: TerminalAgentSwitcher {
         TerminalAgentSwitcher(
-            items: console.agents.map {
-                TerminalAgentSwitcherItem(
-                    agent: $0, pins: console.pins, layout: console.rowLayout(for: $0.hostID))
-            },
+            items: TerminalAgentSwitcherItem.items(
+                for: console.agents, pins: console.pins,
+                layout: { console.rowLayout(for: $0) }),
             selectedID: agent.id,
             onSelect: switchToAgent,
             onTogglePin: { id in

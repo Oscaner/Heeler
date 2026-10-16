@@ -8,18 +8,42 @@ struct TerminalAgentSwitcherItem: Equatable, Sendable {
     let title: String
     let status: AgentStatus
     let isPinned: Bool
+    /// The program name after the title when another chip reads the same;
+    /// see `AgentTitleQualifier`.
+    var qualifier: String? = nil
 }
 
 extension TerminalAgentSwitcherItem {
     /// Maps a Console row through the same pin store the list uses, so a pin
     /// made on either surface shows up on the other.
     @MainActor
-    init(agent: ConsoleAgent, pins: PinnedAgentsStore, layout: AgentRowLayout = .heelerDefault) {
+    init(
+        agent: ConsoleAgent, pins: PinnedAgentsStore, layout: AgentRowLayout = .heelerDefault,
+        qualifier: String? = nil
+    ) {
         self.init(
             id: agent.id,
             title: AgentCardPresentation(agent: agent, layout: layout).switcherTitle,
             status: agent.agent.status,
-            isPinned: pins.isPinned(hostID: agent.hostID, paneID: agent.agent.paneID))
+            isPinned: pins.isPinned(hostID: agent.hostID, paneID: agent.agent.paneID),
+            qualifier: qualifier)
+    }
+
+    /// The strip's chips, in the Console's order. A chip shows only Row 1,
+    /// so chips whose Row 1 reads the same carry their program's name.
+    @MainActor
+    static func items(
+        for agents: [ConsoleAgent], pins: PinnedAgentsStore,
+        layout: (Host.ID) -> AgentRowLayout
+    ) -> [TerminalAgentSwitcherItem] {
+        let qualifiers = AgentTitleQualifier.qualifiers(for: agents) { agent in
+            let card = AgentCardPresentation(agent: agent, layout: layout(agent.hostID))
+            return .init(title: card.switcherTitle, namesAgent: card.namesAgent(inFirst: 1))
+        }
+        return agents.map {
+            TerminalAgentSwitcherItem(
+                agent: $0, pins: pins, layout: layout($0.hostID), qualifier: qualifiers[$0.id])
+        }
     }
 }
 
@@ -414,11 +438,15 @@ final class TerminalAgentChip: UIControl {
     static let spacing: CGFloat = 6
     private static let height: CGFloat = 28
     private static let maximumWidth: CGFloat = 148
+    private static let qualifierSpacing: CGFloat = 4
     private static let dotSize: CGFloat = 8
     private static let pulseKey = "herdr.agentChip.pulse"
 
     let id: ConsoleAgent.ID
     var title: String? { label.text }
+    /// The program name shown after the title, nil when the title stands
+    /// alone.
+    var qualifier: String? { qualifierLabel.isHidden ? nil : qualifierText }
     /// Whether the Working dot is animating. Reads the layer, so it also
     /// answers "did leaving the window strip the animation?".
     var isPulsing: Bool { dot.layer.animation(forKey: Self.pulseKey) != nil }
@@ -428,6 +456,9 @@ final class TerminalAgentChip: UIControl {
 
     private let dot = UIView()
     private let label = UILabel()
+    private let qualifierLabel = UILabel()
+    private var qualifierText: String?
+    private var widthLimit: NSLayoutConstraint?
     private let pinView = UIImageView()
     private var isWorking = false
 
@@ -458,6 +489,9 @@ final class TerminalAgentChip: UIControl {
         isSelected = selected
         label.text = item.title
         label.textColor = selected ? .label : .secondaryLabel
+        qualifierText = item.qualifier
+        qualifierLabel.text = item.qualifier.map { "· \($0)" }
+        qualifierLabel.textColor = label.textColor
         // UIStackView balances arranged-subview hidden flips made inside
         // animation blocks with an internal counter; assigning the value the
         // view already has unbalances it, after which the opposite
@@ -466,12 +500,20 @@ final class TerminalAgentChip: UIControl {
         if pinView.isHidden != !item.isPinned {
             pinView.isHidden = !item.isPinned
         }
+        if qualifierLabel.isHidden != (item.qualifier == nil) {
+            qualifierLabel.isHidden = item.qualifier == nil
+        }
+        // The program name adds to the chip rather than taking from the
+        // title, which keeps the room an unqualified chip gives it.
+        widthLimit?.constant = Self.maximumWidth
+            + (item.qualifier == nil
+                ? 0 : qualifierLabel.intrinsicContentSize.width + Self.qualifierSpacing)
         dot.backgroundColor = item.status.inkUIColor
         backgroundColor = selected ? .tertiarySystemBackground : .clear
         isWorking = item.status == .working
         updatePulse()
 
-        accessibilityLabel = item.title
+        accessibilityLabel = item.qualifier.map { "\(item.title), \($0)" } ?? item.title
         let statusValue = item.status.rawValue.capitalized
         accessibilityValue = item.isPinned ? "Pinned, \(statusValue)" : statusValue
         accessibilityTraits = selected ? [.button, .selected] : .button
@@ -492,6 +534,19 @@ final class TerminalAgentChip: UIControl {
         label.lineBreakMode = .byTruncatingTail
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
+        // The title truncates first: the program name is what tells two
+        // same-titled chips apart.
+        qualifierLabel.font = label.font
+        qualifierLabel.isHidden = true
+        qualifierLabel.setContentHuggingPriority(.required, for: .horizontal)
+        qualifierLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        // Nested so the name sits a word space from the title, closer than
+        // the dot and pin glyph sit.
+        let titleRow = UIStackView(arrangedSubviews: [label, qualifierLabel])
+        titleRow.axis = .horizontal
+        titleRow.alignment = .firstBaseline
+        titleRow.spacing = Self.qualifierSpacing
+
         pinView.translatesAutoresizingMaskIntoConstraints = false
         pinView.image = UIImage(systemName: "pin.fill")
         pinView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(
@@ -501,7 +556,7 @@ final class TerminalAgentChip: UIControl {
         pinView.setContentHuggingPriority(.required, for: .horizontal)
         pinView.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        let content = UIStackView(arrangedSubviews: [dot, label, pinView])
+        let content = UIStackView(arrangedSubviews: [dot, titleRow, pinView])
         content.translatesAutoresizingMaskIntoConstraints = false
         content.axis = .horizontal
         content.alignment = .center
@@ -511,6 +566,7 @@ final class TerminalAgentChip: UIControl {
 
         let width = widthAnchor.constraint(lessThanOrEqualToConstant: Self.maximumWidth)
         width.priority = .required
+        widthLimit = width
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: Self.height),
             width,

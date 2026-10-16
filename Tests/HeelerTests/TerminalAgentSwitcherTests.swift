@@ -16,6 +16,7 @@ struct TerminalAgentSwitcherTests {
         workspace: String? = nil,
         repo: String? = nil,
         name: String? = nil,
+        kind: String = "claude",
         status: AgentStatus = .idle,
         host: UUID = UUID()
     ) -> ConsoleAgent {
@@ -23,7 +24,7 @@ struct TerminalAgentSwitcherTests {
             hostID: host,
             hostName: "devbox",
             agent: Agent(
-                terminalID: "term_\(pane)", kind: "claude", title: "",
+                terminalID: "term_\(pane)", kind: kind, title: "",
                 status: status, workspaceID: "w", tabID: "w:t", paneID: pane,
                 cwd: "/work", revision: 1, name: name),
             workspaceLabel: workspace,
@@ -62,6 +63,94 @@ struct TerminalAgentSwitcherTests {
         let title = AgentCardPresentation(agent: long).switcherTitle
         #expect(title.count == 48 && title.hasSuffix("…"))
         #expect(AgentCardPresentation(agent: project, layout: .init(rows: [])).switcherTitle == "claude")
+    }
+
+    /// Two programs in one workspace both lead with the workspace, so their
+    /// chips read the same; each then carries its program's name, the way a
+    /// notification names it. Chips that already differ stay as they are.
+    @MainActor
+    @Test func chipsThatReadTheSameCarryTheirProgramName() throws {
+        let suiteName = "hm-switcher-qualifiers-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let pins = PinnedAgentsStore(defaults: defaults)
+        let host = UUID()
+        let agents = [
+            Self.makeAgent(pane: "p1", workspace: "proj-omp", kind: "omp", host: host),
+            Self.makeAgent(pane: "p2", workspace: "proj-omp", kind: "pi", host: host),
+            Self.makeAgent(pane: "p3", workspace: "docs", kind: "pi", host: host),
+        ]
+
+        let items = TerminalAgentSwitcherItem.items(
+            for: agents, pins: pins, layout: { _ in .heelerDefault })
+        #expect(items.map(\.title) == ["proj-omp", "proj-omp", "docs"])
+        #expect(items.map(\.qualifier) == ["OMP", "Pi", nil])
+
+        let bar = TerminalAgentSwitcherBar()
+        bar.update(items: items, selectedID: agents[0].id)
+        #expect(bar.chips.map(\.qualifier) == ["OMP", "Pi", nil])
+        #expect(bar.chips.map(\.accessibilityLabel) == ["proj-omp, OMP", "proj-omp, Pi", "docs"])
+
+        // The qualifier leaves with the collision.
+        bar.update(items: [items[1], items[2]].map {
+            TerminalAgentSwitcherItem(
+                id: $0.id, title: $0.title, status: $0.status, isPinned: $0.isPinned)
+        }, selectedID: agents[1].id)
+        #expect(bar.chips.map(\.qualifier) == [nil, nil])
+        #expect(bar.chips.first?.accessibilityLabel == "proj-omp")
+    }
+
+    /// The program name adds to the chip instead of squeezing the title, so
+    /// a qualified title keeps the room an unqualified chip gives it.
+    @MainActor
+    @Test func aProgramNameAddsToTheChipRatherThanTakingFromTheTitle() {
+        let agent = Self.makeAgent(pane: "p1", workspace: "a-workspace-with-a-long-name")
+        let title = AgentCardPresentation(agent: agent).switcherTitle
+        func widestFit(qualifier: String?) -> CGFloat {
+            let chip = TerminalAgentChip(id: agent.id)
+            chip.apply(
+                TerminalAgentSwitcherItem(
+                    id: agent.id, title: title, status: .idle, isPinned: false,
+                    qualifier: qualifier),
+                selected: false)
+            return chip.systemLayoutSizeFitting(
+                CGSize(width: 1000, height: 28),
+                withHorizontalFittingPriority: .fittingSizeLevel,
+                verticalFittingPriority: .required
+            ).width
+        }
+        let plain = widestFit(qualifier: nil)
+        let qualified = widestFit(qualifier: "Gemini CLI")
+        #expect(plain == 148)
+        #expect(qualified > plain + 40, "the name took \(qualified - plain) pt")
+    }
+
+    /// A program name only helps when it differs, and a chip whose own title
+    /// already names the Agent needs none.
+    @MainActor
+    @Test func chipsKeepTheirTitleWhenTheProgramCannotTellThemApart() throws {
+        let suiteName = "hm-switcher-qualifiers-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let pins = PinnedAgentsStore(defaults: defaults)
+        let host = UUID()
+        let twins = [
+            Self.makeAgent(pane: "p1", workspace: "proj", kind: "claude", host: host),
+            Self.makeAgent(pane: "p2", workspace: "proj", kind: "claude", host: host),
+        ]
+        let sameProgram = TerminalAgentSwitcherItem.items(
+            for: twins, pins: pins, layout: { _ in .heelerDefault })
+        #expect(sameProgram.map(\.qualifier) == [nil, nil])
+
+        let named = [
+            Self.makeAgent(pane: "p1", workspace: "proj", name: "omp", kind: "omp", host: host),
+            Self.makeAgent(pane: "p2", workspace: "proj", name: "omp", kind: "pi", host: host),
+        ]
+        let agentFirst = AgentRowLayout(rows: [[.init(.agent)], [.init(.workspace)]])
+        let namedItems = TerminalAgentSwitcherItem.items(
+            for: named, pins: pins, layout: { _ in agentFirst })
+        #expect(namedItems.map(\.title) == ["omp", "omp"])
+        #expect(namedItems.map(\.qualifier) == [nil, nil])
     }
 
     @MainActor

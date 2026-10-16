@@ -67,6 +67,9 @@ Entries reference the pull request that made the change.
 - Chat explains a missing session ID without incorrectly suggesting that the
   integration needs installing, and shows failed session queries with a retry
   while keeping messages already loaded. (#425)
+- Two Agents whose Agents list title or switcher chip reads the same, such as
+  different programs in one Workspace, now show which program each one is
+  ("proj · Pi"). (#425)
 
 ## [0.1.14] - 2026-10-15
 
