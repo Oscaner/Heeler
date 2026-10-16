@@ -204,6 +204,15 @@ struct ClaudeToolOutcomeTests {
             text: decline + " To tell you how to proceed, the user said:\nUse q.txt",
             expected: .declined(feedback: "Use q.txt")),
         Case(
+            name: "Chat about this on a question: Claude's own text is not the user's note",
+            text: decline
+                + " To tell you how to proceed, the user said:\nThe user wants to clarify these questions.\n"
+                + "    Start by asking them what they would like to clarify.",
+            details: ClaudeToolResultDetails(
+                denialKind: "user-rejected",
+                userFeedback: "The user wants to clarify these questions.\n    Questions asked:\n- \"Which size?\""),
+            expected: .declined(feedback: nil)),
+        Case(
             name: "declined without feedback",
             text: decline + " STOP what you are doing and wait for the user to tell you how to proceed.",
             expected: .declined(feedback: nil)),

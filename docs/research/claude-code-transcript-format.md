@@ -248,7 +248,7 @@ How a call that has a result ended; the first matching row wins:
 
 | Evidence | Outcome | Fixture |
 | --- | --- | --- |
-| `toolDenialKind`, or an error starting `The user doesn't want to proceed with this tool use.` (CLI `chunk-v1gtm86q.js` `lC`, `R0`) | Declined. The feedback is `userFeedback`, else the text after `the user said:\n`. | `probe2-transcript.jsonl:26`, `:81` (feedback); `:108`, `:119` (none) |
+| `toolDenialKind`, or an error starting `The user doesn't want to proceed with this tool use.` (CLI `chunk-v1gtm86q.js` `lC`, `R0`) | Declined. The feedback is `userFeedback`, else the text after `the user said:\n`; 2.1.301's `Chat about this` on a question records its own `The user wants to clarify these questions. …` there, which is not the user's. | `probe2-transcript.jsonl:26`, `:81` (feedback); `:108`, `:119` (none) |
 | An error starting `Permission for this tool use was denied` (`lB`, `JQ`) | Declined by a rule or a subagent | none |
 | Text starting with a marker from the CLI's interrupt list (`chunk-p4rztmns.js` `the`; SDK `LI`) | Interrupted or not completed | none |
 | `toolDenialUnanswered` | Not completed: the approval request expired | none |

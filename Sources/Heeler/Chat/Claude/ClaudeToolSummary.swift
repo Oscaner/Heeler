@@ -541,7 +541,7 @@ enum ClaudeToolOutcome: Sendable, Equatable {
             || text.hasPrefix(Self.permissionDeniedPrefix)
         {
             let feedback = details?.userFeedback ?? Self.feedback(in: text)
-            self = .declined(feedback: feedback.flatMap { $0.isEmpty ? nil : $0 })
+            self = .declined(feedback: feedback.flatMap { $0.isEmpty || Self.isClarifyRequest($0) ? nil : $0 })
         } else if text.hasPrefix("The user doesn't want to take this action right now.") {
             self = .declined(feedback: nil)
         } else if text.hasPrefix("[Request interrupted by user") {
@@ -557,6 +557,14 @@ enum ClaudeToolOutcome: Sendable, Equatable {
                 .joined(separator: "\n")
             self = .succeeded(note: note.isEmpty ? nil : note)
         }
+    }
+
+    /// Claude Code's own text for a question's `Chat about this` (2.1.301),
+    /// recorded as the user's feedback although the user typed none.
+    static let clarifyRequestPrefix = "The user wants to clarify these questions."
+
+    static func isClarifyRequest(_ feedback: String) -> Bool {
+        feedback.hasPrefix(clarifyRequestPrefix)
     }
 
     /// What the user typed with a decline: the text after `the user said:`.
