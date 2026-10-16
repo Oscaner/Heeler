@@ -49,12 +49,16 @@ enum ComposerRefusal: Equatable, Sendable {
         }
     }
 
-    /// Whether the refusal was about the Agent's state rather than the text:
-    /// the same draft may go once Agent Status changes, so the notice ends
-    /// then. A refusal of the text itself holds until the text changes.
-    var isTransient: Bool {
+    /// Whether the same draft may go once Agent Status becomes `status`, so
+    /// the notice ends then. A refusal about the Agent's state ends with the
+    /// state it named; one about the input box with any change, since what
+    /// the box shows follows the Agent. A refusal of the text itself holds
+    /// until the text changes.
+    func endsWhenStatusBecomes(_ status: AgentStatus) -> Bool {
         switch self {
-        case .agentBlocked, .commandAwaitsIdle, .inputNotReady: true
+        case .agentBlocked: ChatAgentActivity(status) != .blocked
+        case .commandAwaitsIdle: ChatAgentActivity(status) == .idle
+        case .inputNotReady: true
         case .unsafeText, .unknownCommand, .commandUnavailable: false
         }
     }
@@ -84,7 +88,7 @@ struct ComposerDeliveryPolicy: Sendable {
 }
 
 /// A refusal the Composer shows until the draft it refused changes, a later
-/// Send goes, or, for a transient refusal, Agent Status changes.
+/// Send goes, or Agent Status changes in a way that ends it.
 struct ComposerNotice: Equatable {
     let refusal: ComposerRefusal
     /// The surface that was refused; only it shows the notice.

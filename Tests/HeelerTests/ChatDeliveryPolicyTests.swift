@@ -104,7 +104,7 @@ struct ChatDeliveryPolicyTests {
     /// What the Agent's state held ends with that state, for every program;
     /// what the rules refuse in the text waits for the text to change.
     @Test(arguments: ChatProgram.allCases)
-    func holdsOnTheAgentAreTransientAndRefusalsOfTheTextAreNot(program: ChatProgram) async throws {
+    func holdsOnTheAgentEndWithTheirStateAndRefusalsOfTheTextDoNot(program: ChatProgram) async throws {
         let busy = ChatSendRules(
             program: program, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: false, program: program))
         let blocked = try #require(
@@ -113,27 +113,32 @@ struct ChatDeliveryPolicyTests {
             ComposerDeliveryPolicy.chat(
                 rules: busy, activity: { .working }, readScreen: { throw TransportError.timedOut }
             ).preflight)
-
-        let holds = [await blocked("hello"), await unreadable("hello"), busy.validate("/compact")]
-        let refusals = [busy.validate("!ls"), busy.validate("/nope")]
-
-        for hold in holds {
-            #expect(try #require(hold).isTransient)
+        let statuses: [AgentStatus] = [.idle, .working, .blocked, .done, .unknown]
+        func ending(_ refusal: ComposerRefusal?) throws -> [AgentStatus] {
+            let refusal = try #require(refusal)
+            return statuses.filter { refusal.endsWhenStatusBecomes($0) }
         }
-        for refusal in refusals {
-            #expect(try #require(refusal).isTransient == false)
-        }
+
+        #expect(try ending(await blocked("hello")) == [.idle, .working, .done, .unknown])
+        #expect(try ending(busy.validate("/compact")) == [.idle, .done])
+        #expect(try ending(await unreadable("hello")) == statuses)
         for state in [InputBoxState.text("draft"), .disabled("Working."), .overlay("/compact"), .dialog, .unknown("")] {
-            #expect(ComposerRefusal.inputNotReady(state.holdReason(for: program)).isTransient)
+            #expect(try ending(.inputNotReady(state.holdReason(for: program))) == statuses)
+        }
+        for refusal in [busy.validate("!ls"), busy.validate("/nope")] {
+            #expect(try ending(refusal).isEmpty)
         }
     }
 
-    @Test func ompRefusalsOfTheTextAreNotTransient() throws {
+    @Test func ompRefusalsOfTheTextOutliveEveryStatus() throws {
         let rules = ChatSendRules(
             program: .omp, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: .omp))
 
         for draft in ["exit", "$ print(1)", ".", "-> later", "/compact keep the notes"] {
-            #expect(try #require(rules.validate(draft)).isTransient == false, "\(draft)")
+            let refusal = try #require(rules.validate(draft))
+            for status in [AgentStatus.idle, .working, .blocked, .done, .unknown] {
+                #expect(!refusal.endsWhenStatusBecomes(status), "\(draft)")
+            }
         }
     }
 

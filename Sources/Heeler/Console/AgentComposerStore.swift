@@ -395,7 +395,7 @@ final class AgentComposerStore: ComposerDraftOperations {
         agentStatus = status
         statusRevision &+= 1
         stop.agentStatusChanged(to: status)
-        if notice?.refusal.isTransient == true { notice = nil }
+        if notice?.refusal.endsWhenStatusBecomes(status) == true { notice = nil }
         for index in messages.indices {
             guard messages[index].tracksAgentProgress else { continue }
             if status == .working,

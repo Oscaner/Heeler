@@ -129,6 +129,36 @@ struct AgentComposerChatRouteTests {
         _ = await store.send(policy: Self.chatPolicy(validate: { _ in hold }))
 
         #expect(store.notice?.refusal == hold)
+        store.agentStatusDidChange(.idle)
+        #expect(store.notice == nil)
+    }
+
+    /// `/compact` waits for Idle: a Working Agent turning Blocked is still
+    /// not idle, so the same Send would be refused again.
+    @Test func aCommandAwaitingIdleHoldsUntilTheAgentIsIdle() async {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport, status: .working)
+        store.replaceDraft(with: "/compact")
+        let hold = ComposerRefusal.commandAwaitsIdle("compact")
+
+        _ = await store.send(policy: Self.chatPolicy(validate: { _ in hold }))
+        store.agentStatusDidChange(.blocked)
+        store.agentStatusDidChange(.working)
+
+        #expect(store.notice == ComposerNotice(refusal: hold, route: .chat))
+        store.agentStatusDidChange(.done)
+        #expect(store.notice == nil)
+    }
+
+    @Test func aHoldOnABlockedAgentOutlivesAChangeToBlocked() async {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport, status: .working)
+        store.replaceDraft(with: "hello")
+
+        _ = await store.send(policy: Self.chatPolicy(preflight: { _ in .agentBlocked }))
+        store.agentStatusDidChange(.blocked)
+
+        #expect(store.notice?.refusal == .agentBlocked)
         store.agentStatusDidChange(.working)
         #expect(store.notice == nil)
     }
