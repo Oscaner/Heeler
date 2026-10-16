@@ -1,4 +1,4 @@
-<!-- Translated from docs/guides/overlay-networks.md at d10f1b36 -->
+<!-- Translated from docs/guides/overlay-networks.md at 93baae40 -->
 
 # 通过 Overlay Network 连接 Heeler
 
@@ -84,7 +84,7 @@ Heeler 会直接加入 Overlay Network，因此手机上无需安装 Tailscale�
 
 ## 验证连接
 
-<a href="../images/overlay-networks/networks-connected.png"><img src="../images/overlay-networks/networks-connected.png" width="420" alt="Overlay Networks 列表，三个网络均显示已连接且开关已开启"></a>
+<a href="../images/overlay-networks/networks-connected.png"><img src="../images/overlay-networks/networks-connected.png" width="300" alt="Overlay Networks 列表，三个网络均显示已连接且开关已开启"></a>
 
 这里的 **Connected** 表示 Heeler 已加入网络，不代表 Host 正在使用它。请继续按下方步骤验证 Host 路由。网络名称已匿名化；你只需配置所选网络，不必同时添加三个。轻点图片可放大查看。
 
