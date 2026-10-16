@@ -501,8 +501,11 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         let visibleTop = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
         let visibleBottom = collectionView.contentOffset.y + collectionView.bounds.height
         let range = layout.geometry.indices(from: visibleTop, to: visibleBottom)
+        // Earlier history loads in under the Load Earlier row, which stays
+        // first: holding it still would put the reader at the top of what
+        // loaded, which asks for the next page at once.
         let rows = range.compactMap { index -> (ChatRowID, CGFloat)? in
-            guard let id = layout.id(at: index) else { return nil }
+            guard let id = layout.id(at: index), id != .olderHistory else { return nil }
             return (id, layout.geometry.minY(at: index) - visibleTop)
         }
         return rows.isEmpty ? .end : .rows(rows)

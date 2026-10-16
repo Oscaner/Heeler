@@ -171,6 +171,30 @@ struct ChatTimelineControllerTests {
         }
     }
 
+    @Test func olderRowsLoadedUnderTheLoadEarlierRowKeepTheReadersRowInPlace() async throws {
+        let controller = ChatTimelineController(actions: ChatTimelineActions())
+        let builder = ChatRowBuilder()
+        let newer = await builder.rows(
+            for: ChatTimelineInput(entries: Self.entries(200..<260), older: .available))
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.apply(Self.state(newer))
+            await Self.settle(controller)
+            let view = controller.timeline
+            Self.drag(controller, to: view.minOffsetY)
+            await Self.settle(controller)
+            try #require(controller.visibleRowIDs.contains(.olderHistory))
+            let (anchor, before) = try #require(Self.firstFullyVisibleRow(controller) { $0 != .olderHistory })
+
+            let more = await builder.rows(
+                for: ChatTimelineInput(entries: Self.entries(100..<260), older: .available))
+            controller.apply(Self.state(more, revision: 2))
+            await Self.settle(controller)
+            let after = try #require(Self.screenY(of: anchor, in: controller))
+            #expect(abs(after - before) <= 0.5)
+            #expect(!controller.visibleRowIDs.contains(.olderHistory))
+        }
+    }
+
     @Test func aFollowingListStaysPinnedWhileRowsArriveAndGrow() async throws {
         let controller = ChatTimelineController(actions: ChatTimelineActions())
         let builder = ChatRowBuilder()
