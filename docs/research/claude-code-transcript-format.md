@@ -264,6 +264,15 @@ A decline without feedback ends the turn and is followed by
 the turn continue (`probe2-transcript.jsonl:34`). No record marks an
 approval: a manual approval looks the same as an automatic allow.
 
+Claude Code 2.1.301 records a running call stopped with Esc like a decline
+without feedback: the same `The user doesn't want to proceed with this tool
+use.` result, `toolUseResult` `"User rejected tool use"` and `toolDenialKind`
+`"user-rejected"`. Only the marker after it differs: it carries
+`interruptedMessageId`, the stopped call's assistant `message.id`, which a
+decline's marker lacks (observed live 2026-10-16; the terminal shows
+`Interrupted · What should Claude do instead?` for both). Chat reads that
+pair as Interrupted.
+
 ### Result fields by tool
 
 | Tool | `input` | `toolUseResult` |

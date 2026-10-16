@@ -150,9 +150,16 @@ private struct Builder {
         var record: ClaudeRecord
         var result: ClaudeToolResult
         var trailingTexts: [String] = []
+        /// The interrupt marker after the result names the call's reply:
+        /// Esc stopped the call while it ran. Claude Code 2.1.301 records
+        /// that result with the decline text a refused approval gets, whose
+        /// marker names no reply.
+        var stoppedWhileRunning = false
 
         var outcome: ClaudeToolOutcome {
-            ClaudeToolOutcome(result: result, details: record.toolResult, trailingTexts: trailingTexts)
+            let outcome = ClaudeToolOutcome(result: result, details: record.toolResult, trailingTexts: trailingTexts)
+            if stoppedWhileRunning, case .declined(feedback: nil) = outcome { return .interrupted }
+            return outcome
         }
     }
 
@@ -190,6 +197,8 @@ private struct Builder {
     private var selected: [String: ClaudeRecord] = [:]
     private var children: [String: [ClaudeRecord]] = [:]
     private var answers: [String: Answer] = [:]
+    /// The assistant `message.id` each tool call was sent in.
+    private var callMessages: [String: String] = [:]
     /// Offsets of records that start a new turn or end one, ascending.
     private var turnBoundaries: [UInt64] = []
     /// The turns opened so far, in chain order. A turn whose opener placed
@@ -227,6 +236,7 @@ private struct Builder {
                 children[parent, default: []].append(record)
             }
             collectAnswers(in: record)
+            collectCallMessages(in: record)
             if Self.isTurnBoundary(record) {
                 turnBoundaries.append(record.byteOffset)
             }
@@ -248,6 +258,7 @@ private struct Builder {
                 if record.kind == .user { notificationKeys.insert(Self.key(of: notification)) }
             }
         }
+        markStoppedCalls()
         // Claude Code queues a notification as soon as the work ends, and
         // delivers it once the session can take it, which can be minutes
         // into a busy turn.
@@ -805,6 +816,24 @@ private struct Builder {
     private mutating func collectAnswers(in record: ClaudeRecord) {
         for answer in Self.answers(in: record) {
             store(answer)
+        }
+    }
+
+    private mutating func collectCallMessages(in record: ClaudeRecord) {
+        guard let messageID = record.messageID else { return }
+        for case .toolUse(let use) in record.blocks where !use.id.isEmpty {
+            callMessages[use.id] = messageID
+        }
+    }
+
+    private mutating func markStoppedCalls() {
+        for (callID, answer) in answers {
+            guard let messageID = callMessages[callID],
+                children[answer.record.uuid]?.contains(where: {
+                    $0.interruptedMessageID == messageID && Self.isInterruptMarker($0)
+                }) == true
+            else { continue }
+            answers[callID]?.stoppedWhileRunning = true
         }
     }
 

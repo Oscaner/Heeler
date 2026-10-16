@@ -107,6 +107,8 @@ struct ClaudeToolSummary: Sendable, Equatable {
         outcome: ClaudeToolOutcome
     ) -> ChatToolPreview? {
         if case .declined = outcome { return nil }
+        // A call stopped while it ran can carry the decline text.
+        if result.content.text.hasPrefix(ClaudeToolOutcome.userDeclinePrefix) { return nil }
         let structured = details?.result
         let content = result.content.text.isEmpty && result.content.imageCount == 0 ? nil : result.content
         switch use.name {

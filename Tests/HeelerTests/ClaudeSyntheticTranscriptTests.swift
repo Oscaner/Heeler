@@ -481,6 +481,31 @@ struct ClaudeSyntheticTranscriptTests {
         #expect(cutOff.pendingRequests.isEmpty)
     }
 
+    /// A running call stopped with Esc, as Claude Code 2.1.301 records it:
+    /// the result is the decline text, and only the marker after it names
+    /// the interrupted reply's `message.id`.
+    private static func stoppedCall(markerNamesReply: Bool) -> String {
+        let marker = markerNamesReply ? #""interruptedMessageId":"m1","# : ""
+        return #"""
+            {"type":"user","uuid":"p1","parentUuid":null,"message":{"role":"user","content":"Wait a while"},"promptSource":"typed","origin":{"kind":"human"}}
+            {"type":"assistant","uuid":"a1","parentUuid":"p1","message":{"id":"m1","role":"assistant","content":[{"type":"tool_use","id":"toolu_sleep","name":"Bash","input":{"command":"sleep 30"}}]},"apiBlockIndex":0}
+            {"type":"user","uuid":"r1","parentUuid":"a1","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_sleep","content":"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.","is_error":true}]},"toolUseResult":"User rejected tool use","toolDenialKind":"user-rejected"}
+            {"type":"user","uuid":"i1","parentUuid":"r1",\#(marker)"message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]}}
+            """#
+    }
+
+    @Test("A call stopped while it ran is interrupted, though its result reads as a decline")
+    func stoppedWhileRunning() {
+        let (stopped, _) = Self.read(Self.stoppedCall(markerNamesReply: true))
+        #expect(stopped.entries.map(\.id.rawValue) == ["user:p1", "tool:toolu_sleep"])
+        #expect(Self.tool("tool:toolu_sleep", in: stopped)?.status == .interrupted)
+        #expect(Self.tool("tool:toolu_sleep", in: stopped)?.preview == nil)
+
+        let (declined, _) = Self.read(Self.stoppedCall(markerNamesReply: false))
+        #expect(declined.entries.map(\.id.rawValue) == ["user:p1", "tool:toolu_sleep"])
+        #expect(Self.tool("tool:toolu_sleep", in: declined)?.status == .declined)
+    }
+
     @Test("An approval closed unanswered did not complete")
     func unansweredApproval() {
         let (transcript, _) = Self.read(
