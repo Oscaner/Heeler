@@ -73,6 +73,8 @@ capture.
   before the Write.
 - `claude-39` is a 2.1.301 question at the same grid in a named session:
   under the footer Claude draws a rule carrying the session's name.
+  `claude-40` is the review page after a multi-select answer: no footer,
+  only that rule.
 
 Scrubbing used the same same-length replacements as above, so every column
 is as captured. The shell prompt on the first row of `claude-00-trust.ansi`

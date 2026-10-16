@@ -544,9 +544,11 @@ private struct ClaudeDialogReader {
         var index = row
         while index < rows.count, rows[index].isBlank { index += 1 }
         while index < rows.count, !rows[index].isBlank {
-            if !footerRows.isEmpty, DialogRowScanner.isLabeledRule(rows[index], of: "─", minimumWidth: fullWidth) {
+            if DialogRowScanner.isLabeledRule(rows[index], of: "─", minimumWidth: fullWidth) {
                 // Claude Code 2.1.301 draws a rule under the dialog that
                 // carries the session's name (`──── create-q-txt-probe ─`).
+                // The input box's own top rule looks the same, but its
+                // prompt row follows, so the rows below aren't blank.
                 index += 1
                 break
             }

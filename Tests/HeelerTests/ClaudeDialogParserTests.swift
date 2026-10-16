@@ -192,6 +192,14 @@ struct ClaudeDialogParserTests {
         #expect(typed.fingerprint == page.fingerprint)
     }
 
+    @Test("A review page over the rule with the session's name, with no footer")
+    func reviewOverALabeledRule() throws {
+        let dialog = try dialog("claude-40-c8-phone-review-titled-rule")
+        #expect(dialog.kind == .claudeQuestionReview)
+        #expect(dialog.body == ["● Which colors?", "→ Red, Blue", "Ready to submit your answers?"])
+        #expect(dialog.options.map(\.label) == ["Submit answers", "Cancel"])
+    }
+
     @Test("The review page after the last question")
     func reviewPage() throws {
         let dialog = try dialog("claude-14-c4-review")
