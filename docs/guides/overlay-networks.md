@@ -82,7 +82,7 @@ To fill in the address on the route page, Tailscale offers **Choose from Tailnet
 
 ## Verify the connection
 
-<a href="images/overlay-networks/networks-connected.png"><img src="images/overlay-networks/networks-connected.png" width="420" alt="Overlay Networks list with three connected networks and their switches on"></a>
+<a href="images/overlay-networks/networks-connected.png"><img src="images/overlay-networks/networks-connected.png" width="300" alt="Overlay Networks list with three connected networks and their switches on"></a>
 
 **Connected** here means Heeler has joined the network, not that a Host is using it. Follow the checks below to verify the Host's route. Network names have been anonymized; you only need the network you chose, not all three. Tap the image to enlarge it.
 

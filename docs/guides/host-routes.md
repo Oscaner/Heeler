@@ -30,7 +30,7 @@ Open the Host from **Hosts**. The card at the top shows the connection:
 - While Heeler is connecting, tap ■ to stop trying. The Host stays paused until you tap **Reconnect**.
 - **Can't Connect** means no route reached the Host. Each route is marked **Failed** with its own reason, such as a timeout or an overlay network that isn't connected.
 
-<a href="images/overlay-networks/host-routes-in-use.png"><img src="images/overlay-networks/host-routes-in-use.png" width="420" alt="Connected Host with a Jump Host route marked In Use and a Direct route not selected"></a>
+<a href="images/overlay-networks/host-routes-in-use.png"><img src="images/overlay-networks/host-routes-in-use.png" width="300" alt="Connected Host with a Jump Host route marked In Use and a Direct route not selected"></a>
 
 Here the Jump Host route is **In Use**; the **Direct** route is not selected. This illustrates route selection, not an overlay connection test. Names and addresses have been anonymized. Tap the image to enlarge it.
 
