@@ -12,16 +12,14 @@ Entries reference the pull request that made the change.
 - Pair a Host whose herdr runs outside your own config, such as one bundled
   in a desktop app, from a version 2 Pairing Code. The Host keeps that
   herdr's socket and launcher, shows them in Host detail, and runs every
-  connection and herdr command through them. macOS and Linux Hosts only.
-  Such a code without a one-time key waits for you to tap Pair, since
-  pairing runs its launcher on the Host. A Pairing Code version this app
-  does not know now asks you to update Heeler. (#432)
+  connection and herdr command through them, including the commands Heeler
+  suggests for plugin management and forced Worktree removal. macOS and
+  Linux Hosts only. Such a code without a one-time key waits for you to tap
+  Pair, since pairing runs its launcher on the Host. A Pairing Code version
+  this app does not know now asks you to update Heeler. (#432)
 
 ### Fixed
 
-- Recovery commands for a Host with a Herdr Endpoint now use its launcher
-  and socket for plugin management and forced Worktree removal. Connection
-  hints describe the configured instance without assuming a desktop app. (#432)
 - Closing a connection through a Tailscale network no longer risks shutting
   down an unrelated connection that reused its file descriptor. Tailscale
   networks now run libtailscale 0.2.0 with Tailscale v1.104.1. (#463)
