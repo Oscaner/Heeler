@@ -19,6 +19,9 @@ Entries reference the pull request that made the change.
 
 ### Fixed
 
+- Recovery commands for a Host with a Herdr Endpoint now use its launcher
+  and socket for plugin management and forced Worktree removal. Connection
+  hints describe the configured instance without assuming a desktop app. (#432)
 - Closing a connection through a Tailscale network no longer risks shutting
   down an unrelated connection that reused its file descriptor. Tailscale
   networks now run libtailscale 0.2.0 with Tailscale v1.104.1. (#463)

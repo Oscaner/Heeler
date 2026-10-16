@@ -55,8 +55,8 @@ struct PreflightReport: Equatable, Sendable {
     /// Maps a transport failure onto the check it disproves, with a fix-it
     /// hint. `authMethod` steers the credential hint: a rejected device key
     /// and a wrong password have different fixes. `usesHerdrEndpoint` points
-    /// the socket and protocol hints at the app that provides the Host's herdr
-    /// endpoint (ADR 0023), whose socket no session name can fix.
+    /// the socket and protocol hints at the configured herdr instance
+    /// (ADR 0023), whose socket no session name can fix.
     static func failure(
         _ error: TransportError, authMethod: Host.AuthMethod, usesHerdrEndpoint: Bool = false
     ) -> PreflightReport {
@@ -112,8 +112,8 @@ struct PreflightReport: Equatable, Sendable {
             check = .herdrInstalled
             if usesHerdrEndpoint {
                 hint =
-                    "No herdr socket at \(path). Open the app that provides herdr on the Host, "
-                    + "then run the checks again."
+                    "No herdr socket at \(path). Start the herdr instance configured for this Host "
+                    + "and verify its socket path, then run the checks again."
             } else {
                 hint =
                     "No herdr socket at \(path). Install and start herdr on the Host, "
@@ -131,8 +131,8 @@ struct PreflightReport: Equatable, Sendable {
             check = .serverRunning
             if usesHerdrEndpoint {
                 hint =
-                    "Could not open the herdr socket at \(path). Open the app that provides "
-                    + "herdr on the Host, or enable SSH stream-local forwarding and run the "
+                    "Could not open the herdr socket at \(path). Start the herdr instance "
+                    + "configured for this Host, or enable SSH stream-local forwarding and run the "
                     + "checks again."
             } else {
                 hint =
@@ -150,7 +150,7 @@ struct PreflightReport: Equatable, Sendable {
             // carries an advisory notice instead of failing here.
             let update =
                 usesHerdrEndpoint
-                ? "Update the app that provides herdr on the Host." : "Update herdr on the Host."
+                ? "Update the herdr instance configured for this Host." : "Update herdr on the Host."
             hint =
                 "The Host speaks herdr protocol \(server); this app needs at least "
                 + "\(supported). \(update)"
@@ -190,8 +190,9 @@ struct PreflightReport: Equatable, Sendable {
         case .herdrLauncherNotFound(let path):
             check = .herdrInstalled
             hint =
-                "The herdr launcher at \(path) could not run. Open the app that provides "
-                + "herdr on the Host, or pair the Host again."
+                "The herdr launcher at \(path) could not run. "
+                + "Check that this launcher exists, is executable, and can start herdr. "
+                + "Pair the Host again if its path changed."
         case .jumpHostFailed(let underlying):
             // The first hop broke, so the Host itself was never contacted and
             // nothing about it has been disproved. Name the Jump Host as the

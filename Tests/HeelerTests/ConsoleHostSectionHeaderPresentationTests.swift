@@ -303,9 +303,9 @@ struct HostConnectionDetailPresentationTests {
         #expect(retrying.isDialing)
     }
 
-    /// A stopped endpoint Host points at the app that provides herdr, in the
+    /// A stopped endpoint Host points at its configured instance, in the
     /// sheet and in the Console's status line.
-    @Test func aStoppedEndpointHostIsToldToOpenTheProvidingApp() throws {
+    @Test func aStoppedEndpointHostIsToldToStartTheConfiguredInstance() throws {
         var endpointHost = host
         endpointHost.herdrEndpoint = try #require(
             HerdrEndpoint(
@@ -316,11 +316,11 @@ struct HostConnectionDetailPresentationTests {
         let detail = try #require(
             HostConnectionDetailPresentation(
                 host: endpointHost, status: .failed(failure), standingFailure: nil))
-        #expect(detail.recoverySuggestion == "Open the app that provides herdr on this Host.")
+        #expect(detail.recoverySuggestion == "Start the herdr instance configured for this Host and verify its socket path.")
         let status = try #require(
             ConsoleHostStatusPresentation(
                 host: endpointHost, status: .failed(failure), syncError: nil))
-        #expect(status.message.hasSuffix("Open the app that provides herdr on this Host."))
+        #expect(status.message.hasSuffix("Start the herdr instance configured for this Host and verify its socket path."))
     }
 
     /// A reconnecting Host's Retry Now dials with no standing failure; the

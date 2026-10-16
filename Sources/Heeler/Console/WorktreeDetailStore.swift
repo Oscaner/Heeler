@@ -35,9 +35,9 @@ final class WorktreeDetailStore {
     /// Command.
     private(set) var refusalCommand: String?
 
-    /// The Host's herdr session name, blank for the default session, so a
-    /// command a refusal hands over asks the same herdr server as the removal.
+    /// Recovery commands target the same endpoint or session as the removal.
     private let sessionName: String
+    private let endpoint: HerdrEndpoint?
     private let list: (String) async throws -> WorktreeListResponse
     private let remove: (WorktreeRemovalRequest) async throws -> WorktreeRemovalReceipt
     private let hasWorkingAgent: () -> Bool
@@ -52,6 +52,7 @@ final class WorktreeDetailStore {
         workspaceLabel: String,
         checkout: RepositoryCheckout,
         sessionName: String,
+        endpoint: HerdrEndpoint? = nil,
         list: @escaping (String) async throws -> WorktreeListResponse,
         remove: @escaping (WorktreeRemovalRequest) async throws -> WorktreeRemovalReceipt,
         hasWorkingAgent: @escaping () -> Bool,
@@ -61,6 +62,7 @@ final class WorktreeDetailStore {
         self.workspaceLabel = workspaceLabel
         self.checkout = checkout
         self.sessionName = sessionName
+        self.endpoint = endpoint
         self.list = list
         self.remove = remove
         self.hasWorkingAgent = hasWorkingAgent
@@ -182,7 +184,7 @@ final class WorktreeDetailStore {
             removalPhase = .idle
         } catch {
             let refusal = WorktreeRemovalRefusal(
-                error, request: request, sessionName: sessionName)
+                error, request: request, sessionName: sessionName, endpoint: endpoint)
             refusalOffersChanges = showChangesHandler != nil && refusal.offersChanges
             refusalCommand = refusal.command
             removalPhase = .failed(refusal.message)

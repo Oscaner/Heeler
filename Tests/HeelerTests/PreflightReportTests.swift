@@ -177,7 +177,8 @@ struct PreflightReportTests {
                 == .failed(
                     hint: "The herdr launcher at "
                         + "/Users/ada/Library/Application Support/Example/bin/herdr could not run. "
-                        + "Open the app that provides herdr on the Host, or pair the Host again."))
+                        + "Check that this launcher exists, is executable, and can start herdr. "
+                        + "Pair the Host again if its path changed."))
         #expect(report[.serverRunning] == .blocked)
     }
 
@@ -211,26 +212,25 @@ struct PreflightReportTests {
         }
     }
 
-    /// An endpoint's socket comes from its Pairing Code, so no session name
-    /// or herdr update on the Host can fix it: point at the providing app.
-    @Test func endpointHostsPointSocketAndProtocolHintsAtTheProvidingApp() {
+    /// Endpoint recovery names the configured instance, not its provider.
+    @Test func endpointHostsPointSocketAndProtocolHintsAtTheConfiguredInstance() {
         let path = "/Users/ada/Library/Application Support/Example/herdr/herdr.sock"
         let cases: [(TransportError, PreflightCheck, String)] = [
             (
                 .socketNotFound(path: path), .herdrInstalled,
-                "No herdr socket at \(path). Open the app that provides herdr on the Host, "
-                    + "then run the checks again."
+                "No herdr socket at \(path). Start the herdr instance configured for this Host "
+                    + "and verify its socket path, then run the checks again."
             ),
             (
                 .streamLocalOpenFailed(path: path), .serverRunning,
-                "Could not open the herdr socket at \(path). Open the app that provides "
-                    + "herdr on the Host, or enable SSH stream-local forwarding and run the "
+                "Could not open the herdr socket at \(path). Start the herdr instance "
+                    + "configured for this Host, or enable SSH stream-local forwarding and run the "
                     + "checks again."
             ),
             (
                 .protocolVersionMismatch(server: 16, supported: 17), .protocolCompatible,
                 "The Host speaks herdr protocol 16; this app needs at least 17. "
-                    + "Update the app that provides herdr on the Host."
+                    + "Update the herdr instance configured for this Host."
             ),
         ]
         for (error, check, hint) in cases {

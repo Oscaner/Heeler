@@ -134,20 +134,22 @@ struct WorktreeRemovalRefusal {
     private static let submodulesRefusal =
         "working trees containing submodules cannot be moved or removed"
 
-    /// `sessionName` is the Host's herdr session name, blank for the default
-    /// session.
-    init(_ error: any Error, request: WorktreeRemovalRequest, sessionName: String) {
+    /// The endpoint overrides the Host's session, as it does for API requests.
+    init(
+        _ error: any Error, request: WorktreeRemovalRequest, sessionName: String,
+        endpoint: HerdrEndpoint? = nil
+    ) {
         switch error {
         case let removal as WorktreeRemovalError:
             self.init(message: removal.message)
         case let api as HerdrAPIError:
             self.init(
                 code: api.code, serverMessage: api.message,
-                request: request, sessionName: sessionName)
+                request: request, sessionName: sessionName, endpoint: endpoint)
         case let TransportError.apiRejected(code, message):
             self.init(
                 code: code, serverMessage: message,
-                request: request, sessionName: sessionName)
+                request: request, sessionName: sessionName, endpoint: endpoint)
         case TransportError.sshUnreachable:
             self.init(message: "The Host is not connected.")
         case TransportError.timedOut:
@@ -167,7 +169,7 @@ struct WorktreeRemovalRefusal {
 
     private init(
         code: String, serverMessage: String,
-        request: WorktreeRemovalRequest, sessionName: String
+        request: WorktreeRemovalRequest, sessionName: String, endpoint: HerdrEndpoint?
     ) {
         switch code {
         case Self.forceRequiredCode
@@ -181,7 +183,7 @@ struct WorktreeRemovalRefusal {
                 self.init(message: warning, offersChanges: true)
             } else {
                 let command = HerdrCommandLine.render(
-                    session: sessionName,
+                    session: sessionName, endpoint: endpoint,
                     arguments: ["worktree", "remove", "--workspace", workspaceID, "--force"])
                 self.init(
                     message: "\(warning) To force it, run on the Host: \(command)",

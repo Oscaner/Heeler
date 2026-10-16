@@ -566,7 +566,8 @@ struct HostOnboardingStoreTests {
             report[.herdrInstalled]
                 == .failed(
                     hint: "The herdr launcher at \(Self.endpointLauncherPath) could not run. "
-                        + "Open the app that provides herdr on the Host, or pair the Host again."))
+                        + "Check that this launcher exists, is executable, and can start herdr. "
+                        + "Pair the Host again if its path changed."))
         #expect(await transport.pingCount == 0)
         #expect(await transport.isClosed)
         #expect(store.availableSessions.isEmpty)
@@ -605,7 +606,7 @@ struct HostOnboardingStoreTests {
         #expect(await transport.pingCount == 0)
     }
 
-    @Test func endpointPingFailuresPointAtTheProvidingApp() async throws {
+    @Test func endpointPingFailuresPointAtTheConfiguredInstance() async throws {
         let (store, _) = try makeEndpointStore(
             probe: .success([]),
             ping: .failure(.socketNotFound(path: Self.endpointSocketPath)))
@@ -616,8 +617,8 @@ struct HostOnboardingStoreTests {
         #expect(
             report[.herdrInstalled]
                 == .failed(
-                    hint: "No herdr socket at \(Self.endpointSocketPath). Open the app that "
-                        + "provides herdr on the Host, then run the checks again."))
+                    hint: "No herdr socket at \(Self.endpointSocketPath). Start the herdr instance "
+                        + "configured for this Host and verify its socket path, then run the checks again."))
     }
 }
 

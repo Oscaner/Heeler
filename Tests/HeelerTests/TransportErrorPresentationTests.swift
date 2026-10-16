@@ -315,18 +315,18 @@ struct TransportErrorPresentationTests {
 
     /// An endpoint Host has no session to fix (ADR 0023). Every other error,
     /// and every Host without an endpoint, keeps the shared copy.
-    @Test func endpointHostsAreToldToOpenTheProvidingApp() {
+    @Test func endpointHostsAreToldToStartTheConfiguredInstance() {
         let missing = TransportError.socketNotFound(path: "/tmp/herdr/herdr.sock")
         #expect(
             missing.presentation(usesHerdrEndpoint: true).message
                 == "The herdr socket was not found: /tmp/herdr/herdr.sock. "
-                + "Open the app that provides herdr on this Host.")
+                + "Start the herdr instance configured for this Host and verify its socket path.")
         #expect(missing.presentation(usesHerdrEndpoint: false) == missing.presentation)
         let mismatch = TransportError.protocolVersionMismatch(server: 16, supported: 17)
         #expect(mismatch.presentation(usesHerdrEndpoint: true) == mismatch.presentation)
     }
 
-    @Test func missingHerdrLauncherNamesItsPathAndTheProvidingApp() {
+    @Test func missingHerdrLauncherNamesItsPathAndHowToRepairIt() {
         let failure = TransportError.herdrLauncherNotFound(
             path: "/Users/ada/Library/Application Support/Example/bin/herdr")
         #expect(!failure.isRetryable)
@@ -336,12 +336,14 @@ struct TransportErrorPresentationTests {
         #expect(presentation.detail == "/Users/ada/Library/Application Support/Example/bin/herdr")
         #expect(
             presentation.recoverySuggestion
-                == "Open the app that provides herdr on this Host, or pair it again.")
+                == "Check that this launcher exists, is executable, and can start herdr. "
+                + "Pair the Host again if its path changed.")
         #expect(
             presentation.message
                 == "The herdr launcher could not run: "
                 + "/Users/ada/Library/Application Support/Example/bin/herdr. "
-                + "Open the app that provides herdr on this Host, or pair it again.")
+                + "Check that this launcher exists, is executable, and can start herdr. "
+                + "Pair the Host again if its path changed.")
     }
 
     @Test func protocolVersionMismatchNamesTheUpdate() {

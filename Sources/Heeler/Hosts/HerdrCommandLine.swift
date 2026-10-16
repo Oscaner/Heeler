@@ -1,7 +1,7 @@
 import Foundation
 
 /// A herdr command line for the user to run on a Host, aimed at the herdr
-/// session the Host targets.
+/// instance the Host targets.
 enum HerdrCommandLine {
     /// `herdr <arguments>` for the default session, or
     /// `herdr --session <name> <arguments>` for a named one.
@@ -20,7 +20,16 @@ enum HerdrCommandLine {
     /// quoted, so such a word cannot be passed as an argument: a caller
     /// passing a value Heeler did not choose, such as a herdr id, checks it
     /// with `readsAsGlobalOption` and offers no command when it matches.
-    static func render(session: String, arguments: [String]) -> String {
+    /// An endpoint overrides `session`. Pass its socket, launcher and argv
+    /// as separate words, keeping shell syntax out of the POSIX wrapper.
+    static func render(
+        session: String, endpoint: HerdrEndpoint? = nil, arguments: [String]
+    ) -> String {
+        if let endpoint {
+            return "/bin/sh -c 'export HERDR_SOCKET_PATH=\"$1\"; shift; exec \"$@\"' herdr "
+                + ([endpoint.socketPath, endpoint.executablePath] + arguments)
+                    .map(word).joined(separator: " ")
+        }
         let name = session.trimmingCharacters(in: .whitespaces)
         let scope = name.isEmpty ? [] : ["--session", name]
         return (["herdr"] + (scope + arguments).map(word)).joined(separator: " ")
