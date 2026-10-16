@@ -61,7 +61,7 @@ struct CodexLegacyBuilder {
 
     private mutating func apply(_ record: CodexRecord, line: CodexStoredLine) {
         switch record {
-        case .turnStarted(let turnID, _):
+        case .turnStarted(let turnID, _, _):
             finishCurrent()
             current = Turn(id: turnID, isExplicit: true, status: .inProgress)
         case .turnCompleted(let turnID, let error, _):

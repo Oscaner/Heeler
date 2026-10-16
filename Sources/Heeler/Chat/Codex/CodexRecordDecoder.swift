@@ -174,7 +174,10 @@ enum CodexRecordDecoder {
     ) -> EventResult {
         switch type {
         case "task_started", "turn_started":
-            return event.turnID.map { .record(.turnStarted(turnID: $0, times: turnTimes(event))) } ?? .malformed
+            return event.turnID.map { turnID in
+                let root = event.rootTurnID.flatMap { $0.isEmpty || $0 == turnID ? nil : $0 }
+                return .record(.turnStarted(turnID: turnID, rootTurnID: root, times: turnTimes(event)))
+            } ?? .malformed
         case "task_complete", "turn_complete":
             return event.turnID.map {
                 .record(.turnCompleted(turnID: $0, error: event.errorMessage, times: turnTimes(event)))

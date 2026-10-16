@@ -19,6 +19,39 @@ struct CodexToolSummaryTests {
         #expect(parsed.body == outputCase.body)
     }
 
+    @Test("A review's forwarded reviewer turn joins the review turn without its prompt")
+    func reviewForwardedTurn() {
+        // Codex 0.162.1: the review turn has no task_started; the reviewer's
+        // turn starts under it and writes the prompt Codex made for it.
+        var builder = CodexRolloutBuilder()
+        builder.item(
+            "rv", ["type": "EnteredReviewMode", "id": "e1", "user_facing_hint": "current changes"])
+        builder.event(
+            "task_started", [("turn_id", "child"), ("root_turn_id", "rv"), ("started_at", 1_791_266_142)])
+        builder.userMessage("child", id: "u1", text: "Review the current code changes and provide findings.")
+        builder.command("child", id: "c1", argv: ["/bin/zsh", "-lc", "git diff"])
+        builder.item(
+            "rv",
+            [
+                "type": "ExitedReviewMode", "id": "x1",
+                "review_output": ["findings": [], "overall_explanation": "No issues."],
+            ])
+        builder.agentMessage("rv", id: "a1", text: "No issues.")
+        builder.turnComplete("rv")
+
+        let entries = builder.reducer().transcript(ChatProjectionContext(activity: .idle)).entries
+        let shapes: [String] = entries.map { entry in
+            switch entry.content {
+            case .user(let message): "user \(message.text)"
+            case .assistant(let message): "assistant \(message.text)"
+            case .tool(let tool): "tool \(tool.title)"
+            case .notice(let notice): "notice \(notice.title)"
+            default: "other"
+            }
+        }
+        #expect(shapes == ["notice Review started", "tool git diff", "notice Review finished", "assistant No issues."])
+    }
+
     @Test("Turn items become tool rows")
     func toolItems() {
         var builder = CodexRolloutBuilder()

@@ -28,6 +28,13 @@ struct CodexOrdinalDiagnostics: Equatable, Sendable {
 /// of its first snapshot and the content of its latest, in the turn its
 /// line names, however late it arrives.
 ///
+/// A turn started under the root of a turn already in the file is that
+/// turn's forwarded work: a review's reviewer turn writes its prompt,
+/// commands and reasoning into the parent rollout under its own turn id
+/// (`codex-rs/core/src/tasks/review.rs`, `process_review_events`). Its items
+/// join the root turn, and its prompt, which Codex wrote for the reviewer,
+/// is not the user's message.
+///
 /// Response items are never rows (their `item_completed` twins are). The
 /// exception is the sync `request_user_input` call, which has no turn item:
 /// its question row pairs the call with the `verified_answer` or tool
@@ -71,6 +78,8 @@ struct CodexPaginatedBuilder {
     private var questionTurns: [String: String] = [:]
     /// The turn last started, for a question call without a turn id.
     private var currentTurnID: String?
+    /// Turns whose items join their root turn, by turn id.
+    private var forwardedTurns: [String: String] = [:]
     private var ordinals = CodexOrdinalDiagnostics()
 
     /// The timeline of `segments`, oldest first, each already cut to the
@@ -116,13 +125,19 @@ struct CodexPaginatedBuilder {
 
     private mutating func apply(_ record: CodexRecord, line: CodexStoredLine, segment: CodexSegment, at position: Position) {
         switch record {
-        case .turnStarted(let turnID, let times):
+        case .turnStarted(let started, let root, let times):
+            var turnID = started
+            if let root, turns[root] != nil {
+                forwardedTurns[started] = root
+                turnID = root
+            }
             touch(turnID, at: position)
             turns[turnID]?.sawStart = true
             note(times, of: turnID)
             setStatus(.inProgress, of: turnID, ending: nil, line: line, segment: segment, at: position)
             currentTurnID = turnID
-        case .turnCompleted(let turnID, let error, let times):
+        case .turnCompleted(let completed, let error, let times):
+            let turnID = forwardedTurns[completed] ?? completed
             touch(turnID, at: position)
             note(times, of: turnID)
             if let error {
@@ -130,13 +145,16 @@ struct CodexPaginatedBuilder {
             } else {
                 setStatus(.completed, of: turnID, ending: nil, line: line, segment: segment, at: position)
             }
-        case .turnAborted(let turnID?, let reason, let error, let times):
+        case .turnAborted(let aborted?, let reason, let error, let times):
+            let turnID = forwardedTurns[aborted] ?? aborted
             touch(turnID, at: position)
             note(times, of: turnID)
             let ending: CodexTimelineEntry.Content? =
                 reason == .replaced || reason == .reviewEnded ? nil : .stopped(reason, error: error)
             setStatus(.interrupted, of: turnID, ending: ending, line: line, segment: segment, at: position)
-        case .item(let turnID, let item):
+        case .item(let named, let item):
+            let turnID = forwardedTurns[named] ?? named
+            if turnID != named, case .user = item.content { return }
             touch(turnID, at: position)
             guard var turn = turns[turnID] else { return }
             if var existing = turn.items[item.id] {

@@ -572,6 +572,9 @@ struct CodexRawReviewOutput: Decodable {
 struct CodexRawEvent: Decodable {
     var type: String?
     var turnID: String?
+    /// A turn event's root turn: another turn's id when the turn runs work
+    /// forwarded into it, such as a review's reviewer turn.
+    var rootTurnID: String?
     var reason: CodexAbortReason?
     var errorMessage: String?
     var item: CodexRawItem?
@@ -615,6 +618,7 @@ struct CodexRawEvent: Decodable {
         let container = try decoder.container(keyedBy: CodexKey.self)
         type = container.lenient("type")
         turnID = container.lenient("turn_id")
+        rootTurnID = container.lenient("root_turn_id")
         reason = container.lenient("reason")
         errorMessage = container.lenient("error", as: CodexRawError.self)?.message
         item = container.lenient("item")
@@ -1011,7 +1015,8 @@ struct CodexTurnTimes: Equatable, Sendable {
 
 /// What one line contributes to the transcript.
 enum CodexRecord: Equatable, Sendable {
-    case turnStarted(turnID: String, times: CodexTurnTimes)
+    /// `rootTurnID` is set when it names another turn.
+    case turnStarted(turnID: String, rootTurnID: String? = nil, times: CodexTurnTimes)
     case turnCompleted(turnID: String, error: String?, times: CodexTurnTimes)
     case turnAborted(turnID: String?, reason: CodexAbortReason, error: String?, times: CodexTurnTimes)
     case item(turnID: String, CodexItem)

@@ -277,6 +277,16 @@ The app server projects a paginated rollout like this
   abort at `:35`, and `probe1-rollout.jsonl:21` after the output of the cell
   that ran it.
 - Turns sort by their first ordinal.
+- A review forwards its reviewer's events into the parent rollout
+  (`codex-rs/core/src/tasks/review.rs`, `process_review_events`): Codex
+  0.162.1 writes `EnteredReviewMode` in the review turn (which gets no
+  `task_started`), then a `task_started` for the reviewer's own turn with
+  `root_turn_id` naming the review turn, the reviewer's `UserMessage`
+  (the prompt Codex wrote for it, `thread_id` = the reviewer's thread),
+  its commands and reasoning, and finally `ExitedReviewMode` and the answer
+  in the review turn. The reviewer turn never completes. Heeler folds such
+  a turn into its root turn (when the root is already in the file) and
+  drops its `UserMessage`, so the review reads as one turn.
 
 When a thread is not running, the app server marks every turn still in
 progress as interrupted
