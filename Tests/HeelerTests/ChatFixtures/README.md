@@ -71,6 +71,8 @@ capture.
   recorded the previous plan: Claude wrote the plan file and called
   ExitPlanMode in one message, and `input.plan` kept the file as it was
   before the Write.
+- `claude-39` is a 2.1.301 question at the same grid in a named session:
+  under the footer Claude draws a rule carrying the session's name.
 
 Scrubbing used the same same-length replacements as above, so every column
 is as captured. The shell prompt on the first row of `claude-00-trust.ansi`

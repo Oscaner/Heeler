@@ -121,6 +121,17 @@ struct ClaudeDialogParserTests {
         #expect(typed.fingerprint == empty.fingerprint)
     }
 
+    @Test("A question with the session's name in the rule under it")
+    func questionOverALabeledRule() throws {
+        // Claude Code 2.1.301 at the phone's 62-column grid, in a named session.
+        let dialog = try dialog("claude-39-c8-phone-question-titled-rule")
+        #expect(dialog.kind == .claudeQuestion)
+        #expect(dialog.title == "Which size?")
+        #expect(dialog.options.map(\.label) == ["Small", "Large", "Type something.", "Chat about this"])
+        #expect(dialog.options.map(\.role) == [.answer, .answer, .otherText, .chat])
+        #expect(dialog.focus == DialogFocusState(focusedOrdinal: 1))
+    }
+
     @Test("A multi-select question page")
     func multiSelectQuestion() throws {
         let dialog = try dialog("claude-08-c4-auq-q1")
