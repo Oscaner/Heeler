@@ -167,6 +167,38 @@ struct AgentChatStoreTests {
         #expect(fixture.store.interval == .seconds(4))
     }
 
+    @Test func savedBackgroundWorkShowsOnlyAfterALiveRead() async throws {
+        let previous = Self.paced()
+        let launch = NumberedChatReducer.launch("s1", journal: nil, at: previous.clock.now)
+        await previous.files.write(NumberedChatReducer.lines(0..<2) + launch, at: Self.path(Self.first))
+        await previous.store.step()
+        #expect(previous.store.backgroundWork.rows.map(\.id) == ["s1"])
+        let key = ChatCacheKey(hostID: Self.host, herdrSession: "", program: .claude, conversationID: Self.first)
+        guard case .hit(let document) = await previous.cache.load(key) else {
+            Issue.record("Expected a saved conversation")
+            return
+        }
+
+        let fixture = Self.paced()
+        await fixture.cache.save(document)
+        await fixture.server.fail(with: .channelFailed(detail: "agent.get failed"))
+        await fixture.store.step()
+
+        #expect(fixture.store.conversation.isFromCache)
+        #expect(Self.ids(fixture.store) == previous.store.conversation.transcript.entries.map(\.id.rawValue))
+        #expect(fixture.store.backgroundWork.rows.isEmpty)
+
+        await fixture.server.fail(with: nil)
+        await fixture.files.write(NumberedChatReducer.lines(0..<2) + launch, at: Self.path(Self.first))
+        fixture.store.retry()
+        await fixture.store.step()
+        await fixture.store.step()
+
+        #expect(!fixture.store.conversation.isFromCache)
+        #expect(fixture.store.backgroundWork.rows.map(\.id) == ["s1"])
+        #expect(fixture.store.backgroundWork.isLive)
+    }
+
     @Test func aWorkflowShowsItsJournalAndTheListResetsWithTheConversation() async throws {
         let fixture = Self.paced()
         let launch = NumberedChatReducer.launch("w1", journal: Self.journal, at: fixture.clock.now)

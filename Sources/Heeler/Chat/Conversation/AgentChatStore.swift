@@ -101,6 +101,9 @@ final class AgentChatStore {
     /// The Subagents and Workflows the conversation's program runs beside
     /// it, as last read.
     private(set) var backgroundWork = ChatBackgroundWork()
+    /// Whether this conversation has had a live read. Until then the list
+    /// stays empty: saved work alone could have ended long ago (ADR 0023).
+    private var hasReadLive = false
 
     @ObservationIgnored private let source: AgentChatSource
     @ObservationIgnored private let timing: Timing
@@ -673,6 +676,7 @@ final class AgentChatStore {
         waitingOutputs = []
         workflowProgress = [:]
         backgroundWork = ChatBackgroundWork()
+        hasReadLive = false
         if target == nil {
             showUnavailable()
         } else {
@@ -747,9 +751,13 @@ final class AgentChatStore {
     private func refreshBackgroundWork() {
         var isLive = conversation.readFailure == nil && !conversation.isFromCache
         if case .following = conversation.phase {} else { isLive = false }
-        let next = ChatBackgroundWork(
-            transcript: conversation.transcript, progress: workflowProgress, isLive: isLive, now: now(),
-            staleness: timing.backgroundWorkStaleness)
+        if isLive { hasReadLive = true }
+        let next =
+            hasReadLive
+            ? ChatBackgroundWork(
+                transcript: conversation.transcript, progress: workflowProgress, isLive: isLive, now: now(),
+                staleness: timing.backgroundWorkStaleness)
+            : ChatBackgroundWork()
         if next != backgroundWork { backgroundWork = next }
     }
 
