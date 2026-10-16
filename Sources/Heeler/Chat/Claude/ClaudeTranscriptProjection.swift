@@ -69,8 +69,11 @@ enum ClaudeTranscriptProjection {
         waiting: [UInt64: ChatEntryID] = [:]
     ) -> [ChatRecordedPrompt] {
         var prompts: [ChatRecordedPrompt] = []
-        for record in index.recordsByPosition where !record.isSidechain && record.teamName == nil {
-            guard let text = typedText(of: record, indexed: index.records) else { continue }
+        let byPosition = index.recordsByPosition
+        let imageSources = imageSources(byPosition, indexed: index.records)
+        for record in byPosition where !record.isSidechain && record.teamName == nil {
+            guard var text = typedText(of: record, indexed: index.records) else { continue }
+            if let sources = imageSources[record.uuid] { text = replacingImagePlaceholders(in: text, with: sources) }
             prompts.append(
                 ChatRecordedPrompt(offset: record.byteOffset, text: text, entryID: entryByRecord[record.uuid]))
         }
@@ -89,6 +92,55 @@ enum ClaudeTranscriptProjection {
                     offset: operation.offset, text: text, entryID: delivery?.entryID ?? waiting[operation.offset]))
         }
         return (prompts + enqueued).sorted { $0.offset < $1.offset }
+    }
+
+    /// The files a prompt's pasted images came from, by the prompt's uuid, in
+    /// file order. A paste that is only an image path is recorded as
+    /// `[Image #N]` plus an image block; Claude Code then writes a meta
+    /// `[Image: source: <path>]` record below it, after any attachments.
+    private static func imageSources(
+        _ byPosition: [ClaudeRecord], indexed: [String: ClaudeRecord]
+    ) -> [String: [String]] {
+        var sources: [String: [String]] = [:]
+        for record in byPosition where record.kind == .user && record.isMeta && record.texts.count == 1 {
+            guard let text = record.texts.first, text.hasPrefix(imageSourcePrefix), text.hasSuffix("]") else { continue }
+            let path = String(text.dropFirst(imageSourcePrefix.count).dropLast())
+            guard !path.isEmpty else { continue }
+            var parent = record.parentUUID.flatMap { indexed[$0] }
+            var hops = 0
+            while let ancestor = parent, hops < 8, ancestor.isMeta || isAttachment(ancestor.kind) {
+                parent = ancestor.parentUUID.flatMap { indexed[$0] }
+                hops += 1
+            }
+            guard let prompt = parent, prompt.kind == .user, prompt.imageCount > 0 else { continue }
+            sources[prompt.uuid, default: []].append(path)
+        }
+        return sources
+    }
+
+    private static let imageSourcePrefix = "[Image: source: "
+
+    private static func isAttachment(_ kind: ClaudeRecord.Kind) -> Bool {
+        if case .attachment = kind { return true }
+        return false
+    }
+
+    /// `text` with its `[Image #N]` placeholders replaced, in order, by the
+    /// paths the images were pasted as, so it compares with the text Heeler
+    /// sent. Unchanged unless each placeholder has exactly one path.
+    static func replacingImagePlaceholders(in text: String, with paths: [String]) -> String {
+        guard let pattern = try? Regex(#"\[Image #[0-9]+\]"#) else { return text }
+        let placeholders = text.ranges(of: pattern)
+        guard !placeholders.isEmpty, placeholders.count == paths.count else { return text }
+        var result = ""
+        var cursor = text.startIndex
+        for (range, path) in zip(placeholders, paths) {
+            result += text[cursor..<range.lowerBound]
+            result += path
+            cursor = range.upperBound
+        }
+        result += text[cursor...]
+        return result
     }
 
     /// Prompts Claude Code queued while a turn runs and has not delivered:

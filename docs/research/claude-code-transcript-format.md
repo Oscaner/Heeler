@@ -472,7 +472,11 @@ How the 2.1.291 CLI turns a submitted prompt into a record
    `exit`, `quit`, `:q`, `:q!`, `:wq` or `:wq!` runs `/exit`
    (`chunk-v1gtm86q.js` `xPe`).
 3. `[Pasted text #N +M lines]` references expand inline. `[Image #N]` stays
-   literal, and the images become `image` blocks after the text. Flag
+   literal, and the images become `image` blocks after the text. On 2.1.301
+   a paste that is only an image path is recorded this way too, and a meta
+   user record `[Image: source: <path>]` follows it (after an attachment), so
+   a sent path compares with the record once each placeholder is replaced
+   by its source. A path followed by more text stays plain text. Flag
    `tengu_virtual_pancake` (off by default) wraps pastes in
    `<pasted_content id="abcd">…</pasted_content id="abcd">`.
 4. While the agent is busy, the prompt is queued after `trim()`: a

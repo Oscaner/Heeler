@@ -424,6 +424,26 @@ struct ClaudeTranscriptReducerTests {
             entryID: ChatEntryID("user:e6fda38c-45bf-49c6-b0a2-5e1cf39cbef9")))
     }
 
+    @Test("A sent image path matches the `[Image #1]` prompt Claude Code 2.1.301 recorded for it")
+    func imagePathEchoMatch() throws {
+        let path =
+            "/var/folders/rm/2k0dww5x7w145cb1qctpswr80000gn/T//heeler.TZcsLg5a/stage-5387316b-c580-43bc-afee-b0838609854d/image.jpg"
+        let transcript = try Self.transcript("claude/c12-image-path-paste.jsonl")
+        #expect(transcript.recordedPrompts.count == 1)
+        let prompt = try #require(transcript.recordedPrompts.first)
+        #expect(prompt.entryID == ChatEntryID("user:af095210-9c12-4ed4-914e-85ba8cf6a22a"))
+        // Heeler sends the staged path with a trailing space.
+        #expect(ClaudeTranscriptReducer.echoKey(prompt.text) == ClaudeTranscriptReducer.echoKey(path + " "))
+        #expect(ClaudeTranscriptReducer.echoKey(prompt.text) != ClaudeTranscriptReducer.echoKey("/tmp/other/image.jpg"))
+
+        #expect(
+            ClaudeTranscriptProjection.replacingImagePlaceholders(in: "[Image #1] and [Image #2]", with: ["/a.png", "/b.png"])
+                == "/a.png and /b.png")
+        #expect(
+            ClaudeTranscriptProjection.replacingImagePlaceholders(in: "[Image #1] and [Image #2]", with: ["/a.png"])
+                == "[Image #1] and [Image #2]")
+    }
+
     // MARK: - Subagent and first probe
 
     private struct SubagentMeta: Decodable {
