@@ -91,6 +91,8 @@ Check the fingerprint, let the Host checks finish, then [verify the connection](
 
 Leave these empty for ZeroTier Central. If you run your own ZeroTier controller, use **Import Planet File…** and **Add Moon** with the files and IDs your operator gives you, and authorize Heeler there.
 
+**Privacy:** Heeler shares a set of root servers across all ZeroTier networks it has joined, combining their configured roots with ZeroTier's own roots. Address lookups and relayed traffic can use any of these roots. A self-hosted root may learn which ZeroTier addresses your device looks up for other networks, and ZeroTier's roots may learn those of your self-hosted network. Only add roots whose operators you trust; separate network entries do not isolate these lookups.
+
 ## Stop using the network
 
 Turn off the network's switch to disconnect it; its settings stay. To remove it, move or delete its Hosts first, then delete the network. If you delete your last ZeroTier network, you'll need to authorize Heeler again the next time you add one.

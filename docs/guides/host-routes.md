@@ -17,8 +17,8 @@ A Host can have more than one route: its LAN address for when you are at home, a
 
 ## How Heeler picks a route
 
-- Each time it connects, Heeler tries all of the Host's routes and keeps the first that reaches it.
-- **Direct** routes without a Jump Host start first. Overlay network and Jump Host routes start a moment later, or right away once every direct route has failed. At home the LAN address wins before an overlay network ever starts.
+- Each time it connects, Heeler races the Host's routes with staggered starts and keeps the first that reaches it.
+- **Direct** routes without a Jump Host start first. Overlay network and Jump Host routes start a moment later, or right away once every direct route has failed. At home the LAN address can win before an overlay network ever starts.
 - The order of the list does not decide which route wins. The first route is only the address shown for the Host in the Hosts list.
 - A connection keeps its route until it ends. If you move from Wi-Fi to cellular, the next connection picks again.
 
