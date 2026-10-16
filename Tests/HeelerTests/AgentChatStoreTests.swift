@@ -1174,6 +1174,41 @@ struct AgentChatStoreTests {
         #expect(store.sendStatuses[id] == .discarded)
     }
 
+    /// The steer the user added to and then sent from the terminal is in
+    /// the prompt the transcript records, so that prompt settles it.
+    @Test func aReturnedSendTheUserAddedToAndSentIsRecorded() async throws {
+        let (files, store, _, clock, id) = try await Self.stoppedSteer(.pi, text: "Queued steer: say MANGO. ")
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        store.inputBoxWasRead(try Self.piEditor("Queued steer: say MANGO. and check X"))
+        #expect(store.sendStatuses[id] == .returned)
+
+        store.inputBoxWasRead(try Self.piEditor())
+        await files.append(
+            Self.ompMessage("u2", parent: "u1", role: "user", "Queued steer: say MANGO. and check X"),
+            to: Self.piPath(.pi))
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    /// Only a send seen among more text takes a prompt that merely contains
+    /// it: a cleared one stays discarded when a longer prompt mentions it.
+    @Test func aClearedSendIsNotSettledByALongerPrompt() async throws {
+        let (files, store, _, clock, id) = try await Self.stoppedSteer(.pi, text: "Queued steer: say MANGO. ")
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        store.inputBoxWasRead(try Self.piEditor())
+        #expect(store.sendStatuses[id] == .discarded)
+
+        await files.append(
+            Self.ompMessage("u2", parent: "u1", role: "user", "Queued steer: say MANGO. and check X"),
+            to: Self.piPath(.pi))
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .discarded)
+    }
+
     /// Sent from the terminal after all: the box empties before the
     /// transcript has it, and the recorded copy still settles the send.
     @Test func aDiscardedSendTheTranscriptRecordsLaterIsRecorded() async throws {

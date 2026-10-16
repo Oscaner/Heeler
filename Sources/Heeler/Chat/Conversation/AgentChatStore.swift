@@ -143,6 +143,10 @@ final class AgentChatStore {
     /// Returned sends a later read of the box no longer found, which stay
     /// `.discarded` unless the transcript records them.
     @ObservationIgnored private var discardedSends: Set<UUID> = []
+    /// Returned sends the box was seen holding among more text, which the
+    /// user added in the terminal: a recorded prompt that contains one
+    /// settles it, since what the user sent is that text and more.
+    @ObservationIgnored private var extendedSends: Set<UUID> = []
     /// Sends already looked for in the input box since the Agent last
     /// turned idle: each idle spell reads the screen once for them.
     @ObservationIgnored private var returnChecked: Set<UUID> = []
@@ -369,6 +373,7 @@ final class AgentChatStore {
         sends.removeAll { !ids.contains($0.id) }
         returnedSends.formIntersection(ids)
         discardedSends.formIntersection(ids)
+        extendedSends.formIntersection(ids)
         returnChecked.formIntersection(ids)
         for message in messages {
             if let index = sends.firstIndex(where: { $0.id == message.id }) {
@@ -798,7 +803,8 @@ final class AgentChatStore {
     /// the current one, as may one sent before the file was rewritten; an
     /// entry already showing at the send never matches it. A discarded send
     /// takes only a prompt no other send matches, so sending its text again
-    /// settles the new send. Conservative on purpose: a wrong match would
+    /// settles the new send; a returned send the user added to in the box
+    /// takes a prompt that contains it. Conservative on purpose: a wrong match would
     /// hide a prompt that never arrived.
     private func matchSends() {
         let byEntry = source.adapter.echoesByEntry
@@ -820,7 +826,7 @@ final class AgentChatStore {
         let transcript = conversation.transcript
         let recorded = transcript.recordedPrompts.compactMap { prompt in
             candidate(offset: prompt.offset, entryID: prompt.entryID).map {
-                (candidate: $0, key: source.adapter.echoKey(prompt.text))
+                (candidate: $0, key: source.adapter.echoKey(prompt.text), text: String(Self.squeezed(prompt.text)))
             }
         }
         // Codex records no prompt for `/compact`, only the compaction.
@@ -859,6 +865,10 @@ final class AgentChatStore {
             var match = recorded.first { $0.key == send.key && isOpen($0.candidate) }?.candidate
             if match == nil, send.key == "/compact" {
                 match = compactions.first(where: isOpen)
+            }
+            if match == nil, extendedSends.contains(send.id) {
+                let text = String(Self.squeezed(send.text))
+                match = recorded.first { !text.isEmpty && $0.text.contains(text) && isOpen($0.candidate) }?.candidate
             }
             if let match {
                 claimedPrompts.insert(match.claim)
@@ -939,7 +949,11 @@ final class AgentChatStore {
         }
         let held = Self.sends(in: box, among: sends.filter { ids.contains($0.id) })
         let returned = sends.filter { ids.contains($0.id) && returnedSends.contains($0.id) }
-        if held.isEmpty, Self.mentions(box, any: returned) { return }
+        let mentioned = Self.mentioned(in: box, among: returned)
+        if held.isEmpty, !mentioned.isEmpty {
+            extendedSends.formUnion(mentioned)
+            return
+        }
         let left = returnedSends.intersection(ids).subtracting(held)
         let next = returnedSends.subtracting(ids).union(held)
         guard next != returnedSends else { return }
@@ -978,13 +992,14 @@ final class AgentChatStore {
         return Set(indices.map { sends[$0].id })
     }
 
-    /// Whether any of `sends` shows anywhere in `box`, spacing aside.
-    private static func mentions(_ box: String, any sends: [TrackedSend]) -> Bool {
+    /// Those of `sends` that show anywhere in `box`, spacing aside.
+    private static func mentioned(in box: String, among sends: [TrackedSend]) -> Set<UUID> {
         let target = String(squeezed(box))
-        return sends.contains { send in
-            let text = String(squeezed(send.text))
-            return !text.isEmpty && target.contains(text)
-        }
+        return Set(
+            sends.filter { send in
+                let text = String(squeezed(send.text))
+                return !text.isEmpty && target.contains(text)
+            }.map(\.id))
     }
 
     /// `text` without its whitespace, which the editor's wrapping changes.
