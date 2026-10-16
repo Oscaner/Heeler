@@ -1,4 +1,4 @@
-<!-- Translated from docs/guides/zerotier.md at 2b014a24 -->
+<!-- Translated from docs/guides/zerotier.md at b9b2cbc3 -->
 
 # 通过 ZeroTier 连接 Heeler
 
@@ -92,6 +92,8 @@ ZeroTier 有新旧两个控制台。2025 年 11 月 5 日之后注册的账号�
 ## 进阶：Planet 与 Moon 设置
 
 使用官方 ZeroTier Central 时请保持留空。如果你自建了 ZeroTier 控制器，请使用管理员提供的文件和 ID 配置 **Import Planet File…** 与 **Add Moon**，并在自建控制器中授权 Heeler。
+
+**隐私提示：** Heeler 加入的所有 ZeroTier 网络共享一组根服务器，包括各网络配置的根与 ZeroTier 官方根。地址查询和中继流量可能经过其中任意根服务器。自建根的运营者可能获知你的设备为其他网络查询的 ZeroTier 地址，官方根也可能获知自建网络中的地址查询。请只添加你信任其运营者的根；分别创建网络条目并不能隔离这些查询。
 
 ## 停用或移除网络
 

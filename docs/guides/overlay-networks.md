@@ -82,11 +82,16 @@ To fill in the address on the route page, Tailscale offers **Choose from Tailnet
 
 ## Verify the connection
 
+<a href="images/overlay-networks/networks-connected.png"><img src="images/overlay-networks/networks-connected.png" width="300" alt="Overlay Networks list with three connected networks and their switches on"></a>
+
+**Connected** here means Heeler has joined the network, not that a Host is using it. Follow the checks below to verify the Host's route. Network names have been anonymized; you only need the network you chose, not all three. Tap the image to enlarge it.
+
 1. The network shows **Connected** in **Settings > Overlay Networks**.
-2. The Host checks pass and the session's Agents or Terminals load.
-3. In a **New Terminal**, `pwd` prints a folder on the Mac. Use a new terminal for tests, not an Agent's terminal.
-4. Turn off Wi-Fi on the phone and repeat over cellular.
-5. Leave Heeler for more than 20 seconds, then come back. The Host and terminal reconnect. (Heeler disconnects from the network while you're away; it isn't an always-on VPN.)
+2. Open the Host from **Hosts** and check which route is marked **In Use** under **Routes**. Confirm it uses the overlay network you are testing. If another route wins, this connection does not verify the overlay route. See [which route is in use](host-routes.md#see-which-route-is-in-use).
+3. The Host checks pass and the session's Agents or Terminals load.
+4. In a **New Terminal**, `pwd` prints a folder on the Mac. Use a new terminal for tests, not an Agent's terminal.
+5. Turn off Wi-Fi on the phone and repeat over cellular, checking **In Use** again. Another available route, such as a Jump Host or a different overlay network, can still win.
+6. Leave Heeler for more than 20 seconds, then come back. The Host and terminal reconnect; check **In Use** again to confirm which route reconnected. (Heeler disconnects from the network while you're away; it isn't an always-on VPN.)
 
 ## Troubleshooting
 
