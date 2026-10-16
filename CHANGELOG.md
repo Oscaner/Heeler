@@ -26,7 +26,8 @@ Entries reference the pull request that made the change.
   Chat infrastructure in #425. (#464)
 - Send to Pi and Oh My Pi from Chat. Chat recognizes Oh My Pi 18.11's
   nerd-font status band and Pi's editor in any project directory. Pi takes
-  messages while it works, which steer the turn; for Oh My Pi, Chat holds a
+  messages while it works, which steer the turn, and a steer that Stop puts
+  back in the input box shows as not delivered; for Oh My Pi, Chat holds a
   message while a turn runs or an approval or question panel is open. Sending
   refuses Oh My Pi's exit words, `$` Python, Continue and queue shorthands,
   and pastes of 100 lines or more. The `/` menu and Skills list offer only

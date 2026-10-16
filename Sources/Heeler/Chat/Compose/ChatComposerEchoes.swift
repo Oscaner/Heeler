@@ -39,7 +39,11 @@ enum ChatComposerEchoes {
             case .delivered:
                 // Unknown to the store: sent before this Chat was watching.
                 guard let status else { return nil }
-                state = status == .overdue ? .unconfirmed : .sent
+                switch status {
+                case .overdue: state = .unconfirmed
+                case .returned: state = .notDelivered
+                case .awaiting, .recorded, .abandoned: state = .sent
+                }
             case .undelivered:
                 guard status != nil else { return nil }
                 state = .notDelivered

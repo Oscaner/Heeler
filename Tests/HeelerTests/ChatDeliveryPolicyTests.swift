@@ -200,6 +200,19 @@ struct ChatComposerEchoesTests {
         #expect(echoes.map(\.state) == [.notDelivered])
     }
 
+    /// A steer Esc put back in Pi's or Oh My Pi's input box.
+    @Test func aSendFoundBackInTheInputBoxShowsAsNotDelivered() async throws {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport)
+        store.replaceDraft(with: "say KIWI")
+        await store.send(policy: Self.policy())
+        let id = try #require(store.messages.first?.id)
+
+        let echoes = ChatComposerEchoes.pending(store.messages, statuses: [id: .returned])
+
+        #expect(echoes.map(\.state) == [.notDelivered])
+    }
+
     private func waitUntil(
         _ comment: Comment,
         timeout: Duration = .seconds(2),

@@ -891,25 +891,34 @@ struct AgentChatStoreTests {
 
     /// A store following a Pi or Oh My Pi session through the production
     /// adapter, and the text Chat sends for `/probe from chat`.
+    private static func piPath(_ program: ChatProgram) -> String {
+        let directory = program == .pi ? ".pi" : ".omp"
+        return "/home/dev/\(directory)/agent/sessions/--home-dev-proj--/2026-10-15_\(piSession).jsonl"
+    }
+
+    private static func piAgent(_ program: ChatProgram, status: AgentStatus = .idle) -> Agent {
+        Agent(
+            terminalID: "term-1", kind: program.rawValue, title: "", status: status, workspaceID: "w1",
+            tabID: "t1", paneID: "w1:p1", cwd: cwd, revision: 1,
+            agentSession: AgentSessionInfo(
+                agent: program.rawValue, kind: .path, source: "herdr:\(program.rawValue)", value: piPath(program)))
+    }
+
     private static func skillStore(
-        _ program: ChatProgram, clock: Clock = Clock(), cache: VolatileChatTranscriptCache = VolatileChatTranscriptCache()
+        _ program: ChatProgram, clock: Clock = Clock(), cache: VolatileChatTranscriptCache = VolatileChatTranscriptCache(),
+        screen: BlockedScreenIO = .unavailable
     ) throws -> (
         files: VirtualHostFiles, store: AgentChatStore, path: String, sent: String
     ) {
-        let directory = program == .pi ? ".pi" : ".omp"
-        let path = "/home/dev/\(directory)/agent/sessions/--home-dev-proj--/2026-10-15_\(piSession).jsonl"
-        let agent = Agent(
-            terminalID: "term-1", kind: program.rawValue, title: "", status: .idle, workspaceID: "w1",
-            tabID: "t1", paneID: "w1:p1", cwd: cwd, revision: 1,
-            agentSession: AgentSessionInfo(
-                agent: program.rawValue, kind: .path, source: "herdr:\(program.rawValue)", value: path))
+        let path = piPath(program)
+        let agent = piAgent(program)
         let files = VirtualHostFiles()
         let store = AgentChatStore(
             agentID: ConsoleAgent.ID(hostID: host, paneID: agent.paneID), agent: agent, program: program,
             source: AgentChatSource(
                 hostID: host, socketLocation: .defaultSession, files: files.hostFiles(), agentInfo: { agent },
                 cache: cache,
-                adapter: try #require(ChatTranscriptAdapter.standard(for: program))),
+                adapter: try #require(ChatTranscriptAdapter.standard(for: program)), screen: screen),
             timing: AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)),
             now: { clock.now })
         let rules = ChatSendRules(
@@ -954,6 +963,83 @@ struct AgentChatStoreTests {
 
         #expect(sent == "/skill:probe from chat ")
         #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    // MARK: Pi steers Esc put back
+
+    /// The Agent's pane as Chat reads it, and how often it was read.
+    private actor Pane {
+        var screen: ANSIScreen
+        private(set) var reads = 0
+
+        init(_ screen: ANSIScreen) {
+            self.screen = screen
+        }
+
+        func read() -> ANSIScreen {
+            reads += 1
+            return screen
+        }
+
+        nonisolated var io: BlockedScreenIO {
+            BlockedScreenIO(
+                readScreen: { await self.read() }, sendKeys: { _ in }, paste: { _ in })
+        }
+    }
+
+    /// A steer sent while Pi works, then Esc before the turn takes it: Pi
+    /// puts the text back in its editor (pi-36) and never records it.
+    private static func stoppedSteer(
+        _ program: ChatProgram, text: String
+    ) async throws -> (files: VirtualHostFiles, store: AgentChatStore, pane: Pane, clock: Clock, id: UUID) {
+        let clock = Clock()
+        let pane = Pane(try ScreenFixture.screen("pi-36-steer-back-in-editor"))
+        let (files, store, path, _) = try Self.skillStore(program, clock: clock, screen: pane.io)
+        await files.write(Self.piHeader + "\n" + Self.ompMessage("u1", parent: nil, role: "user", "go"), at: path)
+        await store.step()
+        store.agentDidChange(Self.piAgent(program, status: .working))
+        let id = UUID()
+        store.updateSends([Self.sent(id, text, delivered: false)])
+        store.updateSends([Self.sent(id, text)])
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        #expect(store.sendStatuses[id] == .overdue)
+        store.agentDidChange(Self.piAgent(program, status: .idle))
+        return (files, store, pane, clock, id)
+    }
+
+    @Test func aSteerStopPutBackInTheEditorIsReturnedUntilRecorded() async throws {
+        let (files, store, pane, clock, id) = try await Self.stoppedSteer(.pi, text: "Queued steer: say MANGO. ")
+
+        // Pi may still be moving the steer back.
+        await store.step()
+        #expect(await pane.reads == 0)
+        #expect(store.sendStatuses[id] == .overdue)
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        await store.step()
+
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .returned)
+
+        // Sent from the terminal after all, the transcript has it.
+        await files.append(
+            Self.ompMessage("u2", parent: "u1", role: "user", "Queued steer: say MANGO."), to: Self.piPath(.pi))
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    @Test func anOverdueSendTheEditorDoesNotHoldStaysOverdue() async throws {
+        let (_, store, pane, clock, id) = try await Self.stoppedSteer(.pi, text: "say KIWI ")
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        await store.step()
+
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .overdue)
     }
 
     // MARK: Oh My Pi rewrites

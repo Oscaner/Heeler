@@ -44,6 +44,9 @@ final class AgentChatStore {
         /// How long after delivery a sent prompt may stay unrecorded before
         /// its echo says so.
         var echoTimeout: TimeInterval = 10
+        /// How long Pi or Oh My Pi stays idle before Chat looks in its input
+        /// box for overdue sends a stopped turn put back.
+        var returnCheckDelay: TimeInterval = 1
         var backgroundWorkStaleness = ChatBackgroundWork.Staleness()
     }
 
@@ -64,6 +67,11 @@ final class AgentChatStore {
         case recorded
         /// Still unrecorded `Timing.echoTimeout` after delivery.
         case overdue
+        /// Overdue, and its text sits in the idle Agent's input box: Pi
+        /// and Oh My Pi put a steer the turn had not taken back there when
+        /// Esc stops the turn, and never record it. A recorded copy still
+        /// wins.
+        case returned
         /// Unrecorded and no longer worth an echo: it went into an earlier
         /// conversation, or was sent before this store was watching.
         case abandoned
@@ -122,6 +130,14 @@ final class AgentChatStore {
     /// The Chat views on screen; the conversation is followed while any is.
     @ObservationIgnored private var viewers: Set<UUID> = []
     @ObservationIgnored private var sends: [TrackedSend] = []
+    /// Sends found back in the input box, which stay `.returned` until the
+    /// transcript records them.
+    @ObservationIgnored private var returnedSends: Set<UUID> = []
+    /// Sends already looked for in the input box since the Agent last
+    /// turned idle: each idle spell reads the screen once for them.
+    @ObservationIgnored private var returnChecked: Set<UUID> = []
+    /// When herdr last reported the Agent idle, while it still is.
+    @ObservationIgnored private var idleSince: Date?
     /// Recorded prompts already taken by a send in the current
     /// conversation: one recorded copy answers one send. Keyed by entry for
     /// a program whose entries outlive a rewrite of its file, otherwise by
@@ -140,6 +156,8 @@ final class AgentChatStore {
     private struct TrackedSend {
         let id: UUID
         let key: String
+        /// What herdr typed, looked for in the input box.
+        let text: String
         /// The conversation it went into, how its file was laid out, and
         /// how far it had been read: while that layout holds, the program
         /// records the prompt at or after this offset.
@@ -176,6 +194,7 @@ final class AgentChatStore {
         conversation = ChatConversationSnapshot()
         blocked = BlockedCardStore(program: program, io: source.screen)
         blocked.update(activity: ChatAgentActivity(agent.status))
+        if ChatAgentActivity(agent.status) == .idle { idleSince = now() }
         followReference()
     }
 
@@ -330,6 +349,8 @@ final class AgentChatStore {
     func updateSends(_ messages: [SentMessage]) {
         let ids = Set(messages.map(\.id))
         sends.removeAll { !ids.contains($0.id) }
+        returnedSends.formIntersection(ids)
+        returnChecked.formIntersection(ids)
         for message in messages {
             if let index = sends.firstIndex(where: { $0.id == message.id }) {
                 guard message.isDelivered != (sends[index].deliveredAt != nil) else { continue }
@@ -340,7 +361,7 @@ final class AgentChatStore {
                 let knownEntries = Set(transcript.entries.map(\.id) + transcript.recordedPrompts.compactMap(\.entryID))
                 sends.append(
                     TrackedSend(
-                        id: message.id, key: source.adapter.echoKey(message.text),
+                        id: message.id, key: source.adapter.echoKey(message.text), text: message.text,
                         generation: conversationGeneration, layout: conversation.layoutGeneration,
                         floor: conversation.readOffset, knownEntries: knownEntries,
                         isOrphan: message.isDelivered, deliveredAt: message.isDelivered ? now() : nil))
@@ -372,6 +393,8 @@ final class AgentChatStore {
         }
         guard statusChanged else { return }
         blocked.update(activity: ChatAgentActivity(next.status))
+        idleSince = ChatAgentActivity(next.status) == .idle ? now() : nil
+        returnChecked = []
         // A turn starting or ending is when a session changes (`/clear`,
         // `/resume`) and when a missing transcript appears.
         lastActivity = now()
@@ -422,6 +445,8 @@ final class AgentChatStore {
         // Persist the transcript before optional journal requests can wait
         // on an unavailable connection.
         await engine.save()
+        guard !Task.isCancelled, engine === self.engine, !isAwaitingSession else { return }
+        await checkReturnedSends()
         guard !Task.isCancelled, engine === self.engine, !isAwaitingSession else { return }
         // A journal read adds a deadline of its own, so a round whose
         // transcript read failed leaves the journals for later.
@@ -812,6 +837,8 @@ final class AgentChatStore {
             if let match {
                 claimedPrompts.insert(match.claim)
                 statuses[send.id] = .recorded
+            } else if returnedSends.contains(send.id), send.generation == conversationGeneration {
+                statuses[send.id] = .returned
             } else if isUnwritten || date.timeIntervalSince(deliveredAt) < timing.echoTimeout {
                 statuses[send.id] = .awaiting
             } else if send.generation == conversationGeneration {
@@ -828,6 +855,34 @@ final class AgentChatStore {
             needsAgentRefresh = true
             wake()
         }
+    }
+
+    /// Esc in Pi or Oh My Pi puts the steers its turn had not taken back
+    /// into the input box, and the transcript never records them. Once the
+    /// Agent has been idle a moment, the screen is read once for the sends
+    /// still overdue; one whose text the box holds reads as not delivered.
+    /// Only Pi's and Oh My Pi's Esc is known to hand steers back.
+    private func checkReturnedSends() async {
+        guard program == .pi || program == .omp, let idleSince,
+            now().timeIntervalSince(idleSince) >= timing.returnCheckDelay
+        else { return }
+        let candidates = sends.filter { sendStatuses[$0.id] == .overdue && !returnChecked.contains($0.id) }
+        guard !candidates.isEmpty else { return }
+        returnChecked.formUnion(candidates.map(\.id))
+        guard let screen = try? await source.screen.readScreen(), !Task.isCancelled,
+            self.idleSince == idleSince,
+            case .text(let draft) = InputBoxStateDetector.detect(screen, program: program)
+        else { return }
+        // The editor wraps and trims what it shows; spacing says nothing.
+        func squeezed(_ text: String) -> String { text.filter { !$0.isWhitespace } }
+        let box = squeezed(draft)
+        let returned = candidates.filter { send in
+            let text = squeezed(send.text)
+            return !text.isEmpty && box.contains(text)
+        }
+        guard !returned.isEmpty else { return }
+        returnedSends.formUnion(returned.map(\.id))
+        matchSends()
     }
 }
 
