@@ -1104,8 +1104,9 @@ struct AgentChatStoreTests {
     }
 
     /// A returned send is an observation: once the user clears the box in
-    /// the terminal, the next idle spell's read makes it overdue again.
-    @Test func aReturnedSendTheBoxNoLongerHoldsIsOverdueAgain() async throws {
+    /// the terminal, the next idle spell's read finds it discarded, which
+    /// it stays. It was never delivered, so it is not overdue.
+    @Test func aReturnedSendTheBoxNoLongerHoldsIsDiscarded() async throws {
         let (_, store, pane, clock, id) = try await Self.stoppedSteer(.pi, text: "Queued steer: say MANGO. ")
         clock.now = clock.now.addingTimeInterval(1)
         await store.step()
@@ -1120,12 +1121,21 @@ struct AgentChatStoreTests {
         await Self.nextIdleSpell(store, .pi, clock: clock)
 
         #expect(await pane.reads == 3)
-        #expect(store.sendStatuses[id] == .overdue)
+        #expect(store.sendStatuses[id] == .discarded)
+
+        // The box is not looked at for it again.
+        await pane.show(try ScreenFixture.screen("pi-36-steer-back-in-editor"))
+        await Self.nextIdleSpell(store, .pi, clock: clock)
+        clock.now = clock.now.addingTimeInterval(60)
+        await store.step()
+
+        #expect(await pane.reads == 3)
+        #expect(store.sendStatuses[id] == .discarded)
     }
 
     /// The read before a send also shows whether the box still holds a
     /// returned send, without a read of its own.
-    @Test func aReadBeforeASendDropsAReturnedSendTheBoxNoLongerHolds() async throws {
+    @Test func aReadBeforeASendDiscardsAReturnedSendTheBoxNoLongerHolds() async throws {
         let (_, store, pane, clock, id) = try await Self.stoppedSteer(.pi, text: "Queued steer: say MANGO. ")
         clock.now = clock.now.addingTimeInterval(1)
         await store.step()
@@ -1138,7 +1148,47 @@ struct AgentChatStoreTests {
         await store.step()
 
         #expect(await pane.reads == 1)
-        #expect(store.sendStatuses[id] == .overdue)
+        #expect(store.sendStatuses[id] == .discarded)
+    }
+
+    /// Sent from the terminal after all: the box empties before the
+    /// transcript has it, and the recorded copy still settles the send.
+    @Test func aDiscardedSendTheTranscriptRecordsLaterIsRecorded() async throws {
+        let (files, store, _, clock, id) = try await Self.stoppedSteer(.pi, text: "Queued steer: say MANGO. ")
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(store.sendStatuses[id] == .returned)
+
+        store.inputBoxWasRead(try Self.piEditor())
+        #expect(store.sendStatuses[id] == .discarded)
+
+        await files.append(
+            Self.ompMessage("u2", parent: "u1", role: "user", "Queued steer: say MANGO."), to: Self.piPath(.pi))
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    /// Sent again from Chat once cleared: the new send takes the recorded
+    /// copy, and the discarded one stays discarded instead of leaving the
+    /// new one unconfirmed.
+    @Test func aSendAgainFromChatTakesTheRecordedCopyBeforeADiscardedOne() async throws {
+        let text = "Queued steer: say MANGO. "
+        let (files, store, _, clock, id) = try await Self.stoppedSteer(.pi, text: text)
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        store.inputBoxWasRead(try Self.piEditor())
+        #expect(store.sendStatuses[id] == .discarded)
+
+        let again = UUID()
+        store.updateSends([Self.sent(id, text), Self.sent(again, text, delivered: false)])
+        store.updateSends([Self.sent(id, text), Self.sent(again, text)])
+        await files.append(
+            Self.ompMessage("u2", parent: "u1", role: "user", "Queued steer: say MANGO."), to: Self.piPath(.pi))
+        await store.step()
+
+        #expect(store.sendStatuses[again] == .recorded)
+        #expect(store.sendStatuses[id] == .discarded)
     }
 
     @Test func anOverdueSendTheEditorDoesNotHoldStaysOverdue() async throws {

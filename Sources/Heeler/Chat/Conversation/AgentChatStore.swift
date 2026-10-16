@@ -71,8 +71,13 @@ final class AgentChatStore {
         /// and Oh My Pi put a steer the turn had not taken back there when
         /// Esc stops the turn, and never record it. A recorded copy still
         /// wins, and a later read of the box that no longer finds it makes
-        /// it overdue again.
+        /// it discarded.
         case returned
+        /// Returned, then gone from the input box without the transcript
+        /// recording it, such as when the user cleared it in the terminal.
+        /// The box is not looked at for it again; only a recorded copy,
+        /// such as one the terminal sent, still settles it.
+        case discarded
         /// Unrecorded and no longer worth an echo: it went into an earlier
         /// conversation, or was sent before this store was watching.
         case abandoned
@@ -135,6 +140,9 @@ final class AgentChatStore {
     /// until the transcript records them or a later read of the box no
     /// longer finds them.
     @ObservationIgnored private var returnedSends: Set<UUID> = []
+    /// Returned sends a later read of the box no longer found, which stay
+    /// `.discarded` unless the transcript records them.
+    @ObservationIgnored private var discardedSends: Set<UUID> = []
     /// Sends already looked for in the input box since the Agent last
     /// turned idle: each idle spell reads the screen once for them.
     @ObservationIgnored private var returnChecked: Set<UUID> = []
@@ -360,6 +368,7 @@ final class AgentChatStore {
         let ids = Set(messages.map(\.id))
         sends.removeAll { !ids.contains($0.id) }
         returnedSends.formIntersection(ids)
+        discardedSends.formIntersection(ids)
         returnChecked.formIntersection(ids)
         for message in messages {
             if let index = sends.firstIndex(where: { $0.id == message.id }) {
@@ -787,8 +796,10 @@ final class AgentChatStore {
     /// the send. A send that went into an earlier conversation, such as the
     /// first prompt that makes Codex report a session, may match anywhere in
     /// the current one, as may one sent before the file was rewritten; an
-    /// entry already showing at the send never matches it. Conservative on
-    /// purpose: a wrong match would hide a prompt that never arrived.
+    /// entry already showing at the send never matches it. A discarded send
+    /// takes only a prompt no other send matches, so sending its text again
+    /// settles the new send. Conservative on purpose: a wrong match would
+    /// hide a prompt that never arrived.
     private func matchSends() {
         let byEntry = source.adapter.echoesByEntry
         let layout = conversation.layoutGeneration
@@ -824,7 +835,8 @@ final class AgentChatStore {
         if case .unavailable(.awaitingFirstMessage) = conversation.phase { isUnwritten = true }
         var statuses: [UUID: SendStatus] = [:]
         var becameOverdue = false
-        for send in sends {
+        let ordered = sends.filter { !discardedSends.contains($0.id) } + sends.filter { discardedSends.contains($0.id) }
+        for send in ordered {
             if sendStatuses[send.id] == .recorded {
                 statuses[send.id] = .recorded
                 continue
@@ -853,6 +865,8 @@ final class AgentChatStore {
                 statuses[send.id] = .recorded
             } else if returnedSends.contains(send.id), send.generation == conversationGeneration {
                 statuses[send.id] = .returned
+            } else if discardedSends.contains(send.id), send.generation == conversationGeneration {
+                statuses[send.id] = .discarded
             } else if isUnwritten || date.timeIntervalSince(deliveredAt) < timing.echoTimeout {
                 statuses[send.id] = .awaiting
             } else if send.generation == conversationGeneration {
@@ -904,8 +918,8 @@ final class AgentChatStore {
     }
 
     /// A read of the Agent's screen made for another reason, such as the
-    /// check before a send: a send it no longer finds in the input box
-    /// stops reading as returned. It never finds new ones.
+    /// check before a send: a returned send it no longer finds in the input
+    /// box is discarded. It never finds new ones.
     func inputBoxWasRead(_ screen: ANSIScreen) {
         guard program == .pi || program == .omp, !returnedSends.isEmpty else { return }
         observeInputBox(InputBoxStateDetector.detect(screen, program: program), for: returnedSends)
@@ -913,6 +927,7 @@ final class AgentChatStore {
 
     /// Settles which of `ids` the input box holds. Only an empty box or
     /// one showing text says so; any other state leaves them as they were.
+    /// A returned send the box no longer holds left it undelivered.
     private func observeInputBox(_ state: InputBoxState, for ids: Set<UUID>) {
         let box: String
         switch state {
@@ -921,9 +936,11 @@ final class AgentChatStore {
         default: return
         }
         let held = Self.sends(in: box, among: sends.filter { ids.contains($0.id) })
+        let left = returnedSends.intersection(ids).subtracting(held)
         let next = returnedSends.subtracting(ids).union(held)
         guard next != returnedSends else { return }
         returnedSends = next
+        discardedSends.formUnion(left)
         matchSends()
     }
 

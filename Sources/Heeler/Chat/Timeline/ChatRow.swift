@@ -42,6 +42,9 @@ struct ChatPendingEcho: Identifiable, Equatable, Sendable {
         case failed(String)
         /// The text stayed in the Agent's input box. Never resent.
         case notDelivered
+        /// The text went back to the Agent's input box and has left it
+        /// since, never delivered.
+        case discarded
     }
 
     let id: UUID

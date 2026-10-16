@@ -258,6 +258,38 @@ struct ChatComposerEchoesTests {
         #expect(echoes.map(\.state) == [.notDelivered])
     }
 
+    /// A steer Esc put back that the user then cleared in the terminal: it
+    /// was never delivered, so it never reads as sent.
+    @Test func aSendClearedFromTheInputBoxShowsAsDiscarded() async throws {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport)
+        store.replaceDraft(with: "say KIWI")
+        await store.send(policy: Self.policy())
+        let id = try #require(store.messages.first?.id)
+
+        let echoes = ChatComposerEchoes.pending(store.messages, statuses: [id: .discarded])
+
+        #expect(echoes.map(\.state) == [.discarded])
+    }
+
+    /// Like a failure, a discarded send shows only while it is Chat's
+    /// latest message; one sent since moves the conversation on.
+    @Test func aDiscardedSendGivesWayToANewerMessage() async throws {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport)
+        store.replaceDraft(with: "say KIWI")
+        await store.send(policy: Self.policy())
+        store.replaceDraft(with: "say yes")
+        await store.send(policy: Self.policy())
+        let ids = store.messages.map(\.id)
+
+        let echoes = ChatComposerEchoes.pending(
+            store.messages, statuses: [ids[0]: .discarded, ids[1]: .awaiting])
+
+        #expect(echoes.map(\.text) == ["say yes"])
+        #expect(echoes.map(\.state) == [.sent])
+    }
+
     private func waitUntil(
         _ comment: Comment,
         timeout: Duration = .seconds(2),
