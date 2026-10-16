@@ -609,6 +609,11 @@ struct BlockedRequestMatchTests {
                 for: try dialog("claude-22-c7-edit"), in: [request("w", "Edit", "/work/q.md", kind: .fileEdit)]) == nil)
         let fetch = request("f", "WebFetch", "https://example.com/", kind: .web)
         #expect(BlockedRequestMatch.request(for: try dialog("claude-24-c8-webfetch"), in: [fetch])?.callID == "f")
+        // The call names the bare host; the dialog shows `https://example.com/`.
+        let bare = request("b", "WebFetch", "https://example.com", kind: .web)
+        #expect(BlockedRequestMatch.request(for: try dialog("claude-24-c8-webfetch"), in: [bare])?.callID == "b")
+        let other = request("o", "WebFetch", "https://example.org", kind: .web)
+        #expect(BlockedRequestMatch.request(for: try dialog("claude-24-c8-webfetch"), in: [other]) == nil)
     }
 
     @Test func questionsMatchByTheirText() throws {

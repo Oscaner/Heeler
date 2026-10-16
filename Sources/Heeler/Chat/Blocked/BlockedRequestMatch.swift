@@ -19,7 +19,7 @@ enum BlockedRequestMatch {
             return ["Edit", "MultiEdit", "Write", "NotebookEdit"].contains(request.toolName)
                 && sameFile(request.summary, subject.filePath)
         case .claudeFetch:
-            return request.toolName == "WebFetch" && begins(request.summary, with: subject.url)
+            return request.toolName == "WebFetch" && sameURL(request.summary, subject.url)
         case .claudePlan:
             return request.toolName == "ExitPlanMode"
         case .claudeQuestion:
@@ -54,6 +54,16 @@ enum BlockedRequestMatch {
     private static func begins(_ full: String, with shown: String?) -> Bool {
         let start = DialogRowScanner.comparable(shown ?? "")
         return !start.isEmpty && DialogRowScanner.comparable(full).hasPrefix(start)
+    }
+
+    /// The dialog shows the URL Claude Code normalized, which ends a bare
+    /// host with `/` (`https://example.com/` for `https://example.com`).
+    private static func sameURL(_ full: String, _ shown: String?) -> Bool {
+        guard var shown else { return false }
+        var full = full
+        while shown.hasSuffix("/") { shown.removeLast() }
+        while full.hasSuffix("/") { full.removeLast() }
+        return begins(full, with: shown)
     }
 
     /// Codex code mode runs a command inside a script, so either text may
