@@ -962,6 +962,106 @@ struct ChatTimelineControllerTests {
         }
     }
 
+    /// What an omp approval does to a list that follows: the keyboard goes
+    /// down, a Blocked card takes the Composer's place, the room kept for
+    /// Collapse Steps changes and the turn's rows arrive, in one SwiftUI
+    /// update or in a row in either order. Reached by Jump to Latest or by a
+    /// send, the list must end exactly at its end afterwards.
+    @Test(arguments: [false, true], ChatTimelineChromeChange.allCases)
+    func aFollowingListEndsAtItsEndAfterTheBottomChromeAndRowsChange(
+        jumped: Bool, change: ChatTimelineChromeChange
+    ) async throws {
+        let (rows, turns) = await Self.turns(0..<2, steps: 8)
+        let (newer, newerTurns) = await Self.turns(0..<3, steps: 8)
+        let host = UIHostingController(rootView: ChatTimelineChromeHost(
+            state: Self.foldState(rows, turns: turns), chrome: 300, clearance: 56))
+        try await withTestWindow(frame: Self.frame, rootViewController: host) { _ in
+            for _ in 0..<100 where Self.collectionView(in: host.view) == nil {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            let view = try #require(Self.collectionView(in: host.view))
+            let controller = try #require(view.next as? ChatTimelineController)
+            await Self.settle(controller)
+            Self.drag(controller, to: view.minOffsetY)
+            controller.toggle(.turn(ChatEntryID("a0")))
+            controller.toggle(.group(ChatEntryID("c0b")))
+            await Self.settle(controller)
+            if jumped {
+                host.rootView.jumpRequest += 1
+            } else {
+                host.rootView.followRequest += 1
+            }
+            let deadline = ContinuousClock.now + .seconds(3)
+            while ContinuousClock.now < deadline, abs(view.contentOffset.y - view.maxOffsetY) > 0.5 {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            await Self.settle(controller)
+            try #require(controller.isFollowing)
+            try #require(abs(view.contentOffset.y - view.maxOffsetY) <= 0.5)
+            // The send that starts the approval's turn.
+            host.rootView.followRequest += 1
+            await Self.settle(controller)
+
+            let newState = Self.foldState(newer, turns: newerTurns, revision: 2)
+            switch change {
+            case .together:
+                var root = host.rootView
+                root.state = newState
+                root.chrome = 120
+                root.clearance = 60
+                host.rootView = root
+            case .rowsFirst:
+                host.rootView.state = newState
+                await Self.settle(controller)
+                host.rootView.chrome = 120
+                host.rootView.clearance = 60
+            case .chromeFirst:
+                host.rootView.chrome = 120
+                host.rootView.clearance = 60
+                await Self.settle(controller)
+                host.rootView.state = newState
+            }
+            try await Task.sleep(for: .milliseconds(100))
+            await Self.settle(controller)
+            #expect(controller.isFollowing)
+            #expect(
+                abs(view.contentOffset.y - view.maxOffsetY) <= 0.5,
+                "\(view.maxOffsetY - view.contentOffset.y) pt short of the end")
+            let newest = try #require(controller.cellFrame(of: .entry(ChatEntryID("a2"))))
+            #expect(newest.maxY - view.contentOffset.y <= view.bounds.height - view.adjustedContentInset.bottom + 0.5)
+        }
+    }
+
+    /// An update that lands while Jump to Latest is still animating moves
+    /// the offset itself. Once the jump is over, later layouts pin again.
+    @Test func aJumpAnUpdateInterruptsStillLeavesTheListPinning() async throws {
+        let controller = ChatTimelineController(actions: ChatTimelineActions())
+        let builder = ChatRowBuilder()
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { window in
+            controller.apply(Self.state(await builder.rows(for: ChatTimelineInput(entries: Self.entries(0..<60)))))
+            await Self.settle(controller)
+            let view = controller.timeline
+            Self.drag(controller, to: view.maxOffsetY - 400)
+            await Self.settle(controller)
+            try #require(!controller.isFollowing)
+
+            controller.jumpToLatest()
+            try await Task.sleep(for: .milliseconds(30))
+            try #require(abs(view.contentOffset.y - view.maxOffsetY) > 0.5, "the jump animates")
+            let rows = await builder.rows(for: ChatTimelineInput(entries: Self.entries(0..<62)))
+            controller.apply(Self.state(rows, revision: 2))
+            try await Task.sleep(for: .seconds(1))
+            await Self.settle(controller)
+
+            window.frame.size.height -= 180
+            await Self.settle(controller)
+            #expect(controller.isFollowing)
+            #expect(
+                abs(view.contentOffset.y - view.maxOffsetY) <= 0.5,
+                "\(view.maxOffsetY - view.contentOffset.y) pt short of the end")
+        }
+    }
+
     // MARK: Helpers
 
     private static func foldState(
@@ -1308,4 +1408,30 @@ private final class ImagePreviewCommitAnimator: NSObject, UIContextMenuInteracti
     func addAnimations(_ animations: @escaping () -> Void) { animations() }
     func addCompletion(_ completion: @escaping () -> Void) { completions.append(completion) }
     func complete() { completions.forEach { $0() } }
+}
+
+/// How an approval's changes reach the timeline.
+enum ChatTimelineChromeChange: String, CaseIterable, Sendable {
+    /// Rows, chrome and clearance in one SwiftUI update.
+    case together
+    case rowsFirst
+    case chromeFirst
+}
+
+/// The timeline above bottom chrome of a given height, as in Chat.
+private struct ChatTimelineChromeHost: View {
+    var state: ChatTimelineState
+    var chrome: CGFloat
+    var clearance: CGFloat
+    var jumpRequest = 0
+    var followRequest = 0
+
+    var body: some View {
+        ChatTimelineView(
+            state: state, jumpRequest: jumpRequest, followRequest: followRequest,
+            collapseControlClearance: clearance, actions: ChatTimelineActions()
+        )
+        .padding(.bottom, chrome)
+        .ignoresSafeArea()
+    }
 }

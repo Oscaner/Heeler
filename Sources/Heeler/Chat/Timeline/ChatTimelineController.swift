@@ -471,17 +471,24 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         disclosureAnchor = nil
         latch.reset()
         noteFollowing()
+        // Held from the start, so a layout on the way cannot pin to the end
+        // before the animation begins.
+        isJumpAnimating = true
         collectionView.layoutIfNeeded()
         let end = collectionView.maxOffsetY
         if end - collectionView.contentOffset.y > 2 * collectionView.bounds.height {
             collectionView.contentOffset.y = max(collectionView.minOffsetY, end - collectionView.bounds.height)
             collectionView.layoutIfNeeded()
         }
-        if UIAccessibility.isReduceMotionEnabled {
+        // An animation to where the list already is never starts, so it
+        // never ends either, and the flag would stop every later pin.
+        if UIAccessibility.isReduceMotionEnabled
+            || abs(collectionView.maxOffsetY - collectionView.contentOffset.y) <= 0.25
+        {
+            isJumpAnimating = false
             pinToEnd()
             return
         }
-        isJumpAnimating = true
         collectionView.setContentOffset(CGPoint(x: 0, y: collectionView.maxOffsetY), animated: true)
     }
 
