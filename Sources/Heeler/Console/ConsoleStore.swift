@@ -88,6 +88,7 @@ final class ConsoleStore {
     @ObservationIgnored private let makeSession:
         @Sendable (Host, [EventSubscription]) -> EventsSession
     @ObservationIgnored private let snapshotRetryDelay: Duration
+    @ObservationIgnored private let chatPrefetchRetryDelay: Duration
     @ObservationIgnored private var isActive = false
     /// The most recently enqueued lifecycle transition. Suspend and resume
     /// are each several awaits long, so without a chain a resume racing a
@@ -109,6 +110,8 @@ final class ConsoleStore {
     let cachedChats: ConsoleChatCache
     @ObservationIgnored private var chatPrefetchTasks: [Host.ID: Task<Void, Never>] = [:]
     @ObservationIgnored private var chatPrefetched: [ConsoleAgent.ID: String] = [:]
+    /// Prefetches that found no conversation yet, by the key they ran for.
+    @ObservationIgnored private var chatPrefetchRetries: [ConsoleAgent.ID: (key: String, count: Int)] = [:]
     /// The connection whose saved Chat bindings were last re-proved, per Host.
     @ObservationIgnored private var chatCacheValidatedGenerations: [Host.ID: UInt64] = [:]
     @ObservationIgnored private var chatCacheRetention: Task<Void, Never>?
@@ -123,6 +126,7 @@ final class ConsoleStore {
 
     init(
         snapshotRetryDelay: Duration = .seconds(2),
+        chatPrefetchRetryDelay: Duration = .seconds(5),
         pins: PinnedAgentsStore = PinnedAgentsStore(),
         rowLayouts: AgentRowLayoutStore = AgentRowLayoutStore(),
         chatCache: any ChatTranscriptCache = VolatileChatTranscriptCache(),
@@ -139,6 +143,7 @@ final class ConsoleStore {
         terminalConnections = TerminalConnectionPool(budget: terminalBudget)
         agentTerminals = AgentTerminalCache(budget: terminalBudget)
         self.snapshotRetryDelay = snapshotRetryDelay
+        self.chatPrefetchRetryDelay = chatPrefetchRetryDelay
         self.pins = pins
         self.rowLayouts = rowLayouts
         self.makeSession = makeSession
@@ -160,6 +165,7 @@ final class ConsoleStore {
             chatPrefetchTasks[id]?.cancel()
             chatPrefetchTasks[id] = nil
             chatPrefetched = chatPrefetched.filter { $0.key.hostID != id }
+            chatPrefetchRetries = chatPrefetchRetries.filter { $0.key.hostID != id }
             chatCacheValidatedGenerations[id] = nil
         }
         for (id, session) in composerSessions where incoming[id.hostID] == nil {
@@ -1181,6 +1187,7 @@ final class ConsoleStore {
                 chatPrefetchTasks[host.id]?.cancel()
                 chatPrefetchTasks[host.id] = nil
                 chatPrefetched = chatPrefetched.filter { $0.key.hostID != host.id }
+                chatPrefetchRetries = chatPrefetchRetries.filter { $0.key.hostID != host.id }
                 continue
             }
             guard hostPlatforms[host.id] == .posix else { continue }
@@ -1205,16 +1212,22 @@ final class ConsoleStore {
                         projection.transportGeneration == generation else { break }
                     guard let program = ChatProgram(rawValue: agent.agent.kind),
                         let chat = chatStore(for: agent, program: program) else { continue }
-                    chatPrefetched[agent.id] = chatPrefetchKey(agent, generation: generation)
+                    let key = chatPrefetchKey(agent, generation: generation)
+                    chatPrefetched[agent.id] = key
                     let prefetched = await chat.prefetch()
                     guard !Task.isCancelled else { return }
                     let snapshot = chat.conversation
-                    if !prefetched || snapshot.readFailure != nil || Self.chatPrefetchWaits(on: snapshot.phase) {
+                    let retries = chatPrefetchRetries[agent.id].flatMap { $0.key == key ? $0.count : nil } ?? 0
+                    chatPrefetchRetries[agent.id] =
+                        Self.chatPrefetchWaits(on: snapshot.phase) ? (key, retries + 1) : nil
+                    if !prefetched || snapshot.readFailure != nil
+                        || Self.chatPrefetchRetries(after: retries, phase: snapshot.phase)
+                    {
                         chatPrefetched[agent.id] = nil
                         needsRetry = true
                     }
                 }
-                if needsRetry { try? await Task.sleep(for: .seconds(5)) }
+                if needsRetry { try? await Task.sleep(for: chatPrefetchRetryDelay) }
                 guard !Task.isCancelled, projections[host.id] === projection else { return }
                 chatPrefetchTasks[host.id] = nil
                 reconcileChatCache()
@@ -1231,6 +1244,14 @@ final class ConsoleStore {
         case .unavailable(.noSession), .unavailable(.notFound): true
         default: false
         }
+    }
+
+    /// Whether a prefetch that ended in `phase`, after `retries` earlier
+    /// ones for the same key, looks again. A conversation still missing
+    /// after a few looks waits for a change to its Agent, a new connection,
+    /// or its Chat, which keeps looking while it shows.
+    nonisolated static func chatPrefetchRetries(after retries: Int, phase: ChatConversationSnapshot.Phase) -> Bool {
+        chatPrefetchWaits(on: phase) && retries < 3
     }
 
     private func chatPrefetchKey(_ agent: ConsoleAgent, generation: UInt64) -> String {

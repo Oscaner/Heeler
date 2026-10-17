@@ -163,6 +163,57 @@ struct ConsoleStoreTests {
         #expect(!ConsoleStore.chatPrefetchWaits(on: .following(path: "/p.jsonl")))
     }
 
+    /// A conversation still missing after a few looks waits for a change
+    /// to its Agent instead of sweeping the Host every few seconds while
+    /// its Chat is hidden (SR-02).
+    @Test(arguments: [
+        ChatConversationSnapshot.Phase.unavailable(.notFound(searchedAll: true)), .unavailable(.noSession(.claude)),
+    ])
+    func aMissingConversationStopsPrefetchingAfterThreeRetries(phase: ChatConversationSnapshot.Phase) {
+        #expect((0...4).map { ConsoleStore.chatPrefetchRetries(after: $0, phase: phase) }
+            == [true, true, true, false, false])
+        #expect(!ConsoleStore.chatPrefetchRetries(after: 0, phase: .following(path: "/p.jsonl")))
+    }
+
+    @Test func aStatusChangeRearmsAStoppedPrefetch() async throws {
+        let host = Host.fixture()
+        let session = AgentSessionInfo(
+            agent: "claude", kind: .id, source: "herdr:claude", value: "e951205e-24af-4a5e-baa7-3ccbebd2de2c")
+        let info = AgentInfo(
+            agentStatus: .idle, focused: false, paneID: "w1:p1", revision: 1,
+            tabID: "t1", terminalID: "term-1", workspaceID: "w1", agent: "claude",
+            agentSession: session, cwd: "/home/dev/proj")
+        let transport = ScriptedTransport(snapshot: .fixture(agents: [info]))
+        // No transcript under the session's name.
+        await transport.scriptChat(files: VirtualHostFiles().hostFiles(), agent: Agent(info))
+        let store = ConsoleStore(
+            snapshotRetryDelay: .milliseconds(10), chatPrefetchRetryDelay: .milliseconds(10),
+            makeSession: { _, subscriptions in
+                EventsSession(
+                    subscriptions: subscriptions, connect: { transport },
+                    reconnectPolicy: Self.fastPolicy, keepalive: nil)
+            }, chatAdapter: { _ in NumberedChatReducer.adapter() })
+        defer { store.setHosts([]) }
+
+        store.setHosts([host])
+        await store.resume()
+        try await waitUntil("the first look and three retries") { await transport.chatAgentReads.count == 4 }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(await transport.chatAgentReads.count == 4)
+
+        await transport.setSnapshot(.fixture(agents: [AgentInfo(
+            agentStatus: .working, focused: false, paneID: "w1:p1", revision: 2,
+            tabID: "t1", terminalID: "term-1", workspaceID: "w1", agent: "claude",
+            agentSession: session, cwd: "/home/dev/proj")]))
+        try await waitUntil("the status event lands") {
+            _ = await transport.emit(.agentStatusChanged(paneID: "w1:p1", status: .working))
+            return store.agents.first?.agent.status == .working
+        }
+        try await waitUntil("the new status looks again") { await transport.chatAgentReads.count == 8 }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(await transport.chatAgentReads.count == 8)
+    }
+
     @Test func connectingCachesChatWithoutOpeningItsDetail() async throws {
         let host = Host.fixture()
         let sessionID = "e951205e-24af-4a5e-baa7-3ccbebd2de2c"
