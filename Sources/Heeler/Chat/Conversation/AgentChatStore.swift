@@ -472,6 +472,8 @@ final class AgentChatStore {
             if needsRelocate {
                 needsRelocate = false
                 snapshot = await engine.relocate(context: context)
+                // A search that failed is tried again on the next step.
+                if snapshot.readFailure != nil, !Task.isCancelled, engine === self.engine { needsRelocate = true }
             } else {
                 snapshot = await engine.poll(context: context)
             }

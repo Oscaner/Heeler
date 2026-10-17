@@ -318,7 +318,13 @@ TUI's backtrack is `codex-rs/tui/src/app/event_dispatch.rs:684-768`).
   (`codex-rs/thread-store/src/local/rollout_lineage.rs:14-189`).
 - Turns that were rolled back are simply absent.
 - The thread id does not change, so herdr's reported id stays the same while
-  the live file becomes the newer `_<rolloutID>` sibling.
+  the live file becomes the newer `_<rolloutID>` sibling. Codex 0.162.1
+  (observed live 2026-10-17) writes that sibling at the rewind, named with
+  the rewind's own timestamp in that day's directory, and leaves the base
+  file byte for byte as it was. A follower of the base therefore sees no
+  change at all; Chat looks for the newest segment again on each Agent
+  status change and whenever a send goes overdue, and tries again on the
+  next read when that search fails.
 
 ### Legacy turns
 
@@ -552,7 +558,8 @@ Matching a sent prompt to its record follows from this (Not verified):
   window is incomplete.
 - **Following.** A file shorter than the read position, or whose first line
   or last read bytes changed, was rewritten. A file that disappears may have
-  been archived into `archived_sessions/`.
+  been archived into `archived_sessions/`. A revert changes neither: the
+  thread continues in a new sibling (see [Revert](#revert)).
 
 ## Not verified
 
@@ -561,7 +568,9 @@ Matching a sent prompt to its record follows from this (Not verified):
 - Non-empty code-mode `aggregated_output` and `/compact` turns: read in
   source, never observed live. A lone image-path paste was observed with a
   bare path only; quoted, escaped and `file://` forms rest on source.
-- Where a revert made on a later day places its file. A search for the
-  newest rollout must include today's directory.
+- Where a revert made on a later day than the thread started places its
+  file (a same-day revert lands in that day's directory with a new
+  timestamp). A search for the newest rollout must include today's
+  directory.
 - The matching rules in
   [Prompt recording and echo matching](#prompt-recording-and-echo-matching).

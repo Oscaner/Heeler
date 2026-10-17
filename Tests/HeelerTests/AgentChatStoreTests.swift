@@ -16,12 +16,15 @@ struct AgentChatStoreTests {
         "/home/dev/.claude/projects/-home-dev-proj/\(session).jsonl"
     }
 
-    private static func agent(session: String?, status: AgentStatus = .idle) -> Agent {
+    private static func agent(
+        session: String?, status: AgentStatus = .idle, program: ChatProgram = .claude
+    ) -> Agent {
         Agent(
-            terminalID: "term-1", kind: "claude", title: "", status: status, workspaceID: "w1",
+            terminalID: "term-1", kind: program.rawValue, title: "", status: status, workspaceID: "w1",
             tabID: "t1", paneID: "w1:p1", cwd: cwd, revision: 1,
             agentSession: session.map {
-                AgentSessionInfo(agent: "claude", kind: .id, source: "herdr:claude", value: $0)
+                AgentSessionInfo(
+                    agent: program.rawValue, kind: .id, source: "herdr:\(program.rawValue)", value: $0)
             })
     }
 
@@ -79,22 +82,24 @@ struct AgentChatStoreTests {
         let store: AgentChatStore
 
         init(
-            session: String?, limits: TranscriptFollower.Limits = TranscriptFollower.Limits(),
+            session: String?, program: ChatProgram = .claude,
+            limits: TranscriptFollower.Limits = TranscriptFollower.Limits(),
             timing: AgentChatStore.Timing = AgentChatStore.Timing(
                 activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)),
             cachedSession: @escaping @Sendable (Agent) async -> AgentSessionInfo? = { _ in nil }
         ) {
-            let agent = AgentChatStoreTests.agent(session: session)
+            let agent = AgentChatStoreTests.agent(session: session, program: program)
             let server = Server(agent)
             let clock = clock
             self.server = server
             store = AgentChatStore(
                 agentID: ConsoleAgent.ID(hostID: AgentChatStoreTests.host, paneID: agent.paneID),
-                agent: agent, program: .claude,
+                agent: agent, program: program,
                 source: AgentChatSource(
                     hostID: AgentChatStoreTests.host, socketLocation: .defaultSession,
                     files: files.hostFiles(), agentInfo: { try await server.read() }, cache: cache,
-                    adapter: NumberedChatReducer.adapter(limits: limits), cachedSession: cachedSession),
+                    adapter: NumberedChatReducer.adapter(limits: limits, wantsFirstLine: program == .codex),
+                    cachedSession: cachedSession),
                 timing: timing, now: { clock.now })
         }
 
@@ -920,6 +925,45 @@ struct AgentChatStoreTests {
 
         #expect(fixture.store.sendStatuses[other] == .recorded)
         #expect(fixture.store.sendStatuses[third] == .awaiting)
+    }
+
+    @Test func aCodexUndoIsFollowedOnAStatusChangeAndOnAnOverdueSend() async throws {
+        let thread = "01a10f87-e025-7fb1-8974-8dd09937767a"
+        let directory = "/home/dev/.codex/sessions/2026/10/06"
+        let base = "\(directory)/rollout-2026-10-06T12-45-25-\(thread).jsonl"
+        func segment(_ n: Int) -> String {
+            "\(directory)/rollout-2026-10-06T13-0\(n)-00-\(thread)_01a10f9a-0000-7000-8000-00000000000\(n).jsonl"
+        }
+        let meta = #"{"type":"session_meta","payload":{"id":"\#(thread)"}}"# + "\n"
+        let fixture = Fixture(session: thread, program: .codex)
+        await fixture.files.write(meta + NumberedChatReducer.lines(0..<2), at: base)
+        await fixture.store.step()
+        #expect(fixture.store.conversation.phase == .following(path: base))
+
+        // An undo continues in a sibling and leaves the base file as it
+        // was. The first search after the turn ends fails and is tried again.
+        await fixture.files.write(meta + NumberedChatReducer.lines(40..<42), at: segment(1))
+        await fixture.files.failNext(.list, with: TransportError.channelFailed(detail: "list"))
+        fixture.store.agentDidChange(Self.agent(session: thread, status: .working, program: .codex))
+        await fixture.store.step()
+        #expect(fixture.store.conversation.phase == .following(path: base))
+        await fixture.store.step()
+        #expect(fixture.store.conversation.phase == .following(path: segment(1)))
+        #expect(Self.ids(fixture.store).suffix(2) == ["n-40", "n-41"])
+
+        // A send recorded only in a newer sibling is found once overdue.
+        let id = UUID()
+        fixture.store.updateSends([Self.sent(id, "hello ", delivered: false)])
+        fixture.store.updateSends([Self.sent(id, "hello ")])
+        await fixture.files.write(meta + NumberedChatReducer.prompt("hello"), at: segment(2))
+        await fixture.store.step()
+        #expect(fixture.store.sendStatuses[id] == .awaiting)
+        fixture.advance(10)
+        await fixture.store.step()
+        #expect(fixture.store.sendStatuses[id] == .overdue)
+        await fixture.store.step()
+        #expect(fixture.store.conversation.phase == .following(path: segment(2)))
+        #expect(fixture.store.sendStatuses[id] == .recorded)
     }
 
     @Test func twoIdenticalSendsNeedTwoRecordedCopies() async throws {

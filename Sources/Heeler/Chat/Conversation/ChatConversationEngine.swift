@@ -252,12 +252,7 @@ actor ChatConversationEngine {
         do {
             switch try await locate() {
             case .found(let path):
-                var follower = TranscriptFollower(path: path, limits: adapter.limits, identity: adapter.identity)
-                if let lines = try await follower.open(files) {
-                    try await start(follower, lines: lines)
-                } else {
-                    stop(.notFound(searchedAll: true))
-                }
+                try await follow(path)
             case .unavailable(let reason):
                 stop(reason)
             }
@@ -301,15 +296,35 @@ actor ChatConversationEngine {
     /// continues the thread in a new `_<rollout>` file and leaves the one
     /// followed unchanged, so a poll alone would never show the turns
     /// written since (ADR 0023). Follows the new file when the live one
-    /// moved, else polls. Other programs only poll.
+    /// moved, else polls. A search that fails is a read failure, so the
+    /// owner can look again. Other programs only poll.
     func relocate(context: ChatProjectionContext) async -> ChatConversationSnapshot {
         guard reference.program == .codex, let current = follower?.path else {
             return await poll(context: context)
         }
-        if case .found(let path)? = try? await locate(), path != current {
-            return await open(directories: directories, context: context)
+        setContext(context)
+        do {
+            if case .found(let path) = try await locate(), path != current {
+                try await follow(path)
+                projectIfNeeded()
+                return snapshot
+            }
+        } catch {
+            recordFailure(error)
+            projectIfNeeded()
+            return snapshot
         }
         return await poll(context: context)
+    }
+
+    /// Reads the tail of the transcript at `path` and follows it.
+    private func follow(_ path: String) async throws {
+        var follower = TranscriptFollower(path: path, limits: adapter.limits, identity: adapter.identity)
+        if let lines = try await follower.open(files) {
+            try await start(follower, lines: lines)
+        } else {
+            stop(.notFound(searchedAll: true))
+        }
     }
 
     /// Reads history above the oldest line read, a page at a time, until
