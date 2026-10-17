@@ -493,7 +493,16 @@ How the 2.1.291 CLI turns a submitted prompt into a record
    `<pasted_content id="abcd">…</pasted_content id="abcd">`.
 4. While the agent is busy, the prompt is queued after `trim()`: a
    `queue-operation` enqueue, later a user record or a `queued_command`
-   attachment.
+   attachment. On 2.1.301 (observed live 2026-10-16) the enqueue is written
+   at once, with `content`; the delivery comes only when the turn can take
+   the prompt, which can be minutes later, as a `remove` with the same
+   `content` followed by a `queued_command` attachment (`commandMode`
+   `prompt`, `source_uuid`, `delivery_id`, the enqueue's timestamp). Up in
+   the input box takes queued prompts back with a `popAll` that carries
+   their `content`; the binary also writes `content` on `popOne`, but not on
+   `dequeue`. Chat shows an enqueue with no later prompt of the same text
+   and no later operation carrying it as a Queued bubble while the turn
+   runs; the delivery's bubble replaces it.
 5. `UserPromptSubmit` hooks may rewrite the prompt or append to it.
 
 herdr's `agent.prompt` writes the text as a bracketed paste when the program
@@ -602,8 +611,8 @@ mid-file, a file that shrinks and byte offsets that move.
 - 2.1.291 `local_command` and `!` shell records in a capture, and
   model-invoked skill records.
 - The shape of a rewind branch and of retried or fallback requests.
-- How a prompt queued while busy is recorded: a user record, a
-  `queued_command`, or both.
+- How a prompt queued while busy was recorded before 2.1.301: a user
+  record, a `queued_command`, or both.
 - Whether `api_error` is ever written.
 - Whether the `plan_mode` attachment carries `planFilePath`.
 - NFC normalization in the CLI's project key, and the long-key vectors.
