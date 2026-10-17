@@ -131,7 +131,7 @@ enum FieldText: Sendable, Hashable {
     /// cursor, which follows it as a blank cell when it is at the end.
     static func read(_ runs: [ScreenRun]) -> FieldText {
         guard let cursor = runs.firstIndex(where: \.style.isReverse) else {
-            let text = runs.map(\.text).joined().trimmingCharacters(in: .whitespaces)
+            let text = ScreenRow.normalizedSpaces(runs.map(\.text).joined()).trimmingCharacters(in: .whitespaces)
             let visible = runs.filter { !DialogRowScanner.isBlank($0) }
             if !visible.isEmpty, visible.allSatisfy(\.style.isDim) { return .placeholder(text) }
             return .typed(text)
@@ -742,7 +742,8 @@ private struct ClaudeDialogReader {
 
     /// The first row of a note too long for its row, which leaves the
     /// cursor cell out: `No, ` in the accent color, then the note's start,
-    /// wrapped onto the next rows or cut off with `…`.
+    /// wrapped onto the next rows or cut off with `…`. Dim text alone is the
+    /// empty note's placeholder, as in a field with its cursor.
     private func noteWithoutCursor(_ runs: [ScreenRun]) -> OptionRowReading? {
         let visible = runs.enumerated().filter { !DialogRowScanner.isBlank($0.element) }
         guard let accent = block.accent, let first = visible.first, first.element.style.foreground == accent,
@@ -758,7 +759,7 @@ private struct ClaudeDialogReader {
         var reading = OptionRowReading()
         reading.feedbackLabel = String(label.dropLast())
         reading.label = String(label.dropLast())
-        reading.field = .typed(ScreenRow.normalizedSpaces(rest.map(\.text).joined()).trimmingCharacters(in: .whitespaces))
+        reading.field = FieldText.read(Array(rest))
         return reading
     }
 

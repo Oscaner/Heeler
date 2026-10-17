@@ -615,6 +615,18 @@ struct DialogExpectationTests {
         #expect(dialog.focus.feedbackOrdinal == 4)
     }
 
+    @Test("An empty note drawn without its cursor cell still reads as the placeholder")
+    func emptyNoteWithoutTheCursor() throws {
+        let bash = try fingerprint("claude-32-c7-phone-bash-blocked")
+        // claude-34 with the cursor cell drawn dim like the rest.
+        let text = try ScreenFixture.text("claude-34-c7-phone-tab-on-no")
+        let cursorless = text.replacingOccurrences(of: "\u{1B}[7ma", with: "\u{1B}[2ma")
+        try #require(cursorless != text)
+        let observation = DialogObservation(
+            screen: ANSIScreenDecoder.decode(cursorless), program: .claude, activity: .blocked)
+        #expect(DialogExpectation.feedbackMode(ordinal: 4).isMet(by: observation, fingerprint: bash))
+    }
+
     @Test("A note wrapped at the phone's width, with the cursor on its last row, meets its check")
     func wrappedNoteOnYes() throws {
         let bash = try fingerprint("claude-36-c7-phone-yes-blocked")
