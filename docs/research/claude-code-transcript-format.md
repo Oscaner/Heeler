@@ -297,7 +297,7 @@ read Declined like `4. No` (read in the binary, not observed).
 | AskUserQuestion | `questions[]` | `answers` maps each question to its answers joined by `, `: `probe2-transcript.jsonl:48` has `Red, Blue` and the typed answer `Medium` |
 | ExitPlanMode | `plan`, `planFilePath` | `plan` is the approved plan. `input.plan` can be stale: `probe2-transcript.jsonl:84` proposes p.txt while `:86` holds q.txt |
 | EnterPlanMode | none | `message` (`probe2-transcript.jsonl:60`) |
-| Glob and Grep, WebFetch, TodoWrite | `pattern`, `url` | `numFiles`; `code` and `bytes`; `newTodos` |
+| Glob and Grep, WebFetch, TodoWrite | `pattern`, `url` (as the model wrote it: 2.1.301's permission dialog shows it normalized, a bare host with a trailing `/`) | `numFiles`; `code` and `bytes`; `newTodos` |
 | ToolSearch | `query` | Result content `[{type: "tool_reference"}]` (`probe2-transcript.jsonl:56`) |
 | Other tools and MCP | `name` | The result's first text |
 
