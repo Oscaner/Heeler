@@ -396,6 +396,7 @@ private struct BlockedDialogCard: View {
 /// The card folded away, with Stop still at hand.
 private struct BlockedCollapsedBar: View {
     let store: BlockedCardStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var dialog: BlockedDialog? {
         if case .card(let card) = store.content { return card.dialog }
@@ -403,29 +404,57 @@ private struct BlockedCollapsedBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "hand.raised.fill")
-                .foregroundStyle(.orange)
-                .accessibilityHidden(true)
-            Text(verbatim: dialog?.cardTitle ?? "Waiting for Input")
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            if let dialog, dialog.canStop {
-                Button(dialog.stopTitle, role: .destructive) {
-                    Task { await store.perform(.dismiss) }
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // One line can't hold the buttons at these sizes: the title
+                // goes above them, and a long button wraps.
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        icon
+                        title
+                    }
+                    HStack(spacing: 10) {
+                        buttons
+                    }
                 }
-                .lineLimit(1)
-                .fixedSize()
-                .disabled(!store.canStop)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 10) {
+                    icon
+                    title
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    // Only the title gives way on a narrow screen.
+                    buttons
+                        .lineLimit(1)
+                        .fixedSize()
+                }
             }
-            // Only the title gives way on a narrow screen.
-            Button("Show") { store.isCollapsed = false }
-                .lineLimit(1)
-                .fixedSize()
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+    }
+
+    private var icon: some View {
+        Image(systemName: "hand.raised.fill")
+            .foregroundStyle(.orange)
+            .accessibilityHidden(true)
+    }
+
+    private var title: some View {
+        Text(verbatim: dialog?.cardTitle ?? "Waiting for Input")
+            .font(.subheadline.weight(.semibold))
+    }
+
+    @ViewBuilder
+    private var buttons: some View {
+        if let dialog, dialog.canStop {
+            Button(dialog.stopTitle, role: .destructive) {
+                Task { await store.perform(.dismiss) }
+            }
+            .disabled(!store.canStop)
+        }
+        Button("Show") { store.isCollapsed = false }
     }
 }
 
