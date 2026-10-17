@@ -68,7 +68,7 @@ enum ConfirmationRule: Sendable, Hashable {
     /// The screen no longer shows the dialog: another one, a page turn, or
     /// none. Two identical dialogs in a row look unchanged, so a card
     /// without a matched request can end up unconfirmed until the
-    /// transcript shows a call resolve or another one wait.
+    /// transcript shows a waiting call resolve.
     case fingerprintChange
     /// Codex: the dialog left the screen, or herdr reports the Agent idle
     /// or working.

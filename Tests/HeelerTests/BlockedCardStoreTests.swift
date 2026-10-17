@@ -112,19 +112,23 @@ struct BlockedCardStoreTests {
         #expect(store.progress == .ready)
     }
 
-    /// The next dialog can be identical (two `ls` approvals in a row): the
-    /// conversation moving on brings the answers back.
-    @Test func anUnconfirmedAnswerIsReleasedOnceItsCallResolves() async throws {
+    /// The next dialog can be identical (two `ls` approvals in a row): a
+    /// call that waited resolving brings the answers back, one that only
+    /// starts waiting does not.
+    @Test func anUnconfirmedAnswerIsReleasedOnceAWaitingCallResolves() async throws {
         let pane = FakePane(try ScreenFixture.screen("claude-02-c1-bash-blocked"))
         let store = Self.store(.claude, pane: pane)
+        // A request the dialog doesn't match, as a subagent's dialog has.
+        let waiting = Self.bash("toolu_x", "echo other")
+        store.update(transcript: Self.transcript(pending: [waiting]))
         store.update(activity: .blocked)
         await store.refresh()
         await store.perform(.choose(ordinal: 1))
         #expect(store.progress == .unconfirmed)
 
-        store.update(transcript: Self.transcript())
+        store.update(transcript: Self.transcript(pending: [waiting, Self.bash("toolu_y", "echo next")]))
         #expect(store.progress == .unconfirmed)
-        store.update(transcript: Self.transcript(resolved: [Self.bash("toolu_1", "touch c1.txt")]))
+        store.update(transcript: Self.transcript(resolved: [waiting]))
         #expect(store.progress == .ready)
         await store.refresh()
         #expect(store.progress == .ready)

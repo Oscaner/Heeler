@@ -82,8 +82,8 @@ final class BlockedCardStore {
         /// Keys are going out; every control waits.
         case acting
         /// The keys went out and the Agent has not shown their effect. Only
-        /// Stop acts until a read shows another screen or the conversation
-        /// moves on: the keys may still land.
+        /// Stop acts until a read shows another screen or a waiting call
+        /// resolves: the keys may still land.
         case unconfirmed
     }
 
@@ -188,12 +188,10 @@ final class BlockedCardStore {
             }
         }
         // Two identical dialogs in a row look unchanged on screen, so an
-        // answer that showed no effect took once the conversation moves on:
-        // a call resolved, or another one waits.
-        let movedOn =
-            !resolved.isSubset(of: resolvedToolUseIDs)
-            || !Set(pendingRequests.compactMap(\.callID)).isSubset(of: waiting)
-        if progress == .unconfirmed, movedOn {
+        // answer that showed no effect took once a call that waited
+        // resolves. A call that only starts waiting proves nothing: the
+        // transcript can catch up with the dialog answered.
+        if progress == .unconfirmed, !waiting.isDisjoint(with: resolved.subtracting(resolvedToolUseIDs)) {
             progress = .ready
             unconfirmedFingerprint = nil
         }
