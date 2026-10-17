@@ -695,6 +695,9 @@ private struct ChatToolRow: View {
             if tool.showsDiffAsOutput, let changes = tool.fileChanges {
                 ForEach(changes.files.indices, id: \.self) { index in
                     let file = changes.files[index]
+                    if changes.files.count > 1 {
+                        ChatFileDiffHeading(file: file, path: changes.displayPath(of: file))
+                    }
                     if file.lineCount > 0 {
                         ChatInlineFileDiff(
                             file: file, read: tool.outputRead, missingOutputText: fileMissingOutputText,

@@ -188,6 +188,23 @@ private struct ChatFileChangesNote: View {
     }
 }
 
+/// Names one file's diff in an edit row that changed several, so each
+/// diff below says which file it is.
+struct ChatFileDiffHeading: View {
+    let file: ChatFileChange
+    let path: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("\(Text(file.kind.label).foregroundStyle(.secondary)) \(Text(verbatim: path).fontDesign(.monospaced))")
+                .font(.footnote)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ChatDiffBadge(diff: ChatDiffStats(added: file.added, removed: file.removed))
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// One changed file: what happened to it, its path and its line counts. A
 /// file with lines opens its diff.
 private struct ChatFileChangeLine: View {
