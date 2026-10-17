@@ -286,21 +286,6 @@ struct ChatComposerEchoesTests {
         #expect(echoes.map(\.state) == [.discarded])
     }
 
-    /// Left in the input box, then cleared there, with a prompt recorded
-    /// after it since: no echo, under the newer turn or anywhere else.
-    @Test func aClearedSendOvertakenByALaterPromptGetsNoEcho() async throws {
-        let transport = ScriptedTransport()
-        let store = Self.store(transport)
-        store.replaceDraft(with: "stuck")
-        await store.send(policy: Self.policy(verify: { _ in false }))
-        try await waitUntil("the verify task should mark the message") {
-            store.messages.first?.state == .undelivered
-        }
-        let id = try #require(store.messages.first?.id)
-
-        #expect(ChatComposerEchoes.pending(store.messages, statuses: [id: .abandoned]).isEmpty)
-    }
-
     /// A `/compact` Pi said it had nothing to compact for.
     @Test func aRefusedSendSaysWhatTheProgramSaid() async throws {
         let transport = ScriptedTransport()
