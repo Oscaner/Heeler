@@ -195,6 +195,30 @@ struct ChatTimelineControllerTests {
         }
     }
 
+    @Test func aLoadEarlierRowThatGrowsAtTheTopStaysInView() async throws {
+        let controller = ChatTimelineController(actions: ChatTimelineActions())
+        let builder = ChatRowBuilder()
+        let available = await builder.rows(
+            for: ChatTimelineInput(entries: Self.entries(200..<260), older: .available))
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.apply(Self.state(available))
+            await Self.settle(controller)
+            let view = controller.timeline
+            Self.drag(controller, to: view.minOffsetY)
+            await Self.settle(controller)
+            let before = try #require(Self.screenY(of: .olderHistory, in: controller))
+
+            let message = String(repeating: "Heeler couldn't read earlier messages from the Host. ", count: 4)
+            let failed = await builder.rows(
+                for: ChatTimelineInput(entries: Self.entries(200..<260), older: .failed(message)))
+            controller.apply(Self.state(failed, revision: 2))
+            await Self.settle(controller)
+            let after = try #require(Self.screenY(of: .olderHistory, in: controller))
+            #expect(abs(after - before) <= 0.5)
+            #expect(abs(view.contentOffset.y - view.minOffsetY) <= 0.5)
+        }
+    }
+
     @Test func aFollowingListStaysPinnedWhileRowsArriveAndGrow() async throws {
         let controller = ChatTimelineController(actions: ChatTimelineActions())
         let builder = ChatRowBuilder()
