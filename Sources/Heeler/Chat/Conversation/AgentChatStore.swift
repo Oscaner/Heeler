@@ -988,6 +988,11 @@ final class AgentChatStore {
             } else if let refusal = refusedSends[send.id] {
                 statuses[send.id] =
                     send.generation == conversationGeneration && !isOvertaken ? .refused(refusal) : .abandoned
+            } else if send.key == "/compact", program == .pi || program == .omp, isOvertaken {
+                // Pi and Oh My Pi record a compaction before the next prompt,
+                // and a refused one nowhere: with a prompt after it and no
+                // compaction, it never ran, whatever the screen read found.
+                statuses[send.id] = .abandoned
             } else if isUnwritten || date.timeIntervalSince(deliveredAt) < timing.echoTimeout {
                 statuses[send.id] = .awaiting
             } else if send.generation == conversationGeneration {

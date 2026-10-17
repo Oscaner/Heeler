@@ -1690,9 +1690,10 @@ struct AgentChatStoreTests {
     }
 
     /// The screen is read once for each overdue `/compact`: one that
-    /// showed no refusal stays overdue, whatever the screen shows later.
+    /// showed no refusal stays overdue, whatever the screen shows later,
+    /// until a prompt recorded after it with no compaction retires it.
     @Test func anOverdueCompactIsLookedForOnce() async throws {
-        let (_, store, pane, clock, id) = try await Self.sentCompact(.pi, screen: try Self.piEditor())
+        let (files, store, pane, clock, id) = try await Self.sentCompact(.pi, screen: try Self.piEditor())
 
         clock.now = clock.now.addingTimeInterval(10)
         await store.step()
@@ -1705,6 +1706,11 @@ struct AgentChatStoreTests {
 
         #expect(await pane.reads == 1)
         #expect(store.sendStatuses[id] == .overdue)
+
+        await files.append(Self.ompMessage("u2", parent: "u1", role: "user", "say PLUM"), to: Self.piPath(.pi))
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .abandoned)
     }
 
     /// Any other compaction failure is refused too, and a compaction the
