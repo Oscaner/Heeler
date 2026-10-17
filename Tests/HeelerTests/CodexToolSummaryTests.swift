@@ -265,6 +265,15 @@ struct CodexToolSummaryTests {
         #expect(CodexToolSummary.errorDisplay(#"{"error":{"code":"x"}}"#) == #"{"error":{"code":"x"}}"#)
     }
 
+    @Test("An answer's note drops its user_note key")
+    func displayAnswer() {
+        #expect(
+            CodexToolSummary.displayAnswer("None of the above\nuser_note: Medium please")
+                == "None of the above\nMedium please")
+        #expect(CodexToolSummary.displayAnswer("Red") == "Red")
+        #expect(CodexToolSummary.displayAnswer("say user_note: x") == "say user_note: x")
+    }
+
     @Test("A call without an outcome follows the turn and herdr's activity", arguments: CodexOpenCallCase.allCases)
     func openCall(_ openCase: CodexOpenCallCase) {
         var builder = CodexRolloutBuilder()

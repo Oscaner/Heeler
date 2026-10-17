@@ -40,10 +40,13 @@ struct CodexQuestionBuild: Equatable, Sendable {
             return ChatQuestion(
                 id: question.id, header: question.header, text: Self.firstLine(question.text),
                 options: question.options,
-                answer: verified?.answer ?? question.id.flatMap { outputAnswers?[$0] })
+                answer: (verified?.answer ?? question.id.flatMap { outputAnswers?[$0] })
+                    .map(CodexToolSummary.displayAnswer))
         }
         if questions.isEmpty, let verified {
-            questions = verified.map { ChatQuestion(text: Self.firstLine($0.question), answer: $0.answer) }
+            questions = verified.map {
+                ChatQuestion(text: Self.firstLine($0.question), answer: CodexToolSummary.displayAnswer($0.answer))
+            }
         }
         let answered = questions.contains { $0.answer != nil }
         return CodexQuestionState(callID: callID, questions: questions, isClosed: hasOutput && !answered)
@@ -211,7 +214,9 @@ enum CodexTimelineProjector {
                     ChatNotice(
                         kind: .answered, title: "Answered",
                         questions: replies.map {
-                            ChatQuestion(id: $0.questionItemID, text: $0.question, answer: $0.answer)
+                            ChatQuestion(
+                                id: $0.questionItemID, text: $0.question,
+                                answer: CodexToolSummary.displayAnswer($0.answer))
                         }))
             case .message(let message):
                 content = .user(message)
@@ -358,10 +363,10 @@ enum CodexTimelineProjector {
         /// The reply that settles a question, or nil while it is open.
         func reply(questionID: String?, itemID: String?, title: String) -> Reply? {
             if let questionID, let answer = byQuestionID[questionID] {
-                return Reply(answer: answer)
+                return Reply(answer: CodexToolSummary.displayAnswer(answer))
             }
             guard let itemID, let replies = byItemID[itemID] else { return nil }
-            return Reply(answer: replies.first { $0.question == title }?.answer)
+            return Reply(answer: replies.first { $0.question == title }.map { CodexToolSummary.displayAnswer($0.answer) })
         }
     }
 }

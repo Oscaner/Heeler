@@ -286,6 +286,17 @@ enum CodexToolSummary {
         return (added, removed)
     }
 
+    // MARK: Questions
+
+    /// An answer as the TUI shows it: Codex records a note as a
+    /// `user_note: ` line after the chosen option, and the TUI drops the key.
+    static func displayAnswer(_ answer: String) -> String {
+        let prefix = "user_note: "
+        return answer.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.hasPrefix(prefix) ? String($0.dropFirst(prefix.count)) : String($0) }
+            .joined(separator: "\n")
+    }
+
     // MARK: Outputs
 
     /// The exit code a legacy tool output records, and the output without

@@ -132,7 +132,7 @@ struct CodexProbeTranscriptTests {
                                 .init(label: "Small", detail: "Choose small."),
                                 .init(label: "Large", detail: "Choose large."),
                             ],
-                            answer: "None of the above\nuser_note: Medium please"),
+                            answer: "None of the above\nMedium please"),
                     ], callID: "call_H7ieHhHMR8EkXwMKqGbHpnSB"))
         #expect(projection.transcript.pendingRequests.allSatisfy { $0.toolName != "request_user_input" })
     }
