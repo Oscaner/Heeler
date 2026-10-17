@@ -462,8 +462,9 @@ final class BlockedCardStore {
     /// expectation before the next step.
     ///
     /// - Parameter turnedReason: Why it stopped when a page turn's check
-    ///   failed on a screen without the dialog: the keys took, and the next
-    ///   page is one Heeler can't read.
+    ///   failed on a screen with no dialog Heeler reads: the keys took, and
+    ///   the next page is one it can't read. Another dialog it reads keeps
+    ///   `stopReason`.
     private func send(
         _ steps: [DialogStep], to fingerprint: DialogFingerprint,
         stopReason: String = BlockedCardStore.stoppedMessage, turnedReason: String? = nil
@@ -485,7 +486,7 @@ final class BlockedCardStore {
                     guard check.isMet else {
                         var reason = stopReason
                         if case .page = expectation, let turnedReason, let last = check.last,
-                            last.result.fingerprint != fingerprint
+                            last.result.dialog == nil
                         {
                             reason = turnedReason
                         }
