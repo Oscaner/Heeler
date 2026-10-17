@@ -106,7 +106,7 @@ fields.
 | `local_command` | `content`, `level` (CLI `chunk-v1gtm86q.js` `uh`) |
 | `away_summary` | `content` |
 | `model_refusal_fallback` | `retractedMessageUuids` |
-| `informational`, `scheduled_task_fire`, `agents_killed`, `memory_saved` | Status records |
+| `informational`, `scheduled_task_fire`, `agents_killed`, `memory_saved` | Status records. On 2.1.301 (live 2026-10-17) a `/command` the running CLI doesn't know, such as a skill added after it started, records only an `informational` `Unknown command: /name` and, as its child, `Args from unknown skill: <args>` |
 | `api_error` | CLI `pW`. Never seen in a file; Not verified whether it is ever written. |
 
 ### Attachment records
@@ -248,7 +248,7 @@ How a call that has a result ended; the first matching row wins:
 
 | Evidence | Outcome | Fixture |
 | --- | --- | --- |
-| `toolDenialKind`, or an error starting `The user doesn't want to proceed with this tool use.` (CLI `chunk-v1gtm86q.js` `lC`, `R0`) | Declined. The feedback is `userFeedback`, else the text after `the user said:\n`; 2.1.301's `Chat about this` on a question records its own `The user wants to clarify these questions. …` there, which is not the user's. | `probe2-transcript.jsonl:26`, `:81` (feedback); `:108`, `:119` (none) |
+| `toolDenialKind`, or an error starting `The user doesn't want to proceed with this tool use.` (CLI `chunk-v1gtm86q.js` `lC`, `R0`) | Declined. The feedback is `userFeedback`, else the text after `the user said:\n`. 2.1.301's `Chat about this` on a question records its own `The user wants to clarify these questions. …` there, which is not the user's: Chat reads that one as Chat Instead. | `probe2-transcript.jsonl:26`, `:81` (feedback); `:108`, `:119` (none) |
 | An error starting `Permission for this tool use was denied` (`lB`, `JQ`) | Declined by a rule or a subagent | none |
 | Text starting with a marker from the CLI's interrupt list (`chunk-p4rztmns.js` `the`; SDK `LI`) | Interrupted or not completed | none |
 | `toolDenialUnanswered` | Not completed: the approval request expired | none |
@@ -468,10 +468,10 @@ only at position 0 of the trimmed text; a prompt that mentions
 | Background task done | A user `<task-notification>` with `task-id`, `tool-use-id`, `output-file`, `status`, `summary`, `note`, `result` and `usage`, `promptSource: "system"` and `origin.kind: "task-notification"`, after a `queue-operation` (`probe2-transcript.jsonl:130-132`) | Finishes the Agent call it names |
 | Interrupt | A marker record (SDK `MI`: the text starts with a marker, or every block is text or an error result starting with one) | The turn was stopped |
 | API error | `isApiErrorMessage` | An error notice |
-| Reasoning | A `thinking` block and `thinkingDurationMs` (`probe2-transcript.jsonl:106`) | The text may be empty |
+| Reasoning | A `thinking` block and `thinkingDurationMs` (`probe2-transcript.jsonl:106`) | The text may be empty. 2.1.301 records some narration between calls as a signed thinking block of 2 ms (2.1.291 as unsigned ones of 1-23 ms), which the terminal draws as text; real thinking took 647 ms at the shortest in the probes and 2.1.301 records it without text. Chat shows thinking with text under 200 ms, or with no duration, as the model's text |
 | Images | `image` blocks in user records or tool results | Base64 data |
 | Model switch or retraction | A `fallback` block; `system` `model_refusal_fallback` | `retractedMessageUuids` name records that no longer count |
-| `turn_duration`, `away_summary`, `informational` | `system` records | Status, not conversation |
+| `turn_duration`, `away_summary`, `informational` | `system` records | Status, not conversation, except the `Unknown command:` pair (see [System records](#system-records)): an error notice |
 | `isMeta` with `origin.kind` `channel`, `observer`, `observer-activity`, `slack-ping` or `peer` | | The SDK keeps these (`$C`) |
 | `<system-reminder>`, other `isMeta`, caveats, hook tags | | Model input only |
 
@@ -538,6 +538,10 @@ What follows for matching a sent prompt to its record:
   Images are recorded as blocks, so only the text compares, after each
   `[Image #N]` is replaced by its `[Image: source: …]` path when the prompt
   has one (item 3 above).
+- A `/command` the running CLI doesn't know records no prompt; its
+  `Unknown command: /name` record, with the arguments its
+  `Args from unknown skill:` child names, stands for it (2.1.301, live
+  2026-10-17).
 - Forks and `/clear` start a new session id and file, so a prompt without an
   echo may have landed in another transcript (Not verified for `/clear`; see
   [Location](#location)).
