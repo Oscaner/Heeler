@@ -417,7 +417,8 @@ enum ChatTimelineProjection {
         if fetches > 0 { parts.append("Fetched \(plural(fetches, "page", "pages"))") }
         if otherWeb > 0 { parts.append("Used the web \(times(otherWeb))") }
         if case let n = count(.mcp), n > 0 { parts.append("Called \(plural(n, "tool", "tools"))") }
-        if case let n = count(.image), n > 0 { parts.append("Viewed \(plural(n, "image", "images"))") }
+        // No verb: an image row may be one the Agent viewed or generated.
+        if case let n = count(.image), n > 0 { parts.append(plural(n, "image", "images")) }
         if count(.todo) > 0 { parts.append("Updated the to-do list") }
         if case let n = count(.other), n > 0 {
             parts.append(parts.isEmpty ? "Used \(plural(n, "tool", "tools"))" : plural(n, "other tool", "other tools"))

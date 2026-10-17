@@ -338,7 +338,8 @@ struct ChatTimelineProjectionTests {
         #expect(summary([tool(.search), tool(.listing), tool(.listing)]) == "Ran 1 search, Listed 2 folders")
         #expect(summary([tool(.web, "WebSearch"), tool(.web, "WebFetch"), tool(.web, "WebFetch")]) == "Searched the web once, Fetched 2 pages")
         #expect(summary([tool(.web, "browse"), tool(.web, "browse")]) == "Used the web 2 times")
-        #expect(summary([tool(.mcp), tool(.image), tool(.todo), tool(.todo)]) == "Called 1 tool, Viewed 1 image, Updated the to-do list")
+        #expect(summary([tool(.mcp), tool(.image), tool(.todo), tool(.todo)]) == "Called 1 tool, 1 image, Updated the to-do list")
+        #expect(summary([tool(.command), tool(.image), tool(.image)]) == "Ran 1 command, 2 images")
         #expect(summary([tool(.other), tool(.other)]) == "Used 2 tools")
         #expect(summary([tool(.command), tool(.other)]) == "Ran 1 command, 1 other tool")
 
