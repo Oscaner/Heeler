@@ -173,8 +173,12 @@ final class AgentChatStore {
     @ObservationIgnored private var claimedGeneration = 0
     @ObservationIgnored private var claimedLayout = 0
     @ObservationIgnored private var skillNames: Set<String> = []
-    /// Rows expanded before the transcript was open, read once it is.
+    /// Rows expanded before the transcript was open, or while the Host was
+    /// not connected, read once both are.
     @ObservationIgnored private var waitingOutputs: Set<ChatEntryID> = []
+    /// What the Console last said of the Host's connection. A saved
+    /// conversation keeps following offline, but its outputs cannot be read.
+    @ObservationIgnored private var isHostConnected = true
     /// The latest read for each row, kept so tests can wait for them.
     @ObservationIgnored private var outputReads: [ChatEntryID: Task<Void, Never>] = [:]
     /// What each listed Workflow's journal showed, by the Workflow's id.
@@ -339,13 +343,14 @@ final class AgentChatStore {
     }
 
     /// Reads a tool's output again for its expanded row, once the
-    /// transcript is open. A read that failed is tried again. Reads run
-    /// beside the loop: they change nothing it follows.
+    /// transcript is open and the Host connected. A read that failed is
+    /// tried again. Reads run beside the loop: they change nothing it
+    /// follows.
     func loadOutput(_ id: ChatEntryID) {
         guard case .tool(let tool)? = conversation.transcript.entries.last(where: { $0.id == id })?.content,
             let reference = tool.output, outputs.needsRead(id, at: reference)
         else { return }
-        guard case .following = conversation.phase, let engine else {
+        guard case .following = conversation.phase, isHostConnected, let engine else {
             waitingOutputs.insert(id)
             return
         }
@@ -356,6 +361,18 @@ final class AgentChatStore {
             let result = await engine.output(of: tool)
             guard let self, conversationGeneration == generation else { return }
             outputs.finish(id, at: reference, with: result)
+        }
+    }
+
+    /// The Console's Host status changed. Rows expanded while it was not
+    /// connected are read once it is.
+    func hostConnectionChanged(_ isConnected: Bool) {
+        guard isConnected != isHostConnected else { return }
+        isHostConnected = isConnected
+        guard isConnected else { return }
+        let waiting = waitingOutputs
+        for id in waiting {
+            loadOutput(id)
         }
     }
 

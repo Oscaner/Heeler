@@ -320,6 +320,9 @@ struct AgentChatSurfaceView: View {
         .onChange(of: skillNames, initial: true) { _, names in
             chat?.skillsDidLoad(names)
         }
+        .onChange(of: isHostConnected, initial: true) { _, isConnected in
+            chat?.hostConnectionChanged(isConnected)
+        }
     }
 
     // MARK: Layout

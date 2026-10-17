@@ -1730,6 +1730,28 @@ struct AgentChatStoreTests {
         #expect(await fixture.files.reads.count == 1)
     }
 
+    @Test func aRowExpandedWhileTheHostIsOfflineIsReadOnceItConnects() async throws {
+        let fixture = Fixture(session: Self.first)
+        let id = ChatEntryID("t-5")
+        await fixture.files.write(
+            NumberedChatReducer.lines(0..<2) + NumberedChatReducer.tool(5, output: "built"), at: Self.path(Self.first))
+        await fixture.store.step()
+        await fixture.files.clearRecords()
+
+        // The saved conversation still follows, but the Host is gone.
+        fixture.store.hostConnectionChanged(false)
+        fixture.store.loadOutput(id)
+        await fixture.store.outputReadsSettled()
+        #expect(fixture.store.outputs.loads[id] == nil)
+        #expect(await fixture.files.reads.isEmpty)
+
+        fixture.store.hostConnectionChanged(true)
+        await fixture.store.outputReadsSettled()
+        #expect(
+            fixture.store.outputs.loads[id]?.state
+                == .read(ChatExpandedOutput(preview: ChatToolPreview(text: "built", isTruncated: false))))
+    }
+
     @Test func aRowExpandedWhileTheTranscriptIsMissingIsReadOnceItIsBack() async throws {
         let fixture = Fixture(session: Self.first)
         let id = ChatEntryID("t-5")
