@@ -288,9 +288,21 @@ struct ChatToolActivity: Equatable, Codable, Sendable {
     }
 
     /// Whether an expanded row has more output text to read: none was kept,
-    /// or only its start. A row whose output is a diff reads for the diff.
+    /// or only its start. A row whose output is a diff reads for the diff,
+    /// and a call that never ran has no output to read.
     var previewIsIncomplete: Bool {
-        showsDiffAsOutput ? false : preview?.isTruncated ?? true
+        guard ran, !showsDiffAsOutput else { return false }
+        return preview?.isTruncated ?? true
+    }
+
+    /// Whether the call ran: one declined, stopped or interrupted, or a
+    /// question answered with Chat Instead, has no output.
+    var ran: Bool {
+        guard cardAnswer != .stopped else { return false }
+        switch status {
+        case .declined, .interrupted, .chatInstead: return false
+        default: return true
+        }
     }
 
     // `preview`, `cardAnswer`, `outputRead` and `isNotUpdating` are

@@ -729,12 +729,12 @@ private struct ChatToolRow: View {
                         .foregroundStyle(.secondary)
                 }
             } else if let read = tool.outputRead {
-                if let text = Self.missingPreview(read, didRun: didRun) {
+                if let text = Self.missingPreview(read, didRun: tool.ran) {
                     Text(text)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            } else if !didRun {
+            } else if !tool.ran {
                 // A call that never ran has no output to speak of.
                 EmptyView()
             } else if tool.output != nil {
@@ -756,16 +756,6 @@ private struct ChatToolRow: View {
         case .loading?: "Loading the full output…"
         case .failed(let message)?, .unavailable(let message)?: message
         case .read?, nil: preview.isTruncated ? "Output continues in the terminal." : nil
-        }
-    }
-
-    /// Whether the call ran: one declined, stopped or interrupted, or a
-    /// question answered with Chat Instead, has no output to show.
-    private var didRun: Bool {
-        guard tool.cardAnswer != .stopped else { return false }
-        switch tool.status {
-        case .declined, .interrupted, .chatInstead: return false
-        default: return true
         }
     }
 

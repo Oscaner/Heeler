@@ -460,6 +460,9 @@ struct ChatTimelineControllerTests {
             Self.tool("whole", preview: ChatToolPreview(text: "line 1", isTruncated: false), output: reference),
             Self.tool("saved", preview: nil, output: reference),
             Self.tool("running", preview: nil, output: nil, status: .running),
+            // A call that never ran has no output to read (CLB-02/03/04).
+            Self.tool("declined", preview: nil, output: reference, status: .declined),
+            Self.tool("interrupted", preview: nil, output: reference, status: .interrupted),
         ])
         let rows = await ChatRowBuilder().rows(for: ChatTimelineInput(entries: entries))
         try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
