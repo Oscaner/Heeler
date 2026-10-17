@@ -170,9 +170,9 @@ request, under rules that stand in for the screen the user cannot see:
   space, which Oh My Pi would complete to `/compact soft` instead of running
   it, and with a focus it is refused.
 - Before sending, `agent.read` of the visible screen must show the program's
-  input box empty, in its normal mode, with no popup. Anything else, an
-  unreadable screen included, sends nothing and says why. Chat never clears
-  the box.
+  input box empty, with nothing over the box that would take the keys.
+  Anything else, an unreadable screen included, sends nothing and says why.
+  Chat never clears the box.
 - Three seconds after the acknowledgement the screen is read again. Text left
   in the box marks the message Not delivered. Chat never resends.
 
