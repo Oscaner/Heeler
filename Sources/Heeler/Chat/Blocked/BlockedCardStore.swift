@@ -82,8 +82,8 @@ final class BlockedCardStore {
         /// Keys are going out; every control waits.
         case acting
         /// The keys went out and the Agent has not shown their effect. Only
-        /// Stop acts until a read shows another screen: the keys may still
-        /// land.
+        /// Stop acts until a read shows another screen or the conversation
+        /// moves on: the keys may still land.
         case unconfirmed
     }
 
@@ -174,6 +174,7 @@ final class BlockedCardStore {
     /// The conversation as last read: requests a card can match, and calls
     /// whose results confirm an answer.
     func update(transcript: ChatTranscript) {
+        let waiting = Set(pendingRequests.compactMap(\.callID))
         pendingRequests = transcript.pendingRequests
         var resolved: Set<String> = []
         for entry in transcript.entries {
@@ -185,6 +186,16 @@ final class BlockedCardStore {
             default:
                 break
             }
+        }
+        // Two identical dialogs in a row look unchanged on screen, so an
+        // answer that showed no effect took once the conversation moves on:
+        // a call resolved, or another one waits.
+        let movedOn =
+            !resolved.isSubset(of: resolvedToolUseIDs)
+            || !Set(pendingRequests.compactMap(\.callID)).isSubset(of: waiting)
+        if progress == .unconfirmed, movedOn {
+            progress = .ready
+            unconfirmedFingerprint = nil
         }
         resolvedToolUseIDs = resolved
         // An idle Claude's question reads only while its call is open.

@@ -92,9 +92,12 @@ private struct BlockedDialogCard: View {
             // keyboard it raises.
             textEntry
                 .disabled(!isReady)
+            // While an answer is unconfirmed its options wait, decline too,
+            // so Stop shows as the way out.
             BlockedCardFooter(
-                notice: store.notice, stopTitle: dialog.stopsFromCard ? "Stop" : nil, isReady: isReady,
-                canStop: store.canStop, stop: { perform(.dismiss) })
+                notice: store.notice,
+                stopTitle: dialog.stopsFromCard || (dialog.canStop && store.progress == .unconfirmed) ? "Stop" : nil,
+                isReady: isReady, canStop: store.canStop, stop: { perform(.dismiss) })
         }
     }
 

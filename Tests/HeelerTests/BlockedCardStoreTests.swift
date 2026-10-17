@@ -112,6 +112,24 @@ struct BlockedCardStoreTests {
         #expect(store.progress == .ready)
     }
 
+    /// The next dialog can be identical (two `ls` approvals in a row): the
+    /// conversation moving on brings the answers back.
+    @Test func anUnconfirmedAnswerIsReleasedOnceItsCallResolves() async throws {
+        let pane = FakePane(try ScreenFixture.screen("claude-02-c1-bash-blocked"))
+        let store = Self.store(.claude, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+        await store.perform(.choose(ordinal: 1))
+        #expect(store.progress == .unconfirmed)
+
+        store.update(transcript: Self.transcript())
+        #expect(store.progress == .unconfirmed)
+        store.update(transcript: Self.transcript(resolved: [Self.bash("toolu_1", "touch c1.txt")]))
+        #expect(store.progress == .ready)
+        await store.refresh()
+        #expect(store.progress == .ready)
+    }
+
     @Test func stopStillGoesAfterAnAnswerShowedNoEffect() async throws {
         let pane = FakePane(try ScreenFixture.screen("claude-02-c1-bash-blocked"))
         let store = Self.store(.claude, pane: pane)
