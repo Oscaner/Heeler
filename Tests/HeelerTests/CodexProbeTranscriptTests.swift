@@ -87,9 +87,10 @@ struct CodexProbeTranscriptTests {
         #expect(patch.kind == .fileWrite)
         #expect(patch.name == "FileChange")
         #expect(patch.title == "patch.txt")
-        #expect(patch.status == .failed)
+        // Recorded as failed with "execution error: TurnAborted": nothing applied.
+        #expect(patch.status == .interrupted)
         #expect(patch.diff == ChatDiffStats(added: 1, removed: 0))
-        #expect(patch.preview == ChatToolPreview(text: "execution error: TurnAborted", isTruncated: false))
+        #expect(patch.preview == nil)
         #expect(patch.output == ChatOutputReference(offset: probe.offset(36), length: probe.line(36).length))
         #expect(turn[3].notice == ChatNotice(kind: .stopped, title: "Stopped"))
         #expect(turn[3].id.rawValue == "codex/\(CodexProbe.probe2ID)/01a10fc8-be92-79f2-a957-4a455c620f60/~stopped")
