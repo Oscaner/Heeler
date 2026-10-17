@@ -301,6 +301,24 @@ struct AgentChatStoreTests {
         }
     }
 
+    /// The Host is retried, but the rows on screen are what this device
+    /// kept, so the banner says so while it keeps its progress.
+    @Test(arguments: [
+        EventsSessionStatus.connecting, .reconnecting(attempt: 1, delay: .seconds(1), failure: .timedOut),
+    ])
+    func aConnectingBannerSaysWhenItShowsSavedMessages(status: EventsSessionStatus) {
+        let saved = ChatBannerLine.lines(
+            hostStatus: status, conversation: Self.snapshot(.locating, entries: [Self.savedEntry]),
+            hasPendingEchoes: false)
+        #expect(saved == [.connecting(showingSavedMessages: true)])
+        #expect(saved.map(\.text) == ["Connecting to the Host… Showing saved messages."])
+        #expect(saved.map(\.showsProgress) == [true])
+        for conversation in [nil, Self.snapshot(.locating)] {
+            let lines = ChatBannerLine.lines(hostStatus: status, conversation: conversation, hasPendingEchoes: true)
+            #expect(lines.map(\.text) == ["Connecting to the Host…"])
+        }
+    }
+
     /// With nothing to show, the unavailable view explains instead.
     @Test func noUnavailableBannerWithoutATimeline() {
         let lines = ChatBannerLine.lines(

@@ -99,7 +99,7 @@ extension ChatUnavailableReason {
 
 /// One line over Chat's conversation, before the view adds its action.
 enum ChatBannerLine: Equatable, Identifiable {
-    case connecting
+    case connecting(showingSavedMessages: Bool)
     case notConnected(showingSavedMessages: Bool)
     case readFailure(TransportError)
     case unavailable(ChatUnavailableReason, showingSavedMessages: Bool)
@@ -118,10 +118,11 @@ enum ChatBannerLine: Equatable, Identifiable {
     static func lines(
         hostStatus: EventsSessionStatus?, conversation: ChatConversationSnapshot?, hasPendingEchoes: Bool
     ) -> [ChatBannerLine] {
+        let showingSaved = conversation?.transcript.entries.isEmpty == false
         switch hostStatus {
         case .connected?: break
-        case .connecting?, .reconnecting?: return [.connecting]
-        default: return [.notConnected(showingSavedMessages: conversation?.transcript.entries.isEmpty == false)]
+        case .connecting?, .reconnecting?: return [.connecting(showingSavedMessages: showingSaved)]
+        default: return [.notConnected(showingSavedMessages: showingSaved)]
         }
         guard let conversation else { return [] }
         var lines: [ChatBannerLine] = []
@@ -137,7 +138,10 @@ enum ChatBannerLine: Equatable, Identifiable {
 
     var text: String {
         switch self {
-        case .connecting: "Connecting to the Host…"
+        // A Host that accepts the connection and never answers keeps this
+        // line up, so it says the rows below are the saved ones.
+        case .connecting(let showingSavedMessages):
+            showingSavedMessages ? "Connecting to the Host… Showing saved messages." : "Connecting to the Host…"
         case .notConnected(let showingSavedMessages):
             showingSavedMessages ? "Not connected. Showing saved messages." : "Not connected."
         case .readFailure(let failure): "Couldn't read the conversation. \(failure.presentation.explanation)"
