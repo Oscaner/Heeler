@@ -126,6 +126,10 @@ final class AgentChatStore {
     @ObservationIgnored private var agentRefreshFailure: TransportError?
     @ObservationIgnored private var transcriptReadFailure: TransportError?
     @ObservationIgnored private var olderRequested = false
+    /// Look for the transcript's file again before the next read: Codex
+    /// continues an undone thread in a new file and leaves the old one
+    /// unchanged, so following it alone never shows the new turns.
+    @ObservationIgnored private var needsRelocate = false
     @ObservationIgnored private var nextOpen: Date?
     @ObservationIgnored private var failedOpens = 0
     @ObservationIgnored private var lastActivity: Date?
@@ -427,9 +431,11 @@ final class AgentChatStore {
         if activity == .working, previous != .working, previous != .blocked { turnStartedAt = now() }
         returnChecked = []
         // A turn starting or ending is when a session changes (`/clear`,
-        // `/resume`) and when a missing transcript appears.
+        // `/resume`), when a missing transcript appears, and when a turn
+        // after an undo writes to the thread's new file.
         lastActivity = now()
         needsAgentRefresh = true
+        needsRelocate = true
         nextOpen = nil
         failedOpens = 0
         wake()
@@ -462,7 +468,12 @@ final class AgentChatStore {
             olderRequested = false
             snapshot = await engine.loadOlder(context: context)
         } else if case .following = conversation.phase {
-            snapshot = await engine.poll(context: context)
+            if needsRelocate {
+                needsRelocate = false
+                snapshot = await engine.relocate(context: context)
+            } else {
+                snapshot = await engine.poll(context: context)
+            }
             polled = true
         } else if openIsDue {
             snapshot = await engine.open(directories: directories, context: context)
@@ -669,6 +680,7 @@ final class AgentChatStore {
         restored = false
         appliedRevision = nil
         olderRequested = false
+        needsRelocate = false
         nextOpen = nil
         failedOpens = 0
         // Reads still running for the last conversation drop their results.
@@ -899,6 +911,7 @@ final class AgentChatStore {
         // reported through the snapshot yet.
         if becameOverdue {
             needsAgentRefresh = true
+            needsRelocate = true
             wake()
         }
     }

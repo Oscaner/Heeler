@@ -278,6 +278,29 @@ struct ChatConversationEngineTests {
         #expect(snapshot.transcript.title == meta)
     }
 
+    @Test("After a Codex undo, relocating follows the thread's new file, which a poll never reaches")
+    func codexUndoMovesTheLiveFile() async throws {
+        let fixture = Fixture(program: .codex)
+        let meta = #"{"type":"session_meta","payload":{"id":"\#(Self.thread)"}}"#
+        await fixture.files.write(meta + "\n" + Self.lines(0..<10), at: Self.codexPath)
+        let engine = fixture.makeEngine()
+        let context = ChatProjectionContext(activity: .idle)
+        #expect(await fixture.open(engine).phase == .following(path: Self.codexPath))
+        // Nothing moved: relocating only polls.
+        #expect(await engine.relocate(context: context).phase == .following(path: Self.codexPath))
+
+        // The undo leaves the base file as it was and continues in a sibling.
+        let segment =
+            "/home/dev/.codex/sessions/2026/10/06/rollout-2026-10-06T13-00-00-\(Self.thread)_01a10f9a-0000-7000-8000-000000000001.jsonl"
+        await fixture.files.write(meta + "\n" + Self.lines(40..<43), at: segment)
+        #expect(await fixture.poll(engine).phase == .following(path: Self.codexPath))
+
+        let moved = await engine.relocate(context: context)
+        #expect(moved.phase == .following(path: segment))
+        #expect(Array(Self.numbers(moved).suffix(3)) == Self.ids(40..<43))
+        #expect(Set(Self.numbers(moved)).isDisjoint(with: Self.ids(0..<10)))
+    }
+
     // MARK: Workflow journals
 
     private static func journal(_ run: Int) -> String {
