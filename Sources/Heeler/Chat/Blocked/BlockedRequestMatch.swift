@@ -19,7 +19,7 @@ enum BlockedRequestMatch {
             return ["Edit", "MultiEdit", "Write", "NotebookEdit"].contains(request.toolName)
                 && sameFile(request.summary, subject.filePath)
         case .claudeFileRead:
-            return request.toolName == "Read" && sameFile(request.summary, subject.filePath)
+            return request.toolName == "Read" && samePath(request.summary, subject.filePath)
         case .claudeFetch:
             return request.toolName == "WebFetch" && sameURL(request.summary, subject.url)
         case .claudePlan:
@@ -133,6 +133,17 @@ enum BlockedRequestMatch {
         guard let shown else { return false }
         let name = (shown as NSString).lastPathComponent
         return !name.isEmpty && name == (path as NSString).lastPathComponent
+    }
+
+    /// A Read dialog shows the whole path (wrapped), relative to the project
+    /// for a file inside it. Every staged image is `image.<ext>` in its own
+    /// folder, so the folders must agree too.
+    private static func samePath(_ path: String, _ shown: String?) -> Bool {
+        let screen = DialogRowScanner.comparable(shown ?? "")
+        let call = DialogRowScanner.comparable(path)
+        guard !screen.isEmpty else { return false }
+        if screen.hasPrefix("~/") { return call.hasSuffix(screen.dropFirst()) }
+        return call == screen || call.hasSuffix("/" + screen)
     }
 
     private static func asks(_ request: ChatPendingRequest, _ question: String) -> Bool {

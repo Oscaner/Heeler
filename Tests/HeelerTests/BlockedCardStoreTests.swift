@@ -779,6 +779,14 @@ struct BlockedRequestMatchTests {
         let shown = try dialog("claude-43-c12-read-file")
         let edit = request("e", "Edit", path, kind: .fileEdit)
         #expect(BlockedRequestMatch.request(for: shown, in: [edit, read])?.callID == "r")
+        // Staged images all share a name: an older Read of another one is not it.
+        let other = request(
+            "o", "Read",
+            "/var/folders/zz/probe0placeholder00000000000gn/T/heeler.hnDAu48H/"
+                + "stage-0b1c2d3e-0000-4000-8000-000000000000/image.jpg",
+            kind: .fileRead)
+        #expect(BlockedRequestMatch.request(for: shown, in: [other, read])?.callID == "r")
+        #expect(BlockedRequestMatch.request(for: shown, in: [other]) == nil)
     }
 
     @Test func questionsMatchByTheirText() throws {
