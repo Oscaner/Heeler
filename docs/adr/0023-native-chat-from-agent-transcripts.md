@@ -191,11 +191,13 @@ failed request may still have pressed the key, so Stop then says so and works
 again at once. The wait belongs to the Agent's Composer, not to a surface:
 switching between Chat and the terminal, or a rebuilt detail, keeps it. With
 text in the draft the button stays Send, so a prompt still queues behind the
-running turn (Pi steers the turn with it), and ⌘↩ only ever sends. Oh My Pi
+running turn (Pi and Codex 0.162.1 steer the turn with it), and ⌘↩ only
+ever sends. Oh My Pi
 is the exception: a steer there can move a running command to the
 background, so while its status band shows a turn running, Chat holds the
 message and says to send once it is idle or steer from the terminal. Esc in
-Pi or Oh My Pi puts a steer the turn has not taken back into the input box, so
+Pi or Oh My Pi puts a steer the turn has not taken back into the input box,
+and Esc in Codex 0.162.1 does the same with a follow-up queued with Tab, so
 a draft found there says Stop may have left it. A send that empties the draft keeps Stop
 back for a second, so the second tap of a double tap cannot interrupt the turn
 the prompt was meant to queue behind. Stop is not offered while Blocked, where
@@ -419,8 +421,10 @@ no Attach at all.
   a Workflow is listed, each poll also looks at up to two journals: a stat
   each, and for one that grew, reads of what it added, up to 128 KiB.
 - Stop interrupts the running turn, unlike the Blocked card's Stop, which
-  answers a dialog and leaves a Stopped row. Codex holding queued messages
-  takes Esc as interrupt-and-send, so the Agent can stay Working.
+  answers a dialog and leaves a Stopped row. Codex 0.162.1 records a Chat
+  send during a turn at once, as a steer, so Esc only aborts the turn and the
+  steer goes unanswered; a follow-up queued with Tab in the terminal goes
+  back into the composer, where Chat's next send holds on it.
 - Chat never resizes the pane, and herdr keeps the last attached client's
   size, so cards are parsed at the phone's last grid, usually 40 to
   64 columns, where Claude Code leaves stale text.
