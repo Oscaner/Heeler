@@ -205,6 +205,26 @@ struct ChatTimelineProjectionTests {
         #expect(ChatTimelineProjection.newestPhase(Self.turn("u1", ended: false), signals: held) == .held)
     }
 
+    /// Rows are live only from a connected Host and a conversation read on
+    /// this visit; a failed read alone keeps them live.
+    @Test(arguments: [
+        (EventsSessionStatus?.some(.connected), false, false, true),
+        (.connected, false, true, true),
+        (.connected, true, false, false),
+        (.connecting, false, false, false),
+        (.reconnecting(attempt: 1, delay: .seconds(1), failure: .channelFailed(detail: "x")), false, false, false),
+        (.suspended, false, false, false),
+        (nil, false, false, false),
+    ])
+    func rowsAreLiveOnlyFromAConnectedHostAndAFreshRead(
+        status: EventsSessionStatus?, isFromCache: Bool, readFailed: Bool, isLive: Bool
+    ) {
+        var conversation = ChatConversationSnapshot()
+        conversation.isFromCache = isFromCache
+        conversation.readFailure = readFailed ? .channelFailed(detail: "read") : nil
+        #expect(ChatTurnSignals.isLive(hostStatus: status, conversation: conversation) == isLive)
+    }
+
     /// A running call as last seen stops claiming to run, in its own row
     /// and in its group's header, and draws again as it changes.
     @Test func runningCallsAreLastSeenWithoutALiveHost() throws {

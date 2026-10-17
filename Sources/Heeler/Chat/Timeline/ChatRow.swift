@@ -219,6 +219,13 @@ struct ChatTurnSignals: Equatable, Sendable {
         self.foldsFinishedTurns = foldsFinishedTurns
         self.isLive = isLive
     }
+
+    /// Whether something live backs the rows: the Host is connected and the
+    /// conversation came from it on this visit. A failed read alone keeps
+    /// them live, so one missed poll doesn't flicker them.
+    static func isLive(hostStatus: EventsSessionStatus?, conversation: ChatConversationSnapshot) -> Bool {
+        hostStatus == .connected && !conversation.isFromCache
+    }
 }
 
 /// What the timeline shows. `generation` changes when the conversation does,
