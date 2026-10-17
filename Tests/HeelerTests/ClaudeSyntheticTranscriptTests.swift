@@ -550,6 +550,26 @@ struct ClaudeSyntheticTranscriptTests {
         #expect(Self.tool("tool:toolu_sleep", in: declined)?.status == .declined)
     }
 
+    /// Each result hangs off its own call's record, as
+    /// probe2-transcript.jsonl:160-163 records parallel calls.
+    @Test("Parallel calls stopped together are all interrupted, though the marker follows only the last result")
+    func parallelCallsStoppedWhileRunning() {
+        let decline =
+            "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+        let (transcript, _) = Self.read(
+            #"""
+            {"type":"user","uuid":"p1","parentUuid":null,"message":{"role":"user","content":"Wait twice"},"promptSource":"typed","origin":{"kind":"human"}}
+            {"type":"assistant","uuid":"a1","parentUuid":"p1","message":{"id":"m1","role":"assistant","content":[{"type":"tool_use","id":"toolu_a","name":"Bash","input":{"command":"sleep 30"}}]},"apiBlockIndex":0}
+            {"type":"assistant","uuid":"a2","parentUuid":"a1","message":{"id":"m1","role":"assistant","content":[{"type":"tool_use","id":"toolu_b","name":"Bash","input":{"command":"sleep 40"}}]},"apiBlockIndex":1}
+            {"type":"user","uuid":"r1","parentUuid":"a1","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_a","content":"\#(decline)","is_error":true}]},"toolUseResult":"User rejected tool use","toolDenialKind":"user-rejected"}
+            {"type":"user","uuid":"r2","parentUuid":"a2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_b","content":"\#(decline)","is_error":true}]},"toolUseResult":"User rejected tool use","toolDenialKind":"user-rejected"}
+            {"type":"user","uuid":"i1","parentUuid":"r2","interruptedMessageId":"m1","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]}}
+            """#)
+        #expect(transcript.entries.map(\.id.rawValue) == ["user:p1", "tool:toolu_a", "tool:toolu_b"])
+        #expect(Self.tool("tool:toolu_a", in: transcript)?.status == .interrupted)
+        #expect(Self.tool("tool:toolu_b", in: transcript)?.status == .interrupted)
+    }
+
     @Test("An approval closed unanswered did not complete")
     func unansweredApproval() {
         let (transcript, _) = Self.read(

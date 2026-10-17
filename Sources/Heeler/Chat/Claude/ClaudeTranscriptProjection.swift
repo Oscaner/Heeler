@@ -217,7 +217,7 @@ private struct Builder {
         var record: ClaudeRecord
         var result: ClaudeToolResult
         var trailingTexts: [String] = []
-        /// The interrupt marker after the result names the call's reply:
+        /// An interrupt marker after the result names the call's reply:
         /// Esc stopped the call while it ran. Claude Code 2.1.301 records
         /// that result with the decline text a refused approval gets, whose
         /// marker names no reply.
@@ -911,12 +911,20 @@ private struct Builder {
         }
     }
 
+    /// Marks the calls an interrupt marker after their results names the
+    /// reply of. Claude Code writes each result of a parallel reply in a
+    /// record of its own, so the marker can follow only the last of them.
     private mutating func markStoppedCalls() {
+        let stoppedReplies = chain.records.compactMap { record -> (offset: UInt64, messageID: String)? in
+            guard let messageID = record.interruptedMessageID, Self.isInterruptMarker(record) else { return nil }
+            return (record.byteOffset, messageID)
+        }
+        guard !stoppedReplies.isEmpty else { return }
         for (callID, answer) in answers {
             guard let messageID = callMessages[callID],
-                children[answer.record.uuid]?.contains(where: {
-                    $0.interruptedMessageID == messageID && Self.isInterruptMarker($0)
-                }) == true
+                stoppedReplies.contains(where: {
+                    $0.messageID == messageID && $0.offset > answer.record.byteOffset
+                })
             else { continue }
             answers[callID]?.stoppedWhileRunning = true
         }

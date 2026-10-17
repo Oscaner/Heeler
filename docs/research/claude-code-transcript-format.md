@@ -271,7 +271,11 @@ use.` result, `toolUseResult` `"User rejected tool use"` and `toolDenialKind`
 `interruptedMessageId`, the stopped call's assistant `message.id`, which a
 decline's marker lacks (observed live 2026-10-16; the terminal shows
 `Interrupted · What should Claude do instead?` for both). Chat reads that
-pair as Interrupted.
+pair as Interrupted. Each result of a parallel reply is a record of its own
+(`probe2-transcript.jsonl:160-163`: the first result hangs off the first
+call's record, the second off the second's), so a marker can follow only the
+last of them: Chat marks every call of the named reply whose result comes
+before the marker. A parallel Esc has not been captured.
 
 ### Result fields by tool
 
