@@ -20,8 +20,8 @@ Entries reference the pull request that made the change.
   commands; Oh My Pi questions keep their options and answers, denied
   approvals and dismissed questions read as declined, Stop during a Pi tool
   reads as an interruption, and an Oh My Pi plan proposal reads as ready for
-  review. A message that steers a running turn shows as queued inside it, and
-  an Oh My Pi conversation survives Oh My Pi rewriting its session file.
+  review. A message that steers a running turn shows inside it, marked Sent
+  while working, and an Oh My Pi conversation survives Oh My Pi rewriting its session file.
   Unrecognized input surfaces remain available in the terminal. Extends the
   Chat infrastructure in #425. (#464)
 - Send to Pi and Oh My Pi from Chat. Chat recognizes Oh My Pi 18.11's
