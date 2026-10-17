@@ -45,7 +45,7 @@ struct AgentDetailView: View {
     @State private var isResolvingTerminal = false
     @State private var isChoosingTerminal = false
     @State private var terminalOpenFailure: String?
-    @State private var createdTerminal: ShellTerminalIdentity?
+    @State private var createdTerminal = CreatedWorkspaceTerminal()
     /// A Shell Terminal pushed over this Agent by Open Terminal, so Back
     /// returns here; nil beside a list, where the list selects it instead.
     @State private var shellRoute: WorkspaceTerminalRoute?
@@ -556,7 +556,8 @@ struct AgentDetailView: View {
 
     private func openWorkspaceTerminal() {
         guard onSelectTerminal != nil else { openTerminal.open(); return }
-        if createdTerminal != nil { createWorkspaceTerminal(); return }
+        _ = createdTerminal.resolve(in: console.terminals, hostID: agent.hostID)
+        if createdTerminal.identity != nil { createWorkspaceTerminal(); return }
         switch workspaceShells.count {
         case 0: createWorkspaceTerminal()
         case 1: showWorkspaceTerminal(workspaceShells[0])
@@ -597,26 +598,35 @@ struct AgentDetailView: View {
     /// Open Terminal routes back to the tab this detail already created;
     /// `fresh` (the drawer's New Terminal) asks for another one, unless the
     /// last creation has not reached the inventory yet, in which case it is
-    /// still the retry path and must not create a duplicate.
+    /// still the retry path and must not create a duplicate. A created tab
+    /// closed since is forgotten, and Open Terminal goes where it would have
+    /// without it.
     private func createWorkspaceTerminal(fresh: Bool = false) {
         guard !isResolvingTerminal, let request = agent.shellTerminalCreationRequest else { return }
-        if fresh, let created = createdTerminal, console.terminals.contains(where: {
-            $0.hostID == agent.hostID && $0.terminalID == created.terminalID
-        }) {
-            createdTerminal = nil
+        if createdTerminal.resolve(in: console.terminals, hostID: agent.hostID) != nil, fresh {
+            createdTerminal.forget()
         }
         isResolvingTerminal = true
         Task { @MainActor in
             defer { isResolvingTerminal = false }
             do {
-                if createdTerminal == nil {
-                    createdTerminal = try await console.createShellTerminal(request, on: agent.hostID)
-                } else {
+                if createdTerminal.identity != nil {
                     await console.refreshTerminalInventory(on: agent.hostID)
+                    if createdTerminal.resolve(in: console.terminals, hostID: agent.hostID) == nil,
+                        createdTerminal.identity == nil, !fresh, let shell = workspaceShells.first
+                    {
+                        if workspaceShells.count > 1 {
+                            isChoosingTerminal = true
+                        } else if isVisible() {
+                            showWorkspaceTerminal(shell)
+                        }
+                        return
+                    }
                 }
-                guard let createdTerminal, let target = console.terminals.first(where: {
-                    $0.hostID == agent.hostID && $0.terminalID == createdTerminal.terminalID
-                }) else {
+                if createdTerminal.identity == nil {
+                    createdTerminal.created(try await console.createShellTerminal(request, on: agent.hostID))
+                }
+                guard let target = createdTerminal.resolve(in: console.terminals, hostID: agent.hostID) else {
                     keyboardHandoff.cancelShellTerminal()
                     terminalOpenFailure = "The terminal was created, but its Workspace hasn't refreshed yet. Try Open Terminal again to refresh it."
                     return
@@ -627,6 +637,37 @@ struct AgentDetailView: View {
                 terminalOpenFailure = AgentOpenTerminalStore.presentation(for: error).message
             }
         }
+    }
+}
+
+/// The Shell Terminal tab an Agent detail created for Open Terminal, which
+/// Open Terminal goes back to rather than create another, until the
+/// inventory shows it closed. Before the inventory first lists it, its
+/// absence is the inventory not having caught up.
+struct CreatedWorkspaceTerminal: Equatable {
+    private(set) var identity: ShellTerminalIdentity?
+    private(set) var wasListed = false
+
+    mutating func created(_ identity: ShellTerminalIdentity) {
+        self.identity = identity
+        wasListed = false
+    }
+
+    mutating func forget() {
+        identity = nil
+        wasListed = false
+    }
+
+    /// The created tab as `inventory` lists it. One listed before that no
+    /// longer is was closed, and is forgotten.
+    mutating func resolve(in inventory: [ConsoleTerminal], hostID: Host.ID) -> ConsoleTerminal? {
+        guard let identity else { return nil }
+        if let target = inventory.first(where: { $0.hostID == hostID && $0.terminalID == identity.terminalID }) {
+            wasListed = true
+            return target
+        }
+        if wasListed { forget() }
+        return nil
     }
 }
 
