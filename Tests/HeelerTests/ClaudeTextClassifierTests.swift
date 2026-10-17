@@ -327,6 +327,20 @@ struct ClaudeToolSummaryTests {
             name: "Skill", input: ClaudeToolInput(skill: "lint", arguments: "--fix"),
             expected: ClaudeToolSummary(kind: .other, title: "/lint --fix")),
         Case(
+            name: "TaskCreate",
+            input: ClaudeToolInput(description: "Track item a from the user's request", subject: "Task a"),
+            expected: ClaudeToolSummary(
+                kind: .todo, title: "Task a", subtitle: "Track item a from the user's request")),
+        Case(
+            name: "TaskCreate", input: ClaudeToolInput(description: "Track item b"),
+            expected: ClaudeToolSummary(kind: .todo, title: "Track item b")),
+        Case(
+            name: "TaskUpdate", input: ClaudeToolInput(taskID: "1", status: "completed"),
+            expected: ClaudeToolSummary(kind: .todo, title: "Task #1: completed")),
+        Case(
+            name: "TaskUpdate", input: ClaudeToolInput(taskID: "2"),
+            expected: ClaudeToolSummary(kind: .todo, title: "Updated task #2")),
+        Case(
             name: "mcp__github__create_issue",
             expected: ClaudeToolSummary(kind: .mcp, title: "github.create_issue")),
         Case(

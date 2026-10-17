@@ -51,7 +51,20 @@ struct ClaudeToolSummary: Sendable, Equatable {
             self.init(kind: .question, title: texts.isEmpty ? use.name : texts.joined(separator: " · "))
         case "TodoWrite":
             self.init(kind: .todo, title: "Update todos")
-        case "TaskCreate", "TaskUpdate", "TaskGet", "TaskList":
+        case "TaskCreate":
+            // Claude Code 2.1.301 names the task by `subject`.
+            let subject = input.subject.flatMap { $0.isEmpty ? nil : $0 }
+            let description = input.description.flatMap { $0.isEmpty || $0 == subject ? nil : $0 }
+            self.init(
+                kind: .todo, title: subject ?? description ?? use.name, subtitle: subject == nil ? nil : description)
+        case "TaskUpdate" where input.taskID != nil:
+            let task = input.taskID ?? ""
+            if let status = input.status, !status.isEmpty {
+                self.init(kind: .todo, title: "Task #\(task): \(status)")
+            } else {
+                self.init(kind: .todo, title: "Updated task #\(task)")
+            }
+        case "TaskUpdate", "TaskGet", "TaskList":
             self.init(kind: .todo, title: input.description ?? use.name)
         case "Skill":
             let invocation = ChatCommandInvocation(name: input.skill ?? use.name, arguments: input.arguments ?? "")

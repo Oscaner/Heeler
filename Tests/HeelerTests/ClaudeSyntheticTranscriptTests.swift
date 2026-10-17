@@ -768,6 +768,23 @@ struct ClaudeSyntheticTranscriptTests {
         #expect(Self.tool("tool:toolu_read", in: transcript)?.imagePath == expected)
     }
 
+    @Test("Task rows read by the task's subject and the status an update sets")
+    func taskRows() {
+        // Claude Code 2.1.301 with CLAUDE_CODE_ENABLE_TODO_TOOLS=1 (CL-40).
+        let (transcript, _) = Self.read(
+            Self.firstTurn + "\n" + #"""
+                {"type":"user","uuid":"p2","parentUuid":"t1","message":{"role":"user","content":"Track a"},"promptSource":"typed","origin":{"kind":"human"}}
+                {"type":"assistant","uuid":"a2","parentUuid":"p2","message":{"id":"m2","role":"assistant","content":[{"type":"tool_use","id":"toolu_create","name":"TaskCreate","input":{"subject":"Task a","description":"Track item a from the user's request"}}]},"apiBlockIndex":0}
+                {"type":"assistant","uuid":"a3","parentUuid":"a2","message":{"id":"m2","role":"assistant","content":[{"type":"tool_use","id":"toolu_update","name":"TaskUpdate","input":{"taskId":"1","status":"completed"}}]},"apiBlockIndex":1}
+                {"type":"assistant","uuid":"a4","parentUuid":"a3","message":{"id":"m2","role":"assistant","content":[{"type":"tool_use","id":"toolu_touch","name":"TaskUpdate","input":{"taskId":2}}]},"apiBlockIndex":2}
+                """#)
+        let create = Self.tool("tool:toolu_create", in: transcript)
+        #expect(create?.title == "Task a")
+        #expect(create?.subtitle == "Track item a from the user's request")
+        #expect(Self.tool("tool:toolu_update", in: transcript)?.title == "Task #1: completed")
+        #expect(Self.tool("tool:toolu_touch", in: transcript)?.title == "Updated task #2")
+    }
+
     // MARK: - Links and unknown records
 
     @Test("Links are the newest relocation and a hand-off the session did not continue past")

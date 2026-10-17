@@ -182,6 +182,10 @@ struct ClaudeToolInput: Sendable, Equatable {
     var todos: [ClaudeTodo]?
     var skill: String?
     var arguments: String?
+    /// TaskCreate's task name, and the task and status a TaskUpdate sets.
+    var subject: String?
+    var taskID: String?
+    var status: String?
     /// A Write's content, kept only for a file under `.claude/plans/`: an
     /// ExitPlanMode call in the same message can carry the plan as it
     /// stood before that Write.
@@ -468,7 +472,7 @@ extension ClaudeToolInput {
                     isMultiSelect: question.multiSelect ?? false)
             },
             todos: raw.todos?.compactMap(ClaudeTodo.init), skill: raw.skill, arguments: raw.args,
-            planContent: raw.planContent)
+            subject: raw.subject, taskID: raw.taskId, status: raw.status, planContent: raw.planContent)
     }
 }
 
@@ -824,11 +828,14 @@ private struct RawToolInput: Decodable {
     var todos: [RawTodo]?
     var skill: String?
     var args: String?
+    var subject: String?
+    var taskId: String?
+    var status: String?
     var planContent: String?
 
     private enum CodingKeys: String, CodingKey {
         case command, description, path, pattern, url, query, prompt, plan, planFilePath
-        case questions, todos, skill, args, content
+        case questions, todos, skill, args, content, subject, taskId, status
         case filePath = "file_path"
         case notebookPath = "notebook_path"
         case subagentType = "subagent_type"
@@ -852,6 +859,9 @@ private struct RawToolInput: Decodable {
         todos = c.lenient([RawTodo].self, .todos)
         skill = c.lenient(String.self, .skill)
         args = c.lenient(String.self, .args)
+        subject = c.lenient(String.self, .subject)
+        taskId = c.lenient(String.self, .taskId) ?? c.lenient(Int.self, .taskId).map(String.init)
+        status = c.lenient(String.self, .status)
         if filePath?.contains("/.claude/plans/") == true {
             planContent = c.lenient(String.self, .content)
         }
