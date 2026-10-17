@@ -410,9 +410,14 @@ private struct BlockedCollapsedBar: View {
                 Button(dialog.stopTitle, role: .destructive) {
                     Task { await store.perform(.dismiss) }
                 }
+                .lineLimit(1)
+                .fixedSize()
                 .disabled(!store.canStop)
             }
+            // Only the title gives way on a narrow screen.
             Button("Show") { store.isCollapsed = false }
+                .lineLimit(1)
+                .fixedSize()
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
