@@ -81,6 +81,9 @@ Chat or terminal; beside a list, the list selects it. The Agent's surface
 leaves and rejoins its Attach around that push as it does around Changes.
 The pushed terminal does not count as presenting the Agent: its in-app
 banners show, and a notification landing on it pops back to the Agent.
+The Console holds the pushed route, so a detail remounted by a size-class
+change keeps it, and a detail that comes to stand beside its list hands the
+terminal to the list.
 
 Existing ordinary terminals attach without `--takeover`. If an attach ends,
 the user can reattach or explicitly Take Over another client's attachment.

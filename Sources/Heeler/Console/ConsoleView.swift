@@ -70,6 +70,9 @@ struct ConsoleView: View {
     /// The Agent whose detail shows Chat in place of its terminal, for the
     /// same reason.
     @State private var agentShowingChat: ConsoleAgent.ID?
+    /// The Shell Terminal pushed over the Agent on the path, kept here so a
+    /// detail remounted by a size-class change still shows it.
+    @State private var agentShellRoute: AgentShellRoute?
     /// Each list tab's last selection. In regular width both lists sit
     /// beside their own detail, so a list tab comes back to what it showed
     /// rather than to the other list's pick.
@@ -293,6 +296,7 @@ struct ConsoleView: View {
         }
         .animation(.snappy, value: bannerStore.banner)
         .onChange(of: notificationRouter.path) { old, path in
+            if agentShellRoute?.agentID != path.last { agentShellRoute = nil }
             guard !path.isEmpty else { return }
             bringAgentForward(
                 parking: old.last.map { .agent($0) } ?? selectedTerminal.map { .terminal($0) })
@@ -1082,6 +1086,18 @@ struct ConsoleView: View {
         return nil
     }
 
+    private func shellRoute(over id: ConsoleAgent.ID) -> Binding<WorkspaceTerminalRoute?> {
+        Binding(
+            get: { agentShellRoute?.agentID == id ? agentShellRoute?.route : nil },
+            set: { route in
+                if let route {
+                    agentShellRoute = AgentShellRoute(agentID: id, route: route)
+                } else if agentShellRoute?.agentID == id {
+                    agentShellRoute = nil
+                }
+            })
+    }
+
     private func selectAgent(_ id: ConsoleAgent.ID) {
         changeSelection {
             showAgentsList(parking: parkedSelection)
@@ -1226,7 +1242,8 @@ struct ConsoleView: View {
                             agentShowingChat = nil
                         }
                     },
-                    repeatLandings: notificationRouter.repeatLandings
+                    repeatLandings: notificationRouter.repeatLandings,
+                    shellRoute: shellRoute(over: id)
                 )
                 // Selecting another Agent must tear down the previous terminal
                 // pipeline; without the explicit identity the detail column

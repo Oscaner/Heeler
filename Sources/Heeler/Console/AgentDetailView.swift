@@ -51,7 +51,17 @@ struct AgentDetailView: View {
     @State private var createdTerminal = CreatedWorkspaceTerminal()
     /// A Shell Terminal pushed over this Agent by Open Terminal, so Back
     /// returns here; nil beside a list, where the list selects it instead.
-    @State private var shellRoute: WorkspaceTerminalRoute?
+    /// The Console holds it, so a detail SwiftUI remounts (a size-class
+    /// change) keeps it; this detail's own copy stands in outside one.
+    private let heldShellRoute: Binding<WorkspaceTerminalRoute?>?
+    @State private var ownShellRoute: WorkspaceTerminalRoute?
+    private var shellRouteSelection: Binding<WorkspaceTerminalRoute?> {
+        heldShellRoute ?? $ownShellRoute
+    }
+    private var shellRoute: WorkspaceTerminalRoute? {
+        get { shellRouteSelection.wrappedValue }
+        nonmutating set { shellRouteSelection.wrappedValue = newValue }
+    }
     /// The detail stands alone, pushed over its list, rather than beside it.
     @Environment(\.showsDetailBackButton) private var isPushedOverList
     /// Which window holds this Host's terminal channel; nil outside a scene
@@ -77,6 +87,7 @@ struct AgentDetailView: View {
         onShowsChanges: ((Bool) -> Void)? = nil,
         onShowsChat: ((Bool) -> Void)? = nil,
         repeatLandings: Int = 0,
+        shellRoute: Binding<WorkspaceTerminalRoute?>? = nil,
         composerSession: AgentComposerSession? = nil,
         attachStore: AgentAttachStore? = nil,
         openTerminalStore: AgentOpenTerminalStore? = nil,
@@ -101,6 +112,7 @@ struct AgentDetailView: View {
         self.onShowsChanges = onShowsChanges
         self.onShowsChat = onShowsChat
         self.repeatLandings = repeatLandings
+        heldShellRoute = shellRoute
         _session = State(initialValue: composerSession ?? console.composerSession(for: agent))
         let ownerID = UUID()
         _retentionOwnerID = State(initialValue: ownerID)
@@ -407,7 +419,7 @@ struct AgentDetailView: View {
         }
         // Open Terminal on an iPhone: a short detour, so Back and the swipe
         // come back to this Agent rather than to the list.
-        .navigationDestination(item: $shellRoute) { route in
+        .navigationDestination(item: shellRouteSelection) { route in
             pushedTerminal(route)
         }
         .onAppear {
@@ -504,6 +516,13 @@ struct AgentDetailView: View {
         // pushed, lands on the Agent rather than leaving the shell up.
         .onChange(of: repeatLandings) {
             shellRoute = nil
+        }
+        // A window widened beside its list: the list selects the terminal
+        // pushed while the detail stood alone.
+        .onChange(of: isPushedOverList, initial: true) { _, pushedOverList in
+            guard !pushedOverList, let route = shellRoute else { return }
+            shellRoute = nil
+            onSelectTerminal?(route.terminal)
         }
         .onChange(of: openTerminal.shell != nil || openTerminal.isOpening, initial: true) {
             _, showsShellTerminal in
@@ -687,11 +706,17 @@ struct CreatedWorkspaceTerminal: Equatable {
 
 /// A terminal is identified by its pane; the snapshot stands in while the
 /// inventory no longer lists it.
-private struct WorkspaceTerminalRoute: Hashable {
+struct WorkspaceTerminalRoute: Hashable {
     let terminal: ConsoleTerminal
 
     static func == (lhs: Self, rhs: Self) -> Bool { lhs.terminal.id == rhs.terminal.id }
     func hash(into hasher: inout Hasher) { hasher.combine(terminal.id) }
+}
+
+/// The Shell Terminal pushed over one Agent's detail, held by the Console.
+struct AgentShellRoute: Equatable {
+    let agentID: ConsoleAgent.ID
+    let route: WorkspaceTerminalRoute
 }
 
 @MainActor

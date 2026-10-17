@@ -492,13 +492,15 @@ struct AgentDetailChangesTests {
         await attach.leave().value
     }
 
-    private static func makeDetail(
+    static func makeDetail(
         attach: AgentAttachStore,
         composer: AgentComposerStore,
         inputMode: AgentInputModeSettings,
         defaults: UserDefaults,
         changes: AgentChangesPresentation,
-        onShowsChanges: @escaping (Bool) -> Void
+        onShowsChanges: @escaping (Bool) -> Void,
+        onSelectTerminal: ((ConsoleTerminal) -> Void)? = nil,
+        shellRoute: Binding<WorkspaceTerminalRoute?>? = nil
     ) -> AgentDetailView {
         let console = ConsoleStore(snapshotRetryDelay: .seconds(30)) { _, subscriptions in
             EventsSession(
@@ -525,13 +527,15 @@ struct AgentDetailChangesTests {
             stage: AgentDetailStage(isVisible: { true }, terminalAccess: { .holds }),
             onSwitch: { _ in },
             onClosed: {},
+            onSelectTerminal: onSelectTerminal,
             onShowsChanges: onShowsChanges,
+            shellRoute: shellRoute,
             composerSession: AgentComposerSession(composer: composer),
             attachStore: attach,
             changesPresentation: changes)
     }
 
-    private static func makeLiveAttach(transport: ScriptedTransport) async throws -> AgentAttachStore {
+    static func makeLiveAttach(transport: ScriptedTransport) async throws -> AgentAttachStore {
         let attach = AgentAttachStore(
             target: "w1:p1",
             paneTitle: "Claude",
@@ -653,6 +657,137 @@ struct AgentDetailChangesTests {
 
     nonisolated private static func keystrokes(_ input: TerminalAttachInput) -> Data? {
         if case .keystrokes(let data) = input { data } else { nil }
+    }
+}
+
+/// A Shell Terminal pushed over a hosted Agent detail by Open Terminal: the
+/// system's Back returns to the Agent, and a detail that comes to stand
+/// beside its list hands the terminal to the list. Open Terminal itself is
+/// a More menu item over the terminal inventory, so the push starts from
+/// the route the Console holds; CreatedWorkspaceTerminalTests covers which
+/// terminal it picks.
+@MainActor
+@Suite("Agent detail Shell Terminal push", .timeLimit(.minutes(1)))
+struct AgentDetailShellTerminalPushTests {
+    @Test func backFromThePushedTerminalReturnsToTheAgent() async throws {
+        let fixture = try await Fixture()
+        let held = HeldShellRoute()
+        let detail = fixture.detail(shellRoute: held.binding)
+        let controller = UIHostingController(
+            rootView: NavigationStack { detail }.environment(\.showsDetailBackButton, true))
+        let window = try await makeTestWindow(
+            frame: CGRect(x: 0, y: 0, width: 402, height: 874),
+            rootViewController: controller)
+        try #require(await Self.showsAgent(controller))
+
+        held.route = WorkspaceTerminalRoute(terminal: Self.shell)
+        let pushed = try await ChangesViewTests.eventually {
+            ChangesViewTests.isSettled(controller) && Self.depth(of: controller) == 2
+        }
+        try #require(pushed)
+        #expect(fixture.selected.isEmpty)
+
+        let wentBack = try await ChangesViewTests.eventually {
+            ChangesViewTests.isSettled(controller) && ChangesViewTests.goBack(in: controller)
+        }
+        try #require(wentBack)
+        let returned = try await ChangesViewTests.eventually {
+            ChangesViewTests.isSettled(controller) && Self.depth(of: controller) == 1
+        }
+        #expect(returned)
+        #expect(held.route == nil)
+        #expect(await Self.showsAgent(controller))
+        #expect(fixture.selected.isEmpty)
+
+        await hideTestWindowWhenSettled(window)
+        await fixture.finish()
+    }
+
+    /// A size-class change remounts the detail beside its list: the route the
+    /// Console kept goes to the list, as Open Terminal there would.
+    @Test func aDetailBesideItsListHandsAPushedTerminalToTheList() async throws {
+        let fixture = try await Fixture()
+        let held = HeldShellRoute()
+        held.route = WorkspaceTerminalRoute(terminal: Self.shell)
+        let detail = fixture.detail(shellRoute: held.binding)
+        let controller = UIHostingController(
+            rootView: NavigationStack { detail }.environment(\.showsDetailBackButton, false))
+        let window = try await makeTestWindow(
+            frame: CGRect(x: 0, y: 0, width: 834, height: 1194),
+            rootViewController: controller)
+
+        let handed = try await ChangesViewTests.eventually { !fixture.selected.isEmpty }
+        try #require(handed)
+        #expect(fixture.selected.map(\.id) == [Self.shell.id])
+        #expect(held.route == nil)
+
+        await hideTestWindowWhenSettled(window)
+        await fixture.finish()
+    }
+
+    private static let shell = ConsoleTerminal(
+        hostID: UUID(), hostName: "devbox", hostUsername: "dev",
+        pane: PaneInfo(
+            agentStatus: .idle, focused: false, paneID: "w1:p2", revision: 1, tabID: "w1:t2",
+            terminalID: "term-p2", workspaceID: "w", agent: nil, cwd: "/project", label: "zsh"),
+        workspaceLabel: "Project", tabLabel: "Terminal", workspaceOrder: 0, tabPosition: 2,
+        snapshotOrder: 1, snapshotAgentKind: nil)
+
+    private static func depth(of controller: UIViewController) -> Int {
+        ChangesViewTests.navigationControllers(in: controller).map(\.viewControllers.count).max() ?? 0
+    }
+
+    private static func showsAgent(_ controller: UIViewController) async -> Bool {
+        (try? await ChangesViewTests.eventually {
+            controller.view.layoutIfNeeded()
+            return !AgentSurfaceReplacementTests.terminals(in: controller.view).isEmpty
+        }) ?? false
+    }
+
+    @MainActor
+    private final class Fixture {
+        let transport = ScriptedTransport()
+        let attach: AgentAttachStore
+        let composer = AgentComposerStore(target: "w1:p1") { _ in Agent(.fixture(paneID: "w1:p1")) }
+        let suiteName = "shell-push-\(UUID().uuidString)"
+        let defaults: UserDefaults
+        private(set) var selected: [ConsoleTerminal] = []
+
+        init() async throws {
+            attach = try await AgentDetailChangesTests.makeLiveAttach(transport: transport)
+            defaults = try #require(UserDefaults(suiteName: suiteName))
+        }
+
+        func finish() async {
+            await attach.leave().value
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        func detail(shellRoute: Binding<WorkspaceTerminalRoute?>) -> AgentDetailView {
+            AgentDetailChangesTests.makeDetail(
+                attach: attach, composer: composer,
+                inputMode: AgentInputModeSettings(defaults: defaults), defaults: defaults,
+                changes: AgentChangesPresentation { [transport] in
+                    ChangesStore(directory: { "/project" }) { request in
+                        try await transport.readChanges(request)
+                    }
+                },
+                onShowsChanges: { _ in },
+                onSelectTerminal: { [weak self] in self?.selected.append($0) },
+                shellRoute: shellRoute)
+        }
+    }
+}
+
+/// The Console's hold on the pushed route, observed so the hosted detail
+/// re-renders when the test sets it.
+@MainActor
+@Observable
+private final class HeldShellRoute {
+    var route: WorkspaceTerminalRoute?
+
+    var binding: Binding<WorkspaceTerminalRoute?> {
+        Binding(get: { self.route }, set: { self.route = $0 })
     }
 }
 
