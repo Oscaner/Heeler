@@ -172,9 +172,9 @@ private struct CodexDialogReader {
             return fail("The question's options could not be read.")
         }
 
-        // A notes field opens between the options and the footer on Tab or
-        // a paste: `›` and the text, or a dim `Add notes` while blank. A
-        // long note wraps under its first row.
+        // A notes field opens between the options and the footer on Tab
+        // (Codex 0.160.1 also on a paste): `›` and the text, or a dim `Add
+        // notes` while blank. A long note wraps under its first row.
         var notes: String?
         var notesIndent = 0
         var lastNotesRow: ScreenRow?
@@ -318,13 +318,16 @@ private struct CodexDialogReader {
                         label: label, detail: detail, lastRow: row))
             } else if var draft = drafts.popLast(), let indent = row.indent, indent >= draft.labelColumn {
                 let runs = DialogRowScanner.runs(of: row, from: draft.labelColumn)
-                let visible = runs.filter { !DialogRowScanner.isBlank($0) }
-                if isQuestion, visible.allSatisfy(\.style.isDim) {
-                    let more = text(of: runs)
-                    draft.detail = draft.detail.map { $0 + " " + more } ?? more
-                } else {
+                // A narrow pane wraps either column; a wrapped row keeps the
+                // first row's styles, so it splits the same way.
+                let (label, detail) =
+                    isQuestion ? splitColumns(runs, isSelected: draft.isFocused) : (text(of: runs), nil)
+                if let detail {
+                    draft.detail = draft.detail.map { $0 + " " + detail } ?? detail
+                }
+                if !label.isEmpty {
                     draft.label = DialogRowScanner.join(
-                        draft.label, text(of: runs), wrap: .codex, previousRow: draft.lastRow, columns: columns,
+                        draft.label, label, wrap: .codex, previousRow: draft.lastRow, columns: columns,
                         boxColumn: draft.labelColumn)
                     draft.lastRow = row
                 }

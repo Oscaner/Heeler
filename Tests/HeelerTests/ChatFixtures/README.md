@@ -63,6 +63,12 @@ capture.
   (2026-10-17), read at 41 columns (app terminal font size 12): the MCP
   tool approval "Allow the probe MCP server to run tool ...", a two-column
   list with the footer `enter to submit | esc to cancel`.
+- `codex-16-x7-phone-question-pointed` and `codex-17-x7-phone-question-notes`
+  come from Codex 0.162.1 on herdr 0.9.5 (2026-10-17), read at the phone's
+  62×40 grid: a `request_user_input` question with the pointer on `None of
+  the above`, whose description wraps `(tab)` onto a second reverse row, then
+  the same question after Tab and a paste opened its notes (0.162.1 drops a
+  paste while the options have focus).
 - `claude-27`, `-28`, `-30` and `-31` keep the live rendering residue after
   option 4 (`No` followed by a stale grey `r you`).
 - `claude-32` through `claude-37` come from Claude Code 2.1.301 on herdr

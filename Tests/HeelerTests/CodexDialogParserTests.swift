@@ -108,6 +108,24 @@ struct CodexDialogParserTests {
         #expect(noted.fingerprint == second.fingerprint)
     }
 
+    @Test("At phone width the pointed option's wrapped description stays its detail")
+    func pointedQuestionAtPhoneWidth() throws {
+        let pointed = try dialog("codex-16-x7-phone-question-pointed")
+        #expect(pointed.kind == .codexQuestion)
+        #expect(pointed.title == "Pick a size")
+        #expect(pointed.options.map(\.label) == ["Small", "Large", "None of the above"])
+        #expect(
+            pointed.options.map(\.detail)
+                == ["Choose the small size.", "Choose the large size.", "Optionally, add details in notes (tab)"])
+        #expect(pointed.options.map(\.role) == [.answer, .answer, .otherText])
+        #expect(pointed.focus == DialogFocusState(focusedOrdinal: 3))
+
+        let noted = try dialog("codex-17-x7-phone-question-notes")
+        #expect(noted.options.map(\.label) == pointed.options.map(\.label))
+        #expect(noted.focus == DialogFocusState(focusedOrdinal: 3, notesText: "Medium please"))
+        #expect(noted.fingerprint == pointed.fingerprint)
+    }
+
     @Test("Asynchronous questions folded above the composer")
     func collapsedQuestions() throws {
         let dialog = try dialog("codex-08-x4-async-collapsed")
