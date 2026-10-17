@@ -493,6 +493,25 @@ struct ChatMarkdownTests {
         #expect(ChatMarkdownView.boldingStrongEmphasis(block.content, in: .body) == block.content)
     }
 
+    @Test("Inline code gets a background in every script and keeps its code intent")
+    func inlineCodeTint() throws {
+        let block = try #require(ChatMarkdown.blocks(from: "a `代码` **b** `swift`").first)
+        let content = ChatMarkdownView.styled(block.content, in: .body)
+        #expect(String(content.characters) == "a 代码 b swift")
+        let tinted = content.runs.map { run in
+            Styled(
+                String(content[run.range].characters),
+                run[AttributeScopes.SwiftUIAttributes.BackgroundColorAttribute.self] == nil ? nil : .code)
+        }
+        // The tint stands in the intent's place here: only code runs carry it.
+        #expect(tinted == [
+            Styled("a "), Styled("代码", .code), Styled(" "), Styled("b"), Styled(" "), Styled("swift", .code),
+        ])
+        let intents = content.runs.filter { $0.inlinePresentationIntent?.contains(.code) == true }
+            .map { String(content[$0.range].characters) }
+        #expect(intents == ["代码", "swift"])
+    }
+
     @Test("A soft break inside emphasis keeps the emphasis and loses the break intent")
     func softBreakInEmphasis() throws {
         let block = try #require(ChatMarkdown.blocks(from: "*a\nb*").first)
