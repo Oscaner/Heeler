@@ -1521,7 +1521,8 @@ struct AgentChatStoreTests {
     }
 
     /// Only a send seen among more text takes a prompt that merely contains
-    /// it: a cleared one stays discarded when a longer prompt mentions it.
+    /// it: a cleared one is not recorded when a longer prompt mentions it,
+    /// only no longer shown.
     @Test func aClearedSendIsNotSettledByALongerPrompt() async throws {
         let (files, store, _, clock, id) = try await Self.stoppedSteer(.pi, text: "Queued steer: say MANGO. ")
         clock.now = clock.now.addingTimeInterval(1)
@@ -1534,7 +1535,26 @@ struct AgentChatStoreTests {
             to: Self.piPath(.pi))
         await store.step()
 
+        #expect(store.sendStatuses[id] == .abandoned)
+    }
+
+    /// A cleared send shows while it is Chat's latest message, until the
+    /// transcript records a prompt after it, such as one the terminal
+    /// sent: under that newer turn it would read out of order.
+    @Test func aClearedSendStopsShowingOnceALaterPromptIsRecorded() async throws {
+        let text = "Queued steer: say MANGO. "
+        let (files, store, _, clock, id) = try await Self.stoppedSteer(.pi, text: text)
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        store.inputBoxWasRead(try Self.piEditor())
+        await store.step()
         #expect(store.sendStatuses[id] == .discarded)
+
+        await files.append(
+            Self.ompMessage("u2", parent: "u1", role: "user", "say PLUM"), to: Self.piPath(.pi))
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .abandoned)
     }
 
     /// Sent from the terminal after all: the box empties before the
@@ -1556,8 +1576,8 @@ struct AgentChatStoreTests {
     }
 
     /// Sent again from Chat once cleared: the new send takes the recorded
-    /// copy, and the discarded one stays discarded instead of leaving the
-    /// new one unconfirmed.
+    /// copy instead of leaving it unconfirmed, and the cleared one, with a
+    /// prompt recorded after it, no longer shows.
     @Test func aSendAgainFromChatTakesTheRecordedCopyBeforeADiscardedOne() async throws {
         let text = "Queued steer: say MANGO. "
         let (files, store, _, clock, id) = try await Self.stoppedSteer(.pi, text: text)
@@ -1574,7 +1594,7 @@ struct AgentChatStoreTests {
         await store.step()
 
         #expect(store.sendStatuses[again] == .recorded)
-        #expect(store.sendStatuses[id] == .discarded)
+        #expect(store.sendStatuses[id] == .abandoned)
     }
 
     @Test func anOverdueSendTheEditorDoesNotHoldStaysOverdue() async throws {

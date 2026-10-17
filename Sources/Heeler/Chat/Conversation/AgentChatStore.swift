@@ -85,7 +85,8 @@ final class AgentChatStore {
         /// such as one the terminal sent, still settles it.
         case discarded
         /// Unrecorded and no longer worth an echo: it went into an earlier
-        /// conversation, or was sent before this store was watching.
+        /// conversation, was sent before this store was watching, or was
+        /// discarded and the transcript has recorded a prompt since.
         case abandoned
     }
 
@@ -869,7 +870,9 @@ final class AgentChatStore {
     /// takes only a prompt no other send matches, so sending its text again
     /// settles the new send; a returned send the user added to in the box
     /// takes a prompt that contains it. Conservative on purpose: a wrong match would
-    /// hide a prompt that never arrived.
+    /// hide a prompt that never arrived. A discarded send that any prompt
+    /// recorded after it overtakes, matched or not, is abandoned: it is no
+    /// longer the conversation's latest message.
     private func matchSends() {
         let byEntry = source.adapter.echoesByEntry
         let layout = conversation.layoutGeneration
@@ -924,11 +927,15 @@ final class AgentChatStore {
             }
             let isSameConversation = send.generation == conversationGeneration
             let floor = isSameConversation && send.layout == layout ? send.floor : 0
-            func isOpen(_ candidate: Candidate) -> Bool {
-                guard candidate.offset >= floor, !claimedPrompts.contains(candidate.claim) else { return false }
+            func isAfter(_ candidate: Candidate) -> Bool {
+                guard candidate.offset >= floor else { return false }
                 guard isSameConversation, let entryID = candidate.entryID else { return true }
                 return !send.knownEntries.contains(entryID)
             }
+            func isOpen(_ candidate: Candidate) -> Bool {
+                isAfter(candidate) && !claimedPrompts.contains(candidate.claim)
+            }
+            var isOvertaken: Bool { recorded.contains { isAfter($0.candidate) } }
             var match = recorded.first { $0.key == send.key && isOpen($0.candidate) }?.candidate
             if match == nil, send.key == "/compact" {
                 match = compactions.first(where: isOpen)
@@ -951,7 +958,7 @@ final class AgentChatStore {
             } else if returnedSends.contains(send.id), send.generation == conversationGeneration {
                 statuses[send.id] = .returned
             } else if discardedSends.contains(send.id), send.generation == conversationGeneration {
-                statuses[send.id] = .discarded
+                statuses[send.id] = isOvertaken ? .abandoned : .discarded
             } else if returnedSends.contains(send.id) || discardedSends.contains(send.id) {
                 // Put back or cleared in an earlier conversation: the new
                 // one, still unwritten, is not waiting for it.
