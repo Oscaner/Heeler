@@ -112,8 +112,8 @@ actor FakeQuestionTUI {
             guard page < questions.count, !questions[page].isMultiSelect else { return }
             if focus == questions[page].options.count + 1 { typed[page] = (typed[page] ?? "") + text }
         case .codex:
-            // A paste on the highlighted option opens its notes.
-            notes = (notes ?? "") + text
+            // Codex 0.162.1 drops a paste unless the notes are open.
+            if let open = notes { notes = open + text }
         case .omp:
             // Text goes to the prompt below the panel.
             draft = (draft ?? "") + text

@@ -126,7 +126,7 @@ struct QuestionFormTests {
 
         await store.submit([.option(1), .text("Medium please")])
 
-        #expect(await tui.keys == [["2"], ["down"], ["down"], ["enter"]])
+        #expect(await tui.keys == [["2"], ["down"], ["down"], ["tab"], ["enter"]])
         #expect(await tui.pastes == ["Medium please"])
         #expect(await tui.answers == ["Green", "None of the above: Medium please"])
         #expect(await tui.state == .submitted)

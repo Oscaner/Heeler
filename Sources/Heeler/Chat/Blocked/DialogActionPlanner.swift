@@ -346,8 +346,9 @@ private struct CodexDialogPlanner {
         }
     }
 
-    /// A digit answers and moves to the next question. With notes open,
-    /// keys go to the notes instead, and Esc clears them.
+    /// A digit answers and moves to the next question. Tab opens the
+    /// highlighted option's notes; with notes open, keys go to the notes
+    /// instead, and Esc clears them.
     private func question(_ action: DialogAction) throws(DialogPlanError) -> DialogActionPlan {
         let notes = dialog.focus.notesText
         if let notes, !notes.isEmpty { throw .textFieldNotEmpty }
@@ -375,8 +376,11 @@ private struct CodexDialogPlanner {
                 }
             } else {
                 try builder.move(to: ordinal)
+                // Codex 0.162.1 drops a paste while the options have focus,
+                // so Tab opens the highlighted option's notes first.
+                builder.keys("tab")
+                builder.expect(.notes(""))
             }
-            // A paste on the highlighted option opens its notes.
             builder.paste(text)
             builder.expect(.notes(text))
             builder.keys("enter")

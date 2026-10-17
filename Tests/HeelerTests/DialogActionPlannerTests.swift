@@ -274,12 +274,16 @@ struct DialogActionPlannerTests {
             try plan(.respond(ordinal: 3, text: note), "codex-05-x3-q2").steps
                 == [
                     .keys(["down"]), .expect(.focus(ordinal: 2)), .keys(["down"]), .expect(.focus(ordinal: 3)),
-                    .paste(note), .expect(.notes(note)), .keys(["enter"]),
+                    .keys(["tab"]), .expect(.notes("")), .paste(note), .expect(.notes(note)), .keys(["enter"]),
                 ])
         // The probe's path: `up` had already reached None of the above.
         #expect(
             try plan(.respond(ordinal: 3, text: note), "codex-06-x3-q2-up").steps
-                == [.paste(note), .expect(.notes(note)), .keys(["enter"])])
+                == [.keys(["tab"]), .expect(.notes("")), .paste(note), .expect(.notes(note)), .keys(["enter"])])
+        // Codex 0.162.1 at phone width: Tab opens the notes before the paste.
+        #expect(
+            try plan(.respond(ordinal: 3, text: note), "codex-16-x7-phone-question-pointed").steps
+                == [.keys(["tab"]), .expect(.notes("")), .paste(note), .expect(.notes(note)), .keys(["enter"])])
         #expect(
             try plan(.respond(ordinal: 3, text: "Teal"), "codex-04-x3-q1").steps.last
                 == .expect(.page("Question 2/2")))
