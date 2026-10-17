@@ -218,7 +218,10 @@ terminal. The screen decides what a card offers. Chat reads the visible screen
 through `agent.read` with its ANSI colors, which also tell a narrow pane's
 leftover text apart, and joins it with the main conversation's pending
 request in the transcript; a subagent's dialog is read from the screen alone.
-Labels are the program's own text.
+Labels are the program's own text. herdr reports Claude Code idle on some of
+its question pages, the review page of a question form and a question with
+previews, so while the transcript holds an open AskUserQuestion call, an idle
+Claude Code's screen is read as a Blocked one.
 
 An answer compares a fingerprint of the dialog first and sends nothing if it
 changed, waits until the dialog has shown for 150 ms, presses keys through
@@ -437,8 +440,8 @@ no Attach at all.
     written since; the reducer accepts the earlier segment, but nothing loads
     it yet.
   - Claude Code's session registry (`~/.claude/sessions/<pid>.json`) as a
-    second Blocked signal. Cards follow herdr's Blocked alone, which reported
-    every dialog the isolated-backend probes raised.
+    second Blocked signal. Cards follow herdr's Blocked, and an open
+    AskUserQuestion call for the question pages herdr reports idle.
   - Skill sources the Skills probe misses: Claude Code's `.claude/commands`,
     Codex's built-in, `/etc/codex/skills`, plugin and nested `.agents/skills`
     skills. Claude Code's built-in skills are compiled into the program and
