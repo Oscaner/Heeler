@@ -75,9 +75,9 @@ Open Terminal prefers existing shell panes in the Agent's Workspace: one
 opens directly, multiple offer a choice, and creation is the fallback. A
 successful creation is remembered before inventory refresh, so a failed
 refresh retries discovery without creating another tab.
-Where the detail stands alone, pushed over its list (an iPhone), the
-terminal Open Terminal opens is pushed over the Agent, so Back returns to its
-Chat or terminal; beside a list, the list selects it. The Agent's surface
+Where the detail is pushed over the list (iPhone, or a compact iPad
+window), the terminal Open Terminal opens is pushed over the Agent, so Back
+returns to its Chat or terminal; beside a list, the list selects it. The Agent's surface
 leaves and rejoins its Attach around that push as it does around Changes.
 The pushed terminal does not count as presenting the Agent: its in-app
 banners show, and a notification landing on it pops back to the Agent.
