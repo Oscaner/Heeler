@@ -71,6 +71,18 @@ struct ChatDeliveryPolicyTests {
         #expect(!InputBoxState.text("draft").holdReason(for: .claude).contains("Stop"))
     }
 
+    /// Codex 0.162.1's Esc puts a follow-up queued with Tab back into the
+    /// composer, which then holds Chat's next message.
+    @Test func aCodexDraftMentionsWhatStopPutBack() {
+        #expect(
+            InputBoxState.text("follow-up").holdReason(for: .codex)
+                == "The Agent's input box already has text, such as a draft or a message Stop returned. Send or clear it in the terminal first."
+        )
+        #expect(
+            InputBoxState.text("draft").holdReason(for: .claude)
+                == "The Agent's input box already has text. Send or clear it in the terminal first.")
+    }
+
     @Test func anUnreadableScreenHoldsTheMessage() async throws {
         let preflight = try #require(Self.policy { throw TransportError.timedOut }.preflight)
 

@@ -61,8 +61,12 @@ extension InputBoxState {
             "The Agent's input box is ready."
         case .text:
             switch program {
-            case .claude, .codex:
+            case .claude:
                 "The Agent's input box already has text. Send or clear it in the terminal first."
+            case .codex:
+                // Codex 0.162.1's Esc puts follow-ups queued with Tab back
+                // in the box.
+                "The Agent's input box already has text, such as a draft or a message Stop returned. Send or clear it in the terminal first."
             case .pi, .omp:
                 // Their Esc returns steers the turn has not taken to the
                 // box, but the text may as well be a draft typed there.
