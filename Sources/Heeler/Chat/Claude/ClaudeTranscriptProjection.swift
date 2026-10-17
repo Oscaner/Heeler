@@ -69,52 +69,65 @@ enum ClaudeTranscriptProjection {
         _ index: ClaudeTranscriptIndex, entryByRecord: [String: ChatEntryID],
         waiting: [UInt64: ChatEntryID] = [:]
     ) -> [ChatRecordedPrompt] {
-        var prompts: [ChatRecordedPrompt] = []
+        var prompts: [(prompt: ChatRecordedPrompt, rawKey: String)] = []
         let byPosition = index.recordsByPosition
         let imageSources = imageSources(byPosition, indexed: index.records)
         for record in byPosition where !record.isSidechain && record.teamName == nil {
-            guard var text = typedText(of: record, indexed: index.records) else { continue }
-            if let sources = imageSources[record.uuid] { text = ChatRecordedPrompt.replacingImagePlaceholders(in: text, with: sources) }
+            guard let raw = typedText(of: record, indexed: index.records) else { continue }
+            let sources = imageSources[record.uuid] ?? []
+            let text = sources.isEmpty ? raw : ChatRecordedPrompt.replacingImagePlaceholders(in: raw, with: sources)
             prompts.append(
-                ChatRecordedPrompt(offset: record.byteOffset, text: text, entryID: entryByRecord[record.uuid]))
+                (
+                    ChatRecordedPrompt(
+                        offset: record.byteOffset, text: text, entryID: entryByRecord[record.uuid],
+                        pastedImagePaths: ChatRecordedPrompt.isImagePlaceholder(raw) ? sources : nil),
+                    ClaudeTranscriptReducer.echoKey(raw)
+                ))
         }
         // A queued prompt is recorded first as an enqueue and later as the
         // record that delivers it; the enqueue points at that record's entry,
-        // or at its waiting bubble until then.
+        // or at its waiting bubble until then. Both keep `[Image #N]` for a
+        // pasted image, and only the delivery has a source below it.
         var enqueued: [ChatRecordedPrompt] = []
         for operation in index.queueOperations.values where operation.operation == "enqueue" {
             guard let content = operation.content, let text = promptText(content) else { continue }
             let key = ClaudeTranscriptReducer.echoKey(text)
-            let delivery = prompts.first {
-                $0.offset > operation.offset && ClaudeTranscriptReducer.echoKey($0.text) == key
-            }
+            let delivery = prompts.first { $0.prompt.offset > operation.offset && $0.rawKey == key }?.prompt
             enqueued.append(
                 ChatRecordedPrompt(
-                    offset: operation.offset, text: text, entryID: delivery?.entryID ?? waiting[operation.offset]))
+                    offset: operation.offset, text: text, entryID: delivery?.entryID ?? waiting[operation.offset],
+                    pastedImagePaths: ChatRecordedPrompt.isImagePlaceholder(text)
+                        ? delivery?.pastedImagePaths ?? [] : nil))
         }
-        return (prompts + enqueued).sorted { $0.offset < $1.offset }
+        return (prompts.map(\.prompt) + enqueued).sorted { $0.offset < $1.offset }
     }
 
     /// The files a prompt's pasted images came from, by the prompt's uuid, in
     /// file order. A paste that is only an image path is recorded as
     /// `[Image #N]` plus an image block; Claude Code then writes a meta
-    /// `[Image: source: <path>]` record below it, after any attachments.
+    /// record of `[Image: source: <path>]` blocks, one per image, below it,
+    /// after however many attachments the prompt carried.
     private static func imageSources(
         _ byPosition: [ClaudeRecord], indexed: [String: ClaudeRecord]
     ) -> [String: [String]] {
         var sources: [String: [String]] = [:]
-        for record in byPosition where record.kind == .user && record.isMeta && record.texts.count == 1 {
-            guard let text = record.texts.first, text.hasPrefix(imageSourcePrefix), text.hasSuffix("]") else { continue }
-            let path = String(text.dropFirst(imageSourcePrefix.count).dropLast())
-            guard !path.isEmpty else { continue }
-            var parent = record.parentUUID.flatMap { indexed[$0] }
-            var hops = 0
-            while let ancestor = parent, hops < 8, ancestor.isMeta || isAttachment(ancestor.kind) {
-                parent = ancestor.parentUUID.flatMap { indexed[$0] }
-                hops += 1
+        for record in byPosition where record.kind == .user && record.isMeta {
+            let paths = record.texts.compactMap { text -> String? in
+                guard text.hasPrefix(imageSourcePrefix), text.hasSuffix("]") else { return nil }
+                let path = String(text.dropFirst(imageSourcePrefix.count).dropLast())
+                return path.isEmpty ? nil : path
             }
-            guard let prompt = parent, prompt.kind == .user, prompt.imageCount > 0 else { continue }
-            sources[prompt.uuid, default: []].append(path)
+            guard !paths.isEmpty else { continue }
+            var visited: Set<String> = [record.uuid]
+            var parent = record.parentUUID.flatMap { indexed[$0] }
+            while let ancestor = parent, ancestor.isMeta || isAttachment(ancestor.kind),
+                visited.insert(ancestor.uuid).inserted
+            {
+                parent = ancestor.parentUUID.flatMap { indexed[$0] }
+            }
+            guard let prompt = parent, !visited.contains(prompt.uuid), prompt.kind == .user, prompt.imageCount > 0
+            else { continue }
+            sources[prompt.uuid, default: []].append(contentsOf: paths)
         }
         return sources
     }

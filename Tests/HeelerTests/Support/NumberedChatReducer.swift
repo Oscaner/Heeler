@@ -6,7 +6,8 @@ import Foundation
 /// line becomes one user entry `n-k`; the conversation is titled with the
 /// first line it was seeded with; `{"format":"old"}` is a format it does
 /// not read; `{"continued":"<id>"}` links to another session;
-/// `{"prompt":"<text>"}` is a typed prompt the file records,
+/// `{"prompt":"<text>"}` is a typed prompt the file records (with
+/// `"images":[…]`, the pasted image paths it records for one placeholder),
 /// `{"compacted":true}` a compaction, and `{"tool":k,"output":"<text>"}`
 /// tool row `t-k`, which references its line for the output instead of
 /// keeping a preview, as a saved entry does. `{"workflow":"<id>",
@@ -21,6 +22,7 @@ struct NumberedChatReducer: ChatTranscriptReducer {
         var format: String?
         var continued: String?
         var prompt: String?
+        var images: [String]?
         var compacted: Bool?
         var tool: Int?
         var output: String?
@@ -63,8 +65,8 @@ struct NumberedChatReducer: ChatTranscriptReducer {
         range.map { "n-\($0)" }
     }
 
-    static func prompt(_ text: String) -> String {
-        let data = (try? JSONEncoder().encode(["prompt": text])) ?? Data()
+    static func prompt(_ text: String, images: [String]? = nil) -> String {
+        let data = (try? JSONEncoder().encode(Record(prompt: text, images: images))) ?? Data()
         return String(decoding: data, as: UTF8.self) + "\n"
     }
 
@@ -132,7 +134,9 @@ struct NumberedChatReducer: ChatTranscriptReducer {
             needsOlderHistory: context.windowStart > 0,
             recordedPrompts: records.compactMap { line, record in
                 record?.prompt.map {
-                    ChatRecordedPrompt(offset: line.offset, text: $0, entryID: ChatEntryID("p-\(line.offset)"))
+                    ChatRecordedPrompt(
+                        offset: line.offset, text: $0, entryID: ChatEntryID("p-\(line.offset)"),
+                        pastedImagePaths: record?.images)
                 }
             },
             links: ChatTranscriptLinks(

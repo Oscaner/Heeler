@@ -221,7 +221,10 @@ enum CodexTimelineProjector {
                     let text = ChatRecordedPrompt.replacingImagePlaceholders(
                         in: user.text, with: user.localImagePaths)
                     output.recordedPrompts.append(
-                        ChatRecordedPrompt(offset: entry.sourceOffset, text: text, entryID: entry.id))
+                        ChatRecordedPrompt(
+                            offset: entry.sourceOffset, text: text, entryID: entry.id,
+                            pastedImagePaths: ChatRecordedPrompt.isImagePlaceholder(user.text)
+                                ? user.localImagePaths : nil))
                     output.echoCandidates.append(
                         CodexEchoCandidate(
                             rolloutID: entry.rolloutID, offset: entry.sourceOffset, entryID: entry.id,

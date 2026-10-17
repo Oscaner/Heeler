@@ -831,11 +831,103 @@ struct ChatRecordedPrompt: Equatable, Sendable {
     var text: String
     /// The bubble the prompt produced, when one shows.
     var entryID: ChatEntryID?
+    /// For a prompt recorded as only one `[Image #N]`, the paths its image
+    /// was pasted as, as the program read them; empty when the record does
+    /// not say (Claude Code's enqueue). Nil for any other prompt. A send of
+    /// one path matches such a prompt when it names one of them.
+    var pastedImagePaths: [String]?
 
-    init(offset: UInt64, text: String, entryID: ChatEntryID? = nil) {
+    init(offset: UInt64, text: String, entryID: ChatEntryID? = nil, pastedImagePaths: [String]? = nil) {
         self.offset = offset
         self.text = text
         self.entryID = entryID
+        self.pastedImagePaths = pastedImagePaths
+    }
+
+    /// Whether `text` is one `[Image #N]` placeholder and nothing else.
+    static func isImagePlaceholder(_ text: String) -> Bool {
+        guard let pattern = try? Regex(#"\[Image #[0-9]+\]"#) else { return false }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines).wholeMatch(of: pattern) != nil
+    }
+
+    /// The path a sent text names when it is exactly one path, the way
+    /// Codex's TUI reads a paste as an image path (`normalize_pasted_path`):
+    /// a `file://` URL, optionally in one pair of quotes, else a single
+    /// shell word. Paths compare as written; Heeler sends absolute ones.
+    static func pastedPath(in text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        var unquoted = Substring(trimmed)
+        if trimmed.count >= 2,
+            let first = trimmed.first, first == "\"" || first == "'", trimmed.last == first
+        {
+            unquoted = trimmed.dropFirst().dropLast()
+        }
+        if unquoted.hasPrefix("file://") {
+            return URL(string: String(unquoted)).flatMap { $0.isFileURL ? $0.path(percentEncoded: false) : nil }
+        }
+        guard let words = shellWords(trimmed), words.count == 1 else { return nil }
+        return words[0]
+    }
+
+    /// POSIX shell words: quotes group, a backslash escapes outside single
+    /// quotes. Nil for an unterminated quote.
+    private static func shellWords(_ text: String) -> [String]? {
+        var words: [String] = []
+        var word = ""
+        var inWord = false
+        var characters = text.makeIterator()
+        while let character = characters.next() {
+            switch character {
+            case "'":
+                inWord = true
+                var closed = false
+                while let next = characters.next() {
+                    if next == "'" {
+                        closed = true
+                        break
+                    }
+                    word.append(next)
+                }
+                guard closed else { return nil }
+            case "\"":
+                inWord = true
+                var closed = false
+                while let next = characters.next() {
+                    if next == "\"" {
+                        closed = true
+                        break
+                    }
+                    if next == "\\", let escaped = characters.next() {
+                        if !"$`\"\\\n".contains(escaped) {
+                            word.append("\\")
+                        }
+                        word.append(escaped)
+                    } else {
+                        word.append(next)
+                    }
+                }
+                guard closed else { return nil }
+            case "\\":
+                inWord = true
+                if let escaped = characters.next() {
+                    word.append(escaped)
+                }
+            case _ where character.isWhitespace:
+                if inWord {
+                    words.append(word)
+                    word = ""
+                    inWord = false
+                }
+            default:
+                inWord = true
+                word.append(character)
+            }
+        }
+        if inWord {
+            words.append(word)
+        }
+        return words
     }
 
     /// `text` with its `[Image #N]` placeholders replaced, in order, by the

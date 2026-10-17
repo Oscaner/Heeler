@@ -444,6 +444,35 @@ struct ClaudeTranscriptReducerTests {
                 == "[Image #1] and [Image #2]")
     }
 
+    @Test("An image's source is found after any number of attachments, and one record can name several")
+    func imageSourcesAfterAttachments() throws {
+        let transcript = ClaudeSample.transcript(
+            #"""
+            {"type":"queue-operation","operation":"enqueue","content":"[Image #1]","sessionId":"s1"}
+            {"type":"user","uuid":"p1","parentUuid":null,"message":{"role":"user","content":[{"type":"text","text":"[Image #1]"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AA"}}]}}
+            {"type":"attachment","uuid":"a1","parentUuid":"p1","attachment":{"type":"total_tokens_reminder","text":"x"}}
+            {"type":"attachment","uuid":"a2","parentUuid":"a1","attachment":{"type":"total_tokens_reminder","text":"x"}}
+            {"type":"attachment","uuid":"a3","parentUuid":"a2","attachment":{"type":"total_tokens_reminder","text":"x"}}
+            {"type":"attachment","uuid":"a4","parentUuid":"a3","attachment":{"type":"total_tokens_reminder","text":"x"}}
+            {"type":"attachment","uuid":"a5","parentUuid":"a4","attachment":{"type":"total_tokens_reminder","text":"x"}}
+            {"type":"attachment","uuid":"a6","parentUuid":"a5","attachment":{"type":"total_tokens_reminder","text":"x"}}
+            {"type":"attachment","uuid":"a7","parentUuid":"a6","attachment":{"type":"total_tokens_reminder","text":"x"}}
+            {"type":"attachment","uuid":"a8","parentUuid":"a7","attachment":{"type":"total_tokens_reminder","text":"x"}}
+            {"type":"attachment","uuid":"a9","parentUuid":"a8","attachment":{"type":"total_tokens_reminder","text":"x"}}
+            {"type":"attachment","uuid":"a10","parentUuid":"a9","attachment":{"type":"total_tokens_reminder","text":"x"}}
+            {"type":"user","uuid":"m1","parentUuid":"a10","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"[Image: source: /tmp/one.png]"}]}}
+            {"type":"user","uuid":"p2","parentUuid":"m1","message":{"role":"user","content":[{"type":"text","text":"Compare [Image #2] with [Image #3]"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AA"}},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AA"}}]}}
+            {"type":"user","uuid":"m2","parentUuid":"p2","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"[Image: source: /tmp/two.png]"},{"type":"text","text":"[Image: source: /tmp/three.png]"}]}}
+            """#)
+        let prompts = transcript.recordedPrompts
+        #expect(prompts.map(\.text) == ["[Image #1]", "/tmp/one.png", "Compare /tmp/two.png with /tmp/three.png"])
+        // The enqueue keeps the placeholder, and takes its paths and its
+        // bubble from the record that delivers it.
+        #expect(prompts.map(\.pastedImagePaths) == [["/tmp/one.png"], ["/tmp/one.png"], nil])
+        #expect(prompts[0].entryID == ChatEntryID("user:p1"))
+        #expect(prompts[1].entryID == ChatEntryID("user:p1"))
+    }
+
     // MARK: - Subagent and first probe
 
     private struct SubagentMeta: Decodable {

@@ -298,6 +298,8 @@ struct CodexMessageDisplayTests {
         // Heeler sends the staged path with a trailing space.
         #expect(prompt.map { codexEchoKey($0.text) } == codexEchoKey(path + " "))
         #expect(prompt.map { codexEchoKey($0.text) } != codexEchoKey("/tmp/other/image.jpg"))
+        // A send that wrote the path another way still names it.
+        #expect(prompt?.pastedImagePaths == [path])
     }
 
     @Test("A prompt steered into a running turn is marked queued")

@@ -34,14 +34,9 @@ struct CodexPendingEchoTests {
         #expect(Self.match([send], [Self.prompt("hello", at: 40, rollout: "r2")]) == [Self.id(40)])
     }
 
-    @Test("An image path sent alone matches the [Image #1] prompt carrying it", arguments: CodexImageSendCase.allCases)
-    func imageOnly(_ imageCase: CodexImageSendCase) {
-        let send = CodexPendingSend(text: imageCase.sent, cursor: CodexEchoCursor(rolloutID: "r1", offset: 0))
-        let candidates = [
-            Self.prompt("[Image #1]", at: 10, images: ["/Users/me/other.png"]),
-            Self.prompt("[Image #1]", at: 20, images: [imageCase.path]),
-        ]
-        #expect(Self.match([send], candidates) == [Self.id(20)])
+    @Test("An image path sent alone is read the way the TUI reads a pasted path", arguments: CodexImageSendCase.allCases)
+    func pastedPath(_ imageCase: CodexImageSendCase) {
+        #expect(ChatRecordedPrompt.pastedPath(in: imageCase.sent) == imageCase.path)
     }
 
     @Test("Matching never falls back to prefixes, case or near misses")
@@ -59,9 +54,7 @@ struct CodexPendingEchoTests {
             Self.match([CodexPendingSend(text: "/compact", cursor: cursor)], [Self.prompt("/compact", at: 10)]) == [nil])
 
         // A path with other words is text, not an image paste.
-        let sentence = CodexPendingSend(text: "see /Users/me/shot.png", cursor: cursor)
-        #expect(
-            Self.match([sentence], [Self.prompt("[Image #1]", at: 10, images: ["/Users/me/shot.png"])]) == [nil])
+        #expect(ChatRecordedPrompt.pastedPath(in: "see /Users/me/shot.png") == nil)
     }
 
     @Test("P2's first prompt is the echo of the text Heeler sent")
@@ -79,10 +72,10 @@ struct CodexPendingEchoTests {
     }
 
     private static func prompt(
-        _ text: String, at offset: UInt64, images: [String] = [], rollout: String = "r1"
+        _ text: String, at offset: UInt64, rollout: String = "r1"
     ) -> CodexEchoCandidate {
         CodexEchoCandidate(
-            rolloutID: rollout, offset: offset, entryID: id(offset), kind: .prompt(text: text, localImagePaths: images))
+            rolloutID: rollout, offset: offset, entryID: id(offset), kind: .prompt(text: text, localImagePaths: []))
     }
 
     private static func id(_ offset: UInt64) -> ChatEntryID {

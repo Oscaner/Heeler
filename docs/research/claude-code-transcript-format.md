@@ -488,11 +488,19 @@ How the 2.1.291 CLI turns a submitted prompt into a record
    `exit`, `quit`, `:q`, `:q!`, `:wq` or `:wq!` runs `/exit`
    (`chunk-v1gtm86q.js` `xPe`).
 3. `[Pasted text #N +M lines]` references expand inline. `[Image #N]` stays
-   literal, and the images become `image` blocks after the text. On 2.1.301
-   a paste that is only an image path is recorded this way too, and a meta
-   user record `[Image: source: <path>]` follows it (after an attachment), so
-   a sent path compares with the record once each placeholder is replaced
-   by its source. A path followed by more text stays plain text. Flag
+   literal, and the images become `image` blocks after the text. A pasted
+   image path is recorded this way too (live on 2.1.301 for a paste that is
+   only the path; local transcripts from 2.1.278 on show the same records
+   for prompts with more text around the placeholder), and a meta
+   user record follows it, after however many attachments the prompt
+   carried (one in the live capture, nine or more on a session's first
+   prompt in local transcripts), with one `[Image: source: <path>]`
+   text block per image. A sent path compares with the record once each
+   placeholder is replaced by its source. A path followed by more text
+   stays plain text. A queued paste's enqueue `content` is the submitted
+   text, so it keeps the bare placeholder; Chat matches a send of one path
+   to a placeholder-only prompt that names no source, or to the one whose
+   delivery names that path (not observed live). Flag
    `tengu_virtual_pancake` (off by default) wraps pastes in
    `<pasted_content id="abcd">…</pasted_content id="abcd">`.
 4. While the agent is busy, the prompt is queued after `trim()`: a
@@ -527,7 +535,9 @@ What follows for matching a sent prompt to its record:
   it. A skill command records its name and arguments in tags (see
   [Special flows](#special-flows)). `/compact` records no prompt; a later
   `compact_boundary` with `trigger: "manual"` stands for it (Not verified).
-  Images are recorded as blocks, so only the text compares.
+  Images are recorded as blocks, so only the text compares, after each
+  `[Image #N]` is replaced by its `[Image: source: …]` path when the prompt
+  has one (item 3 above).
 - Forks and `/clear` start a new session id and file, so a prompt without an
   echo may have landed in another transcript (Not verified for `/clear`; see
   [Location](#location)).

@@ -891,6 +891,37 @@ struct AgentChatStoreTests {
         #expect(fixture.store.sendStatuses[id] == .recorded)
     }
 
+    @Test func aSentImagePathIsRecordedByThePlaceholderThatNamesIt() async throws {
+        let fixture = Fixture(session: Self.first)
+        await fixture.files.write(NumberedChatReducer.lines(0..<1), at: Self.path(Self.first))
+        await fixture.store.step()
+        let quoted = UUID()
+        let other = UUID()
+        let third = UUID()
+        let sends = [
+            Self.sent(quoted, "'/tmp/a shot.png' "), Self.sent(other, "/tmp/b.png "), Self.sent(third, "/tmp/c.png "),
+        ]
+        fixture.store.updateSends(sends.map { Self.sent($0.id, $0.text, delivered: false) })
+        fixture.store.updateSends(sends)
+
+        // The program names the file it read: only the send of that path
+        // matches. A placeholder that names none (a Claude Code enqueue)
+        // matches any one path.
+        await fixture.files.append(
+            NumberedChatReducer.prompt("[Image #1]", images: ["/tmp/a shot.png"]), to: Self.path(Self.first))
+        await fixture.store.step()
+
+        #expect(fixture.store.sendStatuses[quoted] == .recorded)
+        #expect(fixture.store.sendStatuses[other] == .awaiting)
+        #expect(fixture.store.sendStatuses[third] == .awaiting)
+
+        await fixture.files.append(NumberedChatReducer.prompt("[Image #1]", images: []), to: Self.path(Self.first))
+        await fixture.store.step()
+
+        #expect(fixture.store.sendStatuses[other] == .recorded)
+        #expect(fixture.store.sendStatuses[third] == .awaiting)
+    }
+
     @Test func twoIdenticalSendsNeedTwoRecordedCopies() async throws {
         let fixture = Fixture(session: Self.first)
         await fixture.files.write(NumberedChatReducer.lines(0..<1), at: Self.path(Self.first))

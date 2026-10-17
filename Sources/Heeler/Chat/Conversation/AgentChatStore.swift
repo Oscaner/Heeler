@@ -847,7 +847,10 @@ final class AgentChatStore {
         let transcript = conversation.transcript
         let recorded = transcript.recordedPrompts.compactMap { prompt in
             candidate(offset: prompt.offset, entryID: prompt.entryID).map {
-                (candidate: $0, key: source.adapter.echoKey(prompt.text), text: String(Self.squeezed(prompt.text)))
+                (
+                    candidate: $0, key: source.adapter.echoKey(prompt.text), text: String(Self.squeezed(prompt.text)),
+                    imagePaths: prompt.pastedImagePaths
+                )
             }
         }
         // Codex records no prompt for `/compact`, only the compaction.
@@ -886,6 +889,14 @@ final class AgentChatStore {
             var match = recorded.first { $0.key == send.key && isOpen($0.candidate) }?.candidate
             if match == nil, send.key == "/compact" {
                 match = compactions.first(where: isOpen)
+            }
+            // A path pasted alone becomes `[Image #N]` plus the image, which
+            // may name the path only as the program read it, or not at all.
+            if match == nil, let path = ChatRecordedPrompt.pastedPath(in: send.text) {
+                match = recorded.first { prompt in
+                    guard let paths = prompt.imagePaths, isOpen(prompt.candidate) else { return false }
+                    return paths.isEmpty || paths.contains(path)
+                }?.candidate
             }
             if match == nil, extendedSends.contains(send.id) {
                 let text = String(Self.squeezed(send.text))

@@ -520,8 +520,11 @@ Matching a sent prompt to its record follows from this (Not verified):
   normalized path and the text `[Image #1]` (seen live with 0.162.1, whose
   response-item twin wraps the image in `<image name=[Image #1] path=...>`
   text parts). Chat puts each `local_image` path back in place of its
-  placeholder before comparing. A path followed by more text is no paste
-  of one path, so it is recorded as plain text.
+  placeholder before comparing, and a send that is one path written
+  another way (quoted, escaped or a `file://` URL) matches a
+  placeholder-only item whose `local_image` names the path it normalizes
+  to. A path followed by more text is no paste of one path, so it is
+  recorded as plain text.
 
 ## Incremental parsing
 
@@ -549,8 +552,9 @@ Matching a sent prompt to its record follows from this (Not verified):
 
 - Legacy behavior, which rests on source only, including which versions
   wrote which exec output format and what a declined question writes.
-- Non-empty code-mode `aggregated_output`, `/compact` turns and lone
-  image-path pastes: read in source, never observed live.
+- Non-empty code-mode `aggregated_output` and `/compact` turns: read in
+  source, never observed live. A lone image-path paste was observed with a
+  bare path only; quoted, escaped and `file://` forms rest on source.
 - Where a revert made on a later day places its file. A search for the
   newest rollout must include today's directory.
 - The matching rules in

@@ -106,21 +106,14 @@ enum CodexPendingEcho {
         var claimed = Set<Int>()
         return pending.map { send in
             let key = codexEchoKey(send.text)
-            let imagePath = imagePath(in: send.text)
             let index = candidates.indices.first { index in
                 let candidate = candidates[index]
                 guard !claimed.contains(index), isAfter(candidate, send.cursor) else { return false }
                 switch candidate.kind {
                 case .compaction:
                     return key == compactCommand
-                case .prompt(let text, let localImagePaths):
-                    guard key != compactCommand else { return false }
-                    if codexEchoKey(text) == key {
-                        return true
-                    }
-                    // A pasted image path becomes `[Image #1]` plus the image.
-                    guard let imagePath, codexEchoKey(text) == "[Image #1]" else { return false }
-                    return localImagePaths.contains(imagePath)
+                case .prompt(let text, _):
+                    return key != compactCommand && codexEchoKey(text) == key
                 }
             }
             guard let index else { return nil }
@@ -134,86 +127,6 @@ enum CodexPendingEcho {
     /// and only the live file offers candidates).
     private static func isAfter(_ candidate: CodexEchoCandidate, _ cursor: CodexEchoCursor) -> Bool {
         candidate.rolloutID != cursor.rolloutID || candidate.offset >= cursor.offset
-    }
-
-    /// The path a sent text names when it is exactly one path, the way the
-    /// TUI reads a paste as an image path (`normalize_pasted_path`): a
-    /// `file://` URL, optionally in one pair of quotes, else a single shell
-    /// word. Paths compare as written; Heeler sends absolute ones.
-    static func imagePath(in text: String) -> String? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        var unquoted = Substring(trimmed)
-        if trimmed.count >= 2,
-            let first = trimmed.first, first == "\"" || first == "'", trimmed.last == first
-        {
-            unquoted = trimmed.dropFirst().dropLast()
-        }
-        if unquoted.hasPrefix("file://") {
-            return URL(string: String(unquoted)).flatMap { $0.isFileURL ? $0.path(percentEncoded: false) : nil }
-        }
-        guard let words = shellWords(trimmed), words.count == 1 else { return nil }
-        return words[0]
-    }
-
-    /// POSIX shell words: quotes group, a backslash escapes outside single
-    /// quotes. Nil for an unterminated quote.
-    private static func shellWords(_ text: String) -> [String]? {
-        var words: [String] = []
-        var word = ""
-        var inWord = false
-        var characters = text.makeIterator()
-        while let character = characters.next() {
-            switch character {
-            case "'":
-                inWord = true
-                var closed = false
-                while let next = characters.next() {
-                    if next == "'" {
-                        closed = true
-                        break
-                    }
-                    word.append(next)
-                }
-                guard closed else { return nil }
-            case "\"":
-                inWord = true
-                var closed = false
-                while let next = characters.next() {
-                    if next == "\"" {
-                        closed = true
-                        break
-                    }
-                    if next == "\\", let escaped = characters.next() {
-                        if !"$`\"\\\n".contains(escaped) {
-                            word.append("\\")
-                        }
-                        word.append(escaped)
-                    } else {
-                        word.append(next)
-                    }
-                }
-                guard closed else { return nil }
-            case "\\":
-                inWord = true
-                if let escaped = characters.next() {
-                    word.append(escaped)
-                }
-            case _ where character.isWhitespace:
-                if inWord {
-                    words.append(word)
-                    word = ""
-                    inWord = false
-                }
-            default:
-                inWord = true
-                word.append(character)
-            }
-        }
-        if inWord {
-            words.append(word)
-        }
-        return words
     }
 
     /// Characters Heeler strips before sending: zero-width and bidi
