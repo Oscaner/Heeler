@@ -172,14 +172,24 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                     transcript.title = name.isEmpty ? nil : name
                 }
             case "compaction":
-                add(record, .divider(ChatDivider(kind: .compaction, detail: record.value["summary"]?.stringValue)))
+                // Pi writes its summaries in Markdown, which neither row
+                // draws: they preview, and read aloud, as plain lines.
+                let summary = record.value["summary"]?.stringValue
+                add(record, .divider(ChatDivider(kind: .compaction, detail: summary.map(ChatMarkdown.plainText))))
             case "branch_summary":
                 // Oh My Pi's atomic rewrite records the entry it dropped as
                 // an empty summary, which is nothing to show.
                 guard let summary = record.value["summary"]?.stringValue, !summary.isEmpty,
                     record.value["details"]?["kind"]?.stringValue != "discarded-entry-branch"
                 else { continue }
-                add(record, .notice(ChatNotice(kind: .system, title: "Branch summary", detail: summary)))
+                // Copy gives the summary as written.
+                let plain = ChatMarkdown.plainText(summary)
+                add(
+                    record,
+                    .notice(
+                        ChatNotice(
+                            kind: .system, title: "Branch summary", detail: plain,
+                            rawDetail: plain == summary ? nil : summary)))
             case "reset_boundary":
                 add(record, .notice(ChatNotice(kind: .system, title: "Conversation context cleared")))
             case "custom_message":

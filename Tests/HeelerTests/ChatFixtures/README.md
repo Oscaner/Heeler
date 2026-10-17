@@ -21,6 +21,7 @@ None came from a personal session.
 | `omp/approvals-asks-plan.jsonl` | Oh My Pi 18.11.1 session from the 2026-10-15 probes below: approved and denied Bash approvals (one denied with a steering message), answered and cancelled `ask` calls, the empty `branch_summary` an atomic rewrite appends, and a plan proposal ending in `__omp.silent_abort__` |
 | `pi/auth-error-skill.jsonl` | Pi 0.85.1 session from the same probes: a provider authentication error and a `/skill:probe-hello world args` invocation recorded as its `<skill>` block |
 | `pi/provider-retry.jsonl` | Pi 0.85.1 session from a later 2026-10-15 probe against herdr 0.9.5: a `Connection error.` Pi retried on its own, the retry recorded as the error's reply |
+| `pi/summaries.jsonl` | Pi 0.85.1's `branch_summary` and `compaction` records from the 2026-10-17 E2E run (isolated root), summaries verbatim: Markdown headings, task checkboxes and a `<read-files>` block. The messages around them are written for the test |
 
 ## Scrubbing
 

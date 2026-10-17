@@ -776,3 +776,31 @@ private struct BlockBuilder {
         return false
     }
 }
+
+extension ChatMarkdown {
+    /// Markdown as plain lines, for a row that previews it without drawing
+    /// it (Pi's compaction and branch summaries): one line per block,
+    /// headings without their `#`, list items with their marker and without
+    /// a task checkbox. HTML blocks, such as Pi's `<read-files>` list, and
+    /// thematic breaks leave nothing.
+    static func plainText(_ source: String) -> String {
+        blocks(from: source).compactMap { block -> String? in
+            switch block.kind {
+            case .html, .thematicBreak:
+                return nil
+            case .listItem(let marker):
+                let prefix = marker + " "
+                guard block.text.hasPrefix(prefix) else { return block.text }
+                var item = block.text.dropFirst(prefix.count)
+                for box in ["[ ] ", "[x] ", "[X] "] where item.hasPrefix(box) {
+                    item = item.dropFirst(box.count)
+                }
+                return prefix + item
+            default:
+                return block.text
+            }
+        }
+        .filter { !$0.isEmpty }
+        .joined(separator: "\n")
+    }
+}

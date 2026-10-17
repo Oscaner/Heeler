@@ -512,6 +512,13 @@ struct ChatMarkdownTests {
         #expect(intents == ["代码", "swift"])
     }
 
+    @Test("Plain text drops heading marks, task boxes, HTML blocks and breaks")
+    func plainText() {
+        #expect(ChatMarkdown.plainText("## Goal\n- [x] done\n- [ ] open\n\n<read-files>\na\n</read-files>") == "Goal\n• done\n• open")
+        #expect(ChatMarkdown.plainText("**Turn** `x`\n\n---\n\n1. Await") == "Turn x\n1. Await")
+        #expect(ChatMarkdown.plainText("Tried another fix") == "Tried another fix")
+    }
+
     @Test("A soft break inside emphasis keeps the emphasis and loses the break intent")
     func softBreakInEmphasis() throws {
         let block = try #require(ChatMarkdown.blocks(from: "*a\nb*").first)

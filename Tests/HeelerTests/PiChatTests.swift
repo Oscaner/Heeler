@@ -1030,6 +1030,35 @@ struct PiChatTests {
         #expect(Self.tool("call_98595df0", in: reducer.transcript(.init(windowStart: 1))) == nil)
     }
 
+    @Test func summariesPreviewAsPlainLines() throws {
+        var reducer = PiTranscriptReducer()
+        reducer.append(try ChatFixture.lines("pi/summaries.jsonl"))
+        let transcript = reducer.transcript(.init())
+        let branch = try #require(
+            transcript.entries.lazy.compactMap { entry -> ChatNotice? in
+                if case .notice(let notice) = entry.content, notice.title == "Branch summary" { notice } else { nil }
+            }.first)
+        let compaction = try #require(
+            transcript.entries.lazy.compactMap { entry -> ChatDivider? in
+                if case .divider(let divider) = entry.content { divider } else { nil }
+            }.first)
+        for detail in [branch.detail, compaction.detail] {
+            let text = try #require(detail)
+            #expect(!text.contains("#"))
+            #expect(!text.contains("[x]") && !text.contains("[ ]"))
+            #expect(!text.contains("read-files>"))
+        }
+        #expect(
+            branch.detail?.hasPrefix(
+                "The user explored a different conversation branch before returning here.\nSummary of that exploration:\nGoal\nUser requested the assistant to say “four”.\nConstraints & Preferences\n• (none)"
+            ) == true)
+        #expect(branch.detail?.contains("• Assistant replied with “four”") == true)
+        #expect(compaction.detail?.hasPrefix("Goal\n• Simple reply tasks (trust fixture, say words)\n") == true)
+        #expect(compaction.detail?.hasSuffix("build directly on that prompt.") == true)
+        // Copy keeps the summary as Pi wrote it.
+        #expect(branch.rawDetail?.contains("## Goal\n") == true)
+    }
+
     @Test func discardedBranchSummaryIsHidden() throws {
         let transcript = try Self.ompTranscript()
         #expect(!transcript.entries.contains { $0.id == ChatEntryID("pi:89c4c5bd") })
