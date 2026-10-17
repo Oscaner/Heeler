@@ -59,7 +59,7 @@ struct BlockedHistory: Equatable, Sendable {
 
     private static func agrees(_ answer: ChatToolActivity.CardAnswer, with status: ChatToolActivity.Status) -> Bool {
         switch answer {
-        case .allowed: [.running, .succeeded, .failed].contains(status)
+        case .allowed: [.running, .succeeded, .failed, .started].contains(status)
         case .stopped: [.declined, .interrupted, .notCompleted, .noResult].contains(status)
         }
     }

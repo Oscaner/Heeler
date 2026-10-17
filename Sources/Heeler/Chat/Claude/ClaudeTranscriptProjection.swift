@@ -500,6 +500,8 @@ private struct Builder {
         var status = outcome?.status ?? unansweredStatus(after: record.byteOffset)
         if status == .succeeded, let launch = structured?.status, launch == "async_launched" || launch == "remote_launched" {
             status = backgroundStatus(callID, launchedAt: record.byteOffset)
+        } else if status == .succeeded, structured?.status == "teammate_spawned" {
+            status = .started
         }
 
         let placed: Bool
@@ -570,6 +572,11 @@ private struct Builder {
         if Self.isWorkflow(use, result: structured), let name = structured?.workflowName, !name.isEmpty {
             row.title = name
             row.subtitle = structured?.workflowSummary
+        }
+        if structured?.status == "teammate_spawned",
+            let name = (use.input.teammateName ?? structured?.teammateName).flatMap(\.nonEmpty)
+        {
+            row.subtitle = "Teammate @\(name)"
         }
         // A background agent reports through its notification.
         if row.preview == nil, !use.id.isEmpty, let report = notifications[use.id]?.notification.result,

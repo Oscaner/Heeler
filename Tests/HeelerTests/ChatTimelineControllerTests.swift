@@ -1475,6 +1475,31 @@ struct ChatRowViewTests {
         let labels = AccessibilityProbe.labels(in: controller.view).filter { $0.contains("You") }
         #expect(labels == [expected])
     }
+
+    /// The accessibility labels a hosted tool row shows.
+    private static func labels(of tool: ChatToolActivity, isExpanded: Bool = false) async throws -> [String] {
+        let entry = ChatEntry(id: ChatEntryID("tool"), sourceOffset: 0, content: .tool(tool))
+        let rows = await ChatRowBuilder().rows(for: ChatTimelineInput(entries: [entry]))
+        let row = try #require(rows.first { $0.id == .entry(entry.id) })
+        let controller = UIHostingController(
+            rootView: ChatRowView(row: row, isExpanded: isExpanded, actions: Self.actions)
+                .frame(width: 402)
+                .fixedSize(horizontal: false, vertical: true))
+        controller.safeAreaRegions = []
+        let window = try await makeTestWindow(
+            frame: CGRect(x: 0, y: 0, width: 402, height: 400), rootViewController: controller)
+        defer { window.isHidden = true }
+        controller.view.layoutIfNeeded()
+        return AccessibilityProbe.labels(in: controller.view)
+    }
+
+    @Test func aSpawnedTeammateSaysStarted() async throws {
+        let labels = try await Self.labels(
+            of: ChatToolActivity(
+                kind: .agent, name: "Agent", title: "worker w1", subtitle: "Teammate @w1", status: .started))
+        #expect(labels.contains { $0.contains("Started") })
+        #expect(!labels.contains { $0.contains("Done") })
+    }
 }
 
 /// Exercises UIKit's commit callback without completing the animation early.

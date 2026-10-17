@@ -187,6 +187,9 @@ struct ChatToolActivity: Equatable, Codable, Sendable {
         case notCompleted
         /// No result was ever recorded and the turn has moved on.
         case noResult
+        /// A teammate the call spawned; the transcript doesn't say when it
+        /// ends.
+        case started
     }
 
     /// How the user answered the call's Blocked card in Chat.

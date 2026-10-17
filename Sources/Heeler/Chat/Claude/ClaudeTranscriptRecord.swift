@@ -182,6 +182,8 @@ struct ClaudeToolInput: Sendable, Equatable {
     var todos: [ClaudeTodo]?
     var skill: String?
     var arguments: String?
+    /// An Agent call's `name`, which makes it spawn a teammate.
+    var teammateName: String?
     /// TaskCreate's task name, and the task and status a TaskUpdate sets.
     var subject: String?
     var taskID: String?
@@ -235,6 +237,8 @@ struct ClaudeToolUseResult: Sendable, Equatable {
     /// `teammate_spawned`; Workflow: `async_launched`.
     var status: String?
     var agentID: String?
+    /// The teammate a `teammate_spawned` Agent call started.
+    var teammateName: String?
     /// Workflow: the id its task notification names, its kind
     /// (`local_workflow`), its name, the run its journal is filed under
     /// (`wf_…`), and what it says it does.
@@ -472,7 +476,7 @@ extension ClaudeToolInput {
                     isMultiSelect: question.multiSelect ?? false)
             },
             todos: raw.todos?.compactMap(ClaudeTodo.init), skill: raw.skill, arguments: raw.args,
-            subject: raw.subject, taskID: raw.taskId, status: raw.status, planContent: raw.planContent)
+            teammateName: raw.name, subject: raw.subject, taskID: raw.taskId, status: raw.status, planContent: raw.planContent)
     }
 }
 
@@ -511,6 +515,7 @@ extension ClaudeToolUseResult {
         }
         status = raw.status
         agentID = raw.agentId
+        teammateName = raw.name
         taskID = raw.taskId
         taskType = raw.taskType
         workflowName = raw.workflowName
@@ -828,6 +833,7 @@ private struct RawToolInput: Decodable {
     var todos: [RawTodo]?
     var skill: String?
     var args: String?
+    var name: String?
     var subject: String?
     var taskId: String?
     var status: String?
@@ -835,7 +841,7 @@ private struct RawToolInput: Decodable {
 
     private enum CodingKeys: String, CodingKey {
         case command, description, path, pattern, url, query, prompt, plan, planFilePath
-        case questions, todos, skill, args, content, subject, taskId, status
+        case questions, todos, skill, args, content, name, subject, taskId, status
         case filePath = "file_path"
         case notebookPath = "notebook_path"
         case subagentType = "subagent_type"
@@ -859,6 +865,7 @@ private struct RawToolInput: Decodable {
         todos = c.lenient([RawTodo].self, .todos)
         skill = c.lenient(String.self, .skill)
         args = c.lenient(String.self, .args)
+        name = c.lenient(String.self, .name)
         subject = c.lenient(String.self, .subject)
         taskId = c.lenient(String.self, .taskId) ?? c.lenient(Int.self, .taskId).map(String.init)
         status = c.lenient(String.self, .status)
@@ -904,6 +911,7 @@ private struct RawToolUseResult: Decodable {
     var bashEditDiff: RawBashEditDiff?
     var status: String?
     var agentId: String?
+    var name: String?
     var taskId: String?
     var taskType: String?
     var workflowName: String?
@@ -916,7 +924,7 @@ private struct RawToolUseResult: Decodable {
     private enum CodingKeys: String, CodingKey {
         case stdout, stderr, interrupted, backgroundTaskId, persistedOutputPath, type, filePath
         case content, structuredPatch, bashEditDiff, status, agentId, answers, plan, newTodos
-        case taskId, taskType, workflowName, runId, summary
+        case taskId, taskType, workflowName, runId, summary, name
     }
 
     init(from decoder: any Decoder) throws {
@@ -936,6 +944,7 @@ private struct RawToolUseResult: Decodable {
         bashEditDiff = c.lenient(RawBashEditDiff.self, .bashEditDiff)
         status = c.lenient(String.self, .status)
         agentId = c.lenient(String.self, .agentId)
+        name = c.lenient(String.self, .name)
         taskId = c.lenient(String.self, .taskId)
         taskType = c.lenient(String.self, .taskType)
         workflowName = c.lenient(String.self, .workflowName)

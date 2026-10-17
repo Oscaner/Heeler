@@ -365,7 +365,7 @@ struct ClaudeSyntheticTranscriptTests {
         #expect(failed.listedBackgroundWork.count == 1)
     }
 
-    @Test("A teammate is never listed: nothing in the transcript says when one is done")
+    @Test("A teammate reads as Started and is never listed: nothing in the transcript says when one is done")
     func teammateNotListed() {
         let (transcript, _) = Self.read(
             #"""
@@ -373,7 +373,12 @@ struct ClaudeSyntheticTranscriptTests {
             {"type":"assistant","uuid":"a1","parentUuid":"p1","message":{"id":"m1","role":"assistant","content":[{"type":"tool_use","id":"toolu_mate","name":"Agent","input":{"description":"Review the parser","name":"parser","subagent_type":"general-purpose","prompt":"Review it.","run_in_background":true}}]},"apiBlockIndex":0}
             {"type":"user","uuid":"r1","parentUuid":"a1","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_mate","content":[{"type":"text","text":"Spawned successfully."}]}]},"toolUseResult":{"status":"teammate_spawned","agent_id":"parser@team","name":"parser","team_name":"team"}}
             """#)
-        #expect(Self.tool("tool:toolu_mate", in: transcript)?.status == .succeeded)
+        // Claude Code 2.1.301 (CL-42) spawns a teammate for an Agent call
+        // with `name`; the pane still lists it running.
+        let row = Self.tool("tool:toolu_mate", in: transcript)
+        #expect(row?.status == .started)
+        #expect(row?.title == "Review the parser")
+        #expect(row?.subtitle == "Teammate @parser")
         #expect(transcript.backgroundWork.isEmpty)
     }
 
