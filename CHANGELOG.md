@@ -56,6 +56,19 @@ Entries reference the pull request that made the change.
   there. (#425)
 - Agent Gone says the Agent may have exited while its pane stays open, and
   that the Agent shows again once one starts in that pane. (#425)
+- Chat shows Claude Code narration that its transcript records as thinking as
+  the Agent's text, as the terminal does, rather than as a collapsed Reasoning
+  row. (#425)
+- Chat titles Claude Code task rows by their subject and status ("Task #2:
+  completed") and ToolSearch rows by the tools they loaded ("Loaded
+  WebFetch"). A spawned teammate reads Started, not Done, and choosing "Chat
+  about this" reads Chat Instead, not Declined. (#425)
+- Chat counts a Codex directory listing as a listed folder rather than a
+  search, counts images in a step group without calling them viewed, and folds
+  Codex's waits for subagents into the turn instead of pinning a row for each.
+  (#425)
+- A message that reached a running turn is marked Sent while working instead
+  of Queued, which stays true once the turn ends or is stopped. (#425)
 
 ### Fixed
 
@@ -68,8 +81,9 @@ Entries reference the pull request that made the change.
 - Chat preloads conversations after connecting, restores saved conversations
   before contacting the Host, and keeps them available from the Agent list
   after an offline relaunch while reconnecting. (#425)
-- Chat previews recorded image files on long press, opens them with zoom, and
-  aligns tool icons with their titles above subtitles. (#425)
+- Chat previews recorded image files on long press, including images a Claude
+  Code Read showed, opens them with zoom, and aligns tool icons with their
+  titles above subtitles. (#425)
 - Chat groups each Subagent's activity into one card per turn, with
   a Lucide Bot icon beside its title and expandable history, and no longer marks message exchanges
   as completed work. (#425)
@@ -84,6 +98,49 @@ Entries reference the pull request that made the change.
   view when it reorders, such as after an Agent restarts in its pane. (#425)
 - The app no longer hangs on iPhone when going back to the Agents list from
   an Agent the app reopened at launch. (#425)
+- Chat explains a `/` command the running Claude Code doesn't know, such as a
+  skill added after the Agent started, instead of leaving the message waiting
+  with no reason. A `/compact` that Pi or Oh My Pi refuses with nothing to
+  compact now says so. (#425)
+- Context compacted previews skip Claude Code's fixed preamble, and Pi's
+  compaction and branch summaries show without their Markdown marks. Inline
+  code is tinted, so it stands out in Chinese text too. (#425)
+- An expanded Declined, Interrupted or Stopped row no longer says "No output."
+  for a call that never ran. (#425)
+- Codex rows show a failed turn's API error message instead of its JSON, read
+  a patch aborted before it applied as Interrupted instead of Failed, and show
+  an answer's note without its `user_note:` key. (#425)
+- Oh My Pi rows show a `write` as a written file with its text and line
+  counts, show `$` Python runs as notices, and no longer show the plan
+  hand-off to `xd://propose` as a created file. (#425)
+- Blocked cards appear for Claude Code's question review page and questions
+  with previews, which herdr reports as idle, and Claude Code's Read file
+  dialog gets its own card. After "The Agent hasn't responded yet." the
+  answers stay off on the same dialog, so a second tap can't send the key
+  again; Stop and the terminal still work. (#425)
+- A Claude Code question form that stops on a page Heeler can't read names the
+  next question rather than the one already answered, the folder-access option
+  says it lasts the session instead of saving a rule, and the folded card's
+  buttons stay on one line. (#425)
+- Generic cards for Codex lists show only the option labels, an Oh My Pi
+  panel's text shows without borders or private-use glyphs, an Oh My Pi
+  question's answers are off while a draft would take the keys, and a Codex
+  asynchronous answer confirms as soon as its question leaves the screen.
+  (#425)
+- A send that Codex holds names its "Implement this plan?" selector or a
+  message Stop put back in the input box, and Waiting for Conversation
+  explains that Codex reports a resumed conversation after its first prompt.
+  (#425)
+- Chat follows `/clear`, `/new` or `/resume` typed in the terminal within
+  seconds while the Agent stays idle, and a steer cleared in the terminal no
+  longer stays under a newer turn. (#425)
+- While the Host is away or the conversation comes from the cache, the newest
+  turn no longer ticks "Working for" and running rows read Running when last
+  seen instead of spinning; the connecting banner says it shows saved
+  messages. (#425)
+- The Console stops looking for a hidden Agent's missing conversation after a
+  few tries, until the Agent's status or session changes, instead of searching
+  the Host every half minute. (#425)
 
 ## [0.1.14] - 2026-10-15
 
