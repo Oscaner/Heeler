@@ -780,11 +780,19 @@ private struct Builder {
 
     /// Bubbles for prompts queued in the running turn and not delivered
     /// yet, marked Queued like the bubble their delivery adds; returns their
-    /// entries by enqueue offset.
+    /// entries by enqueue offset. A turn opened above the loaded lines is
+    /// running when they neither open nor close one and the Agent works.
     mutating func addWaitingPrompts(_ waiting: [(offset: UInt64, text: String)]) -> [UInt64: ChatEntryID] {
-        guard turnOpen, let opener = turnBoundaries.last else { return [:] }
+        let opener: UInt64
+        if turnOpen, let last = turnBoundaries.last {
+            opener = last
+        } else if turnBoundaries.isEmpty, activity == .working || activity == .blocked {
+            opener = 0
+        } else {
+            return [:]
+        }
         var added: [UInt64: ChatEntryID] = [:]
-        for prompt in waiting where prompt.offset > opener {
+        for prompt in waiting where prompt.offset >= opener {
             let id = ChatEntryID("queued:\(prompt.offset)")
             guard entryIDs.insert(id).inserted else { continue }
             entries.append(

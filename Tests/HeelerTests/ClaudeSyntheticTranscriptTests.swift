@@ -107,6 +107,34 @@ struct ClaudeSyntheticTranscriptTests {
         #expect(Self.read(ended).0.entries.map(\.id.rawValue) == ["user:p1", "tool:toolu_test"])
     }
 
+    @Test("A prompt queued in a turn that opened above the loaded lines shows Queued while the Agent works")
+    func waitingQueuedPromptBelowTheWindowStart() {
+        // The tail window starts after the turn's prompt.
+        let running = #"""
+            {"type":"assistant","uuid":"a1","parentUuid":"p1","message":{"id":"m1","role":"assistant","content":[{"type":"tool_use","id":"toolu_test","name":"Bash","input":{"command":"make test","description":"Run the tests"}}]},"apiBlockIndex":0}
+            {"type":"queue-operation","operation":"enqueue","timestamp":"2026-10-16T15:39:24.530Z","content":"Also check the README","sessionId":"s1"}
+            """#
+        let lines = ClaudeSample.lines(running)
+        let reducer = ClaudeSample.reducer(lines)
+        let working = reducer.transcript(ChatProjectionContext(windowStart: 4_096, activity: .working))
+        let bubble = ChatEntryID("queued:\(lines[1].offset)")
+        #expect(working.entries.map(\.id) == [ChatEntryID("tool:toolu_test"), bubble])
+        #expect(working.recordedPrompts.last?.entryID == bubble)
+
+        // Idle, nothing says the turn still runs.
+        let idle = reducer.transcript(ChatProjectionContext(windowStart: 4_096, activity: .idle))
+        #expect(idle.entries.map(\.id) == [ChatEntryID("tool:toolu_test")])
+
+        // A turn the loaded lines close holds no waiting prompt either.
+        let closed = ClaudeSample.reducer(
+            ClaudeSample.lines(
+                running + "\n"
+                    + #"{"type":"system","subtype":"turn_duration","uuid":"t1","parentUuid":"a1","durationMs":900}"#))
+        #expect(
+            closed.transcript(ChatProjectionContext(windowStart: 4_096, activity: .working)).entries.map(\.id)
+                == [ChatEntryID("tool:toolu_test")])
+    }
+
     @Test("A queued prompt recorded as a user record shows once")
     func queuedUserRecord() {
         let (transcript, lines) = Self.read(
