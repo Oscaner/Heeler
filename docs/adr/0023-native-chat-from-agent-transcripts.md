@@ -227,7 +227,8 @@ request in the transcript; a subagent's dialog is read from the screen alone.
 Labels are the program's own text. herdr reports Claude Code idle on some of
 its question pages, the review page of a question form and a question with
 previews, so while the transcript holds an open AskUserQuestion call, an idle
-Claude Code's screen is read as a Blocked one.
+Claude Code's screen is read for a card as a Blocked one is, though a screen
+with no dialog then shows no card rather than the unreadable one.
 
 An answer compares a fingerprint of the dialog first and sends nothing if it
 changed, waits until the dialog has shown for 150 ms, presses keys through
