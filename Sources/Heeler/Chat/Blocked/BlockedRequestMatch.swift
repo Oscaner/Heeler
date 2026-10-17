@@ -78,13 +78,29 @@ enum BlockedRequestMatch {
     }
 
     /// The dialog shows the URL Claude Code normalized, which ends a bare
-    /// host with `/` (`https://example.com/` for `https://example.com`).
+    /// host with `/` (`https://example.com/` for `https://example.com`). A
+    /// URL the dialog cut off matches the call it starts, but once the
+    /// screen shows where the host ends, the call's host must be the same:
+    /// `https://example.com/` never matches `https://example.com.au`.
     private static func sameURL(_ full: String, _ shown: String?) -> Bool {
-        guard var shown else { return false }
-        var full = full
-        while shown.hasSuffix("/") { shown.removeLast() }
-        while full.hasSuffix("/") { full.removeLast() }
-        return begins(full, with: shown)
+        let screen = DialogRowScanner.comparable(shown ?? "")
+        let call = DialogRowScanner.comparable(full)
+        guard !screen.isEmpty else { return false }
+        if let screenHost = host(of: screen, complete: true), host(of: call, complete: false) != screenHost {
+            return false
+        }
+        func trimmed(_ url: String) -> String { url.hasSuffix("/") ? String(url.dropLast()) : url }
+        return trimmed(call).hasPrefix(trimmed(screen))
+    }
+
+    /// The scheme and host of `url`, up to the first `/`, `?` or `#` after
+    /// `://`. With `complete`, nil when the text ends before one.
+    private static func host(of url: String, complete: Bool) -> Substring? {
+        guard let scheme = url.range(of: "://") else { return nil }
+        guard let end = url[scheme.upperBound...].firstIndex(where: { "/?#".contains($0) }) else {
+            return complete ? nil : url[...]
+        }
+        return url[..<end]
     }
 
     /// Codex code mode runs a command inside a script, so either text may

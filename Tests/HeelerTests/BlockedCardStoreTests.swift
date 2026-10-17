@@ -614,6 +614,14 @@ struct BlockedRequestMatchTests {
         #expect(BlockedRequestMatch.request(for: try dialog("claude-24-c8-webfetch"), in: [bare])?.callID == "b")
         let other = request("o", "WebFetch", "https://example.org", kind: .web)
         #expect(BlockedRequestMatch.request(for: try dialog("claude-24-c8-webfetch"), in: [other]) == nil)
+        // Hosts that only start with the shown host are other hosts.
+        for url in ["https://example.com.au", "https://example.community/x", "https://example.com:8080"] {
+            let longer = request("l", "WebFetch", url, kind: .web)
+            #expect(BlockedRequestMatch.request(for: try dialog("claude-24-c8-webfetch"), in: [longer]) == nil)
+        }
+        // A path on the same host still matches, as before.
+        let path = request("p", "WebFetch", "https://example.com/docs?q=1", kind: .web)
+        #expect(BlockedRequestMatch.request(for: try dialog("claude-24-c8-webfetch"), in: [path])?.callID == "p")
     }
 
     @Test func questionsMatchByTheirText() throws {
