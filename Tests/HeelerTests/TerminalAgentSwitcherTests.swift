@@ -515,6 +515,43 @@ struct TerminalAgentSwitcherTests {
         #expect(!bar.chips[2].showsPinIndicator)
     }
 
+    /// SwiftUI's updates reach the strip from inside its graph update, where
+    /// a reorder's synchronous layout once re-entered the render and hung the
+    /// app. The first items show at once; later ones apply together on the
+    /// next main-queue turn, the latest winning.
+    @MainActor
+    @Test func scheduledUpdatesApplyTheLatestItemsOnTheNextTurn() async throws {
+        let host = UUID()
+        let agents = [
+            Self.makeAgent(pane: "p1", workspace: "alpha", host: host),
+            Self.makeAgent(pane: "p2", workspace: "beta", host: host),
+            Self.makeAgent(pane: "p3", workspace: "gamma", host: host),
+        ]
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+        let bar = TerminalAgentSwitcherBar()
+        window.addSubview(bar)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        bar.frame = CGRect(
+            x: 0, y: 0, width: 402, height: TerminalAgentSwitcherBar.preferredHeight)
+
+        let items = agents.map { Self.makeItem($0) }
+        bar.scheduleUpdate(items: items, selectedID: agents[0].id)
+        #expect(bar.arrangedChips.map(\.id) == agents.map(\.id))
+        bar.layoutIfNeeded()
+        let original = bar.chips
+
+        let reversed = Array(items.reversed())
+        let pinned = [Self.makeItem(agents[1], isPinned: true), items[0], items[2]]
+        bar.scheduleUpdate(items: reversed, selectedID: agents[0].id)
+        bar.scheduleUpdate(items: pinned, selectedID: agents[0].id)
+        #expect(bar.arrangedChips.map(\.id) == agents.map(\.id))
+
+        try await Task.sleep(for: .milliseconds(100))
+        bar.layoutIfNeeded()
+        expectStripMatches(bar, items: pinned, identity: original)
+    }
+
     /// Pin/unpin cycles must leave the strip flush every time: no gap
     /// between neighbours after layout, and the same chip views throughout.
     @MainActor

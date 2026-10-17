@@ -161,6 +161,7 @@ final class TerminalAgentSwitcherBar: UIView, UIScrollViewDelegate,
     private var items: [TerminalAgentSwitcherItem] = []
     private var selectedID: ConsoleAgent.ID?
     private var scrollsToSelectionOnLayout = false
+    private var pendingUpdate: (items: [TerminalAgentSwitcherItem], selectedID: ConsoleAgent.ID?)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -170,6 +171,28 @@ final class TerminalAgentSwitcherBar: UIView, UIScrollViewDelegate,
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is unavailable")
+    }
+
+    /// Takes SwiftUI's latest items from `updateUIView`, which runs inside
+    /// SwiftUI's own graph update. A reorder slides by laying out inside
+    /// `UIView.animate`; that layout can reach the hosting view above, which
+    /// then renders the same graph from inside its update, and AttributeGraph
+    /// spins on the cycle forever (the app hangs at 100% CPU). So the latest
+    /// items apply on the next main-queue turn instead, outside the update.
+    /// The first items apply at once, so the strip never draws empty.
+    func scheduleUpdate(items: [TerminalAgentSwitcherItem], selectedID: ConsoleAgent.ID?) {
+        guard !chips.isEmpty || pendingUpdate != nil else {
+            update(items: items, selectedID: selectedID)
+            return
+        }
+        let isScheduled = pendingUpdate != nil
+        pendingUpdate = (items, selectedID)
+        guard !isScheduled else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let pending = self.pendingUpdate else { return }
+            self.pendingUpdate = nil
+            self.update(items: pending.items, selectedID: pending.selectedID)
+        }
     }
 
     func update(items: [TerminalAgentSwitcherItem], selectedID: ConsoleAgent.ID?) {
@@ -756,7 +779,7 @@ struct TerminalAgentSwitcherRow: View {
         func updateUIView(_ bar: TerminalAgentSwitcherBar, context _: Context) {
             bar.onSelect = switcher.onSelect
             bar.onTogglePin = switcher.onTogglePin
-            bar.update(items: switcher.items, selectedID: switcher.selectedID)
+            bar.scheduleUpdate(items: switcher.items, selectedID: switcher.selectedID)
         }
     }
 }
