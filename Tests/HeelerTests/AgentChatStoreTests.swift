@@ -1774,6 +1774,30 @@ struct AgentChatStoreTests {
         #expect(store.sendStatuses[id] == .recorded)
     }
 
+    /// The Composer still holds an earlier `/compact` Pi refused, retired
+    /// by the prompt recorded after it. A compaction recorded after that
+    /// prompt is the next `/compact`'s, not the earlier one's.
+    @Test func aLaterCompactionSettlesTheLaterCompact() async throws {
+        let (files, store, _, clock, first) = try await Self.sentCompact(
+            .pi, screen: try ScreenFixture.screen("pi-41-compact-nothing"))
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        await files.append(Self.ompMessage("u2", parent: "u1", role: "user", "say PLUM"), to: Self.piPath(.pi))
+        await store.step()
+        #expect(store.sendStatuses[first] == .abandoned)
+
+        let second = UUID()
+        store.updateSends([Self.sent(first, "/compact"), Self.sent(second, "/compact", delivered: false)])
+        store.updateSends([Self.sent(first, "/compact"), Self.sent(second, "/compact")])
+        await files.append(
+            #"{"type":"compaction","id":"c1","parentId":"u2","summary":"summary","firstKeptEntryId":"u2"}"# + "\n",
+            to: Self.piPath(.pi))
+        await store.step()
+
+        #expect(store.sendStatuses[second] == .recorded)
+        #expect(store.sendStatuses[first] == .abandoned)
+    }
+
     /// Only Pi and Oh My Pi are known to refuse on screen: Claude's
     /// overdue `/compact` stays overdue without a read.
     @Test func aClaudeCompactIsNotLookedForOnTheScreen() async throws {

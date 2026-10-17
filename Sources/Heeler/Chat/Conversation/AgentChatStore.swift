@@ -959,8 +959,14 @@ final class AgentChatStore {
                 }
             }
             var match = recorded.first { $0.key == send.key && isOpen($0.candidate) }?.candidate
+            // A compaction recorded after a prompt recorded since the send
+            // is a later `/compact`'s, however long this one stays in the
+            // Composer.
             if match == nil, send.key == "/compact" {
-                match = compactions.first(where: isOpen)
+                match = compactions.first { compaction in
+                    isOpen(compaction)
+                        && !recorded.contains { isAfter($0.candidate) && $0.candidate.offset < compaction.offset }
+                }
             }
             // A path pasted alone becomes `[Image #N]` plus the image, which
             // may name the path only as the program read it, or not at all.
