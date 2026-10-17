@@ -92,6 +92,14 @@ struct DialogRowScannerTests {
         #expect(
             try join("  Yes, and don't ask again for commands that", "start with", .codex, columns: 60)
                 == "Yes, and don't ask again for commands that start with")
+        // Codex 0.162.1 wraps a Chinese reason between any two characters
+        // (CXB-13, 41 columns); a space before a Latin word stays, and
+        // Korean, which spaces its words, keeps the space.
+        #expect(
+            try join("  x5-narrow-probe-file.txt？当前文件系", "统为只读，需要写入权限。", .codex)
+                == "x5-narrow-probe-file.txt？当前文件系统为只读，需要写入权限。")
+        #expect(try join("  Reason: 是否允许在当前目录创建", "par-c.txt？", .codex) == "Reason: 是否允许在当前目录创建 par-c.txt？")
+        #expect(try join("  권한이 필요합", "니다", .codex) == "권한이 필요합 니다")
         #expect(try join("   ", "tail", .codex) == "tail")
         #expect(try join("  head", "  ", .claude) == "head")
     }

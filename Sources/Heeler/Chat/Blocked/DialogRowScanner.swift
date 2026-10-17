@@ -147,6 +147,13 @@ enum DialogRowScanner {
         if wrap == .claude, endsWithBlank {
             return head + " " + tail
         }
+        // Chinese and Japanese run without spaces, so a row that wraps
+        // between two of their characters continues the same word.
+        if let last = head.unicodeScalars.last, let first = tail.unicodeScalars.first,
+            isUnspaced(last), isUnspaced(first)
+        {
+            return head + tail
+        }
         if reachesEdge {
             let lastWord = head.split(separator: " ").last.map(String.init) ?? head
             let firstWord = tail.split(separator: " ").first.map(String.init) ?? tail
@@ -157,6 +164,18 @@ enum DialogRowScanner {
         }
         return head + " " + tail
     }
+
+    /// Han, kana, CJK punctuation and fullwidth forms: scripts written
+    /// without spaces between words. Hangul is left out, since Korean
+    /// separates words with spaces.
+    private static func isUnspaced(_ scalar: Unicode.Scalar) -> Bool {
+        unspacedRanges.contains { $0.contains(scalar.value) }
+    }
+
+    private static let unspacedRanges: [ClosedRange<UInt32>] = [
+        0x2E80...0x2FDF, 0x3000...0x30FF, 0x31F0...0x31FF, 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF,
+        0xFF00...0xFF60, 0xFF61...0xFF9F, 0x20000...0x3FFFF,
+    ]
 
     /// Whether the first word of `next` would have fit after `row`'s text.
     /// A program that wraps by words moves a word to the next row only when
