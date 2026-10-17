@@ -255,8 +255,9 @@ enum CodexTimelineProjector {
             }
             content = .questions(ChatQuestionSet(questions: questions))
             // A set without an id cannot be answered from Chat, so it never
-            // feeds the question card.
-            if let itemID = entry.itemID, let first = unanswered.first {
+            // feeds the question card. Codex drops a turn's open questions
+            // when the turn ends, so only a running turn's can be on screen.
+            if open == .running || open == .awaitingApproval, let itemID = entry.itemID, let first = unanswered.first {
                 output.pendingRequests.append(
                     ChatPendingRequest(
                         entryID: entry.id, callID: itemID, kind: .question, toolName: "request_user_input_async",

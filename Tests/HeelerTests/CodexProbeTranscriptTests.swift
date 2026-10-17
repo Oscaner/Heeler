@@ -158,13 +158,20 @@ struct CodexProbeTranscriptTests {
                 == ChatNotice(
                     kind: .answered, title: "Answered",
                     questions: [ChatQuestion(id: fruitID, text: "Pick a fruit", answer: "Apple")]))
+        // Codex drops a turn's open questions when the turn ends, so only
+        // a running turn's can be on screen for a card to answer.
+        #expect(projection.transcript.pendingRequests.isEmpty)
+        #expect(!projection.transcript.recordedPrompts.contains { $0.offset == probe.offset(78) })
+
+        // Up to, not including, the turn's task_complete (P2:L88).
+        let running = probe.reducer(Array(probe.lines.prefix(87))).projection(ChatProjectionContext(activity: .blocked))
+        let runningTurn = running.entries(inTurn: 3)
         #expect(
-            projection.transcript.pendingRequests == [
+            running.transcript.pendingRequests == [
                 ChatPendingRequest(
-                    entryID: turn[2].id, callID: "call_OXMaHSs1BtzjPdK2walFl4Zv", kind: .question,
+                    entryID: runningTurn[2].id, callID: "call_OXMaHSs1BtzjPdK2walFl4Zv", kind: .question,
                     toolName: "request_user_input_async", summary: "Pick a drink", questions: [drink])
             ])
-        #expect(!projection.transcript.recordedPrompts.contains { $0.offset == probe.offset(78) })
     }
 
     @Test("Parallel commands from one cell are separate rows; the cell is not a row")

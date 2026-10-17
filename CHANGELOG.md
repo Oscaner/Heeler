@@ -132,8 +132,9 @@ Entries reference the pull request that made the change.
 - Generic cards for Codex lists show only the option labels, an Oh My Pi
   panel's text shows without borders or private-use glyphs, an Oh My Pi
   question's answers are off while a draft would take the keys, and a Codex
-  asynchronous answer confirms as soon as its question leaves the screen.
-  (#425)
+  asynchronous answer confirms as soon as its question leaves the screen and
+  is marked on the question asked in the running turn, not on an earlier
+  turn's question with the same title. (#425)
 - A send that Codex holds names its "Implement this plan?" selector or a
   message Stop put back in the input box, and Waiting for Conversation
   explains that Codex reports a resumed conversation after its first prompt.
