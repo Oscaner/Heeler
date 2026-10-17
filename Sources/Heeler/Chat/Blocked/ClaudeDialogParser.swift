@@ -49,11 +49,7 @@ struct ClaudeInputBox: Sendable, Hashable {
     /// A full-width `─` rule from column 0. The top rule may carry the
     /// session's name (`──── create-and-verify-probe-file ─`).
     static func isBoxRule(_ row: ScreenRow, minimumWidth: Int) -> Bool {
-        guard row.indent == 0, row.contentWidth >= minimumWidth else { return false }
-        let text = row.trimmedText
-        guard text.hasPrefix("─"), text.hasSuffix("─") else { return false }
-        let label = text.drop { $0 == "─" }.reversed().drop { $0 == "─" }
-        return label.isEmpty || (label.first == " " && label.last == " ")
+        row.indent == 0 && row.contentWidth >= minimumWidth && DialogRowScanner.isLabeledRule(row.trimmedText, of: "─")
     }
 
     private static func promptGlyph(_ row: ScreenRow) -> Character? {

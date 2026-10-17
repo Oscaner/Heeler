@@ -106,11 +106,19 @@ enum DialogRowScanner {
         run.text.allSatisfy(ScreenRow.isBlank)
     }
 
-    /// A rule that may hold a label (`──── name ─`), or none.
+    /// A rule of `glyph` at least `minimumWidth` cells wide that may hold
+    /// a label padded with spaces (`──── name ─`), as Claude Code 2.1.301
+    /// draws a named session's rules. Leading blanks are allowed.
     static func isLabeledRule(_ row: ScreenRow, of glyph: Character, minimumWidth: Int) -> Bool {
         let trimmed = row.trimmedText
-        guard trimmed.hasPrefix(String(repeating: glyph, count: 3)), trimmed.last == glyph else { return false }
-        return TerminalCellWidth.width(of: trimmed) >= minimumWidth
+        return isLabeledRule(trimmed, of: glyph) && TerminalCellWidth.width(of: trimmed) >= minimumWidth
+    }
+
+    /// Whether `text` is glyphs around an optional label padded with spaces.
+    static func isLabeledRule(_ text: String, of glyph: Character) -> Bool {
+        guard text.first == glyph, text.last == glyph else { return false }
+        let label = text.drop { $0 == glyph }.reversed().drop { $0 == glyph }
+        return label.isEmpty || (label.first == " " && label.last == " ")
     }
 
     /// Whether `row` is a horizontal rule of `glyph` at least `minimumWidth`
