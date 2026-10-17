@@ -2228,10 +2228,12 @@ struct MissingAgentPresentation: Equatable {
                 message = Self.paneGoneMessage
             }
         case .ended, nil:
+            // No live inventory says why: an ended session, or a deleted
+            // Host whose projection is gone, where no Agent comes back.
             cause = .paneGone
             title = "Agent Gone"
             systemImage = "rectangle.on.rectangle.slash"
-            message = Self.paneGoneMessage
+            message = Self.unreportedMessage
         }
     }
 
@@ -2240,6 +2242,8 @@ struct MissingAgentPresentation: Equatable {
     /// starts in it again.
     static let paneGoneMessage =
         "The Agent in this pane has exited, or the pane was closed. It shows here again if an Agent starts in the pane."
+
+    static let unreportedMessage = "This Agent's pane is no longer reported."
 
     /// What the Console's detail column shows when the selected Agent is not
     /// in the list.

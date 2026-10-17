@@ -58,8 +58,9 @@ Entries reference the pull request that made the change.
   the Agents list. The Agent's notifications still show as banners there, and
   tapping one returns to the Agent. On iPad beside the list it still selects
   the terminal there. (#425)
-- Agent Gone says the Agent may have exited while its pane stays open, and
-  that the Agent shows again once one starts in that pane. (#425)
+- On a connected Host, Agent Gone says the Agent may have exited while its
+  pane stays open, and that the Agent shows again once one starts in that
+  pane. (#425)
 - Chat shows Claude Code narration that its transcript records as thinking as
   the Agent's text, as the terminal does, rather than as a collapsed Reasoning
   row. (#425)
