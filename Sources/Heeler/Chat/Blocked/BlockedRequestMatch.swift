@@ -54,16 +54,31 @@ enum BlockedRequestMatch {
     /// records `input.plan` from the plan file as it stood before a Write
     /// sent in the same message, so the call can hold the previous plan
     /// while the dialog asks about the new one. Rows compare by letters and
-    /// digits only, so Markdown, wrapping and bullets don't count.
+    /// digits only, so Markdown, wrapping and bullets don't count; a table
+    /// row compares cell by cell, since a wrapped table puts pieces of
+    /// several cells on one line, and a list item without its number, since
+    /// the terminal renumbers a list.
     static func claudePlanText(call: String?, shownRows: [String]) -> String {
         let shown = shownRows.joined(separator: "\n")
         guard let call, !call.isEmpty else { return shown }
         let recorded = lettersAndDigits(call)
         let disagrees = shownRows.contains { row in
-            let text = lettersAndDigits(row)
-            return text.count >= 8 && !recorded.contains(text)
+            row.split(whereSeparator: { "│|┃".contains($0) }).contains { cell in
+                let text = lettersAndDigits(String(droppingListNumber(String(cell))))
+                return text.count >= 8 && !recorded.contains(text)
+            }
         }
         return disagrees ? shown : call
+    }
+
+    /// `text` without a leading `12.` or `12)`.
+    private static func droppingListNumber(_ text: String) -> Substring {
+        let trimmed = text.drop(while: \.isWhitespace)
+        let digits = trimmed.prefix(while: \.isNumber)
+        guard !digits.isEmpty, let marker = trimmed.dropFirst(digits.count).first, marker == "." || marker == ")" else {
+            return trimmed
+        }
+        return trimmed.dropFirst(digits.count + 1)
     }
 
     private static func lettersAndDigits(_ text: String) -> String {

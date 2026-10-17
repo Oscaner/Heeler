@@ -680,6 +680,21 @@ struct BlockedRequestMatchTests {
         #expect(BlockedRequestMatch.claudePlanText(call: nil, shownRows: shown) == stale)
     }
 
+    @Test func aPlanWithAWrappedTableAndARenumberedListStillAgrees() {
+        let call = "# Plan\n\n| Step | Command |\n| --- | --- |\n| Create the file named | touch a.txt && echo done |\n\n"
+            + "1. First thing to do here\n1. Second thing to do here\n"
+        // Drawn the way the terminal draws them: cells wrapped side by
+        // side, the list renumbered.
+        let shown = [
+            "Plan", "┌────────────┬──────────────┐", "│ Step       │ Command      │",
+            "├────────────┼──────────────┤", "│ Create the │ touch a.txt  │", "│ file named │ && echo done │",
+            "└────────────┴──────────────┘", "1. First thing to do here", "2. Second thing to do here",
+        ]
+        #expect(BlockedRequestMatch.claudePlanText(call: call, shownRows: shown) == call)
+        let other = call.replacingOccurrences(of: "touch a.txt", with: "touch b.txt")
+        #expect(BlockedRequestMatch.claudePlanText(call: other, shownRows: shown) == shown.joined(separator: "\n"))
+    }
+
     @Test func anOMPApprovalMatchesItsToolAndCommand() throws {
         let approval = try dialog("omp-24-approval-a-dialog")
         let requests = [
