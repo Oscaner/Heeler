@@ -238,6 +238,12 @@ struct BlockedDialog: Sendable, Hashable {
     func option(_ ordinal: Int) -> DialogOption? {
         options.indices.contains(ordinal - 1) ? options[ordinal - 1] : nil
     }
+
+    /// An Oh My Pi question under a draft in its prompt (`Finish or clear
+    /// the current prompt to answer`) takes no answer, only Stop.
+    var answersHeldByDraft: Bool {
+        [.ompQuestion, .ompQuestionReview].contains(kind) && focus.composerDraftGuard
+    }
 }
 
 /// A screen with something dialog-like the parsers could not name or trust.

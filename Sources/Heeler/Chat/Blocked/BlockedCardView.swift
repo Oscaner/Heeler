@@ -61,10 +61,6 @@ private struct BlockedDialogCard: View {
 
     private var dialog: BlockedDialog { card.dialog }
     private var isReady: Bool { store.progress == .ready }
-    /// An Oh My Pi question under a draft answers nothing but Stop.
-    private var isHeldByDraft: Bool {
-        [.ompQuestion, .ompQuestionReview].contains(dialog.kind) && dialog.focus.composerDraftGuard
-    }
     private var hasText: Bool { !text.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
@@ -224,7 +220,7 @@ private struct BlockedDialogCard: View {
             }
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.roundedRectangle(radius: 12))
-            .disabled(selection.isEmpty || isHeldByDraft)
+            .disabled(selection.isEmpty || dialog.answersHeldByDraft)
             ForEach(dialog.options.filter { $0.role == .chat }, id: \.ordinal) { option in
                 BlockedOptionButton(option: option, emphasis: .plain) { perform(.choose(ordinal: option.ordinal)) }
             }
@@ -241,7 +237,7 @@ private struct BlockedDialogCard: View {
                     }
                 }
             }
-            .disabled(isHeldByDraft)
+            .disabled(dialog.answersHeldByDraft)
         }
         switch dialog.kind {
         case .codexAsyncCollapsed:

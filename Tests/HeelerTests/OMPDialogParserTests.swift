@@ -149,6 +149,9 @@ struct OMPDialogParserTests {
         #expect(guarded.rows == 26..<38)
         #expect(guarded.focus.composerDraftGuard)
         #expect(!free.focus.composerDraftGuard)
+        // The card holds every answer but Stop until the draft goes.
+        #expect(guarded.answersHeldByDraft)
+        #expect(!free.answersHeldByDraft)
         #expect(guarded.focus.focusedOrdinal == free.focus.focusedOrdinal)
         #expect(guarded.fingerprint == free.fingerprint)
     }
