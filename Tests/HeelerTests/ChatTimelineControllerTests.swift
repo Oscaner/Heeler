@@ -1539,12 +1539,19 @@ struct ChatRowViewTests {
             kind: .command, name: "Bash", title: "rm -rf build", status: .declined, note: "Not now",
             output: ChatOutputReference(offset: 0, length: 10))
         declined.outputRead = .read
-        var stopped = ChatToolActivity(kind: .command, name: "Bash", title: "make", status: .declined)
+        // Stop from the card can leave the call not completed in the record.
+        var stopped = ChatToolActivity(
+            kind: .command, name: "Bash", title: "make", status: .notCompleted,
+            output: ChatOutputReference(offset: 0, length: 10))
         stopped.cardAnswer = .stopped
         let interrupted = ChatToolActivity(
             kind: .command, name: "Bash", title: "sleep 30", status: .interrupted,
             output: ChatOutputReference(offset: 0, length: 10))
-        for tool in [declined, stopped, interrupted] {
+        let chatInstead = ChatToolActivity(
+            kind: .question, name: "AskUserQuestion", title: "Which color?", status: .chatInstead,
+            questions: [ChatQuestion(text: "Which color?", options: ["Red", "Blue"])],
+            output: ChatOutputReference(offset: 0, length: 10))
+        for tool in [declined, stopped, interrupted, chatInstead] {
             let labels = try await Self.labels(of: tool, isExpanded: true)
             #expect(!labels.contains { $0.contains("No output.") }, "\(tool.title): \(labels)")
             #expect(!labels.contains { $0.contains("Output is available") }, "\(tool.title): \(labels)")
