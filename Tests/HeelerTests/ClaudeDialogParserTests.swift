@@ -154,7 +154,9 @@ struct ClaudeDialogParserTests {
             return
         }
         #expect(excerpt.reason == "Heeler does not handle questions with previews yet.")
-        #expect(excerpt.numbered == [1: "A", 2: "B"])
+        // Digits only move the focus there, so the card offers the key pad
+        // alone.
+        #expect(excerpt.numbered.isEmpty)
     }
 
     @Test("A multi-select question page")

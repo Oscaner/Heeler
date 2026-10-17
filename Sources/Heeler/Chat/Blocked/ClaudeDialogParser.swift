@@ -409,14 +409,14 @@ private struct ClaudeDialogReader {
             // Claude Code 2.1.301 draws the previews beside the options,
             // which no option scan reads; its notes hint still names them.
             if rows[firstOption...].contains(where: { $0.text.contains("to add notes") }) {
-                return unrecognized(from: top, Self.previewsReason)
+                return unrecognized(from: top, Self.previewsReason, offersDigits: false)
             }
             return unrecognized(from: top, "The rows after the options are not a footer.")
         }
         if let problem = scan.problem { return unrecognized(from: top, problem, scan: scan) }
         if let footer = scan.footer, footer.hints.contains(where: { $0.key == "n" && $0.action.hasPrefix("add notes") }) {
             // The preview layout: digits only move focus there.
-            return unrecognized(from: top, Self.previewsReason, scan: scan)
+            return unrecognized(from: top, Self.previewsReason, scan: scan, offersDigits: false)
         }
         var subject = DialogSubject()
         subject.questionHeaders = tabs.headers
@@ -962,13 +962,18 @@ private struct ClaudeDialogReader {
                 focus: focus, subject: subject))
     }
 
-    private func unrecognized(from top: Int?, _ reason: String, scan: OptionScan? = nil) -> DialogParseResult {
+    /// The generic card for the rows from `top`. Without `offersDigits` it
+    /// offers no option buttons, only the key pad: in Claude's preview
+    /// layout a digit only moves the focus, so a button would never answer.
+    private func unrecognized(
+        from top: Int?, _ reason: String, scan: OptionScan? = nil, offersDigits: Bool = true
+    ) -> DialogParseResult {
         let firstOption = block.rows.first?.rowIndex ?? 0
         let start = top ?? max(0, firstOption - 12)
         let lastOptionRow = block.rows.last?.rowIndex ?? firstOption
         let end = scan.map { max($0.lastRow, lastOptionRow) } ?? lastFooterRow(after: lastOptionRow)
         var numbered: [Int: String] = [:]
-        for index in start...end {
+        for index in start...end where offersDigits {
             // Option numbers carry a color; numbers in a plan or command
             // do not.
             guard let option = DialogRowScanner.numberedOption(in: rows[index], pointer: "❯"),
