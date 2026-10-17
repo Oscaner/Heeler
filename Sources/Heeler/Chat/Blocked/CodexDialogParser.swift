@@ -279,7 +279,10 @@ private struct CodexDialogReader {
         }
         guard let pointed = numbered.first(where: \.isPointed), rows[pointed.rowIndex].runs.contains(where: \.style.isReverse)
         else { return .none }
-        let top = (start..<pointed.rowIndex).reversed().first { index in
+        // A narrow pane wraps the list's question and option details, so
+        // the question can sit above the rows searched for options.
+        let titleSearchStart = max(0, footer.upperBound - 30)
+        let top = (titleSearchStart..<pointed.rowIndex).reversed().first { index in
             rows[index].isBlank && (index == 0 || rows[index - 1].isBlank)
         }.map { $0 + 1 } ?? start
         return unrecognized(

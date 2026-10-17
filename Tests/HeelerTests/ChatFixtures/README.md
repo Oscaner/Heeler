@@ -59,6 +59,10 @@ capture.
   other screen comes from the second.
 - Most screens are 120×40. `claude-27` through `claude-31` and `codex-12`
   through `codex-14` were read at 40×30.
+- `codex-15-x6-mcp-tool-list` comes from Codex 0.162.1 on herdr 0.9.5
+  (2026-10-17), read at 41 columns (app terminal font size 12): the MCP
+  tool approval "Allow the probe MCP server to run tool ...", a two-column
+  list with the footer `enter to submit | esc to cancel`.
 - `claude-27`, `-28`, `-30` and `-31` keep the live rendering residue after
   option 4 (`No` followed by a stale grey `r you`).
 - `claude-32` through `claude-37` come from Claude Code 2.1.301 on herdr

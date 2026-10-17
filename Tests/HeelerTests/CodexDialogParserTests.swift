@@ -195,6 +195,18 @@ struct CodexDialogParserTests {
         #expect(wrapped.fingerprint == blank.fingerprint)
     }
 
+    @Test("An MCP tool approval at 41 columns goes generic with its question in the excerpt")
+    func mcpToolListAtPhoneWidth() throws {
+        let result = CodexDialogParser.parse(try ScreenFixture.screen("codex-15-x6-mcp-tool-list"))
+        let excerpt = try #require(result.excerpt, "parsed as \(result)")
+        #expect(excerpt.reason == "Heeler does not know this list.")
+        let texts = excerpt.rows.map(\.trimmedText)
+        #expect(texts.first == "Field 1/1")
+        #expect(texts.contains("Allow the probe MCP server to run"))
+        #expect(!texts.contains("+ Show details"))
+        #expect(excerpt.numbered.keys.sorted() == [1, 2, 3, 4])
+    }
+
     @Test("A pointed list without a composer goes to the generic card (synthetic)")
     func unknownList() throws {
         let screen = ScreenFixture.synthetic([
