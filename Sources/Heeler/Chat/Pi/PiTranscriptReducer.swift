@@ -397,6 +397,14 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                             ChatNotice(
                                 kind: .shellCommand, title: message["command"]?.stringValue ?? "Shell command",
                                 detail: ChatToolPreview(capping: message["output"]?.stringValue ?? "").text)))
+                case "pythonExecution":
+                    // Oh My Pi's `$ code`, recorded as `!` is.
+                    add(
+                        record,
+                        .notice(
+                            ChatNotice(
+                                kind: .pythonCommand, title: message["code"]?.stringValue ?? "Python",
+                                detail: ChatToolPreview(capping: message["output"]?.stringValue ?? "").text)))
                 default: transcript.diagnostics.unknownRecordTypes.insert("message:\(role)")
                 }
             case "model_change", "thinking_level_change", "model_usage", "usage", "service_tier_change", "custom",

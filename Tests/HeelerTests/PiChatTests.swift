@@ -1068,6 +1068,23 @@ struct PiChatTests {
         #expect(transcript.title == nil)
     }
 
+    @Test func shellAndPythonRunsShowAsCommandNotices() {
+        var reducer = PiTranscriptReducer(program: .omp)
+        reducer.append(
+            Self.lines([
+                Self.header,
+                #"{"type":"message","id":"b","parentId":null,"message":{"role":"bashExecution","command":"pwd","output":"/project\n","exitCode":0}}"#,
+                #"{"type":"message","id":"p","parentId":"b","message":{"role":"pythonExecution","code":"print(6*7)","output":"42\n","exitCode":0,"cancelled":false,"truncated":false,"excludeFromContext":false}}"#,
+            ]))
+        let transcript = reducer.transcript(.init())
+        #expect(
+            transcript.entries.map(\.content) == [
+                .notice(ChatNotice(kind: .shellCommand, title: "pwd", detail: "/project\n")),
+                .notice(ChatNotice(kind: .pythonCommand, title: "print(6*7)", detail: "42\n")),
+            ])
+        #expect(transcript.diagnostics.unknownRecordTypes.isEmpty)
+    }
+
     @Test func emptyPiEditorPassesButDraftAndPopupDoNot() {
         let rule = String(repeating: "─", count: 40)
         let footer = "~/project (main)\r\n$0.000 0.0%/200k (auto)"

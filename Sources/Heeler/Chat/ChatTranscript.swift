@@ -771,6 +771,8 @@ struct ChatNotice: Equatable, Codable, Sendable {
         case command
         /// A shell command the user ran in the program's shell mode.
         case shellCommand
+        /// Python the user ran in the program's Python mode (Oh My Pi's `$`).
+        case pythonCommand
         /// A background task finished.
         case taskNotification
         /// The user interrupted the turn.

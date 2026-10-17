@@ -972,8 +972,8 @@ private struct ChatNoticeRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Label {
-                Text(verbatim: notice.kind == .shellCommand ? "! \(notice.title)" : notice.title)
-                    .fontDesign(notice.kind == .shellCommand || notice.kind == .command ? .monospaced : nil)
+                Text(verbatim: titlePrefix + notice.title)
+                    .fontDesign(isCode ? .monospaced : nil)
             } icon: {
                 Image(systemName: symbol)
             }
@@ -991,10 +991,27 @@ private struct ChatNoticeRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// The mark the program's prompt puts before what the user typed.
+    private var titlePrefix: String {
+        switch notice.kind {
+        case .shellCommand: "! "
+        case .pythonCommand: "$ "
+        default: ""
+        }
+    }
+
+    private var isCode: Bool {
+        switch notice.kind {
+        case .command, .shellCommand, .pythonCommand: true
+        default: false
+        }
+    }
+
     private var symbol: String {
         switch notice.kind {
         case .command: "slash.circle"
         case .shellCommand: "terminal"
+        case .pythonCommand: "chevron.left.forwardslash.chevron.right"
         case .taskNotification: "bell"
         case .interrupted: "stop.circle"
         case .stopped: "pause.circle"
