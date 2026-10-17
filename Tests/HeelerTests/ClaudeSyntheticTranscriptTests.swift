@@ -749,6 +749,25 @@ struct ClaudeSyntheticTranscriptTests {
             ClaudeSample.entry("think:r2", in: transcript) == .reasoning(ChatReasoning(text: "", durationMilliseconds: 3)))
     }
 
+    @Test("A command the running Claude Code doesn't know shows why and records the send")
+    func unknownCommand() {
+        // Claude Code 2.1.301 (CL-38): a skill added after it started.
+        let (transcript, lines) = Self.read(
+            Self.firstTurn + "\n" + #"""
+                {"parentUuid":"t1","isSidechain":false,"type":"system","subtype":"informational","content":"Unknown command: /e2e-hello","isMeta":false,"timestamp":"2026-10-16T15:33:48.638Z","uuid":"u1","level":"warning"}
+                {"parentUuid":"u1","isSidechain":false,"type":"system","subtype":"informational","content":"Args from unknown skill: please","isMeta":false,"timestamp":"2026-10-16T15:33:48.638Z","uuid":"u2","level":"warning"}
+                {"parentUuid":"u2","isSidechain":false,"type":"system","subtype":"informational","content":"Auto-update available","isMeta":false,"uuid":"u3","level":"info"}
+                """#)
+        #expect(transcript.entries.map(\.id.rawValue) == ["user:p1", "text:a1", "notice:u1"])
+        #expect(
+            ClaudeSample.entry("notice:u1", in: transcript)
+                == .notice(
+                    ChatNotice(
+                        kind: .error, title: "Unknown command: /e2e-hello", detail: "Args from unknown skill: please")))
+        #expect(transcript.recordedPrompts.last == ChatRecordedPrompt(
+            offset: lines[3].offset, text: "/e2e-hello please", entryID: ChatEntryID("notice:u1")))
+    }
+
     @Test("A compaction's preview skips Claude Code's fixed opening and starts with the summary")
     func compactionPreview() {
         // Claude Code 2.1.301 (CL-22).

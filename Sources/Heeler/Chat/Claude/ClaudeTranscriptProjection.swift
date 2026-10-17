@@ -72,7 +72,18 @@ enum ClaudeTranscriptProjection {
         var prompts: [(prompt: ChatRecordedPrompt, rawKey: String)] = []
         let byPosition = index.recordsByPosition
         let imageSources = imageSources(byPosition, indexed: index.records)
-        for record in byPosition where !record.isSidechain && record.teamName == nil {
+        for (position, record) in byPosition.enumerated() where !record.isSidechain && record.teamName == nil {
+            if let command = unknownCommand(record) {
+                let next = byPosition.indices.contains(position + 1) ? byPosition[position + 1] : nil
+                let arguments = next.flatMap { unknownSkillArguments($0, below: record) }
+                let text = [command, arguments].compactMap { $0?.nonEmpty }.joined(separator: " ")
+                prompts.append(
+                    (
+                        ChatRecordedPrompt(offset: record.byteOffset, text: text, entryID: entryByRecord[record.uuid]),
+                        ClaudeTranscriptReducer.echoKey(text)
+                    ))
+                continue
+            }
             guard let raw = typedText(of: record, indexed: index.records) else { continue }
             let sources = imageSources[record.uuid] ?? []
             let text = sources.isEmpty ? raw : ChatRecordedPrompt.replacingImagePlaceholders(in: raw, with: sources)
@@ -133,6 +144,29 @@ enum ClaudeTranscriptProjection {
     }
 
     private static let imageSourcePrefix = "[Image: source: "
+
+    /// Claude Code 2.1.301 answers a `/command` it doesn't know, such as a
+    /// skill added after it started, with only these `informational`
+    /// records: the command, then the arguments below it.
+    static let unknownCommandPrefix = "Unknown command: "
+    static let unknownSkillArgumentsPrefix = "Args from unknown skill: "
+
+    /// The `/command` an `informational` record says Claude Code didn't know.
+    static func unknownCommand(_ record: ClaudeRecord) -> String? {
+        guard record.kind == .system("informational"), let content = record.system?.content,
+            content.hasPrefix(unknownCommandPrefix)
+        else { return nil }
+        return String(content.dropFirst(unknownCommandPrefix.count)).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// The arguments `record` says were sent with the unknown command
+    /// `parent` names.
+    static func unknownSkillArguments(_ record: ClaudeRecord, below parent: ClaudeRecord) -> String? {
+        guard record.kind == .system("informational"), record.parentUUID == parent.uuid,
+            let content = record.system?.content, content.hasPrefix(unknownSkillArgumentsPrefix)
+        else { return nil }
+        return String(content.dropFirst(unknownSkillArgumentsPrefix.count)).trimmingCharacters(in: .whitespaces)
+    }
 
     private static func isAttachment(_ kind: ClaudeRecord.Kind) -> Bool {
         if case .attachment = kind { return true }
@@ -820,11 +854,26 @@ private struct Builder {
             add(
                 "notice:\(record.uuid)", at: record,
                 .notice(ChatNotice(kind: .stopped, title: "All background agents stopped")))
+        case "informational" where ClaudeTranscriptProjection.unknownCommand(record) != nil:
+            addUnknownCommand(record, content: content)
         default:
-            // Turn timings, away summaries, informational lines, memory
-            // saves and anything unknown stay hidden.
+            // Turn timings, away summaries, other informational lines,
+            // memory saves and anything unknown stay hidden.
             break
         }
+    }
+
+    /// A command Claude Code didn't know, which it ran nothing for, with the
+    /// arguments the record below it names.
+    private mutating func addUnknownCommand(_ record: ClaudeRecord, content: String) {
+        var notice = ChatNotice(kind: .error, title: content)
+        if let child = children[record.uuid]?.first(where: {
+            !consumed.contains($0.uuid) && ClaudeTranscriptProjection.unknownSkillArguments($0, below: record) != nil
+        }) {
+            consumed.insert(child.uuid)
+            notice.detail = child.system?.content
+        }
+        add("notice:\(record.uuid)", at: record, .notice(notice))
     }
 
     /// 2.1.291 writes a local command as a `local_command` record and its
