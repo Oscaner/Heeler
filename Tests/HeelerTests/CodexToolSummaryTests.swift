@@ -205,6 +205,42 @@ struct CodexToolSummaryTests {
             ])
     }
 
+    @Test("A patch aborted before it applied is interrupted, not failed")
+    func abortedPatch() {
+        var builder = CodexRolloutBuilder()
+        builder.turnStarted("t1")
+        for (id, stderr) in [("p1", "execution error: TurnAborted\n"), ("p2", "patch rejected: context mismatch")] {
+            builder.item(
+                "t1",
+                [
+                    "type": "FileChange", "id": .string(id),
+                    "changes": ["/work/a.txt": ["type": "add", "content": "a\n"]],
+                    "status": "failed", "stdout": "", "stderr": .string(stderr),
+                ])
+        }
+        builder.turnAborted("t1")
+
+        let tools = builder.reducer().transcript(ChatProjectionContext(activity: .idle)).entries.compactMap(\.tool)
+        #expect(tools.map(\.status) == [.interrupted, .failed])
+        #expect(tools.map(\.preview?.text) == [nil, "patch rejected: context mismatch"])
+    }
+
+    @Test("A legacy patch end aborted before it applied is interrupted")
+    func abortedLegacyPatch() {
+        var builder = CodexRolloutBuilder(.legacy)
+        builder.legacyUser("add a")
+        builder.event(
+            "patch_apply_end",
+            [
+                ("call_id", "call-p"), ("stdout", ""), ("stderr", "execution error: TurnAborted"),
+                ("success", false), ("changes", ["/work/a.txt": ["type": "add", "content": "a\n"]]),
+            ])
+
+        let tool = builder.reducer().transcript(ChatProjectionContext(activity: .idle)).entries.last?.tool
+        #expect(tool?.status == .interrupted)
+        #expect(tool?.preview == nil)
+    }
+
     @Test("A call without an outcome follows the turn and herdr's activity", arguments: CodexOpenCallCase.allCases)
     func openCall(_ openCase: CodexOpenCallCase) {
         var builder = CodexRolloutBuilder()
