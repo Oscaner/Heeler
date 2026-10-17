@@ -126,6 +126,37 @@ struct CodexDialogParserTests {
         #expect(noted.fingerprint == pointed.fingerprint)
     }
 
+    /// codex-16 with the pointer on option 1, as Codex draws it before a
+    /// move, and option 3's description as given.
+    private static func phoneQuestion(thirdDetail: (String, String) = ("Optionally, add details in notes", "(tab)"))
+        throws -> ANSIScreen
+    {
+        var rows = try ScreenFixture.text("codex-16-x7-phone-question-pointed").components(separatedBy: "\n")
+        rows[33] =
+            "  " + SGR.reset + SGR.bold + SGR.reverse + "› 1. Small              " + SGR.reset + SGR.reverse
+            + "Choose the small size." + SGR.reset + SGR.bold + SGR.reverse + "          " + SGR.reset
+        rows[35] = "    3. None of the above  " + SGR.reset + SGR.dim + thirdDetail.0 + SGR.reset
+        rows[36] = "                          " + SGR.reset + SGR.dim + thirdDetail.1 + SGR.reset
+        return ANSIScreenDecoder.decode(rows.joined(separator: "\n"))
+    }
+
+    @Test("At phone width moving the pointer down the options keeps the fingerprint (synthetic)")
+    func phoneQuestionPointerOnFirst() throws {
+        let first = try #require(CodexDialogParser.parse(try Self.phoneQuestion()).dialog)
+        let pointed = try dialog("codex-16-x7-phone-question-pointed")
+        #expect(first.focus == DialogFocusState(focusedOrdinal: 1))
+        #expect(first.options.map(\.label) == pointed.options.map(\.label))
+        #expect(first.options.map(\.detail) == pointed.options.map(\.detail))
+        #expect(first.fingerprint == pointed.fingerprint)
+    }
+
+    @Test("A wrapped Chinese description joins without a space (synthetic)")
+    func wrappedChineseDetail() throws {
+        let dialog = try #require(
+            CodexDialogParser.parse(try Self.phoneQuestion(thirdDetail: ("可以在备注里补充", "细节。"))).dialog)
+        #expect(dialog.options.last?.detail == "可以在备注里补充细节。")
+    }
+
     @Test("Asynchronous questions folded above the composer")
     func collapsedQuestions() throws {
         let dialog = try dialog("codex-08-x4-async-collapsed")

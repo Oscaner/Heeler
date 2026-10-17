@@ -301,6 +301,7 @@ private struct CodexDialogReader {
         var label: String
         var detail: String?
         var lastRow: ScreenRow
+        var lastDetailRow: ScreenRow
     }
 
     /// Reads the numbered options in `range`, wrapped rows joined. Question
@@ -318,7 +319,7 @@ private struct CodexDialogReader {
                 drafts.append(
                     OptionDraft(
                         number: numbered.number, labelColumn: numbered.labelColumn, isFocused: numbered.isPointed,
-                        label: label, detail: detail, lastRow: row))
+                        label: label, detail: detail, lastRow: row, lastDetailRow: row))
             } else if var draft = drafts.popLast(), let indent = row.indent, indent >= draft.labelColumn {
                 let runs = DialogRowScanner.runs(of: row, from: draft.labelColumn)
                 // A narrow pane wraps either column; a wrapped row keeps the
@@ -326,7 +327,12 @@ private struct CodexDialogReader {
                 let (label, detail) =
                     isQuestion ? splitColumns(runs, isSelected: draft.isFocused) : (text(of: runs), nil)
                 if let detail {
-                    draft.detail = draft.detail.map { $0 + " " + detail } ?? detail
+                    draft.detail = draft.detail.map {
+                        DialogRowScanner.join(
+                            $0, detail, wrap: .codex, previousRow: draft.lastDetailRow, columns: columns,
+                            boxColumn: draft.labelColumn)
+                    } ?? detail
+                    draft.lastDetailRow = row
                 }
                 if !label.isEmpty {
                     draft.label = DialogRowScanner.join(
