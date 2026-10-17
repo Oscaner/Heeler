@@ -41,7 +41,8 @@ struct BlockedCard: Equatable, Sendable {
 /// and sends nothing if the dialog changed, waits until the dialog has
 /// shown for a moment, sends the plan's keys while checking each of its
 /// expectations, then watches for the effect. Nothing is ever resent: a
-/// dialog that does not respond keeps the card waiting for a fresh read.
+/// dialog that does not respond keeps its answers off until the screen
+/// shows something else.
 @MainActor
 @Observable
 final class BlockedCardStore {
@@ -80,8 +81,9 @@ final class BlockedCardStore {
         case ready
         /// Keys are going out; every control waits.
         case acting
-        /// The keys went out and the Agent has not shown their effect.
-        /// Controls come back with the next read.
+        /// The keys went out and the Agent has not shown their effect. Only
+        /// Stop acts until a read shows another screen: the keys may still
+        /// land.
         case unconfirmed
     }
 
@@ -98,6 +100,10 @@ final class BlockedCardStore {
     /// Folded to a bar; a new dialog unfolds it.
     var isCollapsed = false
 
+    /// Whether Stop acts: also after an answer that showed no effect, as a
+    /// way out of a dialog that keeps the card waiting.
+    var canStop: Bool { progress != .acting }
+
     @ObservationIgnored private let io: BlockedScreenIO
     @ObservationIgnored private let timing: Timing
     @ObservationIgnored private let clock: BlockedCardClock
@@ -107,6 +113,8 @@ final class BlockedCardStore {
     @ObservationIgnored private var isVisible = false
     @ObservationIgnored private var isSuspended = false
     @ObservationIgnored private var watcher: Task<Void, Never>?
+    /// The dialog an answer showed no effect on, while it stays on screen.
+    @ObservationIgnored private var unconfirmedFingerprint: DialogFingerprint?
     /// The dialog on screen and when it first showed.
     @ObservationIgnored private var firstSeen: (fingerprint: DialogFingerprint, at: ContinuousClock.Instant)?
     /// A dialog an action gave up on part way, shown as the generic card
@@ -196,10 +204,11 @@ final class BlockedCardStore {
 
     // MARK: Actions
 
-    /// Answers the card's dialog. Waits for a fresh read after an answer
-    /// that showed no effect, so a second tap is never a resend.
+    /// Answers the card's dialog. After an answer that showed no effect only
+    /// Stop goes until the screen changes, so a second tap is never a
+    /// resend.
     func perform(_ action: DialogAction) async {
-        guard progress == .ready, case .card(let shown) = content else { return }
+        guard progress == .ready || (action == .dismiss && canStop), case .card(let shown) = content else { return }
         let program = program
         let requests = pendingRequests
         var answered: BlockedCard?
@@ -349,8 +358,11 @@ final class BlockedCardStore {
             notice = Self.sendFailure(error)
         }
         try? await clock.sleep(timing.pollInterval)
-        progress = .ready
-        if let observation = await observe() { present(observation) }
+        progress = unconfirmedFingerprint == nil ? .ready : .unconfirmed
+        if let observation = await observe() {
+            releaseIfChanged(observation)
+            present(observation)
+        }
     }
 
     // MARK: Watching
@@ -381,8 +393,16 @@ final class BlockedCardStore {
             if activity == .blocked, content == .none, !isQuiet { content = .unreadable }
             return
         }
-        if progress == .unconfirmed { progress = .ready }
+        releaseIfChanged(observation)
         present(observation)
+    }
+
+    /// Brings the controls back once the dialog an answer showed no effect
+    /// on has gone.
+    private func releaseIfChanged(_ observation: DialogObservation) {
+        guard progress == .unconfirmed, observation.result.fingerprint != unconfirmedFingerprint else { return }
+        progress = .ready
+        unconfirmedFingerprint = nil
     }
 
     // MARK: Acting
@@ -467,10 +487,12 @@ final class BlockedCardStore {
         }
         guard confirmation.isMet, let confirmed = confirmation.last else {
             progress = .unconfirmed
-            notice = "The Agent hasn't responded yet."
+            unconfirmedFingerprint = fingerprint
+            notice = "The Agent hasn't responded yet. Answer in the terminal if it stays."
             return false
         }
         progress = .ready
+        unconfirmedFingerprint = nil
         quietSince = clock.now()
         present(confirmed)
         if plan.focusesComposer { composerFocusRequest += 1 }
@@ -478,7 +500,7 @@ final class BlockedCardStore {
     }
 
     private func finish(notice: String) {
-        progress = .ready
+        progress = unconfirmedFingerprint == nil ? .ready : .unconfirmed
         self.notice = notice
     }
 
@@ -489,6 +511,7 @@ final class BlockedCardStore {
     ) {
         degraded = (fingerprint, reason)
         progress = .ready
+        unconfirmedFingerprint = nil
         if let last { present(last) }
         notice = reason
     }
@@ -565,6 +588,7 @@ final class BlockedCardStore {
     private func clear() {
         if content != .none { content = .none }
         if progress != .ready { progress = .ready }
+        unconfirmedFingerprint = nil
         if notice != nil { notice = nil }
         isCollapsed = false
         firstSeen = nil

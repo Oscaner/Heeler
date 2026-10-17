@@ -90,7 +90,7 @@ private struct BlockedDialogCard: View {
                 .disabled(!isReady)
             BlockedCardFooter(
                 notice: store.notice, stopTitle: dialog.stopsFromCard ? "Stop" : nil, isReady: isReady,
-                stop: { perform(.dismiss) })
+                canStop: store.canStop, stop: { perform(.dismiss) })
         }
     }
 
@@ -405,7 +405,7 @@ private struct BlockedCollapsedBar: View {
                 Button(dialog.stopTitle, role: .destructive) {
                     Task { await store.perform(.dismiss) }
                 }
-                .disabled(store.progress != .ready)
+                .disabled(!store.canStop)
             }
             Button("Show") { store.isCollapsed = false }
         }
@@ -490,6 +490,8 @@ struct BlockedCardFooter: View {
     let notice: String?
     var stopTitle: String? = nil
     let isReady: Bool
+    /// Whether Stop acts, when it may while the rest waits.
+    var canStop: Bool? = nil
     var stop: () -> Void = {}
     /// A quieter way out than Stop, at the trailing edge: Claude's `Chat
     /// about this` on a question form.
@@ -517,7 +519,7 @@ struct BlockedCardFooter: View {
                     HStack(spacing: 16) {
                         if let stopTitle {
                             Button(stopTitle, role: .destructive, action: stop)
-                                .disabled(!isReady)
+                                .disabled(!(canStop ?? isReady))
                         }
                         if let keys {
                             Button {

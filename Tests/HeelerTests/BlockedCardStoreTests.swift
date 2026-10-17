@@ -87,7 +87,7 @@ struct BlockedCardStoreTests {
         #expect(store.progress == .ready)
     }
 
-    @Test func noEffectLeavesTheCardWaitingForAFreshReadAndNeverResends() async throws {
+    @Test func noEffectKeepsTheAnswersOffWhileTheDialogStaysAndNeverResends() async throws {
         let pane = FakePane(try ScreenFixture.screen("claude-02-c1-bash-blocked"))
         let store = Self.store(.claude, pane: pane)
         store.update(activity: .blocked)
@@ -97,12 +97,35 @@ struct BlockedCardStoreTests {
 
         #expect(await pane.keys == [["1"]])
         #expect(store.progress == .unconfirmed)
-        #expect(store.notice == "The Agent hasn't responded yet.")
+        #expect(store.notice == "The Agent hasn't responded yet. Answer in the terminal if it stays.")
+        #expect(store.canStop)
+
+        // The same dialog: the key may still land, so a tap sends nothing.
+        await store.refresh()
+        #expect(store.progress == .unconfirmed)
         await store.perform(.choose(ordinal: 1))
         #expect(await pane.keys == [["1"]])
 
+        // Another screen brings the answers back.
+        await pane.show(try ScreenFixture.screen("claude-31-par-second"))
         await store.refresh()
         #expect(store.progress == .ready)
+    }
+
+    @Test func stopStillGoesAfterAnAnswerShowedNoEffect() async throws {
+        let pane = FakePane(try ScreenFixture.screen("claude-02-c1-bash-blocked"))
+        let store = Self.store(.claude, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+        await store.perform(.choose(ordinal: 1))
+        #expect(store.progress == .unconfirmed)
+        await pane.react(to: ["esc"], with: try ScreenFixture.screen("claude-29-c3-after-immediate"))
+
+        await store.perform(.dismiss)
+
+        #expect(await pane.keys == [["1"], ["esc"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
     }
 
     @Test func aClaudeCardConfirmsByItsCallsResult() async throws {
