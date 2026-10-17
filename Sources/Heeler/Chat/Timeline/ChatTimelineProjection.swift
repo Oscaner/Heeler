@@ -408,6 +408,7 @@ enum ChatTimelineProjection {
         if case let n = files(.created), n > 0 { parts.append("Created \(plural(n, "file", "files"))") }
         if case let n = files(.read), n > 0 { parts.append("Read \(plural(n, "file", "files"))") }
         if case let n = count(.search), n > 0 { parts.append("Ran \(plural(n, "search", "searches"))") }
+        if case let n = count(.listing), n > 0 { parts.append("Listed \(plural(n, "folder", "folders"))") }
         let web = tools.filter { $0.kind == .web }.map { $0.name.lowercased() }
         let searches = web.filter { $0.contains("search") }.count
         let fetches = web.filter { !$0.contains("search") && $0.contains("fetch") }.count

@@ -665,14 +665,14 @@ private struct ChatToolRow: View {
     private var titleIsCode: Bool {
         switch tool.kind {
         case .command: tool.subtitle?.isEmpty ?? true
-        case .fileEdit, .fileWrite, .fileRead, .search: true
+        case .fileEdit, .fileWrite, .fileRead, .search, .listing: true
         default: false
         }
     }
 
     private var subtitleIsCode: Bool {
         switch tool.kind {
-        case .command, .fileEdit, .fileWrite, .fileRead, .search: true
+        case .command, .fileEdit, .fileWrite, .fileRead, .search, .listing: true
         default: false
         }
     }
@@ -781,7 +781,7 @@ private struct ChatToolRow: View {
         case .fileEdit: Image(systemName: "pencil")
         case .fileWrite: Image(systemName: "doc.badge.plus")
         case .fileRead: Image(systemName: "doc.text")
-        case .search: Image(systemName: "magnifyingglass")
+        case .search, .listing: Image(systemName: "magnifyingglass")
         case .web: Image(systemName: "globe")
         case .agent: ChatSubagentPresentation.icon
         case .question: Image(systemName: "questionmark.bubble")

@@ -160,6 +160,28 @@ struct CodexToolSummaryTests {
             ])
     }
 
+    @Test("A directory listing is its own kind; mixed exploration stays a search")
+    func listingKind() {
+        var builder = CodexRolloutBuilder()
+        builder.turnStarted("t1")
+        builder.command(
+            "t1", id: "c1", argv: ["bash", "-lc", "ls /nonexistent-heeler-dir"], status: "failed", exitCode: 1,
+            parsedCommands: [
+                ["type": "list_files", "cmd": "ls /nonexistent-heeler-dir", "path": "/nonexistent-heeler-dir"]
+            ])
+        builder.command(
+            "t1", id: "c2", argv: ["bash", "-lc", "ls src && cat README.md"],
+            parsedCommands: [
+                ["type": "list_files", "cmd": "ls src", "path": "src"],
+                ["type": "read", "cmd": "cat README.md", "name": "README.md", "path": "README.md"],
+            ])
+        builder.turnComplete("t1")
+
+        let tools = builder.reducer().transcript(ChatProjectionContext(activity: .idle)).entries.compactMap(\.tool)
+        #expect(tools.map(\.kind) == [.listing, .search])
+        #expect(tools.map(\.subtitle) == ["/nonexistent-heeler-dir", nil])
+    }
+
     @Test("A call without an outcome follows the turn and herdr's activity", arguments: CodexOpenCallCase.allCases)
     func openCall(_ openCase: CodexOpenCallCase) {
         var builder = CodexRolloutBuilder()

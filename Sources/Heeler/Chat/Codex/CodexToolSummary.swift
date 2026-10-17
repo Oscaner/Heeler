@@ -152,15 +152,19 @@ enum CodexToolSummary {
         }
     }
 
-    /// The row kind `parsed_cmd` implies, and a subtitle naming what was read
-    /// or searched. Anything the TUI cannot read as exploration stays a
-    /// command.
+    /// The row kind `parsed_cmd` implies, and a subtitle naming what was read,
+    /// listed or searched. Anything the TUI cannot read as exploration stays
+    /// a command; mixed exploration counts as a search.
     static func commandKind(_ parsed: [CodexRawParsedCommand]) -> (ChatToolActivity.Kind, String?) {
         guard !parsed.isEmpty else { return (.command, nil) }
         let types = parsed.map { $0.type ?? "unknown" }
         if types.allSatisfy({ $0 == "read" }) {
             let names = parsed.compactMap { $0.name ?? $0.path }
             return (.fileRead, names.isEmpty ? nil : names.joined(separator: ", "))
+        }
+        if types.allSatisfy({ $0 == "list_files" }) {
+            let paths = parsed.compactMap(\.path)
+            return (.listing, paths.isEmpty ? nil : paths.joined(separator: ", "))
         }
         if types.allSatisfy({ ["read", "list_files", "search"].contains($0) }) {
             let queries = parsed.compactMap { $0.type == "search" ? ($0.query ?? $0.path) : nil }
