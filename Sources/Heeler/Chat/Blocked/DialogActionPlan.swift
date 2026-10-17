@@ -73,7 +73,9 @@ enum ConfirmationRule: Sendable, Hashable {
     /// or working.
     case fingerprintChangeOrUnblocked
     /// Codex asynchronous answers: the queued-messages notice lists an
-    /// answer to this question.
+    /// answer to this question, or the question left the screen. Codex
+    /// 0.162.1 hands a waiting tool call the answer at once and draws no
+    /// notice; 0.160.1 lists it until the next tool call.
     case queuedNotice(String)
 }
 
@@ -201,7 +203,7 @@ extension ConfirmationRule {
         case .fingerprintChangeOrUnblocked:
             return dialogLeft || observation.activity == .idle || observation.activity == .working
         case .queuedNotice(let title):
-            return CodexQueuedNotice.shows(answerTo: title, in: observation.screen)
+            return CodexQueuedNotice.shows(answerTo: title, in: observation.screen) || dialogLeft
         }
     }
 }

@@ -251,6 +251,37 @@ struct BlockedCardStoreTests {
         #expect(store.history.calls.isEmpty)
     }
 
+    /// Codex 0.162.1 delivers an asynchronous answer to a waiting tool call
+    /// at once and draws no queued-messages notice: the next question
+    /// replacing the answered one confirms the answer.
+    @Test func aCodexAsynchronousAnswerWithoutTheNoticeConfirmsWhenTheQuestionLeaves() async throws {
+        let pane = FakePane(try ScreenFixture.screen("codex-09-x4-expanded"))
+        let notice = ["Messages to be submitted after next tool call", "↳ > Pick a fruit", "    Apple"]
+        let delivered = try ScreenFixture.text("codex-10-x4-after-digit").components(separatedBy: "\r\n")
+            .filter { row in !notice.contains { ANSIScreenDecoder.decode(row).rows.first?.text.contains($0) == true } }
+        await pane.react(to: ["1"], with: ScreenFixture.synthetic(delivered))
+        let store = Self.store(.codex, pane: pane)
+        let request = ChatPendingRequest(
+            entryID: ChatEntryID("item-1"), callID: "item-1", kind: .question, toolName: "request_user_input_async",
+            summary: "Pick a fruit",
+            questions: [ChatQuestion(id: "item-1:0", text: "Pick a fruit"), ChatQuestion(id: "item-1:1", text: "Pick a drink")])
+        store.update(transcript: ChatTranscript(entries: [], pendingRequests: [request]))
+        store.update(activity: .blocked)
+        await store.refresh()
+
+        await store.perform(.choose(ordinal: 1))
+
+        #expect(await pane.keys == [["1"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        #expect(store.history.queuedAnswers == ["item-1:0": "Apple"])
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected the next question's card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.title == "Pick a drink")
+    }
+
     @Test func oneActionAtATime() async throws {
         let pane = FakePane(try ScreenFixture.screen("claude-02-c1-bash-blocked"))
         await pane.react(to: ["1"], with: try ScreenFixture.screen("claude-29-c3-after-immediate"))
