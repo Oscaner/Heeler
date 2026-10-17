@@ -277,18 +277,17 @@ private struct CodexDialogReader {
     /// Numbered rows with a pointer near the bottom and no composer: some
     /// list view Heeler does not know.
     private func readLooseOptions(footer: ClosedRange<Int>) -> DialogParseResult {
-        let start = max(0, footer.upperBound - 16)
+        // A narrow pane wraps the list's question and option details, so
+        // the pointed option and the question can sit well above the footer.
+        let start = max(0, footer.upperBound - 30)
         let numbered = (start...footer.upperBound).compactMap {
             DialogRowScanner.numberedOption(in: rows[$0], pointer: DialogRowScanner.codexPointer)
         }
-        guard let pointed = numbered.first(where: \.isPointed), rows[pointed.rowIndex].runs.contains(where: \.style.isReverse)
+        guard let pointed = numbered.last(where: \.isPointed), rows[pointed.rowIndex].runs.contains(where: \.style.isReverse)
         else { return .none }
-        // A narrow pane wraps the list's question and option details, so
-        // the question can sit above the rows searched for options.
-        let titleSearchStart = max(0, footer.upperBound - 30)
-        let top = (titleSearchStart..<pointed.rowIndex).reversed().first { index in
+        let top = (start..<pointed.rowIndex).reversed().first { index in
             rows[index].isBlank && (index == 0 || rows[index - 1].isBlank)
-        }.map { $0 + 1 } ?? start
+        }.map { $0 + 1 } ?? min(pointed.rowIndex, max(0, footer.upperBound - 16))
         return unrecognized(
             top: top, end: footer.upperBound, footer: footer, "Heeler does not know this list.")
     }

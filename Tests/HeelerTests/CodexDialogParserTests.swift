@@ -233,6 +233,18 @@ struct CodexDialogParserTests {
         #expect(excerpt.numbered.keys.sorted() == [1, 2, 3, 4])
     }
 
+    @Test("A list whose wrapped details put the pointed option far above the footer still goes generic (synthetic)")
+    func tallWrappedList() throws {
+        let details = (1...18).map { "       detail line \($0)" }
+        let screen = ScreenFixture.synthetic(
+            ["  " + SGR.bold + "Allow the probe MCP server to run" + SGR.reset, "", ""]
+                + [SGR.bold + SGR.reverse + "› 1. Allow" + SGR.reset] + details
+                + ["  2. Deny", "", "  " + SGR.dim + "enter to submit | esc to cancel" + SGR.reset])
+        let excerpt = try #require(CodexDialogParser.parse(screen).excerpt, "parsed as \(CodexDialogParser.parse(screen))")
+        #expect(excerpt.reason == "Heeler does not know this list.")
+        #expect(excerpt.numbered.keys.sorted() == [1, 2])
+    }
+
     @Test("A pointed list without a composer goes to the generic card (synthetic)")
     func unknownList() throws {
         let screen = ScreenFixture.synthetic([
