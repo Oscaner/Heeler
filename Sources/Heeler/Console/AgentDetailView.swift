@@ -46,6 +46,11 @@ struct AgentDetailView: View {
     @State private var isChoosingTerminal = false
     @State private var terminalOpenFailure: String?
     @State private var createdTerminal: ShellTerminalIdentity?
+    /// A Shell Terminal pushed over this Agent by Open Terminal, so Back
+    /// returns here; nil beside a list, where the list selects it instead.
+    @State private var shellRoute: WorkspaceTerminalRoute?
+    /// The detail stands alone, pushed over its list, rather than beside it.
+    @Environment(\.showsDetailBackButton) private var isPushedOverList
     /// Which window holds this Host's terminal channel; nil outside a scene
     /// root, where this detail always holds it.
     @Environment(\.agentSceneRouting) private var sceneRouting
@@ -204,12 +209,17 @@ struct AgentDetailView: View {
     /// The terminal is on screen: no Shell Terminal, no Changes over it, and
     /// not Chat in its place.
     private var showsAgentTerminal: Bool {
-        openTerminal.shell == nil && changes.store == nil && effectiveSurface == .terminal
+        showsAgentSurface && effectiveSurface == .terminal
     }
 
     /// Chat is on screen in the terminal's place, with nothing over it.
     private var showsChatSurface: Bool {
-        openTerminal.shell == nil && changes.store == nil && effectiveSurface == .chat
+        showsAgentSurface && effectiveSurface == .chat
+    }
+
+    /// Nothing stands over the Agent's own surface, Chat or terminal.
+    private var showsAgentSurface: Bool {
+        openTerminal.shell == nil && changes.store == nil && shellRoute == nil
     }
 
     /// Swaps Chat and the Agent terminal in place. A surface whose keyboard
@@ -285,7 +295,8 @@ struct AgentDetailView: View {
                 && !console.hostsAwaitingSnapshot.contains(agent.hostID),
             isSceneActive: scenePhase == .active,
             isOnStage: hasAppeared && isOnStage(),
-            showsShellTerminal: openTerminal.shell != nil || openTerminal.isOpening)
+            showsShellTerminal: openTerminal.shell != nil || openTerminal.isOpening
+                || shellRoute != nil)
     }
 
     private func updateFocus() {
@@ -389,6 +400,11 @@ struct AgentDetailView: View {
             ChangesView(store: route.store)
                 .environment(\.changesScreenPresence, changesScreenPresence)
         }
+        // Open Terminal on an iPhone: a short detour, so Back and the swipe
+        // come back to this Agent rather than to the list.
+        .navigationDestination(item: $shellRoute) { route in
+            pushedTerminal(route)
+        }
         .onAppear {
             hasAppeared = true
             session.detailDidAppear(presenceKey)
@@ -419,7 +435,7 @@ struct AgentDetailView: View {
         .confirmationDialog("Open Terminal", isPresented: $isChoosingTerminal, titleVisibility: .visible) {
             ForEach(workspaceShells) { target in
                 Button("\(target.displayTitle) · \(target.tabLabel ?? "Terminal")") {
-                    onSelectTerminal?(target)
+                    showWorkspaceTerminal(target)
                 }
             }
             if agent.shellTerminalCreationRequest != nil {
@@ -465,8 +481,15 @@ struct AgentDetailView: View {
         .onChange(of: effectiveSurface, initial: true) { previous, current in
             attachReference.showsChat = current == .chat
             sceneRouting?.chatSurfaceDidChange(agent: current == .chat ? agent.id : nil)
-            onShowsChat?(current == .chat)
+            onShowsChat?(current == .chat && shellRoute == nil)
             if previous != current { applyTerminalAccess() }
+        }
+        // Back from a pushed Shell Terminal: the Agent's surface comes back
+        // as it does from Changes. The terminal's chrome is the window's
+        // while it stands over Chat.
+        .onChange(of: shellRoute == nil) { _, showsAgent in
+            onShowsChat?(effectiveSurface == .chat && showsAgent)
+            if showsAgent { applyTerminalAccess() }
         }
         .onChange(of: openTerminal.shell != nil || openTerminal.isOpening, initial: true) {
             _, showsShellTerminal in
@@ -536,9 +559,39 @@ struct AgentDetailView: View {
         if createdTerminal != nil { createWorkspaceTerminal(); return }
         switch workspaceShells.count {
         case 0: createWorkspaceTerminal()
-        case 1: onSelectTerminal?(workspaceShells[0])
+        case 1: showWorkspaceTerminal(workspaceShells[0])
         default: isChoosingTerminal = true
         }
+    }
+
+    /// Open Terminal's destination: pushed over this Agent when the detail
+    /// stands alone, selected in the list beside it otherwise. The drawer's
+    /// picks always go through the list.
+    private func showWorkspaceTerminal(_ target: ConsoleTerminal) {
+        if isPushedOverList {
+            shellRoute = WorkspaceTerminalRoute(terminal: target)
+        } else {
+            onSelectTerminal?(target)
+        }
+    }
+
+    private func pushedTerminal(_ route: WorkspaceTerminalRoute) -> some View {
+        WorkspaceTerminalDetailView(
+            terminal: console.terminals.first(where: { $0.id == route.terminal.id })
+                ?? route.terminal,
+            console: console,
+            settings: terminal,
+            activity: activity,
+            onSelectAgent: { id in
+                if id == agent.id { shellRoute = nil } else { onSwitch(id) }
+            },
+            onSelectTerminal: { onSelectTerminal?($0) },
+            isSelected: { [isVisible] in
+                shellRoute?.terminal.id == route.terminal.id && isVisible()
+            },
+            keyboardHandoff: keyboardHandoff,
+            backTitle: "Back to Agent",
+            onBack: { shellRoute = nil })
     }
 
     /// Open Terminal routes back to the tab this detail already created;
@@ -568,13 +621,22 @@ struct AgentDetailView: View {
                     terminalOpenFailure = "The terminal was created, but its Workspace hasn't refreshed yet. Try Open Terminal again to refresh it."
                     return
                 }
-                if isVisible() { onSelectTerminal?(target) }
+                if isVisible() { showWorkspaceTerminal(target) }
             } catch {
                 keyboardHandoff.cancelShellTerminal()
                 terminalOpenFailure = AgentOpenTerminalStore.presentation(for: error).message
             }
         }
     }
+}
+
+/// A terminal is identified by its pane; the snapshot stands in while the
+/// inventory no longer lists it.
+private struct WorkspaceTerminalRoute: Hashable {
+    let terminal: ConsoleTerminal
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.terminal.id == rhs.terminal.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(terminal.id) }
 }
 
 @MainActor
