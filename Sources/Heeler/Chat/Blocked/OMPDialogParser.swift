@@ -103,7 +103,9 @@ enum OMPDialogParser {
             return review(panel, headers: headers, isGuarded: isGuarded)
                 ?? unrecognized(panel, on: screen, layout)
         }
-        guard isGuarded || footer.contains("select") else { return unrecognized(panel, on: screen, layout) }
+        // Rows come first: a multi-select page's footer reads `toggle ·
+        // submit`, never `select`, and is still a question Heeler leaves
+        // to the terminal.
         var options: [DialogOption] = []
         for line in panel.sections[1] {
             guard let (label, isFocused) = choice(line.text) else {
@@ -116,7 +118,9 @@ enum OMPDialogParser {
                     ordinal: options.count + 1, number: nil, label: label,
                     role: label == otherLabel ? .otherText : .answer, isFocused: isFocused))
         }
-        guard options.contains(where: { $0.role == .answer }) else { return unrecognized(panel, on: screen, layout) }
+        guard isGuarded || footer.contains("select"), options.contains(where: { $0.role == .answer }) else {
+            return unrecognized(panel, on: screen, layout)
+        }
         let focused = options.filter(\.isFocused)
         var subject = DialogSubject()
         subject.question = question

@@ -57,6 +57,7 @@ enum ScreenFixture {
         "omp-28-ask2-e-after-esc-2s", "omp-29-guard-a-draft-while-working",
         "omp-29-guard-b-ask-with-draft", "omp-29-guard-c-after-enter", "omp-29-guard-f-idle",
         "omp-30-plan-mode-on", "omp-31-plan-review", "omp-32-plan-after-esc", "omp-33-after-exit-2",
+        "omp-34-ask-multi-62",
     ]
 
     /// The Claude and Codex captures that the dialog and input-box suites walk.

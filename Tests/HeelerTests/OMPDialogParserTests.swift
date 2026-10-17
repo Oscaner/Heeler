@@ -174,6 +174,15 @@ struct OMPDialogParserTests {
         #expect(excerpt.reason.contains("single-select"))
     }
 
+    /// omp 18.11.1 at 62 columns: a multi-select page's footer reads
+    /// `toggle · submit`, with no `select`, yet the card still says why
+    /// Heeler leaves it to the terminal.
+    @Test func aCapturedMultiSelectQuestionNamesSingleSelect() throws {
+        let excerpt = try #require(try parse("omp-34-ask-multi-62").excerpt)
+        #expect(excerpt.numbered.isEmpty)
+        #expect(excerpt.reason == "Heeler answers only Oh My Pi's single-select questions. Answer this one in the terminal.")
+    }
+
     @Test func aDrawnMultiSelectQuestionIsUnrecognized() async throws {
         let tui = FakeQuestionTUI(
             .omp, [.init(header: "fruit", text: "Pick fruits", options: ["apple", "pear"], isMultiSelect: true)])
