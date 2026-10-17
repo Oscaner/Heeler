@@ -22,9 +22,10 @@ enum ClaudeUserText: Sendable, Equatable {
     /// A shell-mode command's output, unescaped.
     case bashOutput(String)
     case taskNotification(ClaudeTaskNotification)
-    /// A message from outside the conversation: a channel, a teammate, a
-    /// review service.
-    case external(String)
+    /// Messages from outside the conversation: a channel, a teammate, a
+    /// review service. One per message the record holds, as the terminal
+    /// lists them.
+    case external([String])
     /// Model-only context: reminders, caveats, hook text.
     case hidden
 
@@ -59,16 +60,19 @@ enum ClaudeUserText: Sendable, Equatable {
         markers.contains { text.hasPrefix($0) }
     }
 
-    /// The line Claude Code 2.1.301 puts before a message from a teammate or
-    /// another session. The tagged blocks follow, then advice to the model.
+    /// The lines Claude Code 2.1.301 puts before a message from a teammate
+    /// or another session (the binary's chunk-e666gr8q.js; the first was
+    /// captured live). The tagged blocks follow, then advice to the model.
     static let peerMessageHeaders = [
-        "Another Claude session sent a message:", "A peer session sent a message while you were working:",
+        "Another Claude session sent a message:",
+        "Another Claude session sent a message while you were working:",
+        "A peer session sent a message while you were working:",
     ]
 
     static func classify(_ text: String) -> ClaudeUserText {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let message = peerMessage(in: trimmed) {
-            return .external(message)
+        if let messages = peerMessages(in: trimmed) {
+            return .external(messages)
         }
         guard let tag = ClaudeText.leadingTag(of: trimmed) else {
             return .prompt(unwrappingPastedContent(text))
@@ -108,20 +112,29 @@ enum ClaudeUserText: Sendable, Equatable {
         if hiddenTags.contains(tag) {
             return .hidden
         }
+        if tag == "teammate-message", let messages = teammateMessages(ofTag: tag, in: trimmed) {
+            return .external(messages)
+        }
         if externalTags.contains(tag) {
-            return .external(ClaudeText.content(ofTag: tag, in: trimmed) ?? trimmed)
+            return .external([ClaudeText.content(ofTag: tag, in: trimmed) ?? trimmed])
         }
         return .prompt(unwrappingPastedContent(text))
     }
 
-    /// A wrapped peer message's blocks as the terminal lists them: "Message
-    /// from @w2" over its text, or "Teammate @w2 finished" over its result
-    /// for an idle notification. Nil when the text is not one.
-    static func peerMessage(in text: String) -> String? {
+    /// A wrapped peer message's blocks as the terminal lists them. Nil when
+    /// the text is not one.
+    static func peerMessages(in text: String) -> [String]? {
         guard let header = peerMessageHeaders.first(where: { text.hasPrefix($0) }) else { return nil }
         let body = text.dropFirst(header.count).trimmingCharacters(in: .whitespacesAndNewlines)
         guard let tag = ClaudeText.leadingTag(of: body), externalTags.contains(tag) else { return nil }
-        let blocks = ClaudeText.blocks(ofTag: tag, in: body)
+        return teammateMessages(ofTag: tag, in: body)
+    }
+
+    /// Each `<tag>` block in `text` as the terminal lists it: "Message from
+    /// @w2" over its text, or "Teammate @w2 finished" over its result for an
+    /// idle notification. Nil when no block is complete.
+    private static func teammateMessages(ofTag tag: String, in text: String) -> [String]? {
+        let blocks = ClaudeText.blocks(ofTag: tag, in: text)
         guard !blocks.isEmpty else { return nil }
         return blocks.map { block in
             let content = block.content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -133,7 +146,7 @@ enum ClaudeUserText: Sendable, Equatable {
             }
             let title = sender.map { "Message from @\($0)" } ?? "Message"
             return content.isEmpty ? title : title + "\n" + content
-        }.joined(separator: "\n\n")
+        }
     }
 
     /// A teammate's `{"type":"idle_notification","from",…,"result"}` body.

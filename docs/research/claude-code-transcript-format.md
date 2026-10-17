@@ -402,7 +402,11 @@ fixture captures them yet.
   model. A block whose body is `{"type":"idle_notification","from",…,
   "result"}` is the teammate finishing. The terminal lists them as
   "› Message from @w2" and "⏺ Teammate @w2 finished" over the result; Chat
-  shows one system notice per record in the same words.
+  shows one system notice per message in the same words. The binary
+  (`chunk-e666gr8q.js`) also writes the headers "Another Claude session
+  sent a message while you were working:" and "A peer session sent a
+  message while you were working:" (not observed). A record that is only
+  `<teammate-message>` blocks, with no header, reads the same way.
 - **Workflow.** The `Workflow` call's input is `{script}`. Its result is
   `toolUseResult{status: "async_launched", taskId, taskType:
   "local_workflow", workflowName, runId, summary, transcriptDir,

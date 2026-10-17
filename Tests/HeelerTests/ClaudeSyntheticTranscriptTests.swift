@@ -658,13 +658,30 @@ struct ClaudeSyntheticTranscriptTests {
         #expect(transcript.entries.map(\.id.rawValue) == ["user:p1", "text:a1", "notice:e1", "text:a2", "notice:e2", "text:a3"])
         #expect(
             ClaudeSample.entry("notice:e1", in: transcript)
-                == .notice(ChatNotice(kind: .system, title: "Ship it after the tests pass.")))
+                == .notice(ChatNotice(kind: .system, title: "Message from @lead", detail: "Ship it after the tests pass.")))
         #expect(
             ClaudeSample.entry("notice:e2", in: transcript)
                 == .notice(ChatNotice(kind: .system, title: "Continue from where you left off.")))
         #expect(transcript.recordedPrompts.map(\.text) == ["Hello"])
         // A message between turns opens one; the reminder inside it does not.
         #expect(transcript.turns.map(\.firstEntryID.rawValue) == ["user:p1", "notice:e1", "notice:e2"])
+    }
+
+    @Test("A peer record holding several messages shows one notice each, titled by its sender")
+    func peerMessages() {
+        let text =
+            #"Another Claude session sent a message:\n<teammate-message teammate_id=\"w2\">\nDONE\n</teammate-message>\n\n<teammate-message teammate_id=\"w4\">\n{\"type\":\"idle_notification\",\"from\":\"w4\",\"result\":\"All four passed\"}\n</teammate-message>\n\nThis came from another Claude session."#
+        let (transcript, _) = Self.read(
+            Self.firstTurn + "\n"
+                + #"{"type":"user","uuid":"e1","parentUuid":"t1","message":{"role":"user","content":"\#(text)"},"promptSource":"typed","origin":{"kind":"human"}}"#)
+        #expect(transcript.entries.map(\.id.rawValue) == ["user:p1", "text:a1", "notice:e1", "notice:e1#1"])
+        #expect(
+            ClaudeSample.entry("notice:e1", in: transcript)
+                == .notice(ChatNotice(kind: .system, title: "Message from @w2", detail: "DONE")))
+        #expect(
+            ClaudeSample.entry("notice:e1#1", in: transcript)
+                == .notice(ChatNotice(kind: .system, title: "Teammate @w4 finished", detail: "All four passed")))
+        #expect(transcript.recordedPrompts.map(\.text) == ["Hello"])
     }
 
     // MARK: - Model changes and reasoning

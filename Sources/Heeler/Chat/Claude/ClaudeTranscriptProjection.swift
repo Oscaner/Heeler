@@ -638,7 +638,8 @@ private struct Builder {
                 return
             }
             switch ClaudeUserText.classify(text) {
-            case .prompt(let message), .external(let message): addSystemNotice(message, at: record)
+            case .prompt(let message): addSystemNotice(message, at: record)
+            case .external(let messages): addSystemNotices(messages, at: record)
             default: break
             }
             return
@@ -684,8 +685,8 @@ private struct Builder {
             addOutputNotice(kind: .shellCommand, output: output, at: record)
         case .taskNotification(let notification):
             add("notice:\(record.uuid)", at: record, .notice(Self.notice(for: notification)))
-        case .external(let message):
-            addSystemNotice(message, at: record)
+        case .external(let messages):
+            addSystemNotices(messages, at: record)
         case .skillLoaded, .hidden:
             // A model-loaded skill already shows as its Skill call's row.
             break
@@ -831,8 +832,8 @@ private struct Builder {
         case .taskNotification(let notification):
             guard !notificationKeys.contains(Self.key(of: notification)) else { return }
             add("notice:\(record.uuid)", at: record, .notice(Self.notice(for: notification)))
-        case .external(let message):
-            addSystemNotice(message, at: record)
+        case .external(let messages):
+            addSystemNotices(messages, at: record)
         default:
             break
         }
@@ -859,10 +860,19 @@ private struct Builder {
         return true
     }
 
-    private mutating func addSystemNotice(_ text: String, at record: ClaudeRecord) {
+    private mutating func addSystemNotice(_ text: String, at record: ClaudeRecord, suffix: String = "") {
         let parts = ClaudeText.noticeParts(text)
         guard !parts.title.isEmpty else { return }
-        add("notice:\(record.uuid)", at: record, .notice(ChatNotice(kind: .system, title: parts.title, detail: parts.detail)))
+        add(
+            "notice:\(record.uuid)\(suffix)", at: record,
+            .notice(ChatNotice(kind: .system, title: parts.title, detail: parts.detail)))
+    }
+
+    /// One notice per message a record from outside holds.
+    private mutating func addSystemNotices(_ messages: [String], at record: ClaudeRecord) {
+        for (position, message) in messages.enumerated() {
+            addSystemNotice(message, at: record, suffix: position == 0 ? "" : "#\(position)")
+        }
     }
 
     /// Output whose command is not on the branch.

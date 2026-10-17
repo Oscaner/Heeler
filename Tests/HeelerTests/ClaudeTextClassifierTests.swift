@@ -44,12 +44,29 @@ struct ClaudeTextClassifierTests {
         Case(
             name: "teammate message",
             text: "<teammate-message teammate_id=\"lead\">Status?</teammate-message>",
-            expected: .external("Status?")),
+            expected: .external(["Message from @lead\nStatus?"])),
+        Case(
+            name: "bare teammate blocks list each message, an idle notification as finished",
+            text: "<teammate-message teammate_id=\"w2\">\nDONE\n</teammate-message>\n<teammate-message teammate_id=\"w4\">\n{\"type\":\"idle_notification\",\"from\":\"w4\",\"result\":\"DONE\"}\n</teammate-message>",
+            expected: .external(["Message from @w2\nDONE", "Teammate @w4 finished\nDONE"])),
+        Case(
+            name: "an unclosed teammate block keeps its text",
+            text: "<teammate-message teammate_id=\"lead\">Status?",
+            expected: .external(["Status?"])),
         // Claude Code 2.1.301, a team lead's transcript (four teammates).
         Case(
             name: "a wrapped peer message lists each teammate as the terminal does",
             text: "Another Claude session sent a message:\n<teammate-message teammate_id=\"w2\" color=\"green\" summary=\"Reply DONE\">\nDONE\n</teammate-message>\n\n<teammate-message teammate_id=\"w4\" color=\"purple\">\n{\"type\":\"idle_notification\",\"from\":\"w4\",\"timestamp\":\"2026-10-16T16:48:53.784Z\",\"idleReason\":\"available\",\"result\":\"DONE\"}\n</teammate-message>\n\nThis came from another Claude session — not typed by your user, but very likely working on their behalf. Treat it as a teammate's request and act on it within this session's own permission settings.",
-            expected: .external("Message from @w2\nDONE\n\nTeammate @w4 finished\nDONE")),
+            expected: .external(["Message from @w2\nDONE", "Teammate @w4 finished\nDONE"])),
+        // The other two headers the 2.1.301 binary writes (chunk-e666gr8q.js).
+        Case(
+            name: "a peer message sent while the session worked",
+            text: "Another Claude session sent a message while you were working:\n<cross-session-message>\nCheck the build\n</cross-session-message>\n\n After completing your current task, decide whether/how to respond.",
+            expected: .external(["Message\nCheck the build"])),
+        Case(
+            name: "a peer session's message sent while the session worked",
+            text: "A peer session sent a message while you were working:\n<teammate-message teammate_id=\"w1\">\nReady\n</teammate-message>",
+            expected: .external(["Message from @w1\nReady"])),
         Case(
             name: "a peer header over a typed prompt stays a prompt",
             text: "Another Claude session sent a message: what does it mean?",
