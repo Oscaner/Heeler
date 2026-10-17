@@ -955,6 +955,26 @@ struct PiChatTests {
         #expect(silent.turns.last?.ending == .completed)
     }
 
+    @Test func ompPlanHandOffWriteShowsNoRowOrFile() throws {
+        let transcript = try Self.ompTranscript()
+        let tools = transcript.entries.compactMap { entry -> ChatToolActivity? in
+            if case .tool(let tool) = entry.content { tool } else { nil }
+        }
+        #expect(!tools.contains { $0.title.contains("xd://") })
+        #expect(!tools.contains { $0.callID?.hasPrefix("call_98595df0") == true })
+        #expect(transcript.entries.contains { $0.content == .notice(ChatNotice(kind: .system, title: "Plan ready for review")) })
+        // The plan turn's file is the plan itself.
+        let planTurn = tools.filter { $0.kind == .fileWrite }
+        #expect(planTurn.map(\.title) == ["local://append-plan-ok-plan.md"])
+        #expect(ChatTimelineProjection.summary(of: planTurn) == "Created 1 file")
+
+        // The result alone, its call above the lines read, shows nothing either.
+        let lines = try ChatFixture.lines("omp/approvals-asks-plan.jsonl")
+        var reducer = PiTranscriptReducer(program: .omp)
+        reducer.append(Array(lines[54...]))
+        #expect(Self.tool("call_98595df0", in: reducer.transcript(.init(windowStart: 1))) == nil)
+    }
+
     @Test func discardedBranchSummaryIsHidden() throws {
         let transcript = try Self.ompTranscript()
         #expect(!transcript.entries.contains { $0.id == ChatEntryID("pi:89c4c5bd") })

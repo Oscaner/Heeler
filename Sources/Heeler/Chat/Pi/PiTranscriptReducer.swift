@@ -4,7 +4,7 @@ import Foundation
 /// leaf's ancestry, including invisible extension/state entries. File order
 /// alone would resurrect messages abandoned by /tree or a branch switch.
 struct PiTranscriptReducer: ChatTranscriptReducer {
-    static let revision = 7
+    static let revision = 8
 
     private struct Record: Sendable {
         let offset: UInt64
@@ -99,6 +99,8 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
         /// The path each call names in its arguments, which Pi's edit
         /// result leaves out.
         var callPaths: [String: String] = [:]
+        /// Calls that show no row, and whose results show none.
+        var hiddenCalls: Set<String> = []
 
         func entryID(_ record: Record, _ suffix: String = "") -> ChatEntryID {
             ChatEntryID("pi:\(record.id ?? String(record.offset))\(suffix)")
@@ -256,11 +258,19 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                             guard let callID = block["id"]?.stringValue, let name = block["name"]?.stringValue else {
                                 continue
                             }
+                            let path = block["arguments"]?["path"]?.stringValue
+                            // Oh My Pi hands a plan to its review screen as a
+                            // write to `xd://propose`, which changes no file;
+                            // the notice its turn ends with says so.
+                            if name.lowercased() == "write", path?.hasPrefix("xd://") == true {
+                                hiddenCalls.insert(callID)
+                                continue
+                            }
                             let tool = Self.tool(
                                 name: name, arguments: block["arguments"], callID: callID, activity: context.activity,
                                 directory: directory)
                             calls[callID] = transcript.entries.count
-                            callPaths[callID] = block["arguments"]?["path"]?.stringValue
+                            callPaths[callID] = path
                             transcript.entries.append(
                                 ChatEntry(
                                     id: ChatEntryID("pi:tool:\(callID)"), sourceOffset: record.offset,
@@ -312,6 +322,12 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                     }
                 case "toolResult":
                     guard let callID = message["toolCallId"]?.stringValue else { continue }
+                    let resultText = Self.text(message["content"]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    lastToolResultText = resultText
+                    toolResultWrittenAt = Self.date(record)
+                    // A plan hand-off's result carries `details.xdev`, also
+                    // when its call is above the lines read.
+                    if hiddenCalls.contains(callID) || message["details"]?["xdev"] != nil { continue }
                     var tool: ChatToolActivity
                     let index = calls[callID]
                     if let index, case .tool(let existing) = transcript.entries[index].content {
@@ -321,9 +337,6 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                             name: message["toolName"]?.stringValue ?? "Tool", arguments: nil, callID: callID,
                             activity: context.activity, directory: directory)
                     }
-                    let resultText = Self.text(message["content"]).trimmingCharacters(in: .whitespacesAndNewlines)
-                    lastToolResultText = resultText
-                    toolResultWrittenAt = Self.date(record)
                     if message["isError"] == .bool(true) {
                         tool.status =
                             if resultText.hasPrefix(Self.deniedPrefix) || resultText == Self.askCancelled {
