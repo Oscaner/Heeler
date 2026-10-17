@@ -216,8 +216,9 @@ While Agent Status is Blocked, Chat answers the dialog on the Agent's screen
 with a native card in the Composer's place instead of sending the user to the
 terminal. The screen decides what a card offers. Chat reads the visible screen
 through `agent.read` with its ANSI colors, which also tell a narrow pane's
-leftover text apart, and joins it with the pending request in the transcript,
-a subagent's included. Labels are the program's own text.
+leftover text apart, and joins it with the main conversation's pending
+request in the transcript; a subagent's dialog is read from the screen alone.
+Labels are the program's own text.
 
 An answer compares a fingerprint of the dialog first and sends nothing if it
 changed, waits until the dialog has shown for 150 ms, presses keys through
