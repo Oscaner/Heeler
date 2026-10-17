@@ -24,7 +24,7 @@ struct GenericDialogCard: View {
             // The box holds still and its rows scroll inside it, so a long
             // excerpt keeps its corners.
             BlockedScrollingContent(maxHeight: max(maxHeight - CGFloat(numbers.count) * 52, 96)) {
-                GenericExcerptView(rows: excerpt.rows)
+                GenericExcerptView(texts: excerpt.displayLines ?? excerpt.rows.map(\.text))
             }
             .background(Color(uiColor: .tertiarySystemFill))
             .clipShape(.rect(cornerRadius: 12, style: .continuous))
@@ -81,10 +81,11 @@ struct BlockedKeyPad: View {
     }
 }
 
-/// The rows as the terminal shows them. Rules become lines: drawn in
-/// characters, they would wrap at a phone's width.
+/// The rows as the terminal shows them, or as the parser cleaned them up.
+/// Rules become lines: drawn in characters, they would wrap at a phone's
+/// width.
 private struct GenericExcerptView: View {
-    let rows: [ScreenRow]
+    let texts: [String]
 
     private enum Line {
         case text(String)
@@ -119,8 +120,8 @@ private struct GenericExcerptView: View {
     /// either end.
     private var lines: [Line] {
         var lines: [Line] = []
-        for row in rows {
-            let text = String(row.text.reversed().drop(while: \.isWhitespace).reversed())
+        for row in texts {
+            let text = String(row.reversed().drop(while: \.isWhitespace).reversed())
             if text.isEmpty {
                 if let last = lines.last, case .gap = last { continue }
                 if !lines.isEmpty { lines.append(.gap) }

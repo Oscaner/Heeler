@@ -219,7 +219,56 @@ enum OMPDialogParser {
         return .unrecognized(
             GenericDialogExcerpt(
                 rows: Array(screen.rows[panel.rows]), numbered: [:], reason: reason,
-                fingerprint: DialogFingerprint(program: .omp, excerptRows: [panel.title ?? ""] + unpointed)))
+                fingerprint: DialogFingerprint(program: .omp, excerptRows: [panel.title ?? ""] + unpointed),
+                displayLines: displayLines(of: panel)))
+    }
+
+    /// The panel as the card shows it: the title, then each section's rows
+    /// between the side borders, a rule between sections. Rows keep their
+    /// indent inside the panel, so options line up under the pointer.
+    private static func displayLines(of panel: OMPPanel) -> [String] {
+        var lines = panel.title.map { [displayText($0)] } ?? []
+        var hasSection = false
+        for section in panel.sections where !section.isEmpty {
+            if hasSection { lines.append(GenericDialogExcerpt.ruleLine) }
+            lines += section.map { String(repeating: " ", count: max(0, $0.indent - 1)) + displayText($0.text) }
+            hasSection = true
+        }
+        return lines
+    }
+
+    /// `text` with OMP's nerd-font symbols as the system font draws them:
+    /// the pointer, check boxes and radios mapped, any other Private Use
+    /// Area glyph, such as a key icon in the hints, dropped with its space.
+    private static func displayText(_ text: String) -> String {
+        var result = ""
+        var skipsBlank = false
+        for character in text {
+            if skipsBlank, ScreenRow.isBlank(character) {
+                skipsBlank = false
+                continue
+            }
+            skipsBlank = false
+            if let mapped = displayGlyphs[character] {
+                result.append(mapped)
+            } else if character.unicodeScalars.contains(where: isPrivateUse) {
+                skipsBlank = true
+            } else {
+                result.append(character)
+            }
+        }
+        return result
+    }
+
+    /// From OMP's nerd-font symbol table, with the Unicode symbols of its
+    /// plain table.
+    private static let displayGlyphs: [Character: Character] = [
+        "\u{F054}": "❯", "\u{F096}": "☐", "\u{F14A}": "☑", radio: "○", "\u{F192}": "◉",
+    ]
+
+    /// The Private Use Areas, where nerd fonts put their icons.
+    private static func isPrivateUse(_ scalar: Unicode.Scalar) -> Bool {
+        (0xE000...0xF8FF).contains(scalar.value) || scalar.value >= 0xF0000
     }
 }
 

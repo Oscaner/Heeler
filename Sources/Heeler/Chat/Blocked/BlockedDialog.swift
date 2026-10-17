@@ -254,6 +254,13 @@ struct GenericDialogExcerpt: Sendable, Hashable {
     /// Covers the excerpt's text without focus markers, for the same
     /// "screen unchanged" check a parsed dialog gets.
     let fingerprint: DialogFingerprint
+    /// What the card shows in place of `rows`, when the parser can read
+    /// the dialog's frame better than the phone can draw it: Oh My Pi's
+    /// panel without its borders, which wrap at a phone's width, and with
+    /// its nerd-font glyphs mapped or dropped. `ruleLine` marks a rule.
+    var displayLines: [String]? = nil
+
+    static let ruleLine = "───"
 }
 
 enum DialogParseResult: Sendable, Hashable {

@@ -185,6 +185,36 @@ struct OMPDialogParserTests {
         #expect(excerpt.reason == "Heeler answers only Oh My Pi's single-select questions. Answer this one in the terminal.")
     }
 
+    /// The phone wraps the 62-column panel's borders and has no nerd font,
+    /// so the card shows the panel's text with the borders gone and the
+    /// glyphs mapped or dropped. The fingerprint still reads the rows.
+    @Test func aCapturedMultiSelectQuestionShowsWithoutBordersOrNerdGlyphs() throws {
+        let excerpt = try #require(try parse("omp-34-ask-multi-62").excerpt)
+        let lines = try #require(excerpt.displayLines)
+        let text = lines.joined(separator: "\n")
+        #expect(!text.unicodeScalars.contains { (0xE000...0xF8FF).contains($0.value) || $0.value >= 0xF0000 })
+        #expect(!text.contains("│") && !text.contains("╭") && !text.contains("╰"))
+        #expect(
+            lines == [
+                "Ask", " colors    Submit", "请选择颜色（可多选）", GenericDialogExcerpt.ruleLine, "❯ ☐ red", "  ☐ green",
+                "  ☐ blue", "  ☐ Other (type your own)", GenericDialogExcerpt.ruleLine,
+                "toggle · submit · ↑/↓ move · /←/→ question · cance…",
+            ])
+        #expect(excerpt.fingerprint.value == "038f64a1e20da36752fdc2c5f4fa044f4553a1f6a2a30989a11ec37bcc059fcc")
+    }
+
+    @Test func aCheckedBoxAndRadiosShowAsUnicodeSymbols() throws {
+        let screen = Self.ask(
+            ["Pick fruits"], options: ["\u{F054} \u{F14A} apple", "  \u{F096} pear", "  \u{F192} plum", "  \u{F10C} fig"],
+            footer: Self.multiSelectFooter)
+        let lines = try #require(BlockedDialogParser.parse(screen, program: .omp).excerpt?.displayLines)
+        #expect(lines.contains("❯ ☑ apple"))
+        #expect(lines.contains("  ☐ pear"))
+        #expect(lines.contains("  ◉ plum"))
+        #expect(lines.contains("  ○ fig"))
+        #expect(lines.last == "toggle · submit · ↑/↓ move · cancel")
+    }
+
     @Test func aDrawnMultiSelectQuestionIsUnrecognized() async throws {
         let tui = FakeQuestionTUI(
             .omp, [.init(header: "fruit", text: "Pick fruits", options: ["apple", "pear"], isMultiSelect: true)])
