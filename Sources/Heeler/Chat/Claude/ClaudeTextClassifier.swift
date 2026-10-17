@@ -404,14 +404,16 @@ enum ClaudeText {
     }
 
     /// A notice built from free text: its first non-empty line as the title,
-    /// and the whole text, capped, as the detail when there is more.
+    /// and the lines after it, capped, as the detail. A first line too long
+    /// for a title leaves the whole text as the detail.
     static func noticeParts(_ text: String) -> (title: String, detail: String?) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let firstLine =
-            trimmed.split(separator: "\n", omittingEmptySubsequences: true).first
-            .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        let lines = trimmed.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: true)
+        let firstLine = lines.first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
         let title = String(firstLine.prefix(maximumTitleLength))
-        guard title != trimmed else { return (title, nil) }
-        return (title, ChatToolPreview(capping: trimmed).text)
+        let rest = title == firstLine
+            ? (lines.count > 1 ? lines[1].trimmingCharacters(in: .whitespacesAndNewlines) : "")
+            : trimmed
+        return (title, rest.isEmpty ? nil : ChatToolPreview(capping: rest).text)
     }
 }

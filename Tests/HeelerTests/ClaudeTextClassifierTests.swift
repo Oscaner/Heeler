@@ -173,9 +173,13 @@ struct ClaudeTextClassifierTests {
         let single = ClaudeText.noticeParts("  One line  ")
         #expect(single.title == "One line")
         #expect(single.detail == nil)
-        let parts = ClaudeText.noticeParts("API Error: 529\nOverloaded, retry later")
+        let parts = ClaudeText.noticeParts("API Error: 529\n\nOverloaded, retry later\nin a minute")
         #expect(parts.title == "API Error: 529")
-        #expect(parts.detail == "API Error: 529\nOverloaded, retry later")
+        #expect(parts.detail == "Overloaded, retry later\nin a minute")
+        let long = String(repeating: "x", count: ClaudeText.maximumTitleLength + 5) + "\nmore"
+        let cut = ClaudeText.noticeParts(long)
+        #expect(cut.title == String(repeating: "x", count: ClaudeText.maximumTitleLength))
+        #expect(cut.detail == long)
     }
 }
 
