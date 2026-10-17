@@ -4,7 +4,7 @@ import Foundation
 /// leaf's ancestry, including invisible extension/state entries. File order
 /// alone would resurrect messages abandoned by /tree or a branch switch.
 struct PiTranscriptReducer: ChatTranscriptReducer {
-    static let revision = 9
+    static let revision = 10
 
     private struct Record: Sendable {
         let offset: UInt64
@@ -272,19 +272,32 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                                 continue
                             }
                             let path = block["arguments"]?["path"]?.stringValue
+                            let device = Self.device(name: name, path: path)
                             // Oh My Pi hands a plan to its review screen as a
                             // write to `xd://propose`, which changes no file;
                             // the notice its turn ends with says so.
-                            if name.lowercased() == "write", path?.hasPrefix("xd://") == true {
+                            if device == Self.planDevice {
                                 hiddenCalls.insert(callID)
                                 continue
                             }
-                            let tool = Self.tool(
-                                name: name, arguments: block["arguments"], callID: callID, activity: context.activity,
-                                directory: directory)
+                            // Any other device is a tool Oh My Pi drives by a
+                            // write to `xd://<tool>`, its arguments as JSON in
+                            // `content`: a row for that tool, not a file.
+                            let tool =
+                                if let device {
+                                    Self.tool(
+                                        name: device, arguments: Self.deviceArguments(block["arguments"]),
+                                        callID: callID, activity: context.activity, directory: directory)
+                                } else {
+                                    Self.tool(
+                                        name: name, arguments: block["arguments"], callID: callID,
+                                        activity: context.activity, directory: directory)
+                                }
                             calls[callID] = transcript.entries.count
-                            callPaths[callID] = path
-                            if name.lowercased() == "write", let content = block["arguments"]?["content"]?.stringValue {
+                            callPaths[callID] = device == nil ? path : nil
+                            if device == nil, name.lowercased() == "write",
+                                let content = block["arguments"]?["content"]?.stringValue
+                            {
                                 writes[callID] = (content, ChatOutputReference(offset: record.offset, length: record.length))
                             }
                             transcript.entries.append(
@@ -341,16 +354,17 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                     let resultText = Self.text(message["content"]).trimmingCharacters(in: .whitespacesAndNewlines)
                     lastToolResultText = resultText
                     toolResultWrittenAt = Self.date(record)
-                    // A plan hand-off's result carries `details.xdev`, also
-                    // when its call is above the lines read.
-                    if hiddenCalls.contains(callID) || message["details"]?["xdev"] != nil { continue }
-                    var tool: ChatToolActivity
+                    // A device's result names it in `details.xdev`, which
+                    // tells a plan hand-off whose call is above the lines read.
+                    let device = message["details"]?["xdev"]?["tool"]?.stringValue
                     let index = calls[callID]
+                    if hiddenCalls.contains(callID) || (index == nil && device == Self.planDevice) { continue }
+                    var tool: ChatToolActivity
                     if let index, case .tool(let existing) = transcript.entries[index].content {
                         tool = existing
                     } else {
                         tool = Self.tool(
-                            name: message["toolName"]?.stringValue ?? "Tool", arguments: nil, callID: callID,
+                            name: device ?? message["toolName"]?.stringValue ?? "Tool", arguments: nil, callID: callID,
                             activity: context.activity, directory: directory)
                     }
                     // The write call whose text the row shows as its output.
@@ -607,6 +621,8 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
     private static let ompSilentAbort = "__omp.silent_abort__"
     /// The result of Oh My Pi's plan proposal, before its review screen.
     private static let planReady = "Plan ready for review."
+    /// The `xd://` device Oh My Pi proposes a plan through.
+    private static let planDevice = "propose"
     /// Pi's assistant error for a turn the user stopped.
     private static let piAbort = "This operation was aborted"
     /// Oh My Pi's results for a call the user declined: an approval denied,
@@ -618,6 +634,25 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
     private static let steerWriteWindow: TimeInterval = 2
     /// Results of calls the user stopped while they ran.
     private static let abortedResults: Set<String> = ["Command aborted", "Operation aborted"]
+
+    /// The device a write to `xd://<tool>` or `xd://<tool>/<topic>` drives:
+    /// Oh My Pi mounts discoverable tools there (setting `tools.xdev`, on by
+    /// default in 18.11).
+    private static func device(name: String, path: String?) -> String? {
+        guard name.lowercased() == "write", let path, path.hasPrefix(devicePrefix) else { return nil }
+        let device = path.dropFirst(devicePrefix.count).prefix { $0 != "/" }
+        return device.isEmpty ? nil : String(device)
+    }
+
+    private static let devicePrefix = "xd://"
+
+    /// A device call's arguments: the JSON object its write's `content` holds.
+    private static func deviceArguments(_ arguments: JSONValue?) -> JSONValue? {
+        guard let content = arguments?["content"]?.stringValue, let data = content.data(using: .utf8) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(JSONValue.self, from: data)
+    }
 
     private static func blocks(_ content: JSONValue?) -> [JSONValue] {
         if case .array(let blocks) = content { return blocks }

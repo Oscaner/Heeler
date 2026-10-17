@@ -1049,6 +1049,39 @@ struct PiChatTests {
         #expect(Self.tool("call_98595df0", in: reducer.transcript(.init(windowStart: 1))) == nil)
     }
 
+    /// Oh My Pi 18.11 mounts discoverable tools (MCP tools, generate_image,
+    /// report_issue) as `xd://` devices driven by `write`. Only the plan
+    /// hand-off hides; any other device is a row for its tool, not a file,
+    /// and one waiting on an approval is a pending request.
+    @Test func ompDeviceWriteShowsAsItsTool() throws {
+        let call = #"{"type":"message","id":"a","parentId":"u","message":{"role":"assistant","content":[{"type":"toolCall","id":"c","name":"write","arguments":{"path":"xd://generate_image","content":"{\"prompt\":\"a red fox\"}"}}],"stopReason":"toolUse"}}"#
+        let head = [
+            Self.header,
+            #"{"type":"message","id":"u","parentId":null,"message":{"role":"user","content":[{"type":"text","text":"draw a fox"}]}}"#,
+            call,
+        ]
+        var waiting = PiTranscriptReducer(program: .omp)
+        waiting.append(Self.lines(head))
+        let blocked = waiting.transcript(.init(activity: .blocked))
+        #expect(blocked.pendingRequests.map(\.toolName) == ["generate_image"])
+
+        let result = #"{"type":"message","id":"r","parentId":"a","message":{"role":"toolResult","toolCallId":"c","toolName":"write","content":[{"type":"text","text":"Image saved"}],"details":{"xdev":{"tool":"generate_image","mode":"execute"}},"isError":false}}"#
+        var reducer = PiTranscriptReducer(program: .omp)
+        reducer.append(Self.lines(head + [result]))
+        let tool = try #require(Self.tool("c", in: reducer.transcript(.init(activity: .idle))))
+        #expect(tool.kind == .other)
+        #expect(tool.name == "generate_image")
+        #expect(tool.title == "generate_image")
+        #expect(tool.status == .succeeded)
+        #expect(tool.fileChanges == nil)
+        #expect(tool.preview?.text == "Image saved")
+
+        // Its result alone, the call above the lines read, still shows.
+        var paged = PiTranscriptReducer(program: .omp)
+        paged.append(Self.lines([Self.header, result]))
+        #expect(Self.tool("c", in: paged.transcript(.init(windowStart: 1)))?.name == "generate_image")
+    }
+
     @Test func summariesPreviewAsPlainLines() throws {
         var reducer = PiTranscriptReducer()
         reducer.append(try ChatFixture.lines("pi/summaries.jsonl"))
