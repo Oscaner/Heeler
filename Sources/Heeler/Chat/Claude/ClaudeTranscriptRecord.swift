@@ -506,7 +506,7 @@ extension ClaudeToolUseResult {
             diff = ChatDiffStats(added: change.added, removed: change.removed)
             fileChanges = ChatFileChanges(files: [change], directory: directory)
         } else if raw.type == "create", let content = raw.contentText {
-            let change = Self.creation(at: raw.filePath ?? "", of: content)
+            let change = ChatFileChange.allAdded(path: raw.filePath ?? "", content: content, kind: .created)
             diff = ChatDiffStats(added: change.added, removed: 0)
             fileChanges = ChatFileChanges(files: [change], directory: directory)
         }
@@ -527,29 +527,6 @@ extension ClaudeToolUseResult {
         answers = raw.answers ?? [:]
         plan = raw.plan
         todos = raw.newTodos?.compactMap(ClaudeTodo.init)
-    }
-
-    /// Lines in a file's text: a final newline ends the last line rather
-    /// than starting another.
-    static func lineCount(_ text: String) -> Int {
-        guard !text.isEmpty else { return 0 }
-        let newlines = text.utf8.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 }
-        return text.utf8.last == 0x0A ? newlines : newlines + 1
-    }
-
-    /// A created file as one hunk of added lines. Only the lines a row can
-    /// keep are split out; the counts cover the whole text.
-    private static func creation(at path: String, of content: String) -> ChatFileChange {
-        let count = lineCount(content)
-        let lines = content.utf8
-            .split(separator: 0x0A, maxSplits: ChatFileChanges.limits.lines, omittingEmptySubsequences: false)
-            .prefix(min(count, ChatFileChanges.limits.lines))
-            .map { "+" + String(decoding: $0, as: UTF8.self) }
-        let hunks = lines.isEmpty ? [] : [ChatDiffHunk(oldStart: 0, oldLines: 0, newStart: 1, newLines: count, lines: lines)]
-        var change = ChatFileChange(path: path, kind: .created, recorded: hunks)
-        change.added = count
-        change.lineCount = count
-        return change
     }
 
     /// The changes a Bash command made, or nil when the record says nothing

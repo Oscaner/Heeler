@@ -367,12 +367,13 @@ enum ChatTimelineProjection {
     /// "Ran 2 commands, Edited 2 files": what the calls did, in a fixed
     /// order. Files count once per path as the rows show it, relative to
     /// where the call ran; a write over an existing file, as its recorded
-    /// change says, counts as an edit.
+    /// change says, counts as an edit, and a write that cannot tell counts
+    /// as written.
     static func summary(of tools: [ChatToolActivity]) -> String {
         func count(_ kind: ChatToolActivity.Kind) -> Int {
             tools.filter { $0.kind == kind }.count
         }
-        enum FileVerb { case edited, created, read }
+        enum FileVerb { case edited, created, wrote, read }
         var paths: [FileVerb: Set<String>] = [:]
         var more: [FileVerb: Int] = [:]
         for (index, tool) in tools.enumerated() {
@@ -385,7 +386,14 @@ enum ChatTimelineProjection {
             }
             if let changes = tool.fileChanges, !changes.files.isEmpty || changes.moreFiles > 0 {
                 for file in changes.files {
-                    paths[verb == .created && file.kind != .created ? .edited : verb, default: []].insert(changes.displayPath(of: file))
+                    let fileVerb: FileVerb =
+                        switch (verb, file.kind) {
+                        case (.created, .created): .created
+                        case (.created, .written): .wrote
+                        case (.created, _): .edited
+                        default: verb
+                        }
+                    paths[fileVerb, default: []].insert(changes.displayPath(of: file))
                 }
                 more[verb, default: 0] += changes.moreFiles
             } else {
@@ -406,6 +414,7 @@ enum ChatTimelineProjection {
         if case let n = count(.command), n > 0 { parts.append("Ran \(plural(n, "command", "commands"))") }
         if case let n = files(.edited), n > 0 { parts.append("Edited \(plural(n, "file", "files"))") }
         if case let n = files(.created), n > 0 { parts.append("Created \(plural(n, "file", "files"))") }
+        if case let n = files(.wrote), n > 0 { parts.append("Wrote \(plural(n, "file", "files"))") }
         if case let n = files(.read), n > 0 { parts.append("Read \(plural(n, "file", "files"))") }
         if case let n = count(.search), n > 0 { parts.append("Ran \(plural(n, "search", "searches"))") }
         if case let n = count(.listing), n > 0 { parts.append("Listed \(plural(n, "folder", "folders"))") }

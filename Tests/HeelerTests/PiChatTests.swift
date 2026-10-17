@@ -725,6 +725,61 @@ struct PiChatTests {
         #expect(PiFileChanges.numberedHunks(" 1|a\n@@ -1 +1 @@") == nil)
     }
 
+    /// Oh My Pi 18.11.1's write (OMP-05): the result records only where it
+    /// wrote, and the call holds the text.
+    private static let ompWrite = [
+        header,
+        #"{"type":"message","id":"u","parentId":null,"message":{"role":"user","content":"create todo.txt"}}"#,
+        #"{"type":"message","id":"c","parentId":"u","message":{"role":"assistant","content":[{"type":"toolCall","id":"w1","name":"write","arguments":{"path":"todo.txt","content":"buy milk\n"}}],"stopReason":"toolUse"}}"#,
+        #"{"type":"message","id":"r","parentId":"c","message":{"role":"toolResult","toolCallId":"w1","toolName":"write","content":[{"type":"text","text":"Successfully wrote 9 bytes to todo.txt"}],"details":{"resolvedPath":"/project/todo.txt"},"isError":false}}"#,
+    ]
+
+    @Test func ompWriteShowsItsTextAsWritten() throws {
+        var reducer = PiTranscriptReducer(program: .omp)
+        let lines = Self.lines(Self.ompWrite)
+        reducer.append(lines)
+        let tool = try #require(Self.toolRow(reducer.transcript(.init())))
+
+        #expect(tool.kind == .fileWrite)
+        #expect(tool.title == "todo.txt")
+        #expect(tool.status == .succeeded)
+        #expect(tool.diff == ChatDiffStats(added: 1, removed: 0))
+        let changes = try #require(tool.fileChanges)
+        #expect(changes.files.map(\.kind) == [.written])
+        #expect(changes.files.first?.added == 1)
+        #expect(
+            changes.files.first?.hunks == [
+                ChatDiffHunk(oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines: ["+buy milk"])
+            ])
+        #expect(tool.showsDiffAsOutput)
+        #expect(ChatTimelineProjection.summary(of: [tool]) == "Wrote 1 file")
+
+        // An expanded row, its lines dropped as the cache drops them, reads
+        // them again from the call.
+        #expect(tool.output == ChatOutputReference(offset: lines[2].offset, length: lines[2].length))
+        var cached = tool
+        cached.fileChanges = try JSONDecoder().decode(ChatFileChanges.self, from: JSONEncoder().encode(changes))
+        guard case .preview(.none, let expanded)? = reducer.output(of: lines[2], for: cached) else {
+            Issue.record("expected the call's text")
+            return
+        }
+        #expect(expanded == changes)
+    }
+
+    @Test func failedOrEmptyWriteShowsItsResult() throws {
+        var failed = Self.ompWrite
+        failed[3] = failed[3].replacingOccurrences(of: #""isError":false"#, with: #""isError":true"#)
+        var empty = Self.ompWrite
+        empty[2] = empty[2].replacingOccurrences(of: #""buy milk\n""#, with: #""""#)
+        for rows in [failed, empty] {
+            var reducer = PiTranscriptReducer(program: .omp)
+            reducer.append(Self.lines(rows))
+            let tool = try #require(Self.toolRow(reducer.transcript(.init())))
+            #expect(tool.fileChanges == nil)
+            #expect(tool.preview?.text == "Successfully wrote 9 bytes to todo.txt")
+        }
+    }
+
     @Test func ompMultiFileEditListsEachFile() throws {
         let details: JSONValue = try JSONDecoder().decode(
             JSONValue.self,
@@ -966,7 +1021,7 @@ struct PiChatTests {
         // The plan turn's file is the plan itself.
         let planTurn = tools.filter { $0.kind == .fileWrite }
         #expect(planTurn.map(\.title) == ["local://append-plan-ok-plan.md"])
-        #expect(ChatTimelineProjection.summary(of: planTurn) == "Created 1 file")
+        #expect(ChatTimelineProjection.summary(of: planTurn) == "Wrote 1 file")
 
         // The result alone, its call above the lines read, shows nothing either.
         let lines = try ChatFixture.lines("omp/approvals-asks-plan.jsonl")

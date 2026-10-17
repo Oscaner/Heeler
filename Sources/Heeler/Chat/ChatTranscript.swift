@@ -392,6 +392,9 @@ struct ChatFileChange: Equatable, Codable, Sendable {
         case updated
         case created
         case deleted
+        /// Written whole, over a file that may or may not have existed: Oh
+        /// My Pi's write records its content and no diff.
+        case written
 
         /// The word Claude Code's terminal puts before the path.
         var label: String {
@@ -399,6 +402,7 @@ struct ChatFileChange: Equatable, Codable, Sendable {
             case .updated: "Updated"
             case .created: "Created"
             case .deleted: "Deleted"
+            case .written: "Wrote"
             }
         }
     }
@@ -445,6 +449,30 @@ struct ChatFileChange: Equatable, Codable, Sendable {
         let kept = Self.keeping(recorded, within: ChatFileChanges.limits)
         hunks = kept.hunks
         isLineCut = kept.isLineCut
+    }
+
+    /// A file's whole text as one hunk of added lines, for a write that
+    /// recorded its content and no diff. Only the lines a row can keep are
+    /// split out; the counts cover the whole text.
+    static func allAdded(path: String, content: String, kind: Kind) -> ChatFileChange {
+        let count = lineCount(content)
+        let lines = content.utf8
+            .split(separator: 0x0A, maxSplits: ChatFileChanges.limits.lines, omittingEmptySubsequences: false)
+            .prefix(min(count, ChatFileChanges.limits.lines))
+            .map { "+" + String(decoding: $0, as: UTF8.self) }
+        let hunks = lines.isEmpty ? [] : [ChatDiffHunk(oldStart: 0, oldLines: 0, newStart: 1, newLines: count, lines: lines)]
+        var change = ChatFileChange(path: path, kind: kind, recorded: hunks)
+        change.added = count
+        change.lineCount = count
+        return change
+    }
+
+    /// Lines in a file's text: a final newline ends the last line rather
+    /// than starting another.
+    private static func lineCount(_ text: String) -> Int {
+        guard !text.isEmpty else { return 0 }
+        let newlines = text.utf8.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 }
+        return text.utf8.last == 0x0A ? newlines : newlines + 1
     }
 
     /// The change with no more of its hunks than `limits` allow, as a row

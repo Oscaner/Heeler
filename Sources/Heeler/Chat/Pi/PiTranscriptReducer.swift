@@ -99,6 +99,9 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
         /// The path each call names in its arguments, which Pi's edit
         /// result leaves out.
         var callPaths: [String: String] = [:]
+        /// The text each write call names, which its result leaves out,
+        /// and the call's line, which an expanded row reads it from again.
+        var writes: [String: (content: String, call: ChatOutputReference)] = [:]
         /// Calls that show no row, and whose results show none.
         var hiddenCalls: Set<String> = []
 
@@ -271,6 +274,9 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                                 directory: directory)
                             calls[callID] = transcript.entries.count
                             callPaths[callID] = path
+                            if name.lowercased() == "write", let content = block["arguments"]?["content"]?.stringValue {
+                                writes[callID] = (content, ChatOutputReference(offset: record.offset, length: record.length))
+                            }
                             transcript.entries.append(
                                 ChatEntry(
                                     id: ChatEntryID("pi:tool:\(callID)"), sourceOffset: record.offset,
@@ -337,6 +343,8 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                             name: message["toolName"]?.stringValue ?? "Tool", arguments: nil, callID: callID,
                             activity: context.activity, directory: directory)
                     }
+                    // The write call whose text the row shows as its output.
+                    var writtenBy: ChatOutputReference?
                     if message["isError"] == .bool(true) {
                         tool.status =
                             if resultText.hasPrefix(Self.deniedPrefix) || resultText == Self.askCancelled {
@@ -353,6 +361,14 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                             details: message["details"], callPath: callPaths[callID], directory: directory)
                         {
                             Self.show(changes, in: &tool, namedByCall: callPaths[callID] != nil)
+                        } else if let path = callPaths[callID], !path.isEmpty, let write = writes[callID],
+                            !write.content.isEmpty
+                        {
+                            // A write records no diff and says nothing of what
+                            // the file held before: its text, all added.
+                            let file = ChatFileChange.allAdded(path: path, content: write.content, kind: .written)
+                            Self.show(ChatFileChanges(files: [file], directory: directory), in: &tool, namedByCall: true)
+                            writtenBy = write.call
                         }
                     }
                     tool.preview = Self.preview(message)
@@ -360,7 +376,7 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                         tool.preview?.isTruncated = true
                         tool.note = "Output exceeds the preview limit."
                     }
-                    tool.output = ChatOutputReference(offset: record.offset, length: record.length)
+                    tool.output = writtenBy ?? ChatOutputReference(offset: record.offset, length: record.length)
                     if let index {
                         transcript.entries[index].content = .tool(tool)
                     } else {
@@ -409,8 +425,22 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
 
     func output(of line: ChatLine, for tool: ChatToolActivity) -> ChatToolOutput? {
         guard !line.isTruncated, let record = try? JSONDecoder().decode(JSONValue.self, from: line.data),
-            record["type"]?.stringValue == "message", let message = record["message"],
-            message["role"]?.stringValue == "toolResult", message["toolCallId"]?.stringValue == tool.callID
+            record["type"]?.stringValue == "message", let message = record["message"]
+        else { return nil }
+        // A write's row reads its text from the call.
+        if message["role"]?.stringValue == "assistant" {
+            guard let file = tool.fileChanges?.files.first, file.kind == .written,
+                let call = Self.blocks(message["content"]).first(where: {
+                    $0["type"]?.stringValue == "toolCall" && $0["id"]?.stringValue == tool.callID
+                }),
+                let content = call["arguments"]?["content"]?.stringValue
+            else { return nil }
+            let changes = ChatFileChanges(
+                files: [.allAdded(path: file.path, content: content, kind: .written)],
+                directory: tool.fileChanges?.directory)
+            return .preview(nil, fileChanges: changes)
+        }
+        guard message["role"]?.stringValue == "toolResult", message["toolCallId"]?.stringValue == tool.callID
         else { return nil }
         // Pi's path came from the call, which the row's changes kept.
         let fileChanges =

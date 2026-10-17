@@ -356,6 +356,12 @@ struct ChatTimelineProjectionTests {
         overwritten.fileChanges = ChatFileChanges(files: [ChatFileChange(path: "old", kind: .updated, added: 1, removed: 1, lineCount: 1)])
         #expect(summary([created, overwritten]) == "Edited 1 file, Created 1 file")
 
+        // A write that can't tell a new file from an old one wrote it.
+        var written = tool(.fileWrite)
+        written.fileChanges = ChatFileChanges(files: [ChatFileChange(path: "todo.txt", kind: .written, added: 1, removed: 0, lineCount: 1)])
+        #expect(summary([written]) == "Wrote 1 file")
+        #expect(summary([overwritten, created, written]) == "Edited 1 file, Created 1 file, Wrote 1 file")
+
         // A failed edit has only its title, relative to where it ran; the
         // retry that worked records the full path. They are one file.
         let failed = tool(.fileEdit, title: "c.txt")
