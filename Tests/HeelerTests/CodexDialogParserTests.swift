@@ -288,6 +288,31 @@ struct CodexDialogParserTests {
         #expect(excerpt.numbered == [1: "Allow once", 2: "Allow for the whole session", 3: "Deny  me"])
     }
 
+    /// Codex 0.162.1 puts the description two blanks past the widest label
+    /// (`selection_popup_common.rs` `desc_col = max_name_width + 2`), so on a
+    /// pane wide enough for the label not to wrap that row has only a
+    /// two-blank gap; the description's dim style marks it.
+    @Test("A wide two-column list cuts the widest label at its two-blank gap (synthetic, codex-19 rows)")
+    func twoBlankGapLabels() throws {
+        let screen = ScreenFixture.synthetic([
+            "  " + SGR.bold + "Implement this plan?" + SGR.reset,
+            "",
+            SGR.bold + SGR.reverse + "› 1. Yes, implement this plan          " + SGR.reset + SGR.reverse
+                + "Switch to Default and start coding" + SGR.reset,
+            "  2. Yes, clear context and implement  " + SGR.reset + SGR.dim
+                + "Start a fresh thread (current context: 4% used)" + SGR.reset,
+            "  3. No, stay in Plan mode             " + SGR.reset + SGR.dim + "Continue planning with the model"
+                + SGR.reset,
+            "",
+            "  " + SGR.dim + "enter to submit | esc to cancel" + SGR.reset,
+        ])
+        let excerpt = try #require(CodexDialogParser.parse(screen).excerpt, "parsed as \(CodexDialogParser.parse(screen))")
+        #expect(
+            excerpt.numbered == [
+                1: "Yes, implement this plan", 2: "Yes, clear context and implement", 3: "No, stay in Plan mode",
+            ])
+    }
+
     @Test("A list whose wrapped details put the pointed option far above the footer still goes generic (synthetic)")
     func tallWrappedList() throws {
         let details = (1...18).map { "       detail line \($0)" }

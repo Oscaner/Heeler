@@ -526,10 +526,24 @@ private struct CodexDialogReader {
         return [:]
     }
 
-    /// The row's text up to its first gap of three or more blanks, where a
-    /// two-column list's description starts.
+    /// The row's text before a two-column list's description. Codex puts
+    /// the description two blanks past the widest label (more past shorter
+    /// ones) and draws it dim, or plain beside the pointed row's bold label,
+    /// as `splitColumns` reads a question's. A row drawn otherwise cuts at
+    /// its first gap of three or more blanks.
     private func labelText(of runs: [ScreenRun]) -> String {
-        let text = text(of: runs)
+        let isBoldRow = runs.first { !DialogRowScanner.isBlank($0) }?.style.isBold ?? false
+        var label = ""
+        for run in runs {
+            let isDescription = isBoldRow ? !run.style.isBold : run.style.isDim
+            if isDescription, !DialogRowScanner.isBlank(run), !label.isEmpty,
+                ScreenRow.normalizedSpaces(label).hasSuffix("  ")
+            {
+                break
+            }
+            label += run.text
+        }
+        let text = ScreenRow.normalizedSpaces(label).trimmingCharacters(in: .whitespaces)
         guard let gap = text.range(of: "   ") else { return text }
         return text[..<gap.lowerBound].trimmingCharacters(in: .whitespaces)
     }
