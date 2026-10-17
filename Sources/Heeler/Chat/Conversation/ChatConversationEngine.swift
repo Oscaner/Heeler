@@ -370,8 +370,9 @@ actor ChatConversationEngine {
 
     /// Saves what shows, at most once per save interval unless `force`.
     func save(force: Bool = false) async {
+        let entries = snapshot.transcript.recordedEntries
         guard case .following(let path) = snapshot.phase, let follower,
-            let head = follower.head, !snapshot.transcript.entries.isEmpty
+            let head = follower.head, !entries.isEmpty
         else { return }
         let date = now()
         if let lastSave {
@@ -385,7 +386,7 @@ actor ChatConversationEngine {
             key: cacheKey, adapterRevision: adapter.revision, transcriptPath: path, head: head,
             coverageStart: coverageStart, coverageEnd: follower.readOffset,
             reachedStart: (joined?.reachedStart ?? (windowStart == 0)) || olderUnreadable,
-            title: snapshot.transcript.title, entries: snapshot.transcript.entries, savedAt: date,
+            title: snapshot.transcript.title, entries: entries, savedAt: date,
             backgroundWork: snapshot.transcript.listedBackgroundWork,
             latestPromptOffset: snapshot.transcript.latestPromptOffset, turns: snapshot.transcript.turns)
         await cache.save(document)

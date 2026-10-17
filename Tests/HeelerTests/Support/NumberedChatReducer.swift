@@ -13,7 +13,8 @@ import Foundation
 /// "journal":"<path>","at":<epoch>}` launches Background Work, a Subagent
 /// when it names no journal, and `{"ended":"<id>"}` ends it.
 /// `{"turnEnded":true}` completes the turn the last prompt opened, or the
-/// one opened above the loaded lines.
+/// one opened above the loaded lines. `{"waiting":"<text>"}` is a prompt
+/// shown before the file records it: entry `w-<offset>`, unrecorded.
 struct NumberedChatReducer: ChatTranscriptReducer {
     private struct Record: Codable {
         var n: Int?
@@ -28,6 +29,7 @@ struct NumberedChatReducer: ChatTranscriptReducer {
         var at: Double?
         var ended: String?
         var turnEnded: Bool?
+        var waiting: String?
     }
 
     let seed: ChatReducerSeed
@@ -70,6 +72,11 @@ struct NumberedChatReducer: ChatTranscriptReducer {
 
     static let turnEnd = #"{"turnEnded":true}"# + "\n"
 
+    static func waiting(_ text: String) -> String {
+        let data = (try? JSONEncoder().encode(Record(waiting: text))) ?? Data()
+        return String(decoding: data, as: UTF8.self) + "\n"
+    }
+
     static func launch(_ id: String, journal: String?, at date: Date? = nil) -> String {
         let record = Record(workflow: id, journal: journal, at: date?.timeIntervalSince1970)
         let data = (try? JSONEncoder().encode(record)) ?? Data()
@@ -96,6 +103,11 @@ struct NumberedChatReducer: ChatTranscriptReducer {
                     return ChatEntry(
                         id: ChatEntryID("p-\(line.offset)"), sourceOffset: line.offset,
                         content: .user(ChatUserMessage(text: prompt)))
+                }
+                if let waiting = record?.waiting {
+                    return ChatEntry(
+                        id: ChatEntryID("w-\(line.offset)"), sourceOffset: line.offset,
+                        content: .user(ChatUserMessage(text: waiting, wasQueued: true)))
                 }
                 if record?.compacted == true {
                     return ChatEntry(
@@ -128,7 +140,9 @@ struct NumberedChatReducer: ChatTranscriptReducer {
             backgroundWork: Self.backgroundWork(records),
             latestPromptOffset: records.last { $0.record?.prompt != nil }?.line.offset,
             backgroundWorkEnds: Self.backgroundWorkEnds(records),
-            turns: Self.turns(records).turns, precedingTurnEnd: Self.turns(records).precedingEnd)
+            turns: Self.turns(records).turns, precedingTurnEnd: Self.turns(records).precedingEnd,
+            unrecordedEntryIDs: Set(
+                records.compactMap { line, record in record?.waiting.map { _ in ChatEntryID("w-\(line.offset)") } }))
     }
 
     private static func turns(_ records: [(line: ChatLine, record: Record?)]) -> (turns: [ChatTurn], precedingEnd: ChatTurnEnd?) {

@@ -672,6 +672,20 @@ struct ChatConversationEngineTests {
         #expect(await fixture.savedDocument()?.entries.last?.id.rawValue == "n-30")
     }
 
+    @Test("A waiting bubble shows but is never saved, so a later window cannot bring it back")
+    func unrecordedEntriesAreNotSaved() async throws {
+        let fixture = Fixture()
+        await fixture.files.write(Self.lines(0..<3) + NumberedChatReducer.waiting("later"), at: Self.claudePath)
+        let engine = fixture.makeEngine()
+        let opened = await fixture.open(engine)
+        let bubble = "w-\(Self.offset(of: 3))"
+        #expect(Self.numbers(opened) == Self.ids(0..<3) + [bubble])
+
+        await engine.save(force: true)
+
+        #expect(await fixture.savedDocument()?.entries.map(\.id.rawValue) == Self.ids(0..<3))
+    }
+
     @Test func nothingIsSavedBeforeTheTranscriptIsFollowed() async throws {
         let fixture = Fixture()
         await fixture.cache.save(

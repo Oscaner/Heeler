@@ -1055,6 +1055,10 @@ struct ChatTranscript: Equatable, Sendable {
     /// How the turn opened above the loaded lines ended, when they close
     /// it before opening one of their own.
     var precedingTurnEnd: ChatTurnEnd?
+    /// Entries that stand for something the loaded lines have not recorded
+    /// yet, such as a queued prompt's waiting bubble. A later record shows
+    /// it under another id, so the cache never keeps them.
+    var unrecordedEntryIDs: Set<ChatEntryID>
 
     init(
         entries: [ChatEntry] = [], title: String? = nil, needsOlderHistory: Bool = false,
@@ -1063,7 +1067,8 @@ struct ChatTranscript: Equatable, Sendable {
         diagnostics: ChatTranscriptDiagnostics = ChatTranscriptDiagnostics(),
         backgroundWork: [ChatBackgroundWorkItem] = [], latestPromptOffset: UInt64? = nil,
         backgroundWorkEnds: [String: ChatBackgroundWorkEnd] = [:], backgroundWorkStop: ChatBackgroundWorkEnd? = nil,
-        turns: [ChatTurn] = [], precedingTurnEnd: ChatTurnEnd? = nil
+        turns: [ChatTurn] = [], precedingTurnEnd: ChatTurnEnd? = nil,
+        unrecordedEntryIDs: Set<ChatEntryID> = []
     ) {
         self.entries = entries
         self.title = title
@@ -1078,6 +1083,12 @@ struct ChatTranscript: Equatable, Sendable {
         self.backgroundWorkStop = backgroundWorkStop
         self.turns = turns
         self.precedingTurnEnd = precedingTurnEnd
+        self.unrecordedEntryIDs = unrecordedEntryIDs
+    }
+
+    /// The entries a saved document keeps.
+    var recordedEntries: [ChatEntry] {
+        unrecordedEntryIDs.isEmpty ? entries : entries.filter { !unrecordedEntryIDs.contains($0.id) }
     }
 
     /// The Background Work Chat lists: everything still running, and what

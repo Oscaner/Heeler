@@ -80,6 +80,8 @@ struct ClaudeSyntheticTranscriptTests {
                     content: .user(ChatUserMessage(text: "Also check the README", wasQueued: true))))
         #expect(waiting.recordedPrompts.last == ChatRecordedPrompt(
             offset: lines[2].offset, text: "Also check the README", entryID: bubble))
+        // The delivery shows it under another id, so it is never saved.
+        #expect(waiting.unrecordedEntryIDs == [bubble])
 
         // Delivered: the bubble its delivery adds replaces it.
         let delivered = running + "\n" + #"""
@@ -87,9 +89,9 @@ struct ClaudeSyntheticTranscriptTests {
             {"type":"user","uuid":"r1","parentUuid":"a1","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_test","content":"ok"}]},"toolUseResult":{"stdout":"ok","stderr":"","interrupted":false}}
             {"type":"attachment","uuid":"q1","parentUuid":"r1","attachment":{"type":"queued_command","prompt":"Also check the README","source_uuid":"src1","commandMode":"prompt","origin":{"kind":"human"}}}
             """#
-        #expect(Self.read(delivered, activity: .working).0.entries.map(\.id.rawValue) == [
-            "user:p1", "tool:toolu_test", "user:src1",
-        ])
+        let (deliveredTranscript, _) = Self.read(delivered, activity: .working)
+        #expect(deliveredTranscript.entries.map(\.id.rawValue) == ["user:p1", "tool:toolu_test", "user:src1"])
+        #expect(deliveredTranscript.unrecordedEntryIDs.isEmpty)
 
         // Taken back into the input box: no bubble.
         let takenBack = running + "\n" + #"""

@@ -40,7 +40,8 @@ enum ClaudeTranscriptProjection {
             backgroundWorkEnds: role == .main ? builder.backgroundWorkEnds : [:],
             backgroundWorkStop: role == .main ? builder.end(stoppingAfter: context.windowStart) : nil,
             turns: role == .main ? builder.turns : [],
-            precedingTurnEnd: role == .main ? builder.precedingTurnEnd : nil)
+            precedingTurnEnd: role == .main ? builder.precedingTurnEnd : nil,
+            unrecordedEntryIDs: Set(waiting.values))
     }
 
     /// The output `record` holds for the call `use`, as its row's preview
