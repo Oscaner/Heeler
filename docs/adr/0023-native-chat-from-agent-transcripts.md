@@ -293,11 +293,8 @@ terminal's own commands do that, and a stop the user cannot see confirmed
 would claim more than Chat knows.
 
 A row claims only what a read shows. With the Host away or the read failing,
-running rows stop their clocks and say they are not updating. Saved timeline
-rows read as last seen while nothing live backs them: with the Host away or
-the conversation read from the cache, the newest turn shows settled, and a
-running tool, Agent or Workflow row says Running when last seen instead of
-spinning; a failed read alone keeps them live. Running work
+running Background Work rows stop their clocks and say they are not updating.
+Running work
 with no sign of it for longer than such work runs, two hours since a
 Workflow started or its journal last changed, or three hours since a Subagent
 started, says when it was last seen instead of running, and no longer holds
@@ -328,6 +325,12 @@ the running turn ends, and shows after every turn. When the loaded lines
 start inside a turn, the saved record of that turn takes the end they give
 it. A running turn shows "Working for 1:05" under its prompt, counted
 from its first record on the Host's clock.
+
+Timeline rows read as last seen while nothing live backs them: with the Host
+away or the conversation read from the cache, the newest turn stops running
+(it stays open, without a clock, while listed Background Work runs), and a
+running tool, Agent or Workflow row says Running when last seen instead of
+spinning. A failed read alone keeps them live.
 
 A finished turn keeps its prompt, the rows it pins and its final answer, the
 model's text at its end. Everything between folds behind one "Worked for 35s"
