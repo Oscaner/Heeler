@@ -7,6 +7,9 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
     case claudeBash
     case claudeFileEdit
     case claudeFileCreate
+    /// Claude's `Read file`: a read outside the project, such as a staged
+    /// upload.
+    case claudeFileRead
     case claudeFetch
     case claudePlan
     case claudeQuestion
@@ -30,7 +33,7 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
 
     var program: ChatProgram {
         switch self {
-        case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFetch, .claudePlan,
+        case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFileRead, .claudeFetch, .claudePlan,
             .claudeQuestion, .claudeQuestionReview, .claudeWorkspaceTrust:
             .claude
         case .codexExec, .codexPatch, .codexNetwork, .codexQuestion, .codexAsyncCollapsed,

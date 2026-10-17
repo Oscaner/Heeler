@@ -209,7 +209,7 @@ private struct ClaudeDialogPlanner {
     /// Claude what to do next`, `No, and tell Claude what to do
     /// differently`.
     private func amend(_ ordinal: Int, note: String) throws(DialogPlanError) -> DialogActionPlan {
-        guard [.claudeBash, .claudeFileEdit, .claudeFileCreate].contains(dialog.kind) else {
+        guard [.claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFileRead].contains(dialog.kind) else {
             throw .unsupported("Only Claude's Bash and file dialogs take a note with the answer.")
         }
         guard let option = dialog.option(ordinal) else { throw .noSuchOption(ordinal) }
@@ -319,8 +319,9 @@ private struct CodexDialogPlanner {
             try collapsedQuestions(action)
         case .codexAsyncQuestion:
             try asyncQuestion(action)
-        case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFetch, .claudePlan, .claudeQuestion,
-            .claudeQuestionReview, .claudeWorkspaceTrust, .ompApproval, .ompQuestion, .ompQuestionReview:
+        case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFileRead, .claudeFetch, .claudePlan,
+            .claudeQuestion, .claudeQuestionReview, .claudeWorkspaceTrust, .ompApproval, .ompQuestion,
+            .ompQuestionReview:
             throw .unsupported("Not a Codex dialog.")
         }
     }

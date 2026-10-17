@@ -29,6 +29,9 @@ struct DialogActionPlannerTests {
                 == DialogActionPlan(steps: [.keys(["esc"])], confirmation: .fingerprintChange))
         #expect(try plan(.choose(ordinal: 2), "claude-22-c7-edit").steps == [.keys(["2"])])
         #expect(try plan(.choose(ordinal: 3), "claude-24-c8-webfetch").steps == [.keys(["3"])])
+        #expect(
+            try plan(.choose(ordinal: 1), "claude-43-c12-read-file", toolUseID: "toolu_r")
+                == DialogActionPlan(steps: [.keys(["1"])], confirmation: .toolResult(id: "toolu_r")))
         #expect(throws: DialogPlanError.noSuchOption(5)) {
             try plan(.choose(ordinal: 5), "claude-02-c1-bash-blocked")
         }
@@ -63,6 +66,11 @@ struct DialogActionPlannerTests {
         #expect(
             try plan(.amend(ordinal: 3, note: note), "claude-22-c7-edit").steps.prefix(4)
                 == [.keys(["down"]), .expect(.focus(ordinal: 2)), .keys(["down"]), .expect(.focus(ordinal: 3))])
+        // Read file's footer offers Tab to amend too.
+        #expect(
+            try plan(.amend(ordinal: 2, note: note), "claude-43-c12-read-file").steps
+                == [.keys(["down"]), .expect(.focus(ordinal: 2)), .keys(["tab"]), .expect(.feedbackMode(ordinal: 2))]
+                + tail)
     }
 
     @Test("Notes go only on the Yes and No rows of Bash and file dialogs")

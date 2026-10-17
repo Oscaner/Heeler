@@ -257,7 +257,7 @@ private struct ClaudeDialogReader {
     /// Dialogs whose title Heeler knows, keyed by the bold title.
     private static let permissionTitles: [String: BlockedDialogKind] = [
         "Bash command": .claudeBash, "Edit file": .claudeFileEdit, "Create file": .claudeFileCreate,
-        "Fetch": .claudeFetch,
+        "Read file": .claudeFileRead, "Fetch": .claudeFetch,
     ]
     private static let planQuestionPrefix = "Claude has written up a plan"
     private static let reviewTitle = "Review your answers"
@@ -342,6 +342,15 @@ private struct ClaudeDialogReader {
                 } else if entry.hasPrefix("prompt:") {
                     subject.prompt = entry.dropFirst(7).trimmingCharacters(in: .whitespaces)
                 }
+            }
+        case .claudeFileRead:
+            // `Read(<path>)`, a long path wrapped at the screen's edge.
+            let call = sections.content.isEmpty ? description : joinRows(sections.content)
+            if !sections.content.isEmpty, !call.isEmpty { body.append(call) }
+            if call.hasPrefix("Read("), call.hasSuffix(")") {
+                subject.filePath = String(call.dropFirst("Read(".count).dropLast())
+            } else {
+                subject.filePath = call.isEmpty ? nil : call
             }
         default:
             subject.filePath = description.isEmpty ? nil : description

@@ -18,6 +18,8 @@ enum BlockedRequestMatch {
         case .claudeFileEdit, .claudeFileCreate:
             return ["Edit", "MultiEdit", "Write", "NotebookEdit"].contains(request.toolName)
                 && sameFile(request.summary, subject.filePath)
+        case .claudeFileRead:
+            return request.toolName == "Read" && sameFile(request.summary, subject.filePath)
         case .claudeFetch:
             return request.toolName == "WebFetch" && sameURL(request.summary, subject.url)
         case .claudePlan:

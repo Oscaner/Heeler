@@ -36,6 +36,20 @@ struct ClaudeDialogParserTests {
         #expect(dialog.rows == 11..<25)
     }
 
+    @Test("A Read file dialog names its path, wrapped at the phone's width")
+    func readFile() throws {
+        let dialog = try dialog("claude-43-c12-read-file")
+        #expect(dialog.kind == .claudeFileRead)
+        #expect(dialog.title == "Read file")
+        #expect(
+            dialog.subject.filePath
+                == "/var/folders/zz/probe0placeholder00000000000gn/T/heeler.hnDAu48H/"
+                + "stage-474a20ea-59f3-48eb-8639-56c1977b6d41/image.jpg")
+        #expect(dialog.options.map(\.label) == ["Yes", "No"])
+        #expect(dialog.options.map(\.role) == [.approve, .decline])
+        #expect(dialog.focus == DialogFocusState(focusedOrdinal: 1))
+    }
+
     @Test("A persistent approval says what it keeps")
     func persistenceNotes() throws {
         let folder = try dialog("claude-02-c1-bash-blocked").options[1]

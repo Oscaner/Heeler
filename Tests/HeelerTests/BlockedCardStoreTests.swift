@@ -741,6 +741,15 @@ struct BlockedRequestMatchTests {
         #expect(BlockedRequestMatch.request(for: try dialog("claude-24-c8-webfetch"), in: [path])?.callID == "p")
     }
 
+    @Test func aReadMatchesItsFile() throws {
+        let path = "/var/folders/zz/probe0placeholder00000000000gn/T/heeler.hnDAu48H/"
+            + "stage-474a20ea-59f3-48eb-8639-56c1977b6d41/image.jpg"
+        let read = request("r", "Read", path, kind: .fileRead)
+        let shown = try dialog("claude-43-c12-read-file")
+        let edit = request("e", "Edit", path, kind: .fileEdit)
+        #expect(BlockedRequestMatch.request(for: shown, in: [edit, read])?.callID == "r")
+    }
+
     @Test func questionsMatchByTheirText() throws {
         let colors = request(
             "q", "AskUserQuestion", "Which colors?\nWhich size?", kind: .question,

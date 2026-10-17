@@ -94,6 +94,14 @@ capture.
   first page's height, so blank rows sit between its footer and that rule.
   `claude-42` is a question whose options have previews: the preview box
   beside the options and an `n to add notes` hint in a wrapped footer.
+- `claude-43-c12-read-file` is derived, not captured: Claude Code 2.1.301's
+  `Read file` dialog for a staged upload outside the project, rebuilt at the
+  phone's 62-column grid from `claude-32`'s rows and colors and the rows the
+  2026-10-17 E2E run's generic card showed (title, dashed rules, the
+  `Read(<path>)` call wrapped at the edge, `Do you want to proceed?`, `1. Yes`,
+  `2. No`, `Esc to cancel · Tab to amend`). The macOS temporary directory in
+  the path is a same-length placeholder. Replace it with a capture when one
+  is taken.
 
 Scrubbing used the same same-length replacements as above, so every column
 is as captured. The shell prompt on the first row of `claude-00-trust.ansi`

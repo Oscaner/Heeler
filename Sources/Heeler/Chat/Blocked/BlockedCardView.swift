@@ -127,6 +127,8 @@ private struct BlockedDialogCard: View {
                 BlockedChangeBox(
                     lines: Array(dialog.body.dropFirst().dropLast()), marksChanges: dialog.kind == .claudeFileEdit)
             }
+        case .claudeFileRead:
+            BlockedCodeBox(text: card.request?.summary ?? subject.filePath ?? "")
         case .codexPatch:
             if let description = dialog.body.first(where: { $0.hasPrefix("Description:") }) {
                 BlockedCardText(
@@ -284,7 +286,7 @@ private struct BlockedDialogCard: View {
     @ViewBuilder
     private var textEntry: some View {
         switch dialog.kind {
-        case .claudeBash, .claudeFileEdit, .claudeFileCreate:
+        case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFileRead:
             noteEntry
         case .claudePlan:
             if let field = dialog.options.last(where: { $0.role == .otherText && $0.input != nil }) {
