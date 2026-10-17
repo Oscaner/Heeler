@@ -106,9 +106,6 @@ enum DialogRowScanner {
         run.text.allSatisfy(ScreenRow.isBlank)
     }
 
-    /// Whether `row` is a horizontal rule of `glyph` at least `minimumWidth`
-    /// cells wide. Leading blanks are allowed: Claude's plan rules start at
-    /// column 2.
     /// A rule that may hold a label (`──── name ─`), or none.
     static func isLabeledRule(_ row: ScreenRow, of glyph: Character, minimumWidth: Int) -> Bool {
         let trimmed = row.trimmedText
@@ -116,6 +113,9 @@ enum DialogRowScanner {
         return TerminalCellWidth.width(of: trimmed) >= minimumWidth
     }
 
+    /// Whether `row` is a horizontal rule of `glyph` at least `minimumWidth`
+    /// cells wide. Leading blanks are allowed: Claude's plan rules start at
+    /// column 2.
     static func isRule(_ row: ScreenRow, of glyph: Character, minimumWidth: Int) -> Bool {
         let trimmed = row.trimmedText
         guard !trimmed.isEmpty, trimmed.allSatisfy({ $0 == glyph }) else { return false }
