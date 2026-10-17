@@ -277,6 +277,14 @@ call's record, the second off the second's), so a marker can follow only the
 last of them: Chat marks every call of the named reply whose result comes
 before the marker. A parallel Esc has not been captured.
 
+The live decline control was `4. No`. Esc on an approval dialog was not
+captured, but the 2.1.301 binary sets `interruptedMessageId` only when the
+turn was aborted with reason `user-cancel` or `remote-cancel` (its `Kn`),
+while a denial that ends the turn aborts with `permission-stop`, and the
+dialog binds Esc to `confirm:no` ("cancel") in its own Confirmation context.
+So an Esc decline, which Chat's Claude card sends to dismiss a dialog, should
+read Declined like `4. No` (read in the binary, not observed).
+
 ### Result fields by tool
 
 | Tool | `input` | `toolUseResult` |
