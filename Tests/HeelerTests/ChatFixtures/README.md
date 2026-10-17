@@ -69,6 +69,10 @@ capture.
   the above`, whose description wraps `(tab)` onto a second reverse row, then
   the same question after Tab and a paste opened its notes (0.162.1 drops a
   paste while the options have focus).
+- `codex-18-x7-phone-async-countdown` comes from the same Codex at 62×41:
+  `request_user_input_async` questions folded under "Queued follow-up
+  inputs" while a command runs, the count row carrying Codex's countdown
+  (`? 2 questions · 20s`).
 - `claude-27`, `-28`, `-30` and `-31` keep the live rendering residue after
   option 4 (`No` followed by a stale grey `r you`).
 - `claude-32` through `claude-37` come from Claude Code 2.1.301 on herdr

@@ -136,6 +136,14 @@ struct CodexDialogParserTests {
         #expect(dialog.rows == 31..<34)
     }
 
+    @Test("A countdown on the folded questions keeps their title and fingerprint")
+    func collapsedQuestionsCountdown() throws {
+        let ticking = try dialog("codex-18-x7-phone-async-countdown")
+        #expect(ticking.kind == .codexAsyncCollapsed)
+        #expect(ticking.title == "2 questions")
+        #expect(ticking.fingerprint == (try dialog("codex-08-x4-async-collapsed")).fingerprint)
+    }
+
     @Test("An expanded asynchronous question, then the next one")
     func expandedQuestions() throws {
         let first = try dialog("codex-09-x4-expanded")

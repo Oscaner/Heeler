@@ -255,15 +255,19 @@ private struct CodexDialogReader {
 
     /// `? 2 questions` with `shift+← to answer` under Codex's queued inputs:
     /// questions waiting while the turn runs. The composer stays usable to
-    /// the eye, but Codex refuses prompts until they are answered.
+    /// the eye, but Codex refuses prompts until they are answered. Codex
+    /// 0.162.1 adds a countdown (`? 2 questions · 20s`) for a while; the
+    /// title leaves it out, so the ticks keep the fingerprint.
     private func readCollapsedQuestions() -> DialogParseResult? {
+        let countPattern = #"^\? \d+ questions?(?= · |$)"#
         guard
             let countRow = rows.lastIndex(where: {
-                $0.trimmedText.range(of: #"^\? \d+ questions?$"#, options: .regularExpression) != nil
+                $0.trimmedText.range(of: countPattern, options: .regularExpression) != nil
             }),
-            let hintRow = rows[(countRow + 1)...].prefix(2).first(where: { $0.trimmedText.contains("to answer") })
+            let hintRow = rows[(countRow + 1)...].prefix(2).first(where: { $0.trimmedText.contains("to answer") }),
+            let count = rows[countRow].trimmedText.range(of: countPattern, options: .regularExpression)
         else { return nil }
-        let title = String(rows[countRow].trimmedText.dropFirst(2))
+        let title = String(rows[countRow].trimmedText[count].dropFirst(2))
         let top = countRow > 0 && rows[countRow - 1].trimmedText.contains("Queued follow-up inputs") ? countRow - 1 : countRow
         return dialog(
             kind: .codexAsyncCollapsed, title: title, positionLabel: nil, body: [], progress: nil, options: [],
