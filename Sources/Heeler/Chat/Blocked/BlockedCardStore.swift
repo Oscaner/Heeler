@@ -133,7 +133,8 @@ final class BlockedCardStore {
 
     // MARK: Inputs
 
-    /// A Chat view shows the Agent: watch it while it is Blocked.
+    /// A Chat view shows the Agent: watch it while it is Blocked, or while
+    /// an idle Claude has an open AskUserQuestion call.
     func show() {
         isVisible = true
         updateWatching()
@@ -162,7 +163,8 @@ final class BlockedCardStore {
     }
 
     /// herdr's latest status. Leaving Blocked clears the card unless an
-    /// action is still checking its effect.
+    /// action is still checking its effect, or an idle Claude still has an
+    /// open AskUserQuestion call.
     func update(activity: ChatAgentActivity) {
         guard activity != self.activity else { return }
         self.activity = activity
