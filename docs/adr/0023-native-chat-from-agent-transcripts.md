@@ -408,7 +408,8 @@ no Attach at all.
   Chat shows Conversation Not Found.
   Compressed (`.zst`) and pre-envelope Codex rollouts are not read.
 - Claude Code writes no transcript before the first prompt, and Codex reports
-  no session to herdr until after it. The Composer works in both states.
+  no session to herdr until after it, also after a resume, by id or by name,
+  or a restart in its pane. The Composer works in both states.
 - Following makes SFTP requests on the Host's connection at every poll. While
   a Workflow is listed, each poll also looks at up to two journals: a stat
   each, and for one that grew, reads of what it added, up to 128 KiB.
