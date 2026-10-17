@@ -99,7 +99,7 @@ private struct BlockedDialogCard: View {
 
     /// Who asked, when a subagent did.
     private var source: String? {
-        guard let suffix = dialog.sourceSuffix ?? card.request?.origin, !suffix.isEmpty else { return nil }
+        guard let suffix = dialog.sourceSuffix, !suffix.isEmpty else { return nil }
         return suffix.prefix(1).uppercased() + suffix.dropFirst()
     }
 

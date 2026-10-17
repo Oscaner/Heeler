@@ -863,13 +863,11 @@ struct ChatPendingRequest: Equatable, Sendable {
     var detail: String?
     var questions: [ChatQuestion]
     var planFilePath: String?
-    /// Set when a subagent made the request: its description.
-    var origin: String?
 
     init(
         entryID: ChatEntryID, callID: String?, kind: ChatToolActivity.Kind, toolName: String,
         summary: String, detail: String? = nil, questions: [ChatQuestion] = [],
-        planFilePath: String? = nil, origin: String? = nil
+        planFilePath: String? = nil
     ) {
         self.entryID = entryID
         self.callID = callID
@@ -879,7 +877,6 @@ struct ChatPendingRequest: Equatable, Sendable {
         self.detail = detail
         self.questions = questions
         self.planFilePath = planFilePath
-        self.origin = origin
     }
 }
 
