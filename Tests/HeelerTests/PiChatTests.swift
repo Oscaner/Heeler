@@ -78,6 +78,25 @@ struct PiChatTests {
         #expect(paged.transcript(.init()) == whole.transcript(.init()))
     }
 
+    /// Oh My Pi 18.11.1 names its file finder `glob`; it is a search like
+    /// `grep`, not an unnamed tool.
+    @Test func ompGlobCallIsASearch() throws {
+        let lines = Self.lines([
+            Self.header,
+            #"{"type":"message","id":"u","parentId":null,"message":{"role":"user","content":[{"type":"text","text":"use the find tool to list *.txt files"}]}}"#,
+            #"{"type":"message","id":"a","parentId":"u","message":{"role":"assistant","content":[{"type":"toolCall","id":"c","name":"glob","arguments":{"i":"Finding text files","path":"**/*.txt","hidden":true}}],"stopReason":"toolUse"}}"#,
+            #"{"type":"message","id":"r","parentId":"a","message":{"role":"toolResult","toolCallId":"c","toolName":"glob","content":[{"type":"text","text":"todo.txt\nnotes.txt"}],"isError":false}}"#,
+        ])
+        var reducer = PiTranscriptReducer()
+        reducer.append(lines)
+        guard case .tool(let tool) = reducer.transcript(.init(activity: .working)).entries.last?.content else {
+            Issue.record("Tool missing")
+            return
+        }
+        #expect(tool.kind == .search)
+        #expect(tool.title == "**/*.txt")
+    }
+
     @Test func pairsToolsByIDAndReadsFullOutputOnDemand() throws {
         let lines = Self.lines([
             Self.header,

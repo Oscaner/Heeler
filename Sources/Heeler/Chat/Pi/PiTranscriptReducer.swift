@@ -4,7 +4,7 @@ import Foundation
 /// leaf's ancestry, including invisible extension/state entries. File order
 /// alone would resurrect messages abandoned by /tree or a branch switch.
 struct PiTranscriptReducer: ChatTranscriptReducer {
-    static let revision = 6
+    static let revision = 7
 
     private struct Record: Sendable {
         let offset: UInt64
@@ -431,7 +431,8 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
         case "read": kind = .fileRead
         case "edit", "apply_patch": kind = .fileEdit
         case "write": kind = .fileWrite
-        case "grep", "find", "ls": kind = .search
+        // Oh My Pi 18 calls its file finder `glob`.
+        case "grep", "find", "glob", "ls": kind = .search
         case "web_search", "fetch", "browse": kind = .web
         case "task", "subagent": kind = .agent
         case "ask", "ask_user": kind = .question
