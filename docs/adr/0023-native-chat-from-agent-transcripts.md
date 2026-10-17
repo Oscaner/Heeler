@@ -282,7 +282,11 @@ terminal's own commands do that, and a stop the user cannot see confirmed
 would claim more than Chat knows.
 
 A row claims only what a read shows. With the Host away or the read failing,
-running rows stop their clocks and say they are not updating. Running work
+running rows stop their clocks and say they are not updating. Saved timeline
+rows read as last seen while nothing live backs them: with the Host away or
+the conversation read from the cache, the newest turn shows settled, and a
+running tool, Agent or Workflow row says Running when last seen instead of
+spinning; a failed read alone keeps them live. Running work
 with no sign of it for longer than such work runs, two hours since a
 Workflow started or its journal last changed, or three hours since a Subagent
 started, says when it was last seen instead of running, and no longer holds
@@ -305,8 +309,9 @@ notification that opened it to the next one, as the program records it:
 Claude Code from its user records, or a local command or visible message
 between turns, to its `turn_duration` or interrupt marker, Codex from its
 turn events. A Claude Code turn whose last reply is an API error failed.
-The newest turn runs while herdr reports the Agent Working, Blocked or
-unknown and no record has closed it; every other turn is finished. A message
+The newest turn runs while a live read backs it, herdr reports the Agent
+Working, Blocked or unknown, and no record has closed it; every other turn is
+finished. A message
 sent from Chat opens no turn of its own, since the program may hold it until
 the running turn ends, and shows after every turn. When the loaded lines
 start inside a turn, the saved record of that turn takes the end they give
@@ -430,7 +435,7 @@ no Attach at all.
   64 columns, where Claude Code leaves stale text.
 - Folding trusts the programs' turn records. A turn no record closes, such as
   one Claude Code wrote no `turn_duration` for, finishes only when herdr
-  reports the Agent idle, and Chat takes no turn times from Codex's legacy
+  reports the Agent idle or nothing live backs it, and Chat takes no turn times from Codex's legacy
   rollouts, whose turns fold under "Details". Claude Code's own `durationMs` can be far
   shorter than a turn's wall time, so "Worked for" can read longer than the
   program's figure.
