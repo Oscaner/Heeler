@@ -230,7 +230,9 @@ answer) through `pane.send_input`. The answer is confirmed when the dialog on
 screen changes, when Claude Code's transcript shows the matching tool result,
 or when Codex or Oh My Pi leaves Blocked. Staying Blocked proves nothing,
 because herdr stays Blocked while the next queued approval takes the screen.
-Three seconds without effect shows a hint, and nothing is resent. Codex
+Three seconds without effect shows a hint, and nothing is resent: the card's
+answers stay disabled while the same dialog shows, so a second tap cannot
+send the key again, and Stop and the terminal stay available. Codex
 0.160.1 holds an answer to its asynchronous question until its next tool call,
 so the card confirms it by Codex's queued-messages notice and shows it as
 Queued. Codex 0.162.1 delivers the answer at once (a waiting `write_stdin`
