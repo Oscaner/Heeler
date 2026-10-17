@@ -70,7 +70,18 @@ struct ClaudeToolSummary: Sendable, Equatable {
             let invocation = ChatCommandInvocation(name: input.skill ?? use.name, arguments: input.arguments ?? "")
             self.init(kind: .other, title: invocation.displayText)
         case "ToolSearch":
-            self.init(kind: .other, title: input.query ?? use.name)
+            // Claude Code 2.1.301 loads a deferred tool, such as WebFetch,
+            // with `select:Name,Other` before the first call to it.
+            let query = (input.query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let selected = query.hasPrefix(Self.toolSelectPrefix)
+                ? query.dropFirst(Self.toolSelectPrefix.count).split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                : []
+            let title =
+                !selected.isEmpty ? "Loaded \(selected.joined(separator: ", "))"
+                : query.isEmpty || query.hasPrefix(Self.toolSelectPrefix) ? use.name
+                : "Searched tools for \(query)"
+            self.init(kind: .other, title: title)
         case "EnterPlanMode":
             self.init(kind: .other, title: "Enter plan mode")
         case "ExitPlanMode":
@@ -89,6 +100,8 @@ struct ClaudeToolSummary: Sendable, Equatable {
             }
         }
     }
+
+    private static let toolSelectPrefix = "select:"
 
     /// What a Blocked card's screen parse matches a pending call on: the
     /// command, the path, the URL or the questions.

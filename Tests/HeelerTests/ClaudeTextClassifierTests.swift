@@ -341,6 +341,17 @@ struct ClaudeToolSummaryTests {
             name: "TaskUpdate", input: ClaudeToolInput(taskID: "2"),
             expected: ClaudeToolSummary(kind: .todo, title: "Updated task #2")),
         Case(
+            name: "ToolSearch", input: ClaudeToolInput(query: "select:WebFetch"),
+            expected: ClaudeToolSummary(kind: .other, title: "Loaded WebFetch")),
+        Case(
+            name: "ToolSearch", input: ClaudeToolInput(query: "select:TaskCreate,TaskUpdate"),
+            expected: ClaudeToolSummary(kind: .other, title: "Loaded TaskCreate, TaskUpdate")),
+        Case(
+            name: "ToolSearch", input: ClaudeToolInput(query: "notebook"),
+            expected: ClaudeToolSummary(kind: .other, title: "Searched tools for notebook")),
+        Case(
+            name: "ToolSearch", expected: ClaudeToolSummary(kind: .other, title: "ToolSearch")),
+        Case(
             name: "mcp__github__create_issue",
             expected: ClaudeToolSummary(kind: .mcp, title: "github.create_issue")),
         Case(
