@@ -1370,6 +1370,30 @@ struct AgentChatStoreTests {
     /// back while its echo is still inside the timeout, then the user adds
     /// to it, a Chat send is held, and Enter in the terminal sends it all.
     /// The steer is found returned at once, so the prompt settles it.
+    @Test func aSendMadeWhileIdleIsNotLookedForInTheBoxBeforeItIsOverdue() async throws {
+        let capture = try ScreenFixture.text("pi-40-phone-extended-steer")
+        let range = try #require(capture.range(of: "say FIG and also say PEAR", options: .backwards))
+        let clock = Clock()
+        // The editor still shows the text herdr just typed.
+        let pane = Pane(ANSIScreenDecoder.decode(capture.replacingCharacters(in: range, with: "say FIG")))
+        let (files, store, path, _) = try Self.skillStore(.pi, clock: clock, screen: pane.io)
+        await files.write(Self.piHeader + "\n", at: path)
+        store.agentDidChange(Self.piAgent(.pi, status: .working))
+        await store.step()
+        store.agentDidChange(Self.piAgent(.pi, status: .idle))
+        await store.step()
+        clock.now = clock.now.addingTimeInterval(5)
+
+        let id = UUID()
+        store.updateSends([Self.sent(id, "say FIG", delivered: false)])
+        store.updateSends([Self.sent(id, "say FIG")])
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+
+        #expect(await pane.reads == 0)
+        #expect(store.sendStatuses[id] == .awaiting)
+    }
+
     @Test func aReturnedSteerExtendedOnThePhoneIsRecorded() async throws {
         let records = [
             ##"{"type":"message","id":"dcfb765c","parentId":null,"timestamp":"2026-10-17T03:58:00.714Z","message":{"role":"user","content":[{"type":"text","text":"run sleep 40 with bash, then reply: ok"}],"timestamp":1792209480714}}"##,

@@ -45,7 +45,8 @@ final class AgentChatStore {
         /// its echo says so.
         var echoTimeout: TimeInterval = 10
         /// How long Pi or Oh My Pi stays idle before Chat looks in its input
-        /// box for overdue sends a stopped turn put back.
+        /// box for unrecorded sends, overdue or not, that the turn which
+        /// just ended put back.
         var returnCheckDelay: TimeInterval = 1
         var backgroundWorkStaleness = ChatBackgroundWork.Staleness()
     }
@@ -67,7 +68,7 @@ final class AgentChatStore {
         case recorded
         /// Still unrecorded `Timing.echoTimeout` after delivery.
         case overdue
-        /// Overdue, and its text sits in the idle Agent's input box: Pi
+        /// Unrecorded, and its text sits in the idle Agent's input box: Pi
         /// and Oh My Pi put a steer the turn had not taken back there when
         /// Esc stops the turn, and never record it. A recorded copy still
         /// wins, and a later read of the box that no longer finds it makes
@@ -948,9 +949,14 @@ final class AgentChatStore {
             switch sendStatuses[send.id] {
             case .returned:
                 return true
-            case .overdue, .awaiting:
+            case .overdue:
                 guard let deliveredAt = send.deliveredAt, let turnStartedAt else { return false }
                 return deliveredAt >= turnStartedAt
+            case .awaiting:
+                // A send still in time is read early only when it went in
+                // while the turn ran; one made since is the next turn's.
+                guard let deliveredAt = send.deliveredAt, let turnStartedAt else { return false }
+                return deliveredAt >= turnStartedAt && deliveredAt <= idleSince
             default:
                 return false
             }
