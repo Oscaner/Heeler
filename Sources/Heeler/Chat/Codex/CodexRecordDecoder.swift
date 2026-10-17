@@ -215,7 +215,7 @@ enum CodexRecordDecoder {
             let summary = CodexToolSummary.fileChangeSummary(event.changes ?? [:], cwd: context.cwd)
             var status = event.status?.chatStatus ?? (event.success == false ? .failed : .succeeded)
             var output = joinedOutput(event.stdout, event.stderr)
-            var diff = summary.diff
+            var diff: ChatDiffStats? = summary.diff
             if status == .failed, isAbortedPatch(output) {
                 status = .interrupted
                 output = nil
