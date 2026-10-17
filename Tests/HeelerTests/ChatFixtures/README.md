@@ -116,10 +116,11 @@ file keeps the capture's number and name behind the `pi-` or `omp-` prefix.
   columns wide except the `-40` ones.
 - `pi-40-phone-extended-steer` comes from Pi 0.85.1 on 2026-10-17 at the
   phone's 62 columns: a steer Stop returned to the editor, with text the user
-  added after it (`say FIG and also say PEAR`).
+  added after it (`say FIG and also say PEAR`). Its `40` is the capture
+  number, not a width.
 - Oh My Pi used the nerd-font status band.
-- Captures are 119, 120 or 40 columns wide; Pi's are 119 unless the name
-  says otherwise, Oh My Pi's 120.
+- Captures are 119, 120, 62 or 40 columns wide; Pi's are 119 unless the
+  name or the note above says otherwise, Oh My Pi's 120.
 - The shell rows of `pi-03`, `pi-06`, `omp-21` and `omp-33` keep the probe's
   `SOCK=`/`HOME=` echo and the shell prompt.
 
