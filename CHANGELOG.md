@@ -23,6 +23,9 @@ Entries reference the pull request that made the change.
 - Closing a connection through a Tailscale network no longer risks shutting
   down an unrelated connection that reused its file descriptor. Tailscale
   networks now run libtailscale 0.2.0 with Tailscale v1.104.1. (#463)
+- Gboard and other third-party keyboards no longer drop doubled letters
+  (`https` became `htps`) or leave the misspelled word behind when they
+  paste or autocorrect in Direct Input and shell terminals. (#461)
 
 ## [0.1.14] - 2026-10-15
 
