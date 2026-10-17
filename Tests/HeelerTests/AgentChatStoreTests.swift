@@ -720,6 +720,28 @@ struct AgentChatStoreTests {
         #expect(fixture.store.conversation.phase == .following(path: Self.path(Self.first)))
     }
 
+    @Test func openingChatLooksForAMissingTranscriptAtOnceAfterPrefetchesBackedOff() async throws {
+        let fixture = Fixture(session: Self.first)
+        // Background prefetches found nothing and backed off to 8 s.
+        for delay in [0.0, 2, 4] {
+            fixture.advance(delay)
+            await fixture.store.step()
+        }
+        #expect(fixture.store.conversation.phase == .unavailable(.notFound(searchedAll: true)))
+        let looked = await fixture.files.statuses.count
+
+        fixture.store.show()
+        fixture.store.hide()
+        await fixture.store.step()
+        let opened = await fixture.files.statuses.count
+        #expect(opened > looked)
+
+        // Then 2 s, not the prefetches' 8.
+        fixture.advance(2)
+        await fixture.store.step()
+        #expect(await fixture.files.statuses.count > opened)
+    }
+
     @Test func sendingLooksForTheTranscriptAtOnce() async throws {
         let fixture = Fixture(session: Self.first)
         await fixture.store.step()

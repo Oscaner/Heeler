@@ -234,6 +234,17 @@ final class AgentChatStore {
     /// A Chat view is on screen: follow the conversation. Each view passes
     /// its own token, so one window leaving does not stop another's.
     func show(_ viewer: UUID = AgentChatStore.soleViewer) {
+        if viewers.isEmpty {
+            // Background prefetches back off looking for a missing
+            // transcript; opening Chat looks at once and backs off afresh.
+            switch conversation.phase {
+            case .locating, .unavailable(.notFound):
+                nextOpen = nil
+                failedOpens = 0
+            default:
+                break
+            }
+        }
         viewers.insert(viewer)
         isVisible = true
         needsAgentRefresh = true
