@@ -1450,9 +1450,9 @@ struct ChatRowViewTests {
 
     /// VoiceOver reads a user bubble once, chips included. A label set on the
     /// bubble's stack alone once went to each of its children, so a bubble
-    /// with a Queued chip read "You: …, You: …" and never said Queued.
+    /// with a chip read "You: …, You: …" and never named the chip.
     @Test(arguments: [
-        (ChatUserMessage(text: "also say PINEAPPLE", wasQueued: true), "You: also say PINEAPPLE, Queued"),
+        (ChatUserMessage(text: "also say PINEAPPLE", wasQueued: true), "You: also say PINEAPPLE, Sent while working"),
         (
             ChatUserMessage(text: "look", imageCount: 2, attachmentLabels: ["notes.md"]),
             "You: look, 2 images, notes.md"

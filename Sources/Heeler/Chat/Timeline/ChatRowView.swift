@@ -176,7 +176,7 @@ private struct ChatUserBubble: View {
             parts.append(message.imageCount == 1 ? "1 image" : "\(message.imageCount) images")
         }
         parts += message.attachmentLabels
-        if message.wasQueued { parts.append("Queued") }
+        if message.wasQueued { parts.append("Sent while working") }
         return parts.joined(separator: ", ")
     }
 }
@@ -196,7 +196,7 @@ private struct ChatAttachmentChips: View {
                     .lineLimit(1)
             }
             if message.wasQueued {
-                Label("Queued", systemImage: "clock")
+                Label("Sent while working", systemImage: "clock")
             }
         }
         .font(.caption)
