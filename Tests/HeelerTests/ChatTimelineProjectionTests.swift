@@ -430,6 +430,16 @@ struct ChatTimelineProjectionTests {
             files: [ChatFileChange(path: "/private/tmp/p/c.txt", kind: .updated, added: 1, removed: 1, lineCount: 1)],
             directory: "/tmp/p")
         #expect(summary([failed, retried]) == "Edited 1 file")
+
+        // A Codex patch row has no per-file list: its title names every
+        // file it touched, and its line counts say how many there were.
+        var patch = tool(.fileEdit, title: "new.txt, notes.txt")
+        patch.diff = ChatDiffStats(added: 2, removed: 1, files: 2)
+        #expect(summary([patch]) == "Edited 2 files")
+        #expect(summary([patch, patch]) == "Edited 2 files")
+        var adds = tool(.fileWrite, title: "a.txt, b.txt")
+        adds.diff = ChatDiffStats(added: 2, removed: 0, files: 2)
+        #expect(summary([adds, patch]) == "Edited 2 files, Created 2 files")
     }
 
     // MARK: Subagents

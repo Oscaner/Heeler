@@ -382,7 +382,8 @@ enum ChatTimelineProjection {
     /// order. Files count once per path as the rows show it, relative to
     /// where the call ran; a write over an existing file, as its recorded
     /// change says, counts as an edit, and a write that cannot tell counts
-    /// as written.
+    /// as written. A row without its own file list (a Codex patch) names
+    /// all its files in one title, so it counts as many as its diff has.
     static func summary(of tools: [ChatToolActivity]) -> String {
         func count(_ kind: ChatToolActivity.Kind) -> Int {
             tools.filter { $0.kind == kind }.count
@@ -390,6 +391,7 @@ enum ChatTimelineProjection {
         enum FileVerb { case edited, created, wrote, read }
         var paths: [FileVerb: Set<String>] = [:]
         var more: [FileVerb: Int] = [:]
+        var titled: [FileVerb: [String: Int]] = [:]
         for (index, tool) in tools.enumerated() {
             let verb: FileVerb
             switch tool.kind {
@@ -411,11 +413,15 @@ enum ChatTimelineProjection {
                 }
                 more[verb, default: 0] += changes.moreFiles
             } else {
-                paths[verb, default: []].insert(tool.title.isEmpty ? "\u{0}\(index)" : tool.title)
+                let key = tool.title.isEmpty ? "\u{0}\(index)" : tool.title
+                paths[verb, default: []].insert(key)
+                if let files = tool.diff?.files, files > 1 {
+                    titled[verb, default: [:]][key] = max(titled[verb]?[key] ?? 0, files - 1)
+                }
             }
         }
         func files(_ verb: FileVerb) -> Int {
-            (paths[verb]?.count ?? 0) + (more[verb] ?? 0)
+            (paths[verb]?.count ?? 0) + (more[verb] ?? 0) + (titled[verb]?.values.reduce(0, +) ?? 0)
         }
         func plural(_ count: Int, _ one: String, _ many: String) -> String {
             count == 1 ? "1 \(one)" : "\(count) \(many)"
