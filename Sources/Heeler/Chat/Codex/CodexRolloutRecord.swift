@@ -285,16 +285,27 @@ struct CodexSessionMeta: Equatable, Sendable, Decodable {
 
 /// Line 1 of a rollout, read loosely enough to tell an envelope from the
 /// pre-envelope format (≤0.30), whose first line is `{id, instructions}`.
+/// The reducer and the transcript locator both read it, so they agree on
+/// which files are pre-envelope.
 struct CodexFirstLine: Decodable {
     var type: String?
     var payload: CodexSessionMeta?
     var isPreEnvelope: Bool
+    /// A pre-envelope line's session id, when it is a string.
+    var preEnvelopeID: String?
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodexKey.self)
         type = container.lenient("type")
         payload = container.lenient("payload")
         isPreEnvelope = type == nil && container.contains("id") && container.contains("instructions")
+        preEnvelopeID = isPreEnvelope ? container.lenient("id") : nil
+    }
+
+    /// The thread the line names: the `session_meta` payload's id, or a
+    /// pre-envelope line's top-level one.
+    var threadID: String? {
+        isPreEnvelope ? preEnvelopeID : type == "session_meta" ? payload?.id : nil
     }
 }
 

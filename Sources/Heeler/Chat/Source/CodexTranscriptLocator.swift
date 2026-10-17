@@ -116,39 +116,12 @@ struct CodexTranscriptLocator: Sendable {
     private func sessionMetaNames(_ threadID: String, in path: String) async throws -> Bool {
         switch try await files.firstLine(of: path, initialBytes: 64 << 10, limit: 1 << 20) {
         case .line(let data):
-            guard let meta = try? JSONDecoder().decode(SessionMetaLine.self, from: data) else { return false }
-            if meta.type == nil, let id = meta.id, meta.hasInstructions {
-                return id.lowercased() == threadID
-            }
-            guard meta.type == "session_meta" else { return false }
-            return meta.payload?.id?.lowercased() == threadID
+            guard let line = try? JSONDecoder().decode(CodexFirstLine.self, from: data) else { return false }
+            return line.threadID?.lowercased() == threadID
         case .unterminated, .tooLong:
             return true
         case nil:
             return false
-        }
-    }
-
-    private struct SessionMetaLine: Decodable {
-        struct Payload: Decodable {
-            let id: String?
-        }
-        let type: String?
-        let payload: Payload?
-        /// Pre-envelope fields.
-        let id: String?
-        let hasInstructions: Bool
-
-        private enum CodingKeys: String, CodingKey {
-            case type, payload, id, instructions
-        }
-
-        init(from decoder: any Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            type = try? container.decodeIfPresent(String.self, forKey: .type)
-            payload = try? container.decodeIfPresent(Payload.self, forKey: .payload)
-            id = try? container.decodeIfPresent(String.self, forKey: .id)
-            hasInstructions = container.contains(.instructions)
         }
     }
 }
