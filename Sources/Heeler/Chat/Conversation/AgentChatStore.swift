@@ -101,14 +101,15 @@ final class AgentChatStore {
     /// The Subagents and Workflows the conversation's program runs beside
     /// it, as last read.
     private(set) var backgroundWork = ChatBackgroundWork()
-    /// Whether this conversation has had a live read. Until then the list
-    /// stays empty: saved work alone could have ended long ago (ADR 0023).
-    private var hasReadLive = false
 
     @ObservationIgnored private let source: AgentChatSource
     @ObservationIgnored private let timing: Timing
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private var agent: Agent
+    /// Whether this conversation has had a live read. Until then the
+    /// Background Work list stays empty: saved work alone could have ended
+    /// long ago (ADR 0023).
+    @ObservationIgnored private var hasReadLive = false
     /// What herdr last said the Agent's session is.
     @ObservationIgnored private var resolution: ConversationReference.Resolution
     /// A session the transcript says the conversation continued in, until
