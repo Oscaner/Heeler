@@ -120,7 +120,10 @@ Observed live on 2026-10-15 with Pi 0.85.1 and Oh My Pi 18.11.1 on herdr
 - Pi's retryable provider error (`Connection error.`) records an empty
   assistant message with `stopReason: error`; the retried reply's `parentId`
   is that error message, so the error is not the branch's last word. A
-  cancelled retry records nothing.
+  cancelled retry records nothing: Esc during Pi 0.85.1's `Retrying (1/3)`
+  countdown prints `Error: Retry failed after 1 attempts: Retry cancelled`
+  on the pane only, so Chat ends that turn on the provider error, as it ends
+  an exhausted retry.
 - Pi's compaction records `{summary, firstKeptEntryId, tokensBefore,
   details{readFiles, modifiedFiles}, usage, fromHook: false}`, with
   `firstKeptEntryId` the last assistant message. `/compact` with nothing to
@@ -146,7 +149,9 @@ source reading:
   change thinking effort`, which is not a draft. A titled panel such as
   `╭─ Allow tool: bash ─…╮` rests on the band with the spinner and an empty
   `╰─` still below it; an `ask` without a draft replaces the composer, and
-  the Plan Review fills the screen with no composer.
+  the Plan Review fills the screen with no composer. A multi-select `ask`
+  toggles with Space (`space toggle · enter submit`); its generic card's key
+  pad has no Space, so toggling stays in the terminal.
 - `/compact ` with a trailing space is completed to `/compact soft ` with grey
   ghost text and not submitted; only an ANSI read tells the ghost text apart.
 - Pi's footer is a working-directory row (`/private/tmp/...` outside the home
