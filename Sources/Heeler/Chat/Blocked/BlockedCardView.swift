@@ -268,7 +268,7 @@ private struct BlockedDialogCard: View {
     private func emphasis(of option: DialogOption, leads: Bool) -> BlockedOptionEmphasis {
         switch option.role {
         case .decline, .exitProgram: .destructive
-        case .approvePersistent: .caution("Saves a rule, so this isn't asked again.")
+        case .approvePersistent: .caution(option.persistenceNote(program: dialog.program))
         case .approveModeSwitch: .caution("Switches the permission mode.")
         default: leads ? .primary : .plain
         }
@@ -411,6 +411,21 @@ private struct BlockedCollapsedBar: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+    }
+}
+
+extension DialogOption {
+    /// What a persistent approval keeps, for its caution line. Claude Code
+    /// 2.1.301's `always allow access to <dir> from this project` adds the
+    /// folder for the session and saves no rule; its `don't ask again`
+    /// options and Codex 0.162.1's `(a)`/`(p)` ones save one. Recheck when
+    /// either program's version changes.
+    func persistenceNote(program: ChatProgram) -> String {
+        let folded = DialogRowScanner.comparable(label.lowercased())
+        if program == .claude, folded.contains(DialogRowScanner.comparable("always allow access to")) {
+            return "Lets Claude work in this folder for the session."
+        }
+        return "Saves a rule, so this isn't asked again."
     }
 }
 

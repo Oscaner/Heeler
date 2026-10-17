@@ -36,6 +36,23 @@ struct ClaudeDialogParserTests {
         #expect(dialog.rows == 11..<25)
     }
 
+    @Test("A persistent approval says what it keeps")
+    func persistenceNotes() throws {
+        let folder = try dialog("claude-02-c1-bash-blocked").options[1]
+        #expect(folder.persistenceNote(program: .claude) == "Lets Claude work in this folder for the session.")
+        // Wrapped at the phone's width.
+        let narrow = try dialog("claude-28-n1-narrow-bash-later").options[1]
+        #expect(narrow.role == .approvePersistent)
+        #expect(narrow.persistenceNote(program: .claude) == "Lets Claude work in this folder for the session.")
+        let domain = try dialog("claude-24-c8-webfetch").options[1]
+        #expect(domain.role == .approvePersistent)
+        #expect(domain.persistenceNote(program: .claude) == "Saves a rule, so this isn't asked again.")
+        let codex = try #require(
+            CodexDialogParser.parse(try ScreenFixture.screen("codex-01-x1-exec")).dialog?.options[1])
+        #expect(codex.role == .approvePersistent)
+        #expect(codex.persistenceNote(program: .codex) == "Saves a rule, so this isn't asked again.")
+    }
+
     @Test(
         "Bash dialogs from every probe name their command",
         arguments: [
