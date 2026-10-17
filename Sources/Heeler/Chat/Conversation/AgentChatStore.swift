@@ -184,8 +184,9 @@ final class AgentChatStore {
     /// Recorded prompts already taken by a send in the current
     /// conversation: one recorded copy answers one send. Keyed by entry for
     /// a program whose entries outlive a rewrite of its file, otherwise by
-    /// offset within one layout of the file.
-    @ObservationIgnored private var claimedPrompts: Set<String> = []
+    /// offset within one layout of the file. The value is when the send
+    /// that took it was delivered.
+    @ObservationIgnored private var claimedPrompts: [String: Date] = [:]
     @ObservationIgnored private var claimedGeneration = 0
     @ObservationIgnored private var claimedLayout = 0
     @ObservationIgnored private var skillNames: Set<String> = []
@@ -885,15 +886,16 @@ final class AgentChatStore {
     /// settles the new send; a returned send the user added to in the box
     /// takes a prompt that contains it. Conservative on purpose: a wrong match would
     /// hide a prompt that never arrived. A discarded or refused send that
-    /// any prompt recorded after it overtakes, matched or not, is
-    /// abandoned: it is no longer the conversation's latest message.
+    /// any prompt recorded after it overtakes, unmatched or matched by a
+    /// later send, is abandoned: it is no longer the conversation's latest
+    /// message. A send from before it recorded late does not overtake it.
     private func matchSends() {
         let byEntry = source.adapter.echoesByEntry
         let layout = conversation.layoutGeneration
         if claimedGeneration != conversationGeneration || (!byEntry && claimedLayout != layout) {
             claimedGeneration = conversationGeneration
             claimedLayout = layout
-            claimedPrompts = []
+            claimedPrompts = [:]
         }
         struct Candidate {
             let claim: String
@@ -947,9 +949,15 @@ final class AgentChatStore {
                 return !send.knownEntries.contains(entryID)
             }
             func isOpen(_ candidate: Candidate) -> Bool {
-                isAfter(candidate) && !claimedPrompts.contains(candidate.claim)
+                isAfter(candidate) && claimedPrompts[candidate.claim] == nil
             }
-            var isOvertaken: Bool { recorded.contains { isAfter($0.candidate) } }
+            // A prompt that a send from before this one took is that send's
+            // late record, not a message after this one.
+            var isOvertaken: Bool {
+                recorded.contains { prompt in
+                    isAfter(prompt.candidate) && claimedPrompts[prompt.candidate.claim].map { $0 > deliveredAt } ?? true
+                }
+            }
             var match = recorded.first { $0.key == send.key && isOpen($0.candidate) }?.candidate
             if match == nil, send.key == "/compact" {
                 match = compactions.first(where: isOpen)
@@ -967,7 +975,7 @@ final class AgentChatStore {
                 match = recorded.first { !text.isEmpty && $0.text.contains(text) && isOpen($0.candidate) }?.candidate
             }
             if let match {
-                claimedPrompts.insert(match.claim)
+                claimedPrompts[match.claim] = deliveredAt
                 statuses[send.id] = .recorded
             } else if returnedSends.contains(send.id), send.generation == conversationGeneration {
                 statuses[send.id] = .returned

@@ -1576,6 +1576,26 @@ struct AgentChatStoreTests {
         #expect(store.sendStatuses[id] == .abandoned)
     }
 
+    /// Pi delivers one steer per turn boundary, so an earlier steer can be
+    /// recorded after a later one was sent. That record is not a message
+    /// after the later steer: cleared, it still shows as not delivered.
+    @Test func aClearedSteerIsNotOvertakenByAnEarlierSteerRecordedLate() async throws {
+        let (files, store, _, clock, ids) = try await Self.stoppedSteers(
+            .pi, texts: ["Queued steer: say KIWI. ", "Queued steer: say MANGO. "])
+        await files.append(
+            Self.ompMessage("u2", parent: "u1", role: "user", "Queued steer: say KIWI."), to: Self.piPath(.pi))
+        await store.step()
+        #expect(store.sendStatuses[ids[0]] == .recorded)
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(store.sendStatuses[ids[1]] == .returned)
+        store.inputBoxWasRead(try Self.piEditor())
+        await store.step()
+
+        #expect(store.sendStatuses[ids[1]] == .discarded)
+    }
+
     /// Sent from the terminal after all: the box empties before the
     /// transcript has it, and the recorded copy still settles the send.
     @Test func aDiscardedSendTheTranscriptRecordsLaterIsRecorded() async throws {
