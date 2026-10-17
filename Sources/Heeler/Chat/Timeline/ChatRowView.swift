@@ -725,9 +725,14 @@ private struct ChatToolRow: View {
                         .foregroundStyle(.secondary)
                 }
             } else if let read = tool.outputRead {
-                Text(Self.missingPreview(read))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if let text = Self.missingPreview(read, didRun: didRun) {
+                    Text(text)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else if !didRun {
+                // A call that never ran has no output to speak of.
+                EmptyView()
             } else if tool.output != nil {
                 Text(missingOutputText)
                     .font(.caption)
@@ -750,11 +755,22 @@ private struct ChatToolRow: View {
         }
     }
 
-    /// What a row with no preview says about its read.
-    private static func missingPreview(_ read: ChatToolActivity.OutputRead) -> String {
+    /// Whether the call ran: one declined, stopped or interrupted, or a
+    /// question answered with Chat Instead, has no output to show.
+    private var didRun: Bool {
+        guard tool.cardAnswer != .stopped else { return false }
+        switch tool.status {
+        case .declined, .interrupted, .chatInstead: return false
+        default: return true
+        }
+    }
+
+    /// What a row with no preview says about its read; nil when the read
+    /// found nothing for a call that never ran.
+    private static func missingPreview(_ read: ChatToolActivity.OutputRead, didRun: Bool) -> String? {
         switch read {
         case .loading: "Loading output…"
-        case .read: "No output."
+        case .read: didRun ? "No output." : nil
         case .failed(let message), .unavailable(let message): message
         }
     }

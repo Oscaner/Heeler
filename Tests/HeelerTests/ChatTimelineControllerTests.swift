@@ -1476,13 +1476,17 @@ struct ChatRowViewTests {
         #expect(labels == [expected])
     }
 
+    private static let connectedActions = ChatRowActions(
+        toggle: { _ in }, loadOlder: {}, copy: { _ in }, selectText: { _ in },
+        missingOutputText: "Output is available when connected.")
+
     /// The accessibility labels a hosted tool row shows.
     private static func labels(of tool: ChatToolActivity, isExpanded: Bool = false) async throws -> [String] {
         let entry = ChatEntry(id: ChatEntryID("tool"), sourceOffset: 0, content: .tool(tool))
         let rows = await ChatRowBuilder().rows(for: ChatTimelineInput(entries: [entry]))
         let row = try #require(rows.first { $0.id == .entry(entry.id) })
         let controller = UIHostingController(
-            rootView: ChatRowView(row: row, isExpanded: isExpanded, actions: Self.actions)
+            rootView: ChatRowView(row: row, isExpanded: isExpanded, actions: Self.connectedActions)
                 .frame(width: 402)
                 .fixedSize(horizontal: false, vertical: true))
         controller.safeAreaRegions = []
@@ -1499,6 +1503,30 @@ struct ChatRowViewTests {
                 kind: .agent, name: "Agent", title: "worker w1", subtitle: "Teammate @w1", status: .started))
         #expect(labels.contains { $0.contains("Started") })
         #expect(!labels.contains { $0.contains("Done") })
+    }
+
+    /// A call that never ran says nothing about output it has none of
+    /// (CLB-02/03/04); one that ran still says it printed nothing.
+    @Test func anExpandedCallThatNeverRanSaysNothingAboutOutput() async throws {
+        var declined = ChatToolActivity(
+            kind: .command, name: "Bash", title: "rm -rf build", status: .declined, note: "Not now",
+            output: ChatOutputReference(offset: 0, length: 10))
+        declined.outputRead = .read
+        var stopped = ChatToolActivity(kind: .command, name: "Bash", title: "make", status: .declined)
+        stopped.cardAnswer = .stopped
+        let interrupted = ChatToolActivity(
+            kind: .command, name: "Bash", title: "sleep 30", status: .interrupted,
+            output: ChatOutputReference(offset: 0, length: 10))
+        for tool in [declined, stopped, interrupted] {
+            let labels = try await Self.labels(of: tool, isExpanded: true)
+            #expect(!labels.contains { $0.contains("No output.") }, "\(tool.title): \(labels)")
+            #expect(!labels.contains { $0.contains("Output is available") }, "\(tool.title): \(labels)")
+        }
+        let declinedLabels = try await Self.labels(of: declined, isExpanded: true)
+        #expect(declinedLabels.contains { $0.contains("Not now") }, "\(declinedLabels)")
+        let ran = ChatToolActivity(kind: .command, name: "Bash", title: "true", status: .succeeded)
+        let ranLabels = try await Self.labels(of: ran, isExpanded: true)
+        #expect(ranLabels.contains { $0.contains("No output.") }, "\(ranLabels)")
     }
 }
 
