@@ -608,7 +608,9 @@ private struct ChatToolRow: View {
                         if let diff = tool.diff {
                             ChatDiffBadge(diff: diff)
                         }
-                        ChatToolStatusBadge(status: tool.status, exitCode: tool.exitCode, cardAnswer: tool.cardAnswer)
+                        ChatToolStatusBadge(
+                            status: tool.status, exitCode: tool.exitCode, cardAnswer: tool.cardAnswer,
+                            isNotUpdating: tool.isNotUpdating)
                     }
                     if let subtitle = tool.subtitle, !subtitle.isEmpty {
                         Text(verbatim: subtitle)
@@ -740,7 +742,7 @@ private struct ChatToolRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if tool.questions.isEmpty, tool.note == nil {
-                Text(tool.status == .running ? "Running…" : "No output.")
+                Text(tool.status == .running && !tool.isNotUpdating ? "Running…" : "No output.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -835,9 +837,16 @@ private struct ChatToolStatusBadge: View {
     /// Set only where the status agrees: `allowed` on a call that ran,
     /// `stopped` on one that didn't.
     var cardAnswer: ChatToolActivity.CardAnswer? = nil
+    /// A running call shown while nothing live backs the timeline.
+    var isNotUpdating = false
 
     var body: some View {
         switch status {
+        case .running where isNotUpdating:
+            Label("Running when last seen", systemImage: "clock")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .labelStyle(.titleAndIcon)
         case .running:
             ProgressView()
                 .controlSize(.mini)

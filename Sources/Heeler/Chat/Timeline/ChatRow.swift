@@ -205,11 +205,19 @@ struct ChatTurnSignals: Equatable, Sendable {
     var isBackgroundWorkRunning: Bool
     /// The Fold Finished Turns setting.
     var foldsFinishedTurns: Bool
+    /// The Host is connected and the rows come from it, not only from the
+    /// device. Otherwise they read as last seen: no turn runs, and no call
+    /// spins.
+    var isLive: Bool
 
-    init(activity: ChatAgentActivity = .unknown, isBackgroundWorkRunning: Bool = false, foldsFinishedTurns: Bool = true) {
+    init(
+        activity: ChatAgentActivity = .unknown, isBackgroundWorkRunning: Bool = false, foldsFinishedTurns: Bool = true,
+        isLive: Bool = true
+    ) {
         self.activity = activity
         self.isBackgroundWorkRunning = isBackgroundWorkRunning
         self.foldsFinishedTurns = foldsFinishedTurns
+        self.isLive = isLive
     }
 }
 

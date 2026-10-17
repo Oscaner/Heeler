@@ -1519,6 +1519,16 @@ struct ChatRowViewTests {
         #expect(!labels.contains { $0.contains("Done") })
     }
 
+    /// A running call shown while nothing live backs the timeline says it
+    /// ran when last seen instead of spinning.
+    @Test func aCallNotUpdatingSaysRunningWhenLastSeen() async throws {
+        var tool = ChatToolActivity(kind: .agent, name: "Agent", title: "review the diff", status: .running)
+        #expect(try await Self.labels(of: tool).contains { $0.contains("Running") && !$0.contains("last seen") })
+        tool.isNotUpdating = true
+        let labels = try await Self.labels(of: tool)
+        #expect(labels.contains { $0.contains("Running when last seen") })
+    }
+
     /// A call that never ran says nothing about output it has none of
     /// (CLB-02/03/04); one that ran still says it printed nothing.
     @Test func anExpandedCallThatNeverRanSaysNothingAboutOutput() async throws {

@@ -253,6 +253,9 @@ struct ChatToolActivity: Equatable, Codable, Sendable {
     var cardAnswer: CardAnswer?
     /// Reading the output again for an expanded row. Held in memory only.
     var outputRead: OutputRead?
+    /// A running call shown while nothing live backs the timeline: it ran
+    /// when last seen, and may have ended since. Held in memory only.
+    var isNotUpdating = false
 
     init(
         kind: Kind, name: String, title: String, subtitle: String? = nil,
@@ -290,8 +293,8 @@ struct ChatToolActivity: Equatable, Codable, Sendable {
         showsDiffAsOutput ? false : preview?.isTruncated ?? true
     }
 
-    // `preview`, `cardAnswer` and `outputRead` are deliberately absent:
-    // decoding leaves them nil.
+    // `preview`, `cardAnswer`, `outputRead` and `isNotUpdating` are
+    // deliberately absent: decoding leaves them unset.
     private enum CodingKeys: String, CodingKey {
         case kind, name, title, subtitle, status, note, diff, fileChanges, exitCode, questions, callID, output, subagentActivity, imagePath
     }

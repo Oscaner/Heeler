@@ -598,10 +598,13 @@ struct AgentChatSurfaceView: View {
         var isReady = !conversation.transcript.entries.isEmpty || !pending.isEmpty
         if case .locating = conversation.phase {} else { isReady = true }
         // Work that has shown no sign of itself for hours keeps no turn open.
+        // A failed read alone keeps the rows live, so one missed poll
+        // doesn't flicker them.
         let signals = ChatTurnSignals(
             activity: ChatAgentActivity(agent.agent.status),
             isBackgroundWorkRunning: chat.backgroundWork.rows.contains { $0.isRunning && !$0.isStale },
-            foldsFinishedTurns: foldsFinishedTurns)
+            foldsFinishedTurns: foldsFinishedTurns,
+            isLive: console.hostStatuses[agent.hostID] == .connected && !conversation.isFromCache)
         return TimelineFeed(
             generation: chat.conversationGeneration, revision: conversation.revision,
             older: conversation.older, pending: pending, history: chat.blocked.history, outputs: chat.outputs,

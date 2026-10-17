@@ -61,7 +61,7 @@ enum ChatTimelineProjection {
         var pending: [ChatRow] = []
         var hasOlder = false
         let records = Dictionary(turns.map { (ChatRowID.entry($0.firstEntryID), $0) }, uniquingKeysWith: { _, last in last })
-        for row in rows {
+        for row in signals.isLive ? rows : rows.map(lastSeen) {
             if case .olderHistory(let older) = row.content {
                 hasOlder = older != .reachedStart
                 output.rows.append(row)
@@ -113,9 +113,23 @@ enum ChatTimelineProjection {
 
     static func newestPhase(_ turn: ChatTurn?, signals: ChatTurnSignals) -> Phase {
         // A turn its records closed is over: any new work is a turn the
-        // transcript does not show yet.
-        if turn?.ending == nil, signals.activity != .idle { return .running }
+        // transcript does not show yet. Without a live Host, the rows are
+        // as last seen, and a clock counting from them would read as work.
+        if turn?.ending == nil, signals.activity != .idle, signals.isLive { return .running }
         return signals.isBackgroundWorkRunning ? .held : .settled
+    }
+
+    /// A running call as last seen: it may have ended since, so it stops
+    /// claiming to run.
+    private static func lastSeen(_ row: ChatRow) -> ChatRow {
+        guard case .tool(var tool) = row.content, tool.status == .running else { return row }
+        tool.isNotUpdating = true
+        var hasher = Hasher()
+        hasher.combine(row.revision)
+        hasher.combine(tool.isNotUpdating)
+        return ChatRow(
+            id: row.id, content: .tool(tool), revision: hasher.finalize(), topSpacing: row.topSpacing,
+            isNested: row.isNested, isMuted: row.isMuted)
     }
 
     private static func emit(
@@ -281,7 +295,7 @@ enum ChatTimelineProjection {
             added: diffs.isEmpty ? nil : diffs.reduce(0) { $0 + $1.added },
             removed: diffs.isEmpty ? nil : diffs.reduce(0) { $0 + $1.removed },
             failed: tools.filter { failedStatuses.contains($0.status) }.count,
-            isRunning: tools.contains { $0.status == .running }, calls: tools.count, isOpen: isOpen)
+            isRunning: tools.contains { $0.status == .running && !$0.isNotUpdating }, calls: tools.count, isOpen: isOpen)
         var hasher = Hasher()
         hasher.combine(group)
         for member in members { hasher.combine(member.revision) }

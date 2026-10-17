@@ -190,6 +190,46 @@ struct ChatTimelineProjectionTests {
         #expect(Self.ids(idle) == ["u1", "[turn a1]", "a1"])
     }
 
+    /// Saved rows read as last seen while nothing live backs them: an open
+    /// turn the Agent's unknown state can't close settles instead of
+    /// counting minutes from stale rows (SND-12).
+    @Test(arguments: [ChatAgentActivity.working, .blocked, .unknown])
+    func anOpenTurnDoesNotRunWithoutALiveHost(_ activity: ChatAgentActivity) {
+        let rows = [Self.user("u1"), Self.tool("c1"), Self.text("a1")]
+        let signals = ChatTurnSignals(activity: activity, isLive: false)
+        #expect(ChatTimelineProjection.newestPhase(Self.turn("u1", ended: false), signals: signals) == .settled)
+        let output = Self.project(rows, turns: [Self.turn("u1", ended: false)], signals: signals)
+        #expect(Self.ids(output) == ["u1", "[turn a1]", "a1"])
+        var held = signals
+        held.isBackgroundWorkRunning = true
+        #expect(ChatTimelineProjection.newestPhase(Self.turn("u1", ended: false), signals: held) == .held)
+    }
+
+    /// A running call as last seen stops claiming to run, in its own row
+    /// and in its group's header, and draws again as it changes.
+    @Test func runningCallsAreLastSeenWithoutALiveHost() throws {
+        let rows = [
+            Self.user("u1"), Self.tool("c1"), Self.tool("c2", status: .running),
+            Self.tool("t1", .agent, name: "Agent", status: .running),
+        ]
+        let open: Set<ChatRowID> = [.group(ChatEntryID("c2"))]
+        let live = Self.project(rows, turns: [Self.turn("u1", ended: false)], signals: Self.working, open: open)
+        #expect(Self.activityTool(live, "t1")?.isNotUpdating == false)
+        let saved = Self.project(
+            rows, turns: [Self.turn("u1", ended: false)], signals: ChatTurnSignals(activity: .working, isLive: false),
+            open: open)
+        #expect(Self.ids(saved) == ["u1", "[group c2]", "  c1", "  c2", "t1"])
+        #expect(Self.activityTool(saved, "c1")?.isNotUpdating == false)
+        #expect(Self.activityTool(saved, "c2")?.isNotUpdating == true)
+        #expect(Self.activityTool(saved, "t1")?.isNotUpdating == true)
+        #expect(Self.group(saved, .group(ChatEntryID("c2")))?.isRunning == false)
+        let revision = { (output: ChatTimelineProjection.Output, id: String) in
+            output.rows.first { $0.id == Self.entry(id) }?.revision
+        }
+        #expect(revision(saved, "c1") == 1)
+        #expect(revision(saved, "c2") != 1)
+    }
+
     @Test func aClosedTurnStaysFinishedWhileTheNextOneIsNotRecordedYet() {
         let rows = [Self.user("u1"), Self.tool("c1"), Self.text("a1")]
         #expect(Self.ids(Self.project(rows, turns: [Self.turn("u1")], signals: Self.working)) == ["u1", "[turn a1]", "a1"])
