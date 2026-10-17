@@ -35,7 +35,7 @@ struct ClaudeToolSummary: Sendable, Equatable {
         case "Glob", "Grep":
             self.init(kind: .search, title: input.pattern ?? use.name, subtitle: input.path)
         case "LS":
-            self.init(kind: .search, title: input.path ?? use.name)
+            self.init(kind: .listing, title: input.path ?? use.name)
         case "WebFetch":
             self.init(kind: .web, title: input.url ?? use.name)
         case "WebSearch":

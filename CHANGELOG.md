@@ -63,8 +63,8 @@ Entries reference the pull request that made the change.
   completed") and ToolSearch rows by the tools they loaded ("Loaded
   WebFetch"). A spawned teammate reads Started, not Done, and choosing "Chat
   about this" reads Chat Instead, not Declined. (#425)
-- Chat counts a Codex directory listing as a listed folder rather than a
-  search, counts images in a step group without calling them viewed, and folds
+- Chat counts a directory listing as a listed folder rather than a search,
+  counts images in a step group without calling them viewed, and folds
   Codex's waits for subagents into the turn instead of pinning a row for each.
   (#425)
 - A message that reached a running turn is marked Sent while working instead

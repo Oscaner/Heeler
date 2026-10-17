@@ -163,7 +163,8 @@ struct ChatToolActivity: Equatable, Codable, Sendable {
         case fileWrite
         case fileRead
         case search
-        /// A Codex directory listing (`list_files`).
+        /// A directory listing: Codex `list_files`, Pi and Oh My Pi `ls`,
+        /// Claude Code `LS`.
         case listing
         case web
         case agent

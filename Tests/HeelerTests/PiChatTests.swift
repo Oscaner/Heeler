@@ -97,6 +97,25 @@ struct PiChatTests {
         #expect(tool.title == "**/*.txt")
     }
 
+    /// A directory listing reads "Listed 1 folder" in a group, as Codex's
+    /// does, not "Ran 1 search".
+    @Test func lsCallIsAListing() throws {
+        let lines = Self.lines([
+            Self.header,
+            #"{"type":"message","id":"u","parentId":null,"message":{"role":"user","content":[{"type":"text","text":"list src"}]}}"#,
+            #"{"type":"message","id":"a","parentId":"u","message":{"role":"assistant","content":[{"type":"toolCall","id":"c","name":"ls","arguments":{"path":"src"}}],"stopReason":"toolUse"}}"#,
+            #"{"type":"message","id":"r","parentId":"a","message":{"role":"toolResult","toolCallId":"c","toolName":"ls","content":[{"type":"text","text":"main.swift"}],"isError":false}}"#,
+        ])
+        var reducer = PiTranscriptReducer()
+        reducer.append(lines)
+        guard case .tool(let tool) = reducer.transcript(.init(activity: .working)).entries.last?.content else {
+            Issue.record("Tool missing")
+            return
+        }
+        #expect(tool.kind == .listing)
+        #expect(tool.title == "src")
+    }
+
     @Test func pairsToolsByIDAndReadsFullOutputOnDemand() throws {
         let lines = Self.lines([
             Self.header,

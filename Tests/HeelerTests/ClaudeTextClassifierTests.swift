@@ -317,6 +317,9 @@ struct ClaudeToolSummaryTests {
             name: "Grep", input: ClaudeToolInput(path: "Sources", pattern: "TODO"),
             expected: ClaudeToolSummary(kind: .search, title: "TODO", subtitle: "Sources")),
         Case(
+            name: "LS", input: ClaudeToolInput(path: "/w/Sources"),
+            expected: ClaudeToolSummary(kind: .listing, title: "/w/Sources")),
+        Case(
             name: "WebFetch", input: ClaudeToolInput(url: "https://example.com", prompt: "title?"),
             expected: ClaudeToolSummary(kind: .web, title: "https://example.com")),
         Case(
