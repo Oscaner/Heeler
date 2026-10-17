@@ -5,8 +5,9 @@ import Foundation
 /// Claude Code stores much of what its terminal shows as system UI as user
 /// text wrapped in a tag: commands, shell mode, background task
 /// notifications, reminders. Only a tag at the very start of the trimmed text
-/// classifies; a prompt that mentions `<command-name>` further in is still a
-/// prompt, because it is what the person typed.
+/// classifies, or a tag right after one of the headers Claude Code puts
+/// before a peer message; a prompt that mentions `<command-name>` further in
+/// is still a prompt, because it is what the person typed.
 enum ClaudeUserText: Sendable, Equatable {
     /// Words the user wrote, with any `<pasted_content>` wrapper removed.
     case prompt(String)
@@ -318,8 +319,6 @@ enum ClaudeText {
         return nil
     }
 
-    /// The non-empty contents of `tags`, in that order, one per line, with
-    /// terminal escapes removed.
     /// Every `<tag …>…</tag>` block in `text`, in order, with its opening
     /// tag's text (attributes included).
     static func blocks(ofTag tag: String, in text: String) -> [(openingTag: String, content: String)] {
@@ -350,6 +349,8 @@ enum ClaudeText {
         return value.isEmpty ? nil : value
     }
 
+    /// The non-empty contents of `tags`, in that order, one per line, with
+    /// terminal escapes removed.
     static func joinedContent(ofTags tags: [String], in text: String) -> String {
         tags.compactMap { content(ofTag: $0, in: text) }
             .map { strippingTerminalEscapes($0).trimmingCharacters(in: .whitespacesAndNewlines) }
