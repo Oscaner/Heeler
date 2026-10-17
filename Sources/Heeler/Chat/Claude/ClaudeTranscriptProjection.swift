@@ -297,6 +297,8 @@ private struct Builder {
     private var agentsKilled: [ClaudeRecord] = []
     /// `plan_mode_exit` paths by the record they follow (the approval).
     private var planExitPaths: [String: String] = [:]
+    /// The latest content written to each plan file, by path.
+    private var planWrites: [String: String] = [:]
     private var entryIDs: Set<ChatEntryID> = []
     /// Records whose content an earlier entry already shows.
     private var consumed: Set<String> = []
@@ -423,12 +425,24 @@ private struct Builder {
         case "ExitPlanMode":
             let filePath =
                 structured?.filePath ?? answer.flatMap { planExitPaths[$0.record.uuid] } ?? use.input.planFilePath
+            // Claude Code 2.1.301 fills `input.plan` from the plan file as
+            // it stood before a Write in the same message; until the result
+            // says which plan it was, the latest Write is the plan.
+            let written = use.input.planFilePath.flatMap { planWrites[$0] }
             placed = add(
                 entryID, at: record,
                 .plan(
                     ChatPlan(
-                        text: structured?.plan ?? use.input.plan ?? "", filePath: filePath, status: status,
-                        note: outcome?.note, callID: callID)))
+                        text: structured?.plan ?? written ?? use.input.plan ?? "", filePath: filePath,
+                        status: status, note: outcome?.note, callID: callID)))
+        case "Write" where use.input.planContent != nil:
+            if let path = use.input.filePath, let content = use.input.planContent,
+                status != .failed, status != .declined
+            {
+                planWrites[path] = content
+            }
+            placed = add(
+                entryID, at: record, .tool(toolRow(for: use, in: record, status: status, answer: answer)))
         case "EnterPlanMode" where status == .succeeded:
             placed = add(entryID, at: record, .notice(ChatNotice(kind: .planMode, title: "Entered plan mode")))
         default:

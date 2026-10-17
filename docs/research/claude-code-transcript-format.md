@@ -295,7 +295,7 @@ read Declined like `4. No` (read in the binary, not observed).
 | Read | `file_path` | `type: "text"` with `file{numLines, startLine, totalLines}`; images, PDFs and notebooks have other shapes (`sdk-tools.d.ts:208`) |
 | Agent (older name `Task`) | `description`, `subagent_type` | `status` `completed` with `totalToolUseCount` and `totalDurationMs`, or `async_launched` with `agentId` (`sdk-tools.d.ts:102`; `probe2-transcript.jsonl:126`) |
 | AskUserQuestion | `questions[]` | `answers` maps each question to its answers joined by `, `: `probe2-transcript.jsonl:48` has `Red, Blue` and the typed answer `Medium` |
-| ExitPlanMode | `plan`, `planFilePath` | `plan` is the approved plan. `input.plan` can be stale: `probe2-transcript.jsonl:84` proposes p.txt while `:86` holds q.txt |
+| ExitPlanMode | `plan`, `planFilePath` | `plan` is the approved plan. `input.plan` can be stale: `probe2-transcript.jsonl:84` proposes p.txt while `:86` holds q.txt. The model wrote q.txt to `planFilePath` at `:83`, in the same message, and 2.1.301 read the file before that Write, so until the result says otherwise the latest Write to the plan file is the plan |
 | EnterPlanMode | none | `message` (`probe2-transcript.jsonl:60`) |
 | Glob and Grep, WebFetch, TodoWrite | `pattern`, `url` (as the model wrote it: 2.1.301's permission dialog shows it normalized, a bare host with a trailing `/`) | `numFiles`; `code` and `bytes`; `newTodos` |
 | ToolSearch | `query` | Result content `[{type: "tool_reference"}]` (`probe2-transcript.jsonl:56`) |

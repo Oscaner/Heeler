@@ -163,7 +163,8 @@ struct ClaudeToolUse: Sendable, Equatable {
 }
 
 /// The fields of a tool call's input that rows and Blocked cards use. Large
-/// inputs (a written file, an edit's strings) are not kept.
+/// inputs (a written file, an edit's strings) are not kept, except a plan
+/// file's content.
 struct ClaudeToolInput: Sendable, Equatable {
     var command: String?
     var description: String?
@@ -181,6 +182,10 @@ struct ClaudeToolInput: Sendable, Equatable {
     var todos: [ClaudeTodo]?
     var skill: String?
     var arguments: String?
+    /// A Write's content, kept only for a file under `.claude/plans/`: an
+    /// ExitPlanMode call in the same message can carry the plan as it
+    /// stood before that Write.
+    var planContent: String?
 }
 
 struct ClaudeTodo: Sendable, Equatable {
@@ -462,7 +467,8 @@ extension ClaudeToolInput {
                     },
                     isMultiSelect: question.multiSelect ?? false)
             },
-            todos: raw.todos?.compactMap(ClaudeTodo.init), skill: raw.skill, arguments: raw.args)
+            todos: raw.todos?.compactMap(ClaudeTodo.init), skill: raw.skill, arguments: raw.args,
+            planContent: raw.planContent)
     }
 }
 
@@ -818,10 +824,11 @@ private struct RawToolInput: Decodable {
     var todos: [RawTodo]?
     var skill: String?
     var args: String?
+    var planContent: String?
 
     private enum CodingKeys: String, CodingKey {
         case command, description, path, pattern, url, query, prompt, plan, planFilePath
-        case questions, todos, skill, args
+        case questions, todos, skill, args, content
         case filePath = "file_path"
         case notebookPath = "notebook_path"
         case subagentType = "subagent_type"
@@ -845,6 +852,9 @@ private struct RawToolInput: Decodable {
         todos = c.lenient([RawTodo].self, .todos)
         skill = c.lenient(String.self, .skill)
         args = c.lenient(String.self, .args)
+        if filePath?.contains("/.claude/plans/") == true {
+            planContent = c.lenient(String.self, .content)
+        }
     }
 }
 

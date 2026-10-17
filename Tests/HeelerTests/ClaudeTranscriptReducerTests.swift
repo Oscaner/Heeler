@@ -211,6 +211,15 @@ struct ClaudeTranscriptReducerTests {
                     callID: "toolu_01CV6HHFQmyxCu6gXqLc4vgE"))
     }
 
+    @Test("A plan waiting for an answer shows the plan file as written, not the stale input (M L83-L84)")
+    func exitPlanWaitingAfterAWrite() throws {
+        // Up to the ExitPlanMode call whose input still names p.txt.
+        let lines = Array(try ChatFixture.lines(Self.probe).prefix(84))
+        let transcript = ClaudeSample.reducer(lines).transcript(ChatProjectionContext(activity: .blocked))
+        let plan = try #require(Self.plan("tool:toolu_01CV6HHFQmyxCu6gXqLc4vgE", in: transcript))
+        #expect(plan.text.hasPrefix("1. Create q.txt"))
+    }
+
     /// The row is titled by the path relative to the record's `cwd`, as
     /// Codex and Pi rows are; the file change keeps the recorded path.
     @Test("Creating a file counts its lines and opens to them (M L91-L93)")
