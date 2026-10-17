@@ -49,8 +49,6 @@ enum BlockedRequestMatch {
         }
     }
 
-    /// The screen's text is the request's, or its start where the dialog
-    /// was cut off. Wrapping moves spaces, so they do not count.
     /// The plan a Claude card shows: the call's Markdown when it agrees
     /// with the plan rows on screen, else those rows. Claude Code 2.1.301
     /// records `input.plan` from the plan file as it stood before a Write
@@ -72,6 +70,8 @@ enum BlockedRequestMatch {
         String(String.UnicodeScalarView(text.lowercased().unicodeScalars.filter(CharacterSet.alphanumerics.contains)))
     }
 
+    /// The screen's text is the request's, or its start where the dialog
+    /// was cut off. Wrapping moves spaces, so they do not count.
     private static func begins(_ full: String, with shown: String?) -> Bool {
         let start = DialogRowScanner.comparable(shown ?? "")
         return !start.isEmpty && DialogRowScanner.comparable(full).hasPrefix(start)
