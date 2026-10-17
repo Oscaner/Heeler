@@ -48,6 +48,11 @@ Entries reference the pull request that made the change.
   from its cache. Sending checks the Agent's input box before and after and
   never resends. (#425)
 
+### Changed
+
+- Agent Gone says the Agent may have exited while its pane stays open, and
+  that the Agent shows again once one starts in that pane. (#425)
+
 ### Fixed
 
 - Chat renders Markdown tables as aligned columns with wrapping cells, inline

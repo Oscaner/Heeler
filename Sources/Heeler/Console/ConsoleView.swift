@@ -2224,15 +2224,21 @@ struct MissingAgentPresentation: Equatable {
                 cause = .paneGone
                 title = "Agent Gone"
                 systemImage = "rectangle.on.rectangle.slash"
-                message = "This Agent's pane is no longer reported."
+                message = Self.paneGoneMessage
             }
         case .ended, nil:
             cause = .paneGone
             title = "Agent Gone"
             systemImage = "rectangle.on.rectangle.slash"
-            message = "This Agent's pane is no longer reported."
+            message = Self.paneGoneMessage
         }
     }
+
+    /// herdr drops an Agent whose program exits from a pane that stays, as
+    /// it does one whose pane closed; the same pane rebinds when an Agent
+    /// starts in it again.
+    static let paneGoneMessage =
+        "The Agent in this pane has exited, or the pane was closed. It shows here again if an Agent starts in the pane."
 
     /// What the Console's detail column shows when the selected Agent is not
     /// in the list.
