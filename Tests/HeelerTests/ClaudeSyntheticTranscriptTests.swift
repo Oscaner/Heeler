@@ -749,6 +749,32 @@ struct ClaudeSyntheticTranscriptTests {
             ClaudeSample.entry("think:r2", in: transcript) == .reasoning(ChatReasoning(text: "", durationMilliseconds: 3)))
     }
 
+    @Test("A compaction's preview skips Claude Code's fixed opening and starts with the summary")
+    func compactionPreview() {
+        // Claude Code 2.1.301 (CL-22).
+        let summary = ClaudeTranscriptProjection.compactionPreamble + """
+
+
+            Summary:
+            1. Primary Request and Intent:
+               The user asked to add a retry to the payment sheet.
+
+            2. Key Technical Concepts:
+               - SwiftUI sheets
+            """
+        #expect(
+            ClaudeTranscriptProjection.compactionPreview(summary)
+                == "The user asked to add a retry to the payment sheet.\n\n2. Key Technical Concepts:\n   - SwiftUI sheets")
+        let inline = ClaudeTranscriptProjection.compactionPreamble
+            + "\nSummary:\n1. Primary Request and Intent: Add a retry.\n2. Files: Pay.swift"
+        #expect(ClaudeTranscriptProjection.compactionPreview(inline) == "Add a retry.\n2. Files: Pay.swift")
+        // Another opening, or nothing after this one, keeps the whole text.
+        #expect(ClaudeTranscriptProjection.compactionPreview("Summary: two questions were answered.")
+            == "Summary: two questions were answered.")
+        let bare = ClaudeTranscriptProjection.compactionPreamble + "\n\nSummary:\n"
+        #expect(ClaudeTranscriptProjection.compactionPreview(bare) == bare)
+    }
+
     // MARK: - Tool rows
 
     @Test(

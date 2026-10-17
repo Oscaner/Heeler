@@ -213,6 +213,35 @@ enum ClaudeTranscriptProjection {
             ?? (try? Date(timestamp, strategy: Date.ISO8601FormatStyle()))
     }
 
+    /// Claude Code's fixed opening of a compaction summary (2.1.301), which
+    /// would fill the divider's few preview lines.
+    static let compactionPreamble =
+        "This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation."
+
+    /// A summary without its fixed opening, its `Summary:` line and the
+    /// first section's heading, so the preview starts with what the
+    /// conversation was about. The whole summary when it opens otherwise.
+    static func compactionPreview(_ summary: String) -> String {
+        guard summary.hasPrefix(compactionPreamble) else { return summary }
+        var lines = Array(
+            summary.dropFirst(compactionPreamble.count).split(separator: "\n", omittingEmptySubsequences: false)
+                .map(String.init))
+        func dropLeading(_ isDropped: (String) -> Bool) {
+            lines = Array(lines.drop { isDropped($0.trimmingCharacters(in: .whitespaces)) })
+        }
+        dropLeading(\.isEmpty)
+        dropLeading { $0 == "Summary:" }
+        dropLeading(\.isEmpty)
+        let heading = "1. Primary Request and Intent:"
+        if let first = lines.first?.trimmingCharacters(in: .whitespaces), first.hasPrefix(heading) {
+            let rest = first.dropFirst(heading.count).trimmingCharacters(in: .whitespaces)
+            lines = (rest.isEmpty ? [] : [rest]) + lines.dropFirst()
+            dropLeading(\.isEmpty)
+        }
+        let remainder = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return remainder.isEmpty ? summary : remainder
+    }
+
     static func modelChangeTitle(from: String?, to: String?) -> String {
         switch (from, to) {
         case (let from?, let to?): "Switched from \(from) to \(to)"
@@ -761,7 +790,7 @@ private struct Builder {
         else { return }
         let summary = record.texts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !summary.isEmpty else { return }
-        divider.detail = ChatToolPreview(capping: summary).text
+        divider.detail = ChatToolPreview(capping: ClaudeTranscriptProjection.compactionPreview(summary)).text
         entries[index].content = .divider(divider)
     }
 
