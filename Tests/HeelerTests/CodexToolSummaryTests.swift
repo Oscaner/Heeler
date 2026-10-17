@@ -182,6 +182,29 @@ struct CodexToolSummaryTests {
         #expect(tools.map(\.subtitle) == ["/nonexistent-heeler-dir", nil])
     }
 
+    @Test("A wait for subagents is a plain step, not a subagent card")
+    func waitForSubagents() {
+        var builder = CodexRolloutBuilder()
+        builder.turnStarted("t1")
+        builder.item(
+            "t1",
+            [
+                "type": "CollabAgentToolCall", "id": "call_w1", "tool": "wait", "status": "completed",
+                "sender_thread_id": "thread-1", "receiver_thread_ids": [], "receiver_agents": [],
+                "agents_states": [:],
+            ])
+        builder.turnComplete("t1")
+        let lines = builder.chatLines
+
+        let tools = builder.reducer().transcript(ChatProjectionContext(activity: .idle)).entries.compactMap(\.tool)
+        #expect(
+            tools == [
+                ChatToolActivity(
+                    kind: .other, name: "wait", title: "Waited for subagents", status: .succeeded,
+                    callID: "call_w1", output: ChatOutputReference(offset: lines[2].offset, length: lines[2].length))
+            ])
+    }
+
     @Test("A call without an outcome follows the turn and herdr's activity", arguments: CodexOpenCallCase.allCases)
     func openCall(_ openCase: CodexOpenCallCase) {
         var builder = CodexRolloutBuilder()

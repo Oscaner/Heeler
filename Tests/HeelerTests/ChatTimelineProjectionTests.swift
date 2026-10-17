@@ -380,6 +380,21 @@ struct ChatTimelineProjectionTests {
         return tool
     }
 
+    /// A Codex wait is plumbing: it folds while the subagent cards stay
+    /// pinned above the fold.
+    @Test func aWaitFoldsWhileTheSubagentCardsStayPinned() {
+        let rows = [
+            Self.user("u1"), Self.subagent("s1", path: "/root/probe_a", event: "started"),
+            Self.subagent("s2", path: "/root/probe_b", event: "started"),
+            Self.tool("w1", .other, name: "wait", title: "Waited for subagents"),
+            Self.tool("w2", .other, name: "wait", title: "Waited for subagents"), Self.text("a1"),
+        ]
+        let output = Self.project(rows, turns: [Self.turn("u1")])
+        #expect(Self.ids(output) == ["u1", "s1", "s2", "[turn a1]", "a1"])
+        #expect(output.owners[Self.entry("w1")] == .turn(ChatEntryID("a1")))
+        #expect(output.owners[Self.entry("w2")] == .turn(ChatEntryID("a1")))
+    }
+
     @Test func interleavedSubagentEventsMergeByFullPathAndKeepTheLatestStatus() {
         let rows = [
             Self.user("u1"), Self.subagent("a1", path: "/root/a/task", event: "started"),

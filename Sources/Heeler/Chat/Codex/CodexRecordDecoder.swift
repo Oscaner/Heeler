@@ -421,6 +421,14 @@ enum CodexRecordDecoder {
                     savedPath: raw.savedPath, line: line, context: context))
         case .collabAgentToolCall:
             let tool = raw.tool ?? "agent"
+            // A wait is plumbing: the subagent cards carry the state, so it
+            // folds with the turn's other steps instead of pinning.
+            if tool == "wait" {
+                return .tool(
+                    CodexToolSnapshot(
+                        kind: .other, name: tool, title: "Waited for subagents", status: raw.status?.chatStatus,
+                        callID: raw.id, output: reference(line)))
+            }
             let prompt = raw.prompt.flatMap { firstLine($0) }
             return .tool(
                 CodexToolSnapshot(
