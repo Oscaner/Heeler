@@ -226,10 +226,14 @@ answer) through `pane.send_input`. The answer is confirmed when the dialog on
 screen changes, when Claude Code's transcript shows the matching tool result,
 or when Codex or Oh My Pi leaves Blocked. Staying Blocked proves nothing,
 because herdr stays Blocked while the next queued approval takes the screen.
-Three seconds without effect shows a hint, and nothing is resent. Codex holds
-an answer to its asynchronous question until its next tool call, so the card
-confirms it by Codex's queued-messages notice and shows it as Queued; Chat
-never works around herdr's `agent_blocked` while such a question waits. Oh My
+Three seconds without effect shows a hint, and nothing is resent. Codex
+0.160.1 holds an answer to its asynchronous question until its next tool call,
+so the card confirms it by Codex's queued-messages notice and shows it as
+Queued. Codex 0.162.1 delivers the answer at once (a waiting `write_stdin`
+returns early) and draws no notice, so that confirmation never comes: the
+card waits about two seconds, reads the next question, and the transcript's
+answer stands in for the Queued entry. Chat never works around herdr's
+`agent_blocked` while such a question waits. Oh My
 Pi's tool approval binds no digits and ignores its approve key for 500 ms
 after it draws, a span that starts before Chat first sees it: Approve presses
 ctrl+q once the panel has shown for 650 ms, and Deny presses Esc, after which

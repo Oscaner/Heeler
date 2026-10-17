@@ -250,6 +250,12 @@ tool call's `call_…` id, and it has no response-item twin.
   (`codex-rs/tui/src/bottom_pane/async_questions/state.rs:147-155`).
 - `probe2-rollout.jsonl:78` answers only index 0, so the second question
   ("Pick a drink") stays open.
+- When the answer arrives differs by version. 0.160.1 holds it until the
+  next tool call and draws "Messages to be submitted after next tool call".
+  0.162.1 (observed live 2026-10-17) records the reply within 0.2 s, since a
+  waiting code-mode `write_stdin` returns early, and draws no notice. Its
+  collapsed form counts down (`? N questions · 20s`), and a paste sent while
+  the options have focus is dropped.
 
 Sync `request_user_input`:
 
