@@ -73,6 +73,8 @@ Entries reference the pull request that made the change.
 - The app no longer hangs when the Agent switcher reorders its chips after
   an Agent's status changes, and the strip keeps the open Agent's chip in
   view when it reorders, such as after an Agent restarts in its pane. (#425)
+- The app no longer hangs on iPhone when going back to the Agents list from
+  an Agent the app reopened at launch. (#425)
 
 ## [0.1.14] - 2026-10-15
 
