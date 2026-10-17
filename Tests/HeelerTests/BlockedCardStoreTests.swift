@@ -170,6 +170,32 @@ struct BlockedCardStoreTests {
         }
     }
 
+    @Test func aPlanKeepsOnlyTheCardsStopSinceClaudeRecordsItsApproval() async throws {
+        let request = ChatPendingRequest(
+            entryID: ChatEntryID("plan"), callID: "toolu_plan", kind: .other, toolName: "ExitPlanMode", summary: "Plan")
+        for (action, expected) in [
+            (DialogAction.choose(ordinal: 1), ChatToolActivity.CardAnswer?.none),
+            (.dismiss, .stopped),
+        ] {
+            let pane = FakePane(try ScreenFixture.screen("claude-16-c6-exitplan-1"))
+            await pane.react(to: action == .dismiss ? ["esc"] : ["1"], with: try ScreenFixture.screen("claude-29-c3-after-immediate"))
+            let store = Self.store(.claude, pane: pane)
+            store.update(transcript: Self.transcript(pending: [request]))
+            store.update(activity: .blocked)
+            await store.refresh()
+            guard case .card(let card) = store.content else {
+                Issue.record("Expected a plan card, got \(store.content)")
+                return
+            }
+            #expect(card.dialog.kind == .claudePlan)
+
+            await store.perform(action)
+
+            #expect(store.progress == .ready, "\(action)")
+            #expect(store.history.calls["toolu_plan"] == expected, "\(action)")
+        }
+    }
+
     @Test func anAnswerThatShowedNoEffectIsNotKept() async throws {
         let pane = FakePane(try ScreenFixture.screen("claude-02-c1-bash-blocked"))
         let store = Self.store(.claude, pane: pane)

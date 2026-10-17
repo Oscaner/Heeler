@@ -212,10 +212,12 @@ final class BlockedCardStore {
             else { return }
             history.queue(option.label, forQuestion: id)
         case .choose(let ordinal), .amend(let ordinal, _):
+            // Claude records a plan's approval itself ("User has approved
+            // your plan"), whichever button gave it.
             let allows: Set<DialogOptionRole> = [.approve, .approvePersistent, .approveModeSwitch]
-            guard let id = card.request?.callID, let role = dialog.option(ordinal)?.role, allows.contains(role) else {
-                return
-            }
+            guard dialog.kind != .claudePlan, let id = card.request?.callID, let role = dialog.option(ordinal)?.role,
+                allows.contains(role)
+            else { return }
             history.record(.allowed, forCall: id)
         case .dismiss:
             // Oh My Pi's Esc denies the call and goes on, as its transcript
