@@ -1689,6 +1689,22 @@ struct AgentChatStoreTests {
         #expect(store.sendStatuses[id] == .abandoned)
     }
 
+    /// At the phone's 62 columns the refusal wraps `small)` onto a second
+    /// row, and Oh My Pi draws its session title between it and the status
+    /// band (pi-42, omp-35); neither is conversation below the refusal.
+    @Test(arguments: [
+        (ChatProgram.pi, "pi-42-compact-nothing-62"), (ChatProgram.omp, "omp-35-compact-nothing-62"),
+    ])
+    func aWrappedRefusalAtThePhoneWidthIsRefused(program: ChatProgram, stem: String) async throws {
+        let (_, store, pane, clock, id) = try await Self.sentCompact(program, screen: try ScreenFixture.screen(stem))
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .refused("\(program.chatName) had nothing to compact."))
+    }
+
     /// The screen is read once for each overdue `/compact`: one that
     /// showed no refusal stays overdue, whatever the screen shows later,
     /// until a prompt recorded after it with no compaction retires it.

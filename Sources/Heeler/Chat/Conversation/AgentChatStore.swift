@@ -1085,13 +1085,24 @@ final class AgentChatStore {
     /// Pi 0.85.1's and Oh My Pi 18.11's row while a compaction runs.
     private static let compactingSpinner = "Compacting context..."
 
-    /// The last "Compaction failed:" row, when only blank rows separate it
-    /// from the input box (Pi's rule, Oh My Pi's box or status band). One
-    /// with conversation below it is an earlier attempt's.
+    /// The last "Compaction failed:" row, when nothing but blank rows, the
+    /// message's own wrapped rows (drawn in its color: at the phone's 62
+    /// columns `small)` wraps) and Oh My Pi's dim italic session title
+    /// separate it from the input box (Pi's rule, Oh My Pi's box or status
+    /// band). One with conversation below it is an earlier attempt's.
     private static func latestCompactionFailure(in screen: ANSIScreen, program: ChatProgram) -> ScreenRow? {
         let rows = screen.rows
         guard let index = rows.lastIndex(where: { $0.text.contains("Compaction failed:") }) else { return nil }
-        guard let next = rows[(index + 1)...].first(where: { !$0.isBlank }) else { return rows[index] }
+        let color = rows[index].runs.first { $0.text.contains("Compaction failed:") }?.style.foreground
+        func drawn(_ row: ScreenRow, _ matches: (ScreenStyle) -> Bool) -> Bool {
+            let runs = row.runs.filter { !$0.text.allSatisfy(\.isWhitespace) }
+            return !runs.isEmpty && runs.allSatisfy { matches($0.style) }
+        }
+        let next = rows[(index + 1)...].first { row in
+            !row.isBlank && !(color != nil && drawn(row) { $0.foreground == color })
+                && !(program == .omp && drawn(row) { $0.isDim && $0.isItalic })
+        }
+        guard let next else { return rows[index] }
         let text = next.trimmedText
         let isInputBox =
             text.allSatisfy { $0 == "─" } || text.hasPrefix("╭")

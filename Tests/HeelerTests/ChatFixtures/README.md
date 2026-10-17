@@ -137,6 +137,11 @@ file keeps the capture's number and name behind the `pi-` or `omp-` prefix.
   started with `--no-session` in an empty directory: `/compact` typed into
   the fresh session printed `Error: Compaction failed: Nothing to compact
   (session too small)` above the editor, and the Agent stayed idle.
+- `pi-42-compact-nothing-62` and `omp-35-compact-nothing-62` come from Pi
+  0.85.1 and Oh My Pi 18.11.2 on herdr 0.9.5 (2026-10-18) at the phone's 62
+  columns, after one turn each: the same refusal wraps `small)` onto a
+  second row, and Oh My Pi draws its session title, dim and italic, between
+  it and the status band.
 - Oh My Pi used the nerd-font status band.
 - Captures are 119, 120, 62 or 40 columns wide; Pi's are 119 unless the
   name or the note above says otherwise, Oh My Pi's 120.
