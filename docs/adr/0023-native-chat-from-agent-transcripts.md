@@ -401,8 +401,11 @@ no Attach at all.
   often. Unknown records are skipped, so a format change hides content until
   an adapter learns it rather than breaking Chat. The research notes record
   what each version wrote.
-- Only `~/.claude` and `~/.codex` are searched; an Agent run with
-  `CLAUDE_CONFIG_DIR` or `CODEX_HOME` elsewhere shows Conversation Not Found.
+- Only `~/.claude` and `~/.codex` are searched. herdr learns the session from
+  integration hooks in the program's config directory, so an Agent run with
+  `CLAUDE_CONFIG_DIR` or `CODEX_HOME` elsewhere reports none without them
+  there, and Chat shows Waiting for Conversation; with them installed there,
+  Chat shows Conversation Not Found.
   Compressed (`.zst`) and pre-envelope Codex rollouts are not read.
 - Claude Code writes no transcript before the first prompt, and Codex reports
   no session to herdr until after it. The Composer works in both states.
