@@ -1056,17 +1056,23 @@ final class AgentChatStore {
     /// small)") and record nothing, so its echo would stay overdue. The
     /// Agent often never leaves idle for it, so the screen is read once for
     /// each overdue `/compact` while herdr reports the Agent idle, whenever
-    /// it last turned so.
+    /// it last turned so. herdr stays idle through a compaction that runs
+    /// too, so a read that finds its spinner counts for nothing and the next
+    /// step reads again.
     private func checkRefusedCompactions() async {
         guard program == .pi || program == .omp, ChatAgentActivity(agent.status) == .idle else { return }
         let candidates = sends.filter {
             $0.key == "/compact" && sendStatuses[$0.id] == .overdue && !compactChecked.contains($0.id)
         }
         guard !candidates.isEmpty else { return }
-        compactChecked.formUnion(candidates.map(\.id))
-        guard let screen = try? await source.screen.readScreen(), !Task.isCancelled,
-            let failure = screen.rows.last(where: { $0.text.contains("Compaction failed:") })
-        else { return }
+        let ids = Set(candidates.map(\.id))
+        compactChecked.formUnion(ids)
+        guard let screen = try? await source.screen.readScreen(), !Task.isCancelled else { return }
+        if screen.rows.contains(where: { $0.text.contains(Self.compactingSpinner) }) {
+            compactChecked.subtract(ids)
+            return
+        }
+        guard let failure = Self.latestCompactionFailure(in: screen, program: program) else { return }
         let refusal =
             failure.text.contains("Nothing to compact")
             ? "\(program.chatName) had nothing to compact." : "\(program.chatName) couldn't compact."
@@ -1074,6 +1080,23 @@ final class AgentChatStore {
             refusedSends[send.id] = refusal
         }
         matchSends()
+    }
+
+    /// Pi 0.85.1's and Oh My Pi 18.11's row while a compaction runs.
+    private static let compactingSpinner = "Compacting context..."
+
+    /// The last "Compaction failed:" row, when only blank rows separate it
+    /// from the input box (Pi's rule, Oh My Pi's box or status band). One
+    /// with conversation below it is an earlier attempt's.
+    private static func latestCompactionFailure(in screen: ANSIScreen, program: ChatProgram) -> ScreenRow? {
+        let rows = screen.rows
+        guard let index = rows.lastIndex(where: { $0.text.contains("Compaction failed:") }) else { return nil }
+        guard let next = rows[(index + 1)...].first(where: { !$0.isBlank }) else { return rows[index] }
+        let text = next.trimmedText
+        let isInputBox =
+            text.allSatisfy { $0 == "─" } || text.hasPrefix("╭")
+            || (program == .omp && PiInputBoxDetector.isOMPStatusBand(next))
+        return isInputBox ? rows[index] : nil
     }
 
     /// A read of the Agent's screen made for another reason, such as the

@@ -1713,6 +1713,30 @@ struct AgentChatStoreTests {
         #expect(store.sendStatuses[id] == .abandoned)
     }
 
+    /// herdr stays idle while Pi compacts: a read that finds the spinner
+    /// waits for the next step, and a failure row with conversation below
+    /// it is an earlier attempt's, not this one's refusal.
+    @Test func aCompactionStillRunningOrAnEarlierFailureIsNoRefusal() async throws {
+        let (_, store, pane, clock, id) = try await Self.sentCompact(
+            .pi, screen: try ScreenFixture.screen("pi-39-compacting-empty"))
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .overdue)
+
+        let capture = try ScreenFixture.text("pi-39-compacting-empty")
+        await pane.show(
+            ANSIScreenDecoder.decode(
+                capture.replacingOccurrences(of: "Compacting context... (escape to cancel)", with: "")))
+        await store.step()
+        #expect(await pane.reads == 2)
+        #expect(store.sendStatuses[id] == .overdue)
+
+        await store.step()
+        #expect(await pane.reads == 2)
+    }
+
     /// Any other compaction failure is refused too, and a compaction the
     /// transcript records after all still settles the send.
     @Test func anotherCompactionFailureIsRefusedUntilACompactionIsRecorded() async throws {
