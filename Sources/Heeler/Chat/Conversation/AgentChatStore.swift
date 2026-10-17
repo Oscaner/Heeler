@@ -919,10 +919,12 @@ final class AgentChatStore {
     /// Esc in Pi or Oh My Pi puts the steers its turn had not taken back
     /// into the input box, and the transcript never records them. Once the
     /// Agent has been idle a moment, the screen is read once for the sends
-    /// still overdue from the turn that just ended, and for the sends
-    /// already found there, which the user may have sent or cleared in the
-    /// terminal since. Only Pi's and Oh My Pi's Esc is known to hand steers
-    /// back.
+    /// from the turn that just ended that are still unrecorded, overdue or
+    /// not (a Stop right after a steer ends the turn inside the echo
+    /// timeout, and the user may add to the box before it runs out), and
+    /// for the sends already found there, which the user may have sent or
+    /// cleared in the terminal since. Only Pi's and Oh My Pi's Esc is known
+    /// to hand steers back.
     private func checkReturnedSends() async {
         guard program == .pi || program == .omp, let idleSince,
             now().timeIntervalSince(idleSince) >= timing.returnCheckDelay
@@ -932,7 +934,7 @@ final class AgentChatStore {
             switch sendStatuses[send.id] {
             case .returned:
                 return true
-            case .overdue:
+            case .overdue, .awaiting:
                 guard let deliveredAt = send.deliveredAt, let turnStartedAt else { return false }
                 return deliveredAt >= turnStartedAt
             default:

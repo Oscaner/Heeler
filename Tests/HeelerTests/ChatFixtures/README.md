@@ -114,6 +114,9 @@ file keeps the capture's number and name behind the `pi-` or `omp-` prefix.
   developer logged in again (numbered here, not by capture), so they show real model turns: the Working
   rule, queued steers, a retry countdown and compaction. They are 120
   columns wide except the `-40` ones.
+- `pi-40-phone-extended-steer` comes from Pi 0.85.1 on 2026-10-17 at the
+  phone's 62 columns: a steer Stop returned to the editor, with text the user
+  added after it (`say FIG and also say PEAR`).
 - Oh My Pi used the nerd-font status band.
 - Captures are 119, 120 or 40 columns wide; Pi's are 119 unless the name
   says otherwise, Oh My Pi's 120.

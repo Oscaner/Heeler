@@ -1291,6 +1291,62 @@ struct AgentChatStoreTests {
         #expect(store.sendStatuses[id] == .recorded)
     }
 
+    /// Pi 0.85.1 at the phone's 62 columns: Stop 2 s after a steer puts it
+    /// back while its echo is still inside the timeout, then the user adds
+    /// to it, a Chat send is held, and Enter in the terminal sends it all.
+    /// The steer is found returned at once, so the prompt settles it.
+    @Test func aReturnedSteerExtendedOnThePhoneIsRecorded() async throws {
+        let records = [
+            ##"{"type":"message","id":"dcfb765c","parentId":null,"timestamp":"2026-10-17T03:58:00.714Z","message":{"role":"user","content":[{"type":"text","text":"run sleep 40 with bash, then reply: ok"}],"timestamp":1792209480714}}"##,
+            ##"{"type":"message","id":"6a04c408","parentId":"dcfb765c","timestamp":"2026-10-17T03:58:02.924Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Running sleep 40 via bash, then replying ok.","thinkingSignature":"{\"id\":\"rs_7c3ac87e-1c7b-961b-9bf8-0ddc730bfc37\",\"summary\":[{\"text\":\"Running sleep 40 via bash, then replying ok.\",\"type\":\"summary_text\"}],\"type\":\"reasoning\",\"status\":\"completed\",\"encrypted_content\":\"qxkzShyrpNcpoBRidtN3Sq0oayhAJnohMakiye+6HSrMARqPLSOvjoqQFwAfbkR8gZ+dQITPLbgNExuyPPsBKhGf6DsCwxx8cegQtL+IYnPv7uhC4+K1lgNihAdHvxaXF9ribah+cZtiMy6ZHW553QKhWQZx7rYhZz7/a2XqZb6wBCcari4d8vtlNtsizIH3ywBCKaGKWozw/yxB0qD4nBWpRYB8dPv/yq6k5loNtPs9ZwHqC2Crc2E+JOe0mp9zxdDFoKiF2AI\"}"},{"type":"toolCall","id":"call-f4bfa82d-4cb3-4a0b-a7d8-3f55e366b25a-3|fc_7c3ac87e-1c7b-961b-9bf8-0ddc730bfc37_0","name":"bash","arguments":{"command":"sleep 40","timeout":60}}],"api":"openai-responses","provider":"xai","model":"grok-4.5","usage":{"input":94,"output":54,"cacheRead":7168,"cacheWrite":0,"reasoning":39,"totalTokens":7316,"cost":{"input":0.000188,"output":0.000324,"cacheRead":0.0021504,"cacheWrite":0,"total":0.0026623999999999997}},"stopReason":"toolUse","timestamp":1792209480715,"responseId":"7c3ac87e-1c7b-961b-9bf8-0ddc730bfc37","rawStopReason":"completed"}}"##,
+            ##"{"type":"message","id":"41d0569e","parentId":"6a04c408","timestamp":"2026-10-17T03:58:13.068Z","message":{"role":"toolResult","toolCallId":"call-f4bfa82d-4cb3-4a0b-a7d8-3f55e366b25a-3|fc_7c3ac87e-1c7b-961b-9bf8-0ddc730bfc37_0","toolName":"bash","content":[{"type":"text","text":"Command aborted"}],"details":{},"isError":true,"timestamp":1792209493068}}"##,
+            ##"{"type":"message","id":"230cb2fa","parentId":"41d0569e","timestamp":"2026-10-17T03:58:13.069Z","message":{"role":"assistant","content":[],"api":"openai-responses","provider":"xai","model":"grok-4.5","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"error","errorMessage":"This operation was aborted","timestamp":1792209493069}}"##,
+            ##"{"type":"message","id":"929aa8c6","parentId":"230cb2fa","timestamp":"2026-10-17T03:58:37.242Z","message":{"role":"user","content":[{"type":"text","text":"say FIG and also say PEAR"}],"timestamp":1792209517241}}"##,
+            ##"{"type":"message","id":"5ecb20e9","parentId":"929aa8c6","timestamp":"2026-10-17T03:58:39.432Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"","thinkingSignature":"{\"id\":\"rs_20af3db3-28ae-9efc-93b2-58737484644f\",\"summary\":[],\"type\":\"reasoning\",\"status\":\"completed\",\"encrypted_content\":\"EY3OTsyOVY7cG1jjBLa5vX/QCTg/mibrpKUS2S9RW1I3Zo94/Jb+VNFnTEPiq75LGvR4+VAQ7HzqfJVWdbXPJTrs\"}"},{"type":"text","text":"FIG\nPEAR","textSignature":"{\"v\":1,\"id\":\"msg_20af3db3-28ae-9efc-93b2-58737484644f\"}"}],"api":"openai-responses","provider":"xai","model":"grok-4.5","usage":{"input":168,"output":15,"cacheRead":7168,"cacheWrite":0,"reasoning":11,"totalTokens":7351,"cost":{"input":0.000336,"output":9e-05,"cacheRead":0.0021504,"cacheWrite":0,"total":0.0025764}},"stopReason":"stop","timestamp":1792209517242,"responseId":"20af3db3-28ae-9efc-93b2-58737484644f","rawStopReason":"completed"}}"##,
+        ]
+        let capture = try ScreenFixture.text("pi-40-phone-extended-steer")
+        func editor(_ text: String) throws -> ANSIScreen {
+            let range = try #require(capture.range(of: "say FIG and also say PEAR", options: .backwards))
+            return ANSIScreenDecoder.decode(capture.replacingCharacters(in: range, with: text))
+        }
+        let clock = Clock()
+        let pane = Pane(try editor("say FIG"))
+        let (files, store, path, _) = try Self.skillStore(.pi, clock: clock, screen: pane.io)
+        await files.write(Self.piHeader + "\n" + records[0] + "\n" + records[1] + "\n", at: path)
+        store.agentDidChange(Self.piAgent(.pi, status: .working))
+        await store.step()
+        let id = UUID()
+        store.updateSends([Self.sent(id, "say FIG", delivered: false)])
+        store.updateSends([Self.sent(id, "say FIG")])
+        await store.step()
+        await files.append(records[2] + "\n" + records[3] + "\n", to: path)
+        store.agentDidChange(Self.piAgent(.pi, status: .idle))
+        await store.step()
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        await store.step()
+        #expect(store.sendStatuses[id] == .returned)
+
+        await pane.show(try editor("say FIG and also say PEAR"))
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        store.inputBoxWasRead(try editor("say FIG and also say PEAR"))
+        #expect(store.sendStatuses[id] == .returned)
+
+        await pane.show(try editor(""))
+        store.agentDidChange(Self.piAgent(.pi, status: .working))
+        await files.append(records[4] + "\n", to: path)
+        await store.step()
+        #expect(store.sendStatuses[id] == .recorded)
+        await files.append(records[5] + "\n", to: path)
+        store.agentDidChange(Self.piAgent(.pi, status: .idle))
+        await store.step()
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        await store.step()
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
     /// Only a send seen among more text takes a prompt that merely contains
     /// it: a cleared one stays discarded when a longer prompt mentions it.
     @Test func aClearedSendIsNotSettledByALongerPrompt() async throws {
