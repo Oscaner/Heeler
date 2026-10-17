@@ -64,7 +64,10 @@ results retain activity-derived running/blocked/interrupted status. Assistant
 `stopReason` ends turns; `aborted` and `error` show notices.
 
 `compaction` inserts a separator and keeps earlier visible history.
-`branch_summary` and OMP `reset_boundary` show notices. Displayable custom
+`branch_summary` and OMP `reset_boundary` show notices; summaries are
+Markdown, and the separator and notice preview them as plain lines (headings
+without `#`, list items without task boxes, HTML blocks such as
+`<read-files>` dropped), while Copy keeps the text as written. Displayable custom
 extension messages become notices; hidden extension state remains invisible.
 Unknown record types remain tree links and are counted in diagnostics.
 
@@ -96,7 +99,22 @@ Observed live on 2026-10-15 with Pi 0.85.1 and Oh My Pi 18.11.1 on herdr
 - OMP's plan proposal records the `write xd://propose` result `Plan ready
   for review.`, then an empty assistant message with `stopReason: aborted`
   and `errorMessage: __omp.silent_abort__`. Chat ends the turn normally with a
-  plan-ready notice instead of an interruption.
+  plan-ready notice instead of an interruption, and the `xd://propose` call
+  and its result (`details.xdev.tool: propose`) show no row and count no
+  file.
+- OMP 18.11 mounts discoverable tools (MCP tools, `generate_image`,
+  `report_issue`) as `xd://<tool>` devices when `tools.xdev` is on (the
+  default), driven by `write` with the tool's JSON arguments in `content`;
+  their results carry `details.xdev.tool`. Chat shows such a call as a row for
+  that tool, not as a file write (read from the 18.11.2 binary's strings on
+  2026-10-18; not captured live).
+- OMP's `write` result records only `Successfully wrote N bytes` and no diff,
+  and says nothing of what the file held before. Chat shows the call's
+  `content` as an all-added diff with the file marked written, re-reading it
+  from the call's line, and a group counts it as "Wrote N files".
+- OMP records `$ code` typed in its prompt as a `pythonExecution` message
+  (`code`, `output`), as Pi records `!` as `bashExecution`; Chat shows both as
+  notices with capped output.
 - OMP's atomic file rewrite appends a `branch_summary` with an empty
   `summary` and `details.kind: discarded-entry-branch`, which Chat hides.
 - Tool-call ids can contain `|` (`call…|fc_…` in both programs with these

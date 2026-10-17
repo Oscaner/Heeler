@@ -337,7 +337,8 @@ Turns in Settings turns folding off.
 
 Two or more consecutive tool calls show as one group row: the first call's
 symbol, what the calls did ("Ran 2 commands, Edited 2 files", files counted
-once per path, a write over an existing file as an edit), their lines changed, and a spinner or a count of failures.
+once per path, a write over an existing file as an edit, a write that records
+no diff as written), their lines changed, and a spinner or a count of failures.
 Reasoning between calls joins the group; reasoning with no text shows
 nowhere. Subagent launches, questions, calls waiting on the user and Codex's
 user shell commands are never grouped. While a turn runs, its last group
