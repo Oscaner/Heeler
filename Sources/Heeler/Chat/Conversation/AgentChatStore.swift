@@ -9,7 +9,8 @@ struct AgentChatSource: Sendable {
     let socketLocation: HerdrSocketLocation
     let files: ChatHostFiles
     /// Re-reads the Agent's record (`agent.get`). herdr reports a changed
-    /// session through no event, so Chat asks after status changes.
+    /// session through no event, so Chat asks after status changes, and
+    /// every few seconds while it shows an idle Agent.
     let agentInfo: @Sendable () async throws -> Agent
     let cache: any ChatTranscriptCache
     let adapter: ChatTranscriptAdapter
@@ -41,6 +42,10 @@ final class AgentChatStore {
         /// How often the Agent's record is re-read while it reports no
         /// session Chat can follow.
         var sessionRecheck: TimeInterval = 5
+        /// How often the record of an idle Agent is re-read while Chat
+        /// shows it: `/clear`, `/new` or `/resume` typed in the terminal
+        /// moves an idle Agent to another session without a status change.
+        var idleSessionRecheck: TimeInterval = 5
         /// How long after delivery a sent prompt may stay unrecorded before
         /// its echo says so.
         var echoTimeout: TimeInterval = 10
@@ -623,9 +628,16 @@ final class AgentChatStore {
     // MARK: Session
 
     private var sessionRecheckIsDue: Bool {
-        guard engine == nil || isUnavailable || agentRefreshFailure != nil else { return false }
+        let interval: TimeInterval
+        if engine == nil || isUnavailable || agentRefreshFailure != nil {
+            interval = timing.sessionRecheck
+        } else if isVisible, ChatAgentActivity(agent.status) == .idle {
+            interval = timing.idleSessionRecheck
+        } else {
+            return false
+        }
         guard let lastAgentRefresh else { return true }
-        return now().timeIntervalSince(lastAgentRefresh) >= timing.sessionRecheck
+        return now().timeIntervalSince(lastAgentRefresh) >= interval
     }
 
     private func refreshAgent() async {

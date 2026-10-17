@@ -650,6 +650,56 @@ struct AgentChatStoreTests {
         #expect(await fixture.server.reads == 2)
     }
 
+    /// Shows Chat without its loop, so the test drives every turn.
+    private static func showWithoutLoop(_ store: AgentChatStore) {
+        store.show()
+        store.suspend()
+    }
+
+    /// `/clear` typed in the terminal moves an Agent that stays idle to a
+    /// new session, and no status change asks herdr about it.
+    @Test func aShownIdleAgentIsAskedAgainAndFollowsANewSession() async throws {
+        let fixture = Fixture(session: Self.first)
+        await fixture.files.write(NumberedChatReducer.lines(0..<3), at: Self.path(Self.first))
+        await fixture.files.write(NumberedChatReducer.lines(7..<9), at: Self.path(Self.second))
+        Self.showWithoutLoop(fixture.store)
+        await fixture.store.step()
+        let generation = fixture.store.conversationGeneration
+        await fixture.server.set(Self.agent(session: Self.second))
+
+        fixture.advance(4)
+        await fixture.store.step()
+        #expect(await fixture.server.reads == 1)
+
+        fixture.advance(1)
+        await fixture.store.step()
+
+        #expect(await fixture.server.reads == 2)
+        #expect(fixture.store.conversationGeneration == generation + 1)
+        #expect(Self.ids(fixture.store) == NumberedChatReducer.ids(7..<9))
+    }
+
+    /// A working Agent's session changes with a status change, which asks
+    /// anyway, and a hidden Chat never polls herdr.
+    @Test(arguments: [true, false])
+    func aWorkingOrHiddenAgentIsNotAskedAgainWithoutAReason(shown: Bool) async throws {
+        let fixture = Fixture(session: Self.first)
+        await fixture.files.write(NumberedChatReducer.lines(0..<3), at: Self.path(Self.first))
+        if shown {
+            Self.showWithoutLoop(fixture.store)
+            fixture.store.agentDidChange(Self.agent(session: Self.first, status: .working))
+        }
+        await fixture.store.step()
+        #expect(await fixture.server.reads == 1)
+
+        fixture.advance(5)
+        await fixture.store.step()
+        fixture.advance(30)
+        await fixture.store.step()
+
+        #expect(await fixture.server.reads == 1)
+    }
+
     @Test func aSnapshotsNewSessionIsFollowedWithoutAsking() async throws {
         let fixture = Fixture(session: Self.first)
         await fixture.files.write(NumberedChatReducer.lines(0..<3), at: Self.path(Self.first))
