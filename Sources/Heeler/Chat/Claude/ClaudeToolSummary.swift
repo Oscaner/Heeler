@@ -132,7 +132,10 @@ struct ClaudeToolSummary: Sendable, Equatable {
         for use: ClaudeToolUse, result: ClaudeToolResult, details: ClaudeToolResultDetails?,
         outcome: ClaudeToolOutcome
     ) -> ChatToolPreview? {
-        if case .declined = outcome { return nil }
+        switch outcome {
+        case .declined, .clarify: return nil
+        default: break
+        }
         // A call stopped while it ran can carry the decline text.
         if result.content.text.hasPrefix(ClaudeToolOutcome.userDeclinePrefix) { return nil }
         let structured = details?.result
@@ -560,6 +563,9 @@ private enum ShellWords {
 enum ClaudeToolOutcome: Sendable, Equatable {
     case succeeded(note: String?)
     case declined(feedback: String?)
+    /// A question's `Chat about this`, which Claude Code records as a
+    /// decline whose feedback is its own clarify text.
+    case clarify
     case interrupted
     case notCompleted
     case failed
@@ -576,7 +582,11 @@ enum ClaudeToolOutcome: Sendable, Equatable {
             || text.hasPrefix(Self.permissionDeniedPrefix)
         {
             let feedback = details?.userFeedback ?? Self.feedback(in: text)
-            self = .declined(feedback: feedback.flatMap { $0.isEmpty || Self.isClarifyRequest($0) ? nil : $0 })
+            if let feedback, Self.isClarifyRequest(feedback) {
+                self = .clarify
+            } else {
+                self = .declined(feedback: feedback.flatMap { $0.isEmpty ? nil : $0 })
+            }
         } else if text.hasPrefix("The user doesn't want to take this action right now.") {
             self = .declined(feedback: nil)
         } else if text.hasPrefix("[Request interrupted by user") {
@@ -613,6 +623,7 @@ enum ClaudeToolOutcome: Sendable, Equatable {
         switch self {
         case .succeeded: .succeeded
         case .declined: .declined
+        case .clarify: .chatInstead
         case .interrupted: .interrupted
         case .notCompleted: .notCompleted
         case .failed: .failed
@@ -634,7 +645,7 @@ enum ClaudeToolOutcome: Sendable, Equatable {
     var absorbsInterruptMarker: Bool {
         switch self {
         case .declined(let feedback): feedback == nil
-        case .interrupted: true
+        case .clarify, .interrupted: true
         default: false
         }
     }

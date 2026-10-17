@@ -225,14 +225,14 @@ struct ClaudeToolOutcomeTests {
             text: decline + " To tell you how to proceed, the user said:\nUse q.txt",
             expected: .declined(feedback: "Use q.txt")),
         Case(
-            name: "Chat about this on a question: Claude's own text is not the user's note",
+            name: "Chat about this on a question: Chat Instead, and Claude's own text is not the user's note",
             text: decline
                 + " To tell you how to proceed, the user said:\nThe user wants to clarify these questions.\n"
                 + "    Start by asking them what they would like to clarify.",
             details: ClaudeToolResultDetails(
                 denialKind: "user-rejected",
                 userFeedback: "The user wants to clarify these questions.\n    Questions asked:\n- \"Which size?\""),
-            expected: .declined(feedback: nil)),
+            expected: .clarify),
         Case(
             name: "declined without feedback",
             text: decline + " STOP what you are doing and wait for the user to tell you how to proceed.",
@@ -289,6 +289,9 @@ struct ClaudeToolOutcomeTests {
     func absorbsMarker() {
         #expect(ClaudeToolOutcome.declined(feedback: nil).absorbsInterruptMarker)
         #expect(ClaudeToolOutcome.interrupted.absorbsInterruptMarker)
+        #expect(ClaudeToolOutcome.clarify.absorbsInterruptMarker)
+        #expect(ClaudeToolOutcome.clarify.status == .chatInstead)
+        #expect(ClaudeToolOutcome.declined(feedback: nil).status == .declined)
         #expect(!ClaudeToolOutcome.declined(feedback: "no").absorbsInterruptMarker)
         #expect(!ClaudeToolOutcome.failed.absorbsInterruptMarker)
     }

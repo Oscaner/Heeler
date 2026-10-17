@@ -190,6 +190,9 @@ struct ChatToolActivity: Equatable, Codable, Sendable {
         /// A teammate the call spawned; the transcript doesn't say when it
         /// ends.
         case started
+        /// The user chose to talk it over instead of answering the call's
+        /// questions.
+        case chatInstead
     }
 
     /// How the user answered the call's Blocked card in Chat.

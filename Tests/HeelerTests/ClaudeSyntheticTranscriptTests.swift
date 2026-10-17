@@ -818,6 +818,28 @@ struct ClaudeSyntheticTranscriptTests {
         #expect(Self.tool("tool:toolu_read", in: transcript)?.imagePath == expected)
     }
 
+    @Test("Chat about this on a question reads as Chat Instead, a plain decline as Declined")
+    func chatInstead() {
+        // Claude Code 2.1.301 (CLB-19).
+        let decline = "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file)."
+        func question(feedback: String) -> ChatToolActivity? {
+            let text = decline + " To tell you how to proceed, the user said:\\n" + feedback
+            let (transcript, _) = Self.read(
+                Self.firstTurn + "\n" + #"""
+                    {"type":"user","uuid":"p2","parentUuid":"t1","message":{"role":"user","content":"Ask me"},"promptSource":"typed","origin":{"kind":"human"}}
+                    {"type":"assistant","uuid":"a2","parentUuid":"p2","message":{"id":"m2","role":"assistant","content":[{"type":"tool_use","id":"toolu_ask","name":"AskUserQuestion","input":{"questions":[{"question":"Which size?","header":"Size","options":[{"label":"Small"},{"label":"Large"}],"multiSelect":false}]}}]},"apiBlockIndex":0}
+                    {"type":"user","uuid":"r2","parentUuid":"a2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_ask","is_error":true,"content":"\#(text)"}]},"toolUseResult":"Error: \#(text)","toolDenialKind":"user-rejected","userFeedback":"\#(feedback)"}
+                    """#)
+            return Self.tool("tool:toolu_ask", in: transcript)
+        }
+        let clarify = question(feedback: "The user wants to clarify these questions.\\n    Start by asking them what they would like to clarify.")
+        #expect(clarify?.status == .chatInstead)
+        #expect(clarify?.note == nil)
+        let declined = question(feedback: "Not now")
+        #expect(declined?.status == .declined)
+        #expect(declined?.note == "Not now")
+    }
+
     @Test("Task rows read by the task's subject and the status an update sets")
     func taskRows() {
         // Claude Code 2.1.301 with CLAUDE_CODE_ENABLE_TODO_TOOLS=1 (CL-40).

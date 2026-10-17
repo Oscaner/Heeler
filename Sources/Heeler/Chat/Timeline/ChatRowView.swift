@@ -850,6 +850,7 @@ private struct ChatToolStatusBadge: View {
         case .notCompleted: return "Not completed"
         case .noResult: return "No result"
         case .started: return "Started"
+        case .chatInstead: return "Chat Instead"
         case .running: return ""
         }
     }
@@ -864,6 +865,7 @@ private struct ChatToolStatusBadge: View {
         case .interrupted: return "stop.circle"
         case .notCompleted, .noResult: return "minus.circle"
         case .started: return "arrow.up.forward.circle"
+        case .chatInstead: return "bubble.left.and.bubble.right"
         case .running: return ""
         }
     }
