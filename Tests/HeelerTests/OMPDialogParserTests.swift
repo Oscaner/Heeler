@@ -168,7 +168,9 @@ struct OMPDialogParserTests {
         ["\u{F054}\u{F10C} apple"],
     ])
     func optionRowsHeelerDoesNotKnowAreUnrecognized(options: [String]) throws {
-        let screen = Self.ask(["Pick a fruit"], options: options)
+        // A multi-select page has its own footer.
+        let footer = options.contains { $0.contains("\u{F096}") } ? Self.multiSelectFooter : Self.selectFooter
+        let screen = Self.ask(["Pick a fruit"], options: options, footer: footer)
         let excerpt = try #require(BlockedDialogParser.parse(screen, program: .omp).excerpt)
         #expect(excerpt.numbered.isEmpty)
         #expect(excerpt.reason.contains("single-select"))
@@ -186,7 +188,8 @@ struct OMPDialogParserTests {
     @Test func aDrawnMultiSelectQuestionIsUnrecognized() async throws {
         let tui = FakeQuestionTUI(
             .omp, [.init(header: "fruit", text: "Pick fruits", options: ["apple", "pear"], isMultiSelect: true)])
-        #expect(BlockedDialogParser.parse(await tui.read(), program: .omp).excerpt != nil)
+        let excerpt = try #require(BlockedDialogParser.parse(await tui.read(), program: .omp).excerpt)
+        #expect(excerpt.reason == "Heeler answers only Oh My Pi's single-select questions. Answer this one in the terminal.")
     }
 
     /// The drawn program reads like the captures, page by page.
@@ -237,11 +240,14 @@ struct OMPDialogParserTests {
 
     /// An `Ask` panel with these question and option rows, ending the
     /// screen.
-    private static func ask(_ question: [String], options: [String]) -> ANSIScreen {
+    private static let selectFooter = "\u{F0311} select · ↑/↓ move · \u{F12B7} cancel"
+    private static let multiSelectFooter = "\u{F1050} toggle · \u{F0311} submit · ↑/↓ move · \u{F12B7} cancel"
+
+    private static func ask(_ question: [String], options: [String], footer: String = selectFooter) -> ANSIScreen {
         let rule = "├" + String(repeating: "─", count: 30) + "┤"
         let rows =
             ["Asking…", "╭─ Ask " + String(repeating: "─", count: 24) + "╮"] + question.map { "│ \($0) │" } + [rule]
-            + options.map { "│ \($0) │" } + [rule, "│ \u{F0311} select · ↑/↓ move · \u{F12B7} cancel │"]
+            + options.map { "│ \($0) │" } + [rule, "│ \(footer) │"]
             + ["╰" + String(repeating: "─", count: 30) + "╯"]
         return ScreenFixture.synthetic(rows)
     }

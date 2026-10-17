@@ -457,7 +457,10 @@ actor FakeQuestionTUI {
                         : ompRow([("", "  "), (R.ompMuted, mark), ("", " \(label)")]))
             }
             let turn = questions.count > 1 ? "\u{F0312}/←/→ question · " : ""
-            footer = "\u{F0311} select · n note · ↑/↓ move · " + turn + "\u{F12B7} cancel · \u{F0635} H hide"
+            // Oh My Pi 18.11.1 (omp-34-ask-multi-62): a multi-select page
+            // toggles and submits instead of selecting.
+            let keys = question.isMultiSelect ? "\u{F1050} toggle · \u{F0311} submit · " : "\u{F0311} select · n note · "
+            footer = keys + "↑/↓ move · " + turn + "\u{F12B7} cancel · \u{F0635} H hide"
         } else {
             rows.append(ompRow([(R.bold + R.ompAccent, "Review answers")]))
             rows.append(rule)
