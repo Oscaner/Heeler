@@ -195,13 +195,27 @@ struct ChatFileDiffHeading: View {
     let path: String
 
     var body: some View {
+        ChatFileChangeLabel(file: file, path: path, lineLimit: nil)
+            .accessibilityElement(children: .combine)
+    }
+}
+
+/// What happened to a file, its path and its line counts, as a changed
+/// file's line and a diff's heading both show them.
+private struct ChatFileChangeLabel: View {
+    let file: ChatFileChange
+    let path: String
+    let lineLimit: Int?
+
+    var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text("\(Text(file.kind.label).foregroundStyle(.secondary)) \(Text(verbatim: path).fontDesign(.monospaced))")
                 .font(.footnote)
+                .lineLimit(lineLimit)
+                .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
             ChatDiffBadge(diff: ChatDiffStats(added: file.added, removed: file.removed))
         }
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -236,12 +250,7 @@ private struct ChatFileChangeLine: View {
                 .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 .opacity(file.lineCount > 0 ? 1 : 0)
                 .accessibilityHidden(true)
-            Text("\(Text(file.kind.label).foregroundStyle(.secondary)) \(Text(verbatim: path).fontDesign(.monospaced))")
-                .font(.footnote)
-                .lineLimit(isExpanded ? nil : 2)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            ChatDiffBadge(diff: ChatDiffStats(added: file.added, removed: file.removed))
+            ChatFileChangeLabel(file: file, path: path, lineLimit: isExpanded ? nil : 2)
         }
     }
 }
