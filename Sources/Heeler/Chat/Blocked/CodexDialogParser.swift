@@ -483,17 +483,38 @@ private struct CodexDialogReader {
     /// The numbered rows of the options block: the last block when the list
     /// has no footer, else the block above the footer. Numbered lines
     /// further up belong to the history or a reply.
+    ///
+    /// A two-column list such as the MCP tool approval draws a description
+    /// beside each label, and a narrow pane wraps both columns, so a label
+    /// keeps only its text before the description's gap, joined with the
+    /// rows below that start at its own column (`2. Allow for this` +
+    /// `session`). Rows that start at the description column add nothing.
     private func numberedOptions(near footer: ClosedRange<Int>, from start: Int) -> [Int: String] {
         for block in [footer, blockAbove(footer.lowerBound)].compactMap({ $0 }) {
             var numbered: [Int: String] = [:]
+            var current: NumberedOptionRow?
             for index in block where index >= start {
-                guard
-                    let option = DialogRowScanner.numberedOption(in: rows[index], pointer: DialogRowScanner.codexPointer)
-                else { continue }
-                numbered[option.number] = text(of: DialogRowScanner.runs(of: rows[index], from: option.labelColumn))
+                if let option = DialogRowScanner.numberedOption(in: rows[index], pointer: DialogRowScanner.codexPointer)
+                {
+                    numbered[option.number] = labelText(of: DialogRowScanner.runs(of: rows[index], from: option.labelColumn))
+                    current = option
+                } else if let option = current, rows[index].indent == option.labelColumn {
+                    let part = labelText(of: DialogRowScanner.runs(of: rows[index], from: option.labelColumn))
+                    guard !part.isEmpty else { continue }
+                    let head = numbered[option.number] ?? ""
+                    numbered[option.number] = head.isEmpty ? part : head + " " + part
+                }
             }
             if !numbered.isEmpty { return numbered }
         }
         return [:]
+    }
+
+    /// The row's text up to its first gap of three or more blanks, where a
+    /// two-column list's description starts.
+    private func labelText(of runs: [ScreenRun]) -> String {
+        let text = text(of: runs)
+        guard let gap = text.range(of: "   ") else { return text }
+        return text[..<gap.lowerBound].trimmingCharacters(in: .whitespaces)
     }
 }

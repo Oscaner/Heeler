@@ -264,6 +264,30 @@ struct CodexDialogParserTests {
         #expect(excerpt.numbered.keys.sorted() == [1, 2, 3, 4])
     }
 
+    @Test("An MCP tool approval's generic buttons keep the label column, wrapped label rows joined")
+    func mcpToolListLabels() throws {
+        let excerpt = try #require(CodexDialogParser.parse(try ScreenFixture.screen("codex-15-x6-mcp-tool-list")).excerpt)
+        #expect(
+            excerpt.numbered == [1: "Allow", 2: "Allow for this session", 3: "Always allow", 4: "Cancel"])
+    }
+
+    @Test("A two-column row cuts at the gap and joins only rows at its label column (synthetic)")
+    func twoColumnLabels() throws {
+        let screen = ScreenFixture.synthetic([
+            "  " + SGR.bold + "Allow the probe MCP server to run tool \"echo\"?" + SGR.reset,
+            "",
+            SGR.bold + SGR.reverse + "› 1. Allow once" + SGR.reset + "      " + SGR.reverse + "Run it" + SGR.reset,
+            "                     " + SGR.reverse + "now" + SGR.reset,
+            "  2. Allow for the" + "   " + SGR.dim + "Remember" + SGR.reset,
+            "     whole session" + "   " + SGR.dim + "it" + SGR.reset,
+            "  3. Deny  me" + "      " + SGR.dim + "Stop" + SGR.reset,
+            "",
+            "  " + SGR.dim + "enter to submit | esc to cancel" + SGR.reset,
+        ])
+        let excerpt = try #require(CodexDialogParser.parse(screen).excerpt, "parsed as \(CodexDialogParser.parse(screen))")
+        #expect(excerpt.numbered == [1: "Allow once", 2: "Allow for the whole session", 3: "Deny  me"])
+    }
+
     @Test("A list whose wrapped details put the pointed option far above the footer still goes generic (synthetic)")
     func tallWrappedList() throws {
         let details = (1...18).map { "       detail line \($0)" }
