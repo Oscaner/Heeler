@@ -655,12 +655,16 @@ private struct ChatToolRow: View {
         tool.output == nil ? nil : missingOutputText
     }
 
+    /// A call that never ran has no output: expanding it shows the whole
+    /// call and any note or questions.
     private var hint: String {
-        switch (isExpanded, tool.showsDiffAsOutput) {
-        case (true, true): "Hides the diff"
-        case (false, true): "Shows the diff"
-        case (true, false): "Hides the output"
-        case (false, false): "Shows the output"
+        switch (isExpanded, tool.showsDiffAsOutput, tool.ran) {
+        case (true, true, _): "Hides the diff"
+        case (false, true, _): "Shows the diff"
+        case (true, false, true): "Hides the output"
+        case (false, false, true): "Shows the output"
+        case (true, false, false): "Hides the details"
+        case (false, false, false): "Shows the details"
         }
     }
 
