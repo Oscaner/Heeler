@@ -79,6 +79,8 @@ Where the detail stands alone, pushed over its list (an iPhone), the
 terminal Open Terminal opens is pushed over the Agent, so Back returns to its
 Chat or terminal; beside a list, the list selects it. The Agent's surface
 leaves and rejoins its Attach around that push as it does around Changes.
+The pushed terminal does not count as presenting the Agent: its in-app
+banners show, and a notification landing on it pops back to the Agent.
 
 Existing ordinary terminals attach without `--takeover`. If an attach ends,
 the user can reattach or explicitly Take Over another client's attachment.

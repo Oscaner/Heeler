@@ -239,6 +239,29 @@ struct AgentSceneDirectoryTests {
         #expect(directory.keyScenePresentedAgent == target("w1:p3").agentID)
     }
 
+    /// A Shell Terminal pushed over the Agent keeps the Agent on the path,
+    /// but the window no longer shows it, so its banners come through.
+    @Test func anAgentUnderAPushedShellTerminalIsNotPresented() {
+        let directory = AgentSceneDirectory()
+        let router = makeRouter(knowing: ["w1:p1"])
+        let scene = UUID()
+        directory.register(sceneID: scene, router: router) {}
+        directory.sceneDidBecomeActive(sceneID: scene)
+        router.path = [target("w1:p1").agentID]
+
+        directory.agentCoverDidChange(sceneID: scene, agent: target("w1:p1").agentID)
+        #expect(directory.keyScenePresentedAgent == nil)
+        // A link to it still activates the window it is in.
+        #expect(directory.activateScene(presenting: target("w1:p1").agentID))
+
+        directory.agentCoverDidChange(sceneID: scene, agent: nil)
+        #expect(directory.keyScenePresentedAgent == target("w1:p1").agentID)
+
+        // A cover left by another Agent's detail does not hide this one.
+        directory.agentCoverDidChange(sceneID: scene, agent: target("w1:p9").agentID)
+        #expect(directory.keyScenePresentedAgent == target("w1:p1").agentID)
+    }
+
     /// A killed-state launch can deliver the tap before SwiftUI has built
     /// any window; the first window to connect receives it.
     @Test func aLinkBeforeAnyWindowWaitsForTheFirstOne() {

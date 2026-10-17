@@ -1225,7 +1225,8 @@ struct ConsoleView: View {
                         } else if agentShowingChat == id {
                             agentShowingChat = nil
                         }
-                    }
+                    },
+                    repeatLandings: notificationRouter.repeatLandings
                 )
                 // Selecting another Agent must tear down the previous terminal
                 // pipeline; without the explicit identity the detail column

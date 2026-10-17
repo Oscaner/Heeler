@@ -26,6 +26,9 @@ struct AgentDetailView: View {
     /// Told whether Chat is shown in place of the terminal, for the same
     /// reason.
     private let onShowsChat: ((Bool) -> Void)?
+    /// Bumped when a notification lands on this Agent while it is already
+    /// on the path: a pushed Shell Terminal steps back to it.
+    private let repeatLandings: Int
     /// This detail's own copy of the remembered surface, taken when it
     /// opens: a choice made in another window leaves this one alone.
     @State private var surface: AgentDetailSurface
@@ -73,6 +76,7 @@ struct AgentDetailView: View {
         onSelectTerminal: ((ConsoleTerminal) -> Void)? = nil,
         onShowsChanges: ((Bool) -> Void)? = nil,
         onShowsChat: ((Bool) -> Void)? = nil,
+        repeatLandings: Int = 0,
         composerSession: AgentComposerSession? = nil,
         attachStore: AgentAttachStore? = nil,
         openTerminalStore: AgentOpenTerminalStore? = nil,
@@ -96,6 +100,7 @@ struct AgentDetailView: View {
         self.onSelectTerminal = onSelectTerminal
         self.onShowsChanges = onShowsChanges
         self.onShowsChat = onShowsChat
+        self.repeatLandings = repeatLandings
         _session = State(initialValue: composerSession ?? console.composerSession(for: agent))
         let ownerID = UUID()
         _retentionOwnerID = State(initialValue: ownerID)
@@ -407,6 +412,9 @@ struct AgentDetailView: View {
         }
         .onAppear {
             hasAppeared = true
+            // A detail mounted afresh covers nothing, whatever the last one
+            // in this window left behind.
+            sceneRouting?.agentCoverDidChange(agent: shellRoute == nil ? nil : agent.id)
             session.detailDidAppear(presenceKey)
             prepareRetainedAgent()
             updateFocus()
@@ -489,7 +497,13 @@ struct AgentDetailView: View {
         // while it stands over Chat.
         .onChange(of: shellRoute == nil) { _, showsAgent in
             onShowsChat?(effectiveSurface == .chat && showsAgent)
+            sceneRouting?.agentCoverDidChange(agent: showsAgent ? nil : agent.id)
             if showsAgent { applyTerminalAccess() }
+        }
+        // A notification for this Agent, tapped while its Shell Terminal is
+        // pushed, lands on the Agent rather than leaving the shell up.
+        .onChange(of: repeatLandings) {
+            shellRoute = nil
         }
         .onChange(of: openTerminal.shell != nil || openTerminal.isOpening, initial: true) {
             _, showsShellTerminal in

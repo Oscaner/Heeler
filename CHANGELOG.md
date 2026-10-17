@@ -55,8 +55,9 @@ Entries reference the pull request that made the change.
 
 - On iPhone, Open Terminal in an Agent's More menu opens the Shell Terminal
   over the Agent, so Back returns to the Agent's Chat or terminal instead of
-  the Agents list. On iPad beside the list it still selects the terminal
-  there. (#425)
+  the Agents list. The Agent's notifications still show as banners there, and
+  tapping one returns to the Agent. On iPad beside the list it still selects
+  the terminal there. (#425)
 - Agent Gone says the Agent may have exited while its pane stays open, and
   that the Agent shows again once one starts in that pane. (#425)
 - Chat shows Claude Code narration that its transcript records as thinking as
