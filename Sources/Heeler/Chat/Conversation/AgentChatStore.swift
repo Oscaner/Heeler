@@ -84,9 +84,15 @@ final class AgentChatStore {
         /// The box is not looked at for it again; only a recorded copy,
         /// such as one the terminal sent, still settles it.
         case discarded
+        /// Overdue, and the program said on screen that it would not do
+        /// it, saying so here: Pi and Oh My Pi print "Compaction failed"
+        /// for a `/compact` with nothing to compact and record nothing. A
+        /// recorded copy still wins.
+        case refused(String)
         /// Unrecorded and no longer worth an echo: it went into an earlier
         /// conversation, was sent before this store was watching, or was
-        /// discarded and the transcript has recorded a prompt since.
+        /// discarded or refused and the transcript has recorded a prompt
+        /// since.
         case abandoned
     }
 
@@ -165,6 +171,10 @@ final class AgentChatStore {
     /// Sends already looked for in the input box since the Agent last
     /// turned idle: each idle spell reads the screen once for them.
     @ObservationIgnored private var returnChecked: Set<UUID> = []
+    /// What the program said on screen about each refused send.
+    @ObservationIgnored private var refusedSends: [UUID: String] = [:]
+    /// Overdue `/compact` sends already looked for on the screen, once each.
+    @ObservationIgnored private var compactChecked: Set<UUID> = []
     /// When herdr last reported the Agent idle, while it still is.
     @ObservationIgnored private var idleSince: Date?
     /// When herdr last reported a turn starting. Esc puts back only the
@@ -418,6 +428,8 @@ final class AgentChatStore {
         discardedSends.formIntersection(ids)
         extendedSends.formIntersection(ids)
         returnChecked.formIntersection(ids)
+        refusedSends = refusedSends.filter { ids.contains($0.key) }
+        compactChecked.formIntersection(ids)
         for message in messages {
             if let index = sends.firstIndex(where: { $0.id == message.id }) {
                 guard message.isDelivered != (sends[index].deliveredAt != nil) else { continue }
@@ -527,6 +539,8 @@ final class AgentChatStore {
         await engine.save()
         guard !Task.isCancelled, engine === self.engine, !isAwaitingSession else { return }
         await checkReturnedSends()
+        guard !Task.isCancelled, engine === self.engine, !isAwaitingSession else { return }
+        await checkRefusedCompactions()
         guard !Task.isCancelled, engine === self.engine, !isAwaitingSession else { return }
         // A journal read adds a deadline of its own, so a round whose
         // transcript read failed leaves the journals for later.
@@ -870,9 +884,9 @@ final class AgentChatStore {
     /// takes only a prompt no other send matches, so sending its text again
     /// settles the new send; a returned send the user added to in the box
     /// takes a prompt that contains it. Conservative on purpose: a wrong match would
-    /// hide a prompt that never arrived. A discarded send that any prompt
-    /// recorded after it overtakes, matched or not, is abandoned: it is no
-    /// longer the conversation's latest message.
+    /// hide a prompt that never arrived. A discarded or refused send that
+    /// any prompt recorded after it overtakes, matched or not, is
+    /// abandoned: it is no longer the conversation's latest message.
     private func matchSends() {
         let byEntry = source.adapter.echoesByEntry
         let layout = conversation.layoutGeneration
@@ -963,6 +977,9 @@ final class AgentChatStore {
                 // Put back or cleared in an earlier conversation: the new
                 // one, still unwritten, is not waiting for it.
                 statuses[send.id] = .abandoned
+            } else if let refusal = refusedSends[send.id] {
+                statuses[send.id] =
+                    send.generation == conversationGeneration && !isOvertaken ? .refused(refusal) : .abandoned
             } else if isUnwritten || date.timeIntervalSince(deliveredAt) < timing.echoTimeout {
                 statuses[send.id] = .awaiting
             } else if send.generation == conversationGeneration {
@@ -1019,6 +1036,31 @@ final class AgentChatStore {
             self.idleSince == idleSince
         else { return }
         observeInputBox(InputBoxStateDetector.detect(screen, program: program), for: ids)
+    }
+
+    /// Pi and Oh My Pi refuse a `/compact` with nothing to compact on
+    /// screen ("Error: Compaction failed: Nothing to compact (session too
+    /// small)") and record nothing, so its echo would stay overdue. The
+    /// Agent often never leaves idle for it, so the screen is read once for
+    /// each overdue `/compact` while herdr reports the Agent idle, whenever
+    /// it last turned so.
+    private func checkRefusedCompactions() async {
+        guard program == .pi || program == .omp, ChatAgentActivity(agent.status) == .idle else { return }
+        let candidates = sends.filter {
+            $0.key == "/compact" && sendStatuses[$0.id] == .overdue && !compactChecked.contains($0.id)
+        }
+        guard !candidates.isEmpty else { return }
+        compactChecked.formUnion(candidates.map(\.id))
+        guard let screen = try? await source.screen.readScreen(), !Task.isCancelled,
+            let failure = screen.rows.last(where: { $0.text.contains("Compaction failed:") })
+        else { return }
+        let refusal =
+            failure.text.contains("Nothing to compact")
+            ? "\(program.chatName) had nothing to compact." : "\(program.chatName) couldn't compact."
+        for send in candidates {
+            refusedSends[send.id] = refusal
+        }
+        matchSends()
     }
 
     /// A read of the Agent's screen made for another reason, such as the

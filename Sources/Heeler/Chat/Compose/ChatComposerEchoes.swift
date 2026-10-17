@@ -24,7 +24,8 @@ enum ChatComposerEchoes {
     /// The echoes below the transcript. A message the transcript recorded
     /// gives way to its entry, and a failure shows only while it is Chat's
     /// latest message, the one the Composer offers to retry. So does a send
-    /// the user cleared from the Agent's input box.
+    /// the user cleared from the Agent's input box. A send the program
+    /// refused says what it said instead.
     static func pending(
         _ messages: [AgentComposerStore.Message], statuses: [UUID: AgentChatStore.SendStatus]
     ) -> [ChatPendingEcho] {
@@ -45,6 +46,7 @@ enum ChatComposerEchoes {
                 case .overdue: state = .unconfirmed
                 case .returned: state = .notDelivered
                 case .discarded: state = .discarded
+                case .refused(let refusal): state = .refused(refusal)
                 case .awaiting, .recorded, .abandoned: state = .sent
                 }
             case .undelivered:

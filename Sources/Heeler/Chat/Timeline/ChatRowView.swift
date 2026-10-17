@@ -239,6 +239,8 @@ private struct ChatPendingBubble: View {
             ("Not delivered. The text is still in the Agent's input box.", "exclamationmark.triangle", .orange)
         case .discarded:
             ("Not delivered. It's no longer in the Agent's input box.", "exclamationmark.triangle", .orange)
+        case .refused(let refusal):
+            (refusal, "info.circle", .secondary)
         }
     }
 }

@@ -86,7 +86,8 @@ struct AgentChatStoreTests {
             limits: TranscriptFollower.Limits = TranscriptFollower.Limits(),
             timing: AgentChatStore.Timing = AgentChatStore.Timing(
                 activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)),
-            cachedSession: @escaping @Sendable (Agent) async -> AgentSessionInfo? = { _ in nil }
+            cachedSession: @escaping @Sendable (Agent) async -> AgentSessionInfo? = { _ in nil },
+            screen: BlockedScreenIO = .unavailable
         ) {
             let agent = AgentChatStoreTests.agent(session: session, program: program)
             let server = Server(agent)
@@ -99,7 +100,7 @@ struct AgentChatStoreTests {
                     hostID: AgentChatStoreTests.host, socketLocation: .defaultSession,
                     files: files.hostFiles(), agentInfo: { try await server.read() }, cache: cache,
                     adapter: NumberedChatReducer.adapter(limits: limits, wantsFirstLine: program == .codex),
-                    cachedSession: cachedSession),
+                    cachedSession: cachedSession, screen: screen),
                 timing: timing, now: { clock.now })
         }
 
@@ -1606,6 +1607,106 @@ struct AgentChatStoreTests {
 
         #expect(await pane.reads == 1)
         #expect(store.sendStatuses[id] == .overdue)
+    }
+
+    // MARK: Refused compactions
+
+    /// A Pi or Oh My Pi store holding one recorded prompt, with `/compact`
+    /// sent from Chat while the Agent stays idle.
+    private static func sentCompact(
+        _ program: ChatProgram, screen: ANSIScreen
+    ) async throws -> (files: VirtualHostFiles, store: AgentChatStore, pane: Pane, clock: Clock, id: UUID) {
+        let clock = Clock()
+        let pane = Pane(screen)
+        let (files, store, path, _) = try Self.skillStore(program, clock: clock, screen: pane.io)
+        await files.write(Self.piHeader + "\n" + Self.ompMessage("u1", parent: nil, role: "user", "go"), at: path)
+        await store.step()
+        let id = UUID()
+        store.updateSends([Self.sent(id, "/compact", delivered: false)])
+        store.updateSends([Self.sent(id, "/compact")])
+        await store.step()
+        return (files, store, pane, clock, id)
+    }
+
+    /// Pi 0.85.1 (pi-41) and Oh My Pi 18.11.1 print the same refusal for
+    /// a `/compact` with nothing to compact, record nothing and stay idle.
+    /// One read once the echo is overdue says so instead; a prompt
+    /// recorded later retires it rather than leave it under that turn.
+    @Test(arguments: [ChatProgram.pi, .omp])
+    func aCompactWithNothingToCompactIsRefusedAfterOneRead(program: ChatProgram) async throws {
+        let (files, store, pane, clock, id) = try await Self.sentCompact(
+            program, screen: try ScreenFixture.screen("pi-41-compact-nothing"))
+        #expect(await pane.reads == 0)
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        await store.step()
+
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .refused("\(program.chatName) had nothing to compact."))
+
+        await files.append(Self.ompMessage("u2", parent: "u1", role: "user", "say PLUM"), to: Self.piPath(program))
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .abandoned)
+    }
+
+    /// The screen is read once for each overdue `/compact`: one that
+    /// showed no refusal stays overdue, whatever the screen shows later.
+    @Test func anOverdueCompactIsLookedForOnce() async throws {
+        let (_, store, pane, clock, id) = try await Self.sentCompact(.pi, screen: try Self.piEditor())
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .overdue)
+
+        await pane.show(try ScreenFixture.screen("pi-41-compact-nothing"))
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .overdue)
+    }
+
+    /// Any other compaction failure is refused too, and a compaction the
+    /// transcript records after all still settles the send.
+    @Test func anotherCompactionFailureIsRefusedUntilACompactionIsRecorded() async throws {
+        let capture = try ScreenFixture.text("pi-41-compact-nothing")
+        let screen = ANSIScreenDecoder.decode(
+            capture.replacingOccurrences(
+                of: "Nothing to compact (session too small)", with: "Summarization request failed"))
+        let (files, store, _, clock, id) = try await Self.sentCompact(.pi, screen: screen)
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        #expect(store.sendStatuses[id] == .refused("Pi couldn't compact."))
+
+        await files.append(
+            #"{"type":"compaction","id":"c1","parentId":"u1","summary":"summary","firstKeptEntryId":"u1"}"# + "\n",
+            to: Self.piPath(.pi))
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    /// Only Pi and Oh My Pi are known to refuse on screen: Claude's
+    /// overdue `/compact` stays overdue without a read.
+    @Test func aClaudeCompactIsNotLookedForOnTheScreen() async throws {
+        let pane = Pane(try ScreenFixture.screen("pi-41-compact-nothing"))
+        let fixture = Fixture(session: Self.first, screen: pane.io)
+        await fixture.files.write(NumberedChatReducer.lines(0..<2), at: Self.path(Self.first))
+        await fixture.store.step()
+        let id = UUID()
+        fixture.store.updateSends([Self.sent(id, "/compact", delivered: false)])
+        fixture.store.updateSends([Self.sent(id, "/compact")])
+
+        fixture.advance(10)
+        await fixture.store.step()
+        await fixture.store.step()
+
+        #expect(await pane.reads == 0)
+        #expect(fixture.store.sendStatuses[id] == .overdue)
     }
 
     // MARK: Oh My Pi rewrites

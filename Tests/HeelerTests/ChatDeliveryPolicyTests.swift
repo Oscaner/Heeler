@@ -301,6 +301,20 @@ struct ChatComposerEchoesTests {
         #expect(ChatComposerEchoes.pending(store.messages, statuses: [id: .abandoned]).isEmpty)
     }
 
+    /// A `/compact` Pi said it had nothing to compact for.
+    @Test func aRefusedSendSaysWhatTheProgramSaid() async throws {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport)
+        store.replaceDraft(with: "/compact")
+        await store.send(policy: Self.policy())
+        let id = try #require(store.messages.first?.id)
+
+        let echoes = ChatComposerEchoes.pending(
+            store.messages, statuses: [id: .refused("Pi had nothing to compact.")])
+
+        #expect(echoes.map(\.state) == [.refused("Pi had nothing to compact.")])
+    }
+
     /// A steer Esc put back in Pi's or Oh My Pi's input box.
     @Test func aSendFoundBackInTheInputBoxShowsAsNotDelivered() async throws {
         let transport = ScriptedTransport()

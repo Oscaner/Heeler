@@ -133,6 +133,10 @@ file keeps the capture's number and name behind the `pi-` or `omp-` prefix.
   phone's 62 columns: a steer Stop returned to the editor, with text the user
   added after it (`say FIG and also say PEAR`). Its `40` is the capture
   number, not a width.
+- `pi-41-compact-nothing` comes from Pi 0.85.1 on herdr 0.9.5 (2026-10-18),
+  started with `--no-session` in an empty directory: `/compact` typed into
+  the fresh session printed `Error: Compaction failed: Nothing to compact
+  (session too small)` above the editor, and the Agent stayed idle.
 - Oh My Pi used the nerd-font status band.
 - Captures are 119, 120, 62 or 40 columns wide; Pi's are 119 unless the
   name or the note above says otherwise, Oh My Pi's 120.
