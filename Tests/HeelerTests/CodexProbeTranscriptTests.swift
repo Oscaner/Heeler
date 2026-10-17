@@ -89,7 +89,7 @@ struct CodexProbeTranscriptTests {
         #expect(patch.title == "patch.txt")
         // Recorded as failed with "execution error: TurnAborted": nothing applied.
         #expect(patch.status == .interrupted)
-        #expect(patch.diff == ChatDiffStats(added: 1, removed: 0))
+        #expect(patch.diff == nil)
         #expect(patch.preview == nil)
         #expect(patch.output == ChatOutputReference(offset: probe.offset(36), length: probe.line(36).length))
         #expect(turn[3].notice == ChatNotice(kind: .stopped, title: "Stopped"))

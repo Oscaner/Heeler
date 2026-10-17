@@ -215,13 +215,15 @@ enum CodexRecordDecoder {
             let summary = CodexToolSummary.fileChangeSummary(event.changes ?? [:], cwd: context.cwd)
             var status = event.status?.chatStatus ?? (event.success == false ? .failed : .succeeded)
             var output = joinedOutput(event.stdout, event.stderr)
+            var diff = summary.diff
             if status == .failed, isAbortedPatch(output) {
                 status = .interrupted
                 output = nil
+                diff = nil
             }
             let snapshot = CodexToolSnapshot(
                 kind: summary.kind, name: "apply_patch", title: summary.title.isEmpty ? "Patch" : summary.title,
-                status: status, diff: summary.diff, callID: callID, preview: CodexToolSummary.preview(output),
+                status: status, diff: diff, callID: callID, preview: CodexToolSummary.preview(output),
                 output: reference(line))
             let turn = event.turnID.flatMap { $0.isEmpty ? nil : $0 }
             return .record(.legacyItem(CodexItem(id: callID, content: .tool(snapshot)), .turnOrCurrent(turn)))
@@ -347,14 +349,16 @@ enum CodexRecordDecoder {
             let summary = CodexToolSummary.fileChangeSummary(raw.changes ?? [:], cwd: context.cwd)
             var status = raw.status?.chatStatus
             var output = complete ? joinedOutput(raw.stdout, raw.stderr) : nil
+            var diff = complete ? summary.diff : nil
             if status == .failed, isAbortedPatch(output) {
                 status = .interrupted
                 output = nil
+                diff = nil
             }
             return .tool(
                 CodexToolSnapshot(
                     kind: summary.kind, name: "FileChange", title: summary.title.isEmpty ? "Patch" : summary.title,
-                    status: status, diff: complete ? summary.diff : nil, callID: raw.id,
+                    status: status, diff: diff, callID: raw.id,
                     preview: CodexToolSummary.preview(output), output: reference(line)))
         case .mcpToolCall:
             var status = raw.status?.chatStatus
@@ -760,7 +764,8 @@ enum CodexRecordDecoder {
     }
 
     /// A patch declined on Codex's card or cut off by Esc: Codex records it
-    /// as failed with this output, though nothing was applied.
+    /// as failed with this output, though nothing was applied, so it shows
+    /// no output and no line counts.
     private static func isAbortedPatch(_ output: String?) -> Bool {
         output?.trimmingCharacters(in: .whitespacesAndNewlines) == "execution error: TurnAborted"
     }

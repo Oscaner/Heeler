@@ -223,6 +223,8 @@ struct CodexToolSummaryTests {
         let tools = builder.reducer().transcript(ChatProjectionContext(activity: .idle)).entries.compactMap(\.tool)
         #expect(tools.map(\.status) == [.interrupted, .failed])
         #expect(tools.map(\.preview?.text) == [nil, "patch rejected: context mismatch"])
+        // Nothing was applied, so a group counts no added lines for it.
+        #expect(tools.first?.diff == nil)
     }
 
     @Test("A legacy patch end aborted before it applied is interrupted")
@@ -239,6 +241,7 @@ struct CodexToolSummaryTests {
         let tool = builder.reducer().transcript(ChatProjectionContext(activity: .idle)).entries.last?.tool
         #expect(tool?.status == .interrupted)
         #expect(tool?.preview == nil)
+        #expect(tool?.diff == nil)
     }
 
     @Test("A failed turn shows an API error's message and keeps the JSON to copy")
