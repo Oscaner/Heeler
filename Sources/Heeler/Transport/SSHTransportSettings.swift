@@ -81,6 +81,12 @@ struct SSHTransportSettings: Sendable {
     var hostKeyTrust: HostKeyTrust = .endpoint
     /// Which herdr socket to reach on the Host.
     var socket: HerdrSocketLocation
+    /// The launcher of the Host's herdr endpoint (Pairing Code v2, ADR 0023).
+    /// When set, the session list, plugin list, and plugin config-dir
+    /// commands are its builders, and the wake and attach execs run it in
+    /// place of ``wakeCommand``, ``attachCommand``, and
+    /// ``terminalAttachCommand``. nil runs the `herdr` on the SSH PATH.
+    var herdrLauncher: HerdrLauncher? = nil
     /// Command that wakes a stopped herdr server, run over a no-PTY exec
     /// channel when a request hits connection-refused (#6). The default is
     /// the strategy from spec #16: `herdr remote-client-bridge` ensures the

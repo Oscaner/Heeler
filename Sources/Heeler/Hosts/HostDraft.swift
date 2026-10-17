@@ -74,6 +74,9 @@ struct HostDraft: Equatable, Sendable {
     /// Blank means "keep the stored password" when editing.
     var password = ""
     var sessionName = ""
+    /// The Pairing Code's herdr endpoint, carried through Edit and Duplicate
+    /// unchanged. The form shows it read-only; nil for every other Host.
+    var herdrEndpoint: HerdrEndpoint?
     /// The Host's routes in order. A new Host starts with none and cannot
     /// be saved until Add Route gives it one; the forwarding properties
     /// below create the first route when set.
@@ -87,6 +90,7 @@ struct HostDraft: Equatable, Sendable {
         username = host.username
         authMethod = host.authMethod
         sessionName = host.sessionName
+        herdrEndpoint = host.herdrEndpoint
         routes = host.routes.map(HostRouteDraft.init(route:))
     }
 
@@ -235,6 +239,7 @@ struct HostDraft: Equatable, Sendable {
             username: username.trimmingCharacters(in: .whitespaces),
             authMethod: authMethod,
             sessionName: sessionName.trimmingCharacters(in: .whitespaces),
+            herdrEndpoint: herdrEndpoint,
             routes: routes)
     }
 

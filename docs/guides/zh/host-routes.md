@@ -1,4 +1,4 @@
-<!-- Translated from docs/guides/host-routes.md at 6a68aa1b -->
+<!-- Translated from docs/guides/host-routes.md at 93baae40 -->
 # 通过多条路由访问 Host
 
 一台 Host 可以配置不止一条路由：在家时使用局域网地址，在外时使用 Overlay Network 或跳板机（Jump Host）。每次连接时，Heeler 都会尝试所有路由并采用最先连通 Host 的那一条，因此无需手动切换任何设置。
@@ -18,7 +18,7 @@
 
 ## Heeler 如何选择路由
 
-- 每次连接时，Heeler 会同时尝试该 Host 的所有路由，并保留最先连通的一条。
+- 每次连接时，Heeler 会错峰启动该 Host 的路由进行竞速，并保留最先连通的一条。
 - 不带跳板机的 **Direct** 路由会最先发起连接；Overlay Network 路由和跳板机路由会在片刻之后启动，或者在所有直连路由均告失败后立即启动。在家时，局域网地址通常会在 Overlay Network 启动前就率先连通。
 - 列表顺序不会决定哪条路由胜出。排在第一位的路由仅用作 **Hosts** 列表中展示的该 Host 地址。
 - 一次连接在断开前会一直保持所选路由。如果你从 Wi-Fi 切换到蜂窝网络，下一次连接会重新竞速选路。
@@ -30,6 +30,10 @@
 - **Connected** 会指明当前使用的路由，同时该路由在 **Routes** 下会标记为 **In Use**。轻点 ↻ 可重新连接。
 - 当 Heeler 正在连接时，轻点 ■ 可停止尝试。该 Host 会保持暂停状态，直到你轻点 **Reconnect**。
 - **Can't Connect** 表示没有任何路由能连上该 Host。每条路由都会标记为 **Failed** 并附上各自的原因，例如连接超时或 Overlay Network 尚未连接。
+
+<a href="../images/overlay-networks/host-routes-in-use.png"><img src="../images/overlay-networks/host-routes-in-use.png" width="300" alt="已连接的 Host，跳板机路由标记为 In Use，Direct 路由未被选中"></a>
+
+图中跳板机路由标记为 **In Use**，**Direct** 路由未被选中。这是路由选择示例，不是 Overlay 连接测试。名称与地址已匿名化，轻点图片可放大查看。
 
 ## 修改、排序或删除路由
 

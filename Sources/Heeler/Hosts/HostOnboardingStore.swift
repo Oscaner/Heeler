@@ -18,7 +18,9 @@ struct HostOnboardingDependencies: Sendable {
 
 /// Drives one Host's onboarding preflight (#14): resolve credentials,
 /// connect (surfacing the TOFU first-connect prompt), discover sessions,
-/// ping the selected session, and render the outcome as the checklist.
+/// ping the selected session, and render the outcome as the checklist. A
+/// Host with a herdr endpoint (ADR 0023) skips discovery, because its socket
+/// already fixes the session, and must instead prove its launcher answers.
 @MainActor
 @Observable
 final class HostOnboardingStore {
@@ -165,29 +167,43 @@ final class HostOnboardingStore {
                 try? await transport.close()
                 return
             }
-            do {
-                let sessions = try await transport.listSessions()
-                if !Task.isCancelled { availableSessions = sessions }
-            } catch {
-                if !Task.isCancelled {
-                    sessionDiscoveryError = "Could not discover herdr sessions. You can still enter a session name manually."
+            let launcherFailure: PreflightReport?
+            if let endpoint = host.herdrEndpoint {
+                launcherFailure = await launcherProbeFailure(endpoint, over: transport)
+            } else {
+                launcherFailure = nil
+                do {
+                    let sessions = try await transport.listSessions()
+                    if !Task.isCancelled { availableSessions = sessions }
+                } catch {
+                    if !Task.isCancelled {
+                        sessionDiscoveryError = "Could not discover herdr sessions. You can still enter a session name manually."
+                    }
                 }
             }
-            do {
-                let info = try await transport.ping()
-                if !Task.isCancelled {
-                    serverInfo = info
-                    report = .allPassed
-                    // After the report, so the checklist renders first. The
-                    // run still waits for this read (bounded by the request
-                    // timeout), and its failure never fails the preflight.
-                    let plugin = await HeelerPluginStatus.read(over: transport)
-                    if !Task.isCancelled { pluginStatus = plugin }
-                }
-            } catch {
-                if !Task.isCancelled {
-                    captureHostKeyReplacement(error)
-                    report = failureReport(error)
+            guard !Task.isCancelled else {
+                try? await transport.close()
+                return
+            }
+            if let launcherFailure {
+                report = launcherFailure
+            } else {
+                do {
+                    let info = try await transport.ping()
+                    if !Task.isCancelled {
+                        serverInfo = info
+                        report = .allPassed
+                        // After the report, so the checklist renders first. The
+                        // run still waits for this read (bounded by the request
+                        // timeout), and its failure never fails the preflight.
+                        let plugin = await HeelerPluginStatus.read(over: transport)
+                        if !Task.isCancelled { pluginStatus = plugin }
+                    }
+                } catch {
+                    if !Task.isCancelled {
+                        captureHostKeyReplacement(error)
+                        report = failureReport(error)
+                    }
                 }
             }
             // Preflight only probes; the Console owns long-lived connections.
@@ -252,10 +268,33 @@ final class HostOnboardingStore {
         }
     }
 
+    /// Runs an endpoint Host's session list as its launcher probe, before
+    /// ping. The sessions are discarded: the endpoint's socket already names
+    /// the one this Host uses. nil means the launcher answered like herdr.
+    private func launcherProbeFailure(
+        _ endpoint: HerdrEndpoint, over transport: any Transport
+    ) async -> PreflightReport? {
+        do {
+            _ = try await transport.listSessions()
+            return nil
+        } catch TransportError.malformedResponse(let detail) {
+            return .failure(
+                check: .herdrInstalled,
+                hint: "The herdr launcher at \(endpoint.executablePath) did not answer like herdr. "
+                    + "(\(detail))")
+        } catch {
+            guard !Task.isCancelled else { return nil }
+            captureHostKeyReplacement(error)
+            return failureReport(error)
+        }
+    }
+
     private func failureReport(_ error: any Error) -> PreflightReport {
         overlayLoginURL = (error as? TransportError)?.overlayLoginURL
         return if let transportError = error as? TransportError {
-            .failure(transportError, authMethod: host.authMethod)
+            .failure(
+                transportError, authMethod: host.authMethod,
+                usesHerdrEndpoint: host.herdrEndpoint != nil)
         } else {
             .failure(
                 check: .connection,

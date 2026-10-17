@@ -63,30 +63,35 @@ Do these steps on the Mac that runs herdr, signed in as the account Heeler will 
 
 Come here from your provider guide once the Mac and Heeler are on the same network.
 
-1. Open **Hosts** and tap **Add Host**. For Tailscale and EasyTier, you can instead open the network in Settings and tap **Add** next to the Mac; this fills in its address.
-2. Set **Network** at the top of the form to your saved network. (**Direct** means Heeler does not use the overlay network.)
-3. Fill in the fields below and save.
-4. Tap **Trust** only if the fingerprint matches the one from the Mac. If a check fails, fix it and tap **Run Checks Again**.
+1. Open **Hosts** and tap **Add Host**. Under **Routes**, tap **Add Route**, set **Network** to your saved network, fill in **Address** and **Port**, and tap **Save**. For Tailscale and EasyTier, you can instead open the network in Settings and tap **Add** next to the Mac; this pre-fills the route. (**Direct** means Heeler does not use the overlay network.)
+2. Back in **Add Host**, fill in the remaining fields below and tap **Save**.
+3. Tap **Trust** only if the fingerprint matches the one from the Mac. If a check fails, fix it and tap **Run Checks Again**.
 
 | Field | Value |
 | --- | --- |
 | Name | Any label for this Mac |
-| Address | The Mac's IP address on the network, with no port or `/24`-style suffix |
-| Port | `22`, unless your guide says otherwise |
 | User | Your Mac username (from `id -un`) |
+| Network (in Route) | Your saved overlay network |
+| Address (in Route) | The Mac's IP address on the network, with no port or `/24`-style suffix |
+| Port (in Route) | `22`, unless your guide says otherwise |
+| Jump Host (in Route) | Leave blank |
 | Authentication | The sign-in method you picked |
 | herdr Session | The session name, or blank for the default |
-| Jump Host | Leave blank |
 
-To fill in the address, Tailscale offers **Choose from Tailnet…** (keep **IP Address** selected) and EasyTier offers **Choose from Network…**. For ZeroTier, copy the Mac's IP address from ZeroTier Central.
+To fill in the address on the route page, Tailscale offers **Choose from Tailnet…** (keep **IP Address** selected) and EasyTier offers **Choose from Network…**. For ZeroTier, copy the Mac's IP address from ZeroTier Central.
 
 ## Verify the connection
 
+<a href="images/overlay-networks/networks-connected.png"><img src="images/overlay-networks/networks-connected.png" width="300" alt="Overlay Networks list with three connected networks and their switches on"></a>
+
+**Connected** here means Heeler has joined the network, not that a Host is using it. Follow the checks below to verify the Host's route. Network names have been anonymized; you only need the network you chose, not all three. Tap the image to enlarge it.
+
 1. The network shows **Connected** in **Settings > Overlay Networks**.
-2. The Host checks pass and the session's Agents or Terminals load.
-3. In a **New Terminal**, `pwd` prints a folder on the Mac. Use a new terminal for tests, not an Agent's terminal.
-4. Turn off Wi-Fi on the phone and repeat over cellular.
-5. Leave Heeler for more than 20 seconds, then come back. The Host and terminal reconnect. (Heeler disconnects from the network while you're away; it isn't an always-on VPN.)
+2. Open the Host from **Hosts** and check which route is marked **In Use** under **Routes**. Confirm it uses the overlay network you are testing. If another route wins, this connection does not verify the overlay route. See [which route is in use](host-routes.md#see-which-route-is-in-use).
+3. The Host checks pass and the session's Agents or Terminals load.
+4. In a **New Terminal**, `pwd` prints a folder on the Mac. Use a new terminal for tests, not an Agent's terminal.
+5. Turn off Wi-Fi on the phone and repeat over cellular, checking **In Use** again. Another available route, such as a Jump Host or a different overlay network, can still win.
+6. Leave Heeler for more than 20 seconds, then come back. The Host and terminal reconnect; check **In Use** again to confirm which route reconnected. (Heeler disconnects from the network while you're away; it isn't an always-on VPN.)
 
 ## Troubleshooting
 
@@ -97,10 +102,10 @@ To fill in the address, Tailscale offers **Choose from Tailnet…** (keep **IP A
 | **Waiting for approval** (Tailscale) | Approve the device in the Tailscale admin console. |
 | **Waiting for authorization** (ZeroTier) | Authorize Heeler's device in ZeroTier Central. |
 | **Waiting for a network** (EasyTier Config Server) | Assign a network to Heeler's Machine ID in the EasyTier console. |
-| Network is connected, but SSH times out | Check the Host's Network, address, and port. Make sure the Mac is awake and Remote Login is on. |
+| Network is connected, but SSH times out | Check the route's Network, address, and port. Make sure the Mac is awake and Remote Login is on. |
 | SSH login fails | Check the username, Remote Login access, and the key or password. |
 | SSH works, herdr checks fail | Read the failing check. Usually herdr isn't installed for this account or the session name is wrong. |
-| Network turns back on after you switch it off | A Host is using it. To keep it off, change that Host's **Network** or delete the Host. |
+| Network turns back on after you switch it off | A Host route is using it. To keep it off, change that route's **Network** or delete the Host. |
 
 Last checked on 2026-10-09 on macOS.
 

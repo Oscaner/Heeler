@@ -174,6 +174,25 @@ struct HeelerPluginListResultTests {
 struct HeelerPluginPresentationTests {
     private let install = HostSetupGuide.pluginInstallCommand
 
+    @Test func endpointRecoveryCommandsKeepTheInstanceForEveryOperation() throws {
+        let endpoint = try #require(HerdrEndpoint(
+            socketPath: "/tmp/custom herdr/herdr/sessions/work/herdr.sock",
+            executablePath: "/tmp/custom herdr/bin/launch"))
+        let notice = try #require(HeelerPluginPresentation(
+            .installed(HeelerPluginInstallation(
+                pluginID: "herdr-mobile.pairing", version: "0.3.0",
+                disabledCurrentIDSource: .github)),
+            session: "wrong", endpoint: endpoint).notice)
+        let prefix = #"/bin/sh -c 'export HERDR_SOCKET_PATH="$1"; shift; exec "$@"' herdr '/tmp/custom herdr/herdr/sessions/work/herdr.sock' '/tmp/custom herdr/bin/launch' "#
+        #expect(notice.commands == [
+            prefix + "plugin uninstall herdr-mobile.pairing",
+            prefix + "plugin install 'ZingerLittleBee/Heeler/plugin' --ref main --yes",
+            prefix + "plugin enable heeler",
+        ])
+        #expect(try #require(HeelerPluginPresentation(
+            .notInstalled, session: "", endpoint: endpoint).notice).commands == [notice.commands[1]])
+    }
+
     @Test func statesWithNothingToDoShowOnlyTheValue() {
         let cases: [(HeelerPluginStatus, String)] = [
             (.checking, "Checking…"),
