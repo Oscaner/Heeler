@@ -768,12 +768,18 @@ struct ChatNotice: Equatable, Codable, Sendable {
     var kind: Kind
     var title: String
     var detail: String?
+    /// The text as recorded when `detail` shows a readable form of it (an
+    /// API error's message out of its JSON); Copy gives this.
+    var rawDetail: String?
     var questions: [ChatQuestion]
 
-    init(kind: Kind, title: String, detail: String? = nil, questions: [ChatQuestion] = []) {
+    init(
+        kind: Kind, title: String, detail: String? = nil, rawDetail: String? = nil, questions: [ChatQuestion] = []
+    ) {
         self.kind = kind
         self.title = title
         self.detail = detail
+        self.rawDetail = rawDetail
         self.questions = questions
     }
 }

@@ -358,6 +358,37 @@ enum CodexToolSummary {
         return preview(text, imageCount: images)
     }
 
+    /// A turn error's readable message: Codex records an API error as its
+    /// JSON body, `{"error": {"message": ...}}` or `{"message": ...}`, which
+    /// the TUI prints verbatim. Anything else stays as recorded.
+    static func errorDisplay(_ text: String) -> String {
+        let json = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard json.hasPrefix("{"), let body = try? JSONDecoder().decode(ErrorBody.self, from: Data(json.utf8)),
+            let message = body.error?.message ?? body.message, !message.isEmpty
+        else { return text }
+        return message
+    }
+
+    private struct ErrorBody: Decodable {
+        var message: String?
+        var error: Inner?
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodexKey.self)
+            message = container.lenient("message")
+            error = container.lenient("error")
+        }
+
+        struct Inner: Decodable {
+            var message: String?
+
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodexKey.self)
+                message = container.lenient("message")
+            }
+        }
+    }
+
     /// A web search's title from its query or action.
     static func webSearchTitle(query: String?, action: CodexRawWebAction?) -> String {
         if let query, !query.isEmpty {

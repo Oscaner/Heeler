@@ -142,7 +142,8 @@ struct ChatRow: Identifiable, Sendable {
                 }
             case .plan(let plan, _): plan.text
             case .questions(let questions): questions.map(\.text).joined(separator: "\n\n")
-            case .notice(let notice): [notice.title, notice.detail].compactMap { $0 }.joined(separator: "\n")
+            case .notice(let notice):
+                [notice.title, notice.rawDetail ?? notice.detail].compactMap { $0 }.joined(separator: "\n")
             case .pending(let echo): echo.text
             case .toolGroup(let group): group.summary
             case .divider, .olderHistory, .turnHeader: nil

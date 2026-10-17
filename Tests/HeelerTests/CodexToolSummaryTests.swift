@@ -241,6 +241,30 @@ struct CodexToolSummaryTests {
         #expect(tool?.preview == nil)
     }
 
+    @Test("A failed turn shows an API error's message and keeps the JSON to copy")
+    func failedTurnError() {
+        let json = #"{"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'heeler-no-such-model' model is not supported when using Codex with a ChatGPT account."}}"#
+        var builder = CodexRolloutBuilder()
+        builder.turnStarted("t1")
+        builder.userMessage("t1", id: "u1", text: "hi")
+        builder.turnComplete("t1", error: json)
+        builder.turnStarted("t2")
+        builder.userMessage("t2", id: "u2", text: "again")
+        builder.turnComplete("t2", error: "stream disconnected before completion")
+
+        let notices = builder.reducer().transcript(ChatProjectionContext(activity: .idle)).entries.compactMap(\.notice)
+        #expect(
+            notices == [
+                ChatNotice(
+                    kind: .error, title: "Turn failed",
+                    detail: "The 'heeler-no-such-model' model is not supported when using Codex with a ChatGPT account.",
+                    rawDetail: json),
+                ChatNotice(kind: .error, title: "Turn failed", detail: "stream disconnected before completion"),
+            ])
+        #expect(CodexToolSummary.errorDisplay(#"{"message":"Rate limited"}"#) == "Rate limited")
+        #expect(CodexToolSummary.errorDisplay(#"{"error":{"code":"x"}}"#) == #"{"error":{"code":"x"}}"#)
+    }
+
     @Test("A call without an outcome follows the turn and herdr's activity", arguments: CodexOpenCallCase.allCases)
     func openCall(_ openCase: CodexOpenCallCase) {
         var builder = CodexRolloutBuilder()

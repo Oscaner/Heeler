@@ -1448,6 +1448,20 @@ struct ChatRowViewTests {
         }
     }
 
+    /// A notice that shows a readable form of its text copies the text as
+    /// recorded.
+    @Test func aNoticeCopiesItsRawDetail() async throws {
+        let notice = ChatNotice(
+            kind: .error, title: "Turn failed", detail: "Not supported.", rawDetail: #"{"message":"Not supported."}"#)
+        let plain = ChatNotice(kind: .error, title: "Turn failed", detail: "Disconnected")
+        let entries = [notice, plain].enumerated().map { index, notice in
+            ChatEntry(id: ChatEntryID("n\(index)"), sourceOffset: UInt64(index), content: .notice(notice))
+        }
+        let rows = await ChatRowBuilder().rows(for: ChatTimelineInput(entries: entries))
+        let copied = entries.map { entry in rows.first { $0.id == .entry(entry.id) }?.copyText }
+        #expect(copied == ["Turn failed\n{\"message\":\"Not supported.\"}", "Turn failed\nDisconnected"])
+    }
+
     /// VoiceOver reads a user bubble once, chips included. A label set on the
     /// bubble's stack alone once went to each of its children, so a bubble
     /// with a chip read "You: …, You: …" and never named the chip.

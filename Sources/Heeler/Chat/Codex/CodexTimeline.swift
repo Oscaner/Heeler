@@ -315,7 +315,11 @@ enum CodexTimelineProjector {
                 ChatNotice(
                     kind: .stopped, title: reason == .budgetLimited ? "Stopped (budget)" : "Stopped", detail: error))
         case .failed(let message):
-            content = .notice(ChatNotice(kind: .error, title: "Turn failed", detail: message))
+            let display = message.map(CodexToolSummary.errorDisplay)
+            content = .notice(
+                ChatNotice(
+                    kind: .error, title: "Turn failed", detail: display,
+                    rawDetail: display == message ? nil : message))
         case .divider(let divider):
             content = .divider(divider)
         }
