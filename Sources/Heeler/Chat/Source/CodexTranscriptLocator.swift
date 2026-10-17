@@ -110,13 +110,17 @@ struct CodexTranscriptLocator: Sendable {
     /// Line 1 of a rollout is its `session_meta`, whose `payload.id` is the
     /// thread id across reverts. The line carries the base instructions, so
     /// it can run to tens of kilobytes; a line longer than 1 MiB is accepted
-    /// on its file name.
+    /// on its file name. A pre-envelope line (Codex 0.30 and older) names
+    /// its session in a top-level `id`; it is accepted so that Chat can say
+    /// the format is too old rather than that it is another conversation.
     private func sessionMetaNames(_ threadID: String, in path: String) async throws -> Bool {
         switch try await files.firstLine(of: path, initialBytes: 64 << 10, limit: 1 << 20) {
         case .line(let data):
-            guard let meta = try? JSONDecoder().decode(SessionMetaLine.self, from: data),
-                meta.type == "session_meta"
-            else { return false }
+            guard let meta = try? JSONDecoder().decode(SessionMetaLine.self, from: data) else { return false }
+            if meta.type == nil, let id = meta.id, meta.hasInstructions {
+                return id.lowercased() == threadID
+            }
+            guard meta.type == "session_meta" else { return false }
             return meta.payload?.id?.lowercased() == threadID
         case .unterminated, .tooLong:
             return true
@@ -131,5 +135,20 @@ struct CodexTranscriptLocator: Sendable {
         }
         let type: String?
         let payload: Payload?
+        /// Pre-envelope fields.
+        let id: String?
+        let hasInstructions: Bool
+
+        private enum CodingKeys: String, CodingKey {
+            case type, payload, id, instructions
+        }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            type = try? container.decodeIfPresent(String.self, forKey: .type)
+            payload = try? container.decodeIfPresent(Payload.self, forKey: .payload)
+            id = try? container.decodeIfPresent(String.self, forKey: .id)
+            hasInstructions = container.contains(.instructions)
+        }
     }
 }

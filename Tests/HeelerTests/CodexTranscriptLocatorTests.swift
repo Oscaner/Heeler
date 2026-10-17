@@ -97,6 +97,16 @@ struct CodexTranscriptLocatorTests {
         #expect(try await Self.locate(files) == .failure(.mismatched))
     }
 
+    @Test func aPreEnvelopeRolloutOfTheThreadIsLocatedForTheReducerToRefuse() async throws {
+        let files = VirtualHostFiles()
+        let path = "\(Self.sessions)/2026/10/06/\(Self.rolloutName("2026-10-06T12-45-25"))"
+        await files.write(#"{"id":"\#(Self.thread.uppercased())","timestamp":"2025-08-01T00:00:00Z","instructions":null}"# + "\n", at: path)
+        #expect(try await Self.locate(files).get().segments.map(\.path) == [path])
+
+        await files.write(#"{"id":"\#(Self.revert)","timestamp":"2025-08-01T00:00:00Z","instructions":null}"# + "\n", at: path)
+        #expect(try await Self.locate(files) == .failure(.mismatched))
+    }
+
     @Test func aLongSessionMetaLineIsReadInGrowingPieces() async throws {
         let files = VirtualHostFiles()
         let path = "\(Self.sessions)/2026/10/06/\(Self.rolloutName("2026-10-06T12-45-25"))"

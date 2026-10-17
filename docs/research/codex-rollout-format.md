@@ -177,7 +177,9 @@ without a path.
   day of the time in the UUIDv7 id, picking the newest
   `(timestamp key, rollout id)` as Codex does
   (`codex-rs/rollout/src/list.rs:1579-1608`), and checking
-  `session_meta.payload.id`.
+  `session_meta.payload.id`. A pre-envelope line 1 names the session in its
+  top-level `id`; Heeler checks that instead, so Chat reports the format as
+  too old rather than the file as another conversation.
 
 ## Messages and deduplication
 
