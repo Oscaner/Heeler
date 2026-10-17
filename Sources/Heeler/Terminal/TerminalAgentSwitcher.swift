@@ -233,6 +233,14 @@ final class TerminalAgentSwitcherBar: UIView, UIScrollViewDelegate,
                 chip.apply(item, selected: item.id == selectedID)
             }
             self.syncArrangedSubviews(ordered, removing: stale)
+            // A reorder moves chips inside a row whose width stays the same,
+            // so nothing lays the strip out again on its own, and the open
+            // Agent's chip can slide off screen: an Agent restarted in its
+            // pane arrives last, then moves to its sorted place. Inside the
+            // slide this pass scrolls along with it.
+            if layoutChanged, self.scrollsToSelectionOnLayout {
+                self.setNeedsLayout()
+            }
         }
 
         if shouldAnimate {

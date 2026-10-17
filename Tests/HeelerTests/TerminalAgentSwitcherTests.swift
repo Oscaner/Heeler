@@ -796,6 +796,38 @@ struct TerminalAgentSwitcherTests {
         #expect(strip.contentOffset.x == 0)
     }
 
+    /// An Agent restarted in its pane comes back last, with no status yet,
+    /// and moves to its sorted place a moment later. The open Agent's chip
+    /// must follow it there instead of leaving the strip scrolled to the end.
+    @MainActor
+    @Test func aReorderKeepsTheOpenAgentInView() async throws {
+        let controller = UIViewController()
+        let window = try await makeTestWindow(
+            frame: CGRect(x: 0, y: 0, width: 402, height: 700),
+            rootViewController: controller)
+        defer { window.isHidden = true }
+
+        let host = UUID()
+        let agents = (0..<8).map {
+            Self.makeAgent(pane: "p\($0)", workspace: "project-\($0)", host: host)
+        }
+        let bar = TerminalAgentSwitcherBar()
+        bar.frame = CGRect(x: 0, y: 0, width: 240, height: 40)
+        // On screen, as in the app: a same-membership reorder then slides.
+        controller.view.addSubview(bar)
+        let opened = agents[1]
+        let arriving = agents.filter { $0.id != opened.id } + [opened]
+        bar.update(items: arriving.map { Self.makeItem($0) }, selectedID: opened.id)
+        bar.layoutIfNeeded()
+        let strip = try #require(bar.subviews.compactMap { $0 as? UIScrollView }.first)
+        #expect(strip.contentOffset.x > 0)
+
+        bar.update(items: agents.map { Self.makeItem($0) }, selectedID: opened.id)
+        bar.layoutIfNeeded()
+        let chip = try #require(bar.chips.first { $0.id == opened.id })
+        #expect(bar.bounds.contains(chip.convert(chip.bounds, to: bar)))
+    }
+
     /// Motion is the Working signal here, exactly as the orb is on the card.
     @MainActor
     @Test func onlyWorkingChipsPulse() {
