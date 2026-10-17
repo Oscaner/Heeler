@@ -552,6 +552,50 @@ struct TerminalAgentSwitcherTests {
         expectStripMatches(bar, items: pinned, identity: original)
     }
 
+    /// SwiftUI's updates reach the strip through `updateUIView`, which must
+    /// not reorder inside SwiftUI's own update (that hangs the app): a Pin
+    /// and an Unpin show on the next main-queue turn, flush and with the
+    /// same chips.
+    @MainActor
+    @Test(.timeLimit(.minutes(1)))
+    func aHostedPinAndUnpinReorderOnTheNextTurn() async throws {
+        let host = UUID()
+        let agents = [
+            Self.makeAgent(pane: "p1", workspace: "alpha", host: host),
+            Self.makeAgent(pane: "p2", workspace: "beta", host: host),
+            Self.makeAgent(pane: "p3", workspace: "gamma", host: host),
+        ]
+        func row(_ items: [TerminalAgentSwitcherItem]) -> TerminalAgentSwitcherRow {
+            TerminalAgentSwitcherRow(
+                switcher: TerminalAgentSwitcher(
+                    items: items, selectedID: agents[0].id, onSelect: { _ in }, onTogglePin: { _ in }),
+                isKeyboardUp: true, toggleKeyboard: {}, switchKeyboard: {})
+        }
+        let unpinned = agents.map { Self.makeItem($0) }
+        let controller = UIHostingController(rootView: row(unpinned))
+        let width: CGFloat = 402
+        let window = try makeWindow(width: width, rootViewController: controller)
+        defer { window.isHidden = true }
+        controller.view.frame = CGRect(x: 0, y: 0, width: width, height: TerminalAgentSwitcherBar.preferredHeight)
+        controller.view.layoutIfNeeded()
+        let bar = try #require(Self.firstStrip(in: controller.view))
+        bar.layoutIfNeeded()
+        let original = bar.chips
+        #expect(original.map(\.id) == unpinned.map(\.id))
+
+        let pinGamma = [Self.makeItem(agents[2], isPinned: true), unpinned[0], unpinned[1]]
+        for items in [pinGamma, unpinned] {
+            controller.rootView = row(items)
+            // The hosting view runs SwiftUI's update in its layout.
+            controller.view.setNeedsLayout()
+            controller.view.layoutIfNeeded()
+            #expect(bar.chips.map(\.id) != items.map(\.id), "reordered inside SwiftUI's update")
+            try await Task.sleep(for: .milliseconds(100))
+            bar.layoutIfNeeded()
+            expectStripMatches(bar, items: items, identity: original)
+        }
+    }
+
     /// Pin/unpin cycles must leave the strip flush every time: no gap
     /// between neighbours after layout, and the same chip views throughout.
     @MainActor
