@@ -276,6 +276,65 @@ struct BlockedCardStoreTests {
         #expect(store.content == .none)
     }
 
+    /// herdr reports Claude idle on its question review page and on a
+    /// question with previews; the open call keeps the card reading.
+    @Test func anIdleClaudeWithAnOpenQuestionStillShowsItsDialog() async throws {
+        let pane = FakePane(try ScreenFixture.screen("claude-14-c4-review"))
+        let store = Self.store(.claude, pane: pane)
+        store.update(transcript: Self.transcript(pending: [Self.question("toolu_q")]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        store.update(activity: .idle)
+        guard case .card(let review) = store.content else {
+            Issue.record("Expected the review card to stay, got \(store.content)")
+            return
+        }
+        #expect(review.dialog.kind == .claudeQuestionReview)
+
+        // A relaunch: the review was reached while Chat wasn't watching.
+        let relaunched = Self.store(.claude, pane: pane)
+        relaunched.update(activity: .idle)
+        relaunched.update(transcript: Self.transcript(pending: [Self.question("toolu_q")]))
+        await relaunched.refresh()
+        guard case .card(let card) = relaunched.content else {
+            Issue.record("Expected the review card, got \(relaunched.content)")
+            return
+        }
+        #expect(card.dialog.kind == .claudeQuestionReview)
+        #expect(card.request?.callID == "toolu_q")
+
+        await pane.show(try ScreenFixture.screen("claude-42-c8-phone-question-previews"))
+        await relaunched.refresh()
+        guard case .generic = relaunched.content else {
+            Issue.record("Expected the generic card, got \(relaunched.content)")
+            return
+        }
+
+        // The call's result ends it.
+        relaunched.update(transcript: Self.transcript(resolved: [Self.question("toolu_q")]))
+        #expect(relaunched.content == .none)
+    }
+
+    @Test func anIdleAgentWithoutAnOpenQuestionIsNotRead() async throws {
+        let pane = FakePane(try ScreenFixture.screen("claude-14-c4-review"))
+        let store = Self.store(.claude, pane: pane)
+        store.update(transcript: Self.transcript(pending: [Self.bash("toolu_1", "touch c1.txt")]))
+        store.update(activity: .idle)
+
+        await store.refresh()
+
+        #expect(store.content == .none)
+        #expect(await pane.reads == 0)
+
+        // Only Claude's idle questions read: herdr reports the others.
+        let codex = Self.store(.codex, pane: pane)
+        codex.update(transcript: Self.transcript(pending: [Self.question("toolu_q")]))
+        codex.update(activity: .idle)
+        await codex.refresh()
+        #expect(codex.content == .none)
+        #expect(await pane.reads == 0)
+    }
+
     @Test func aNewDialogUnfoldsACollapsedCard() async throws {
         let pane = FakePane(try ScreenFixture.screen("claude-30-par-first"))
         let store = Self.store(.claude, pane: pane)
@@ -520,6 +579,11 @@ struct BlockedCardStoreTests {
             clock: clock.clock)
     }
 
+    private static func question(_ id: String) -> ChatPendingRequest {
+        ChatPendingRequest(
+            entryID: ChatEntryID(id), callID: id, kind: .question, toolName: "AskUserQuestion", summary: "Colors")
+    }
+
     private static func bash(_ id: String, _ command: String) -> ChatPendingRequest {
         ChatPendingRequest(
             entryID: ChatEntryID(id), callID: id, kind: .command, toolName: "Bash", summary: command)
@@ -552,12 +616,16 @@ private actor FakePane {
     private var reactions: [[String]: ANSIScreen] = [:]
     private(set) var keys: [[String]] = []
     private(set) var pastes: [String] = []
+    private(set) var reads = 0
 
     init(_ screen: ANSIScreen) {
         self.screen = screen
     }
 
-    func read() -> ANSIScreen { screen }
+    func read() -> ANSIScreen {
+        reads += 1
+        return screen
+    }
 
     func show(_ screen: ANSIScreen) {
         self.screen = screen

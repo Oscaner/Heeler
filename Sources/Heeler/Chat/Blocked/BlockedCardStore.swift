@@ -36,7 +36,8 @@ struct BlockedCard: Equatable, Sendable {
 /// screen as a native card, answered with keys.
 ///
 /// The screen decides everything a card offers. While Chat shows a Blocked
-/// Agent the store reads it every second. An action reads it again first
+/// Agent the store reads it every second, and also an idle Claude whose
+/// AskUserQuestion call is open (see `readsIdleQuestion`). An action reads it again first
 /// and sends nothing if the dialog changed, waits until the dialog has
 /// shown for a moment, sends the plan's keys while checking each of its
 /// expectations, then watches for the effect. Nothing is ever resent: a
@@ -158,7 +159,7 @@ final class BlockedCardStore {
         guard activity != self.activity else { return }
         self.activity = activity
         if activity == .blocked { quietSince = clock.now() }
-        if activity != .blocked, progress != .acting { clear() }
+        if !readsScreen, progress != .acting { clear() }
         updateWatching()
     }
 
@@ -178,7 +179,20 @@ final class BlockedCardStore {
             }
         }
         resolvedToolUseIDs = resolved
+        // An idle Claude's question reads only while its call is open.
+        if !readsScreen, progress != .acting, content != .none { clear() }
+        updateWatching()
     }
+
+    /// herdr 0.9.5 reports Claude Code 2.1.301 idle, not Blocked, on some
+    /// AskUserQuestion screens: the review page, and a question with
+    /// previews. An open AskUserQuestion call stands in for Blocked there.
+    private var readsIdleQuestion: Bool {
+        program == .claude && activity == .idle && pendingRequests.contains { $0.toolName == "AskUserQuestion" }
+    }
+
+    /// Whether the screen may show a dialog the card answers.
+    private var readsScreen: Bool { activity == .blocked || readsIdleQuestion }
 
     // MARK: Actions
 
@@ -342,7 +356,7 @@ final class BlockedCardStore {
     // MARK: Watching
 
     private func updateWatching() {
-        let shouldWatch = isVisible && !isSuspended && activity == .blocked
+        let shouldWatch = isVisible && !isSuspended && readsScreen
         if shouldWatch, watcher == nil {
             watcher = Task { [weak self] in
                 while !Task.isCancelled {
@@ -360,11 +374,11 @@ final class BlockedCardStore {
     /// One watch read; an action in flight reads for itself. Internal for
     /// tests, which drive reads directly.
     func refresh() async {
-        guard progress != .acting else { return }
+        guard progress != .acting, readsScreen else { return }
         let observation = await observe()
-        guard progress != .acting, activity == .blocked else { return }
+        guard progress != .acting, readsScreen else { return }
         guard let observation else {
-            if content == .none, !isQuiet { content = .unreadable }
+            if activity == .blocked, content == .none, !isQuiet { content = .unreadable }
             return
         }
         if progress == .unconfirmed { progress = .ready }
