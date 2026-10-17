@@ -935,8 +935,10 @@ struct TerminalAttachTests {
         defer { window.isHidden = true }
 
         terminal.insertText("say teh")
+        let start = try #require(
+            terminal.position(from: terminal.endOfDocument, offset: -3))
         let word = try #require(terminal.textRange(
-            from: try #require(terminal.position(from: terminal.endOfDocument, offset: -3)),
+            from: start,
             to: terminal.endOfDocument))
         terminal.replace(word, withText: "the")
 
