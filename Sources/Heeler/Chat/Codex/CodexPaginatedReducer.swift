@@ -80,19 +80,39 @@ struct CodexPaginatedBuilder {
     private var currentTurnID: String?
     /// Turns whose items join their root turn, by turn id.
     private var forwardedTurns: [String: String] = [:]
+    /// Every turn a loaded line names, so a turn started under a root that
+    /// only appears further down still joins it.
+    private var namedTurns: Set<String> = []
     private var ordinals = CodexOrdinalDiagnostics()
 
     /// The timeline of `segments`, oldest first, each already cut to the
     /// range it contributes.
     static func build(_ segments: [CodexSegment]) -> (timeline: CodexTimeline, ordinals: CodexOrdinalDiagnostics) {
         var builder = CodexPaginatedBuilder()
+        let accepted = segments.map { builder.accepted($0) }
+        builder.namedTurns = Set(accepted.joined().compactMap { Self.turnID(named: $0.record) })
         for (index, segment) in segments.enumerated() {
-            builder.replay(segment, index: index)
+            for (record, line) in accepted[index] {
+                builder.apply(record, line: line, segment: segment, at: Position(segment: index, offset: line.offset))
+            }
         }
         return (builder.timeline(), builder.ordinals)
     }
 
-    private mutating func replay(_ segment: CodexSegment, index: Int) {
+    private static func turnID(named record: CodexRecord) -> String? {
+        switch record {
+        case .turnStarted(let turnID, _, _), .turnCompleted(let turnID, _, _), .turnAborted(let turnID?, _, _, _),
+            .item(let turnID, _):
+            turnID
+        default:
+            nil
+        }
+    }
+
+    /// The records `segment` contributes, in file order, counting ordinal
+    /// problems on the way.
+    private mutating func accepted(_ segment: CodexSegment) -> [(record: CodexRecord, line: CodexStoredLine)] {
+        var records: [(record: CodexRecord, line: CodexStoredLine)] = []
         // A window that does not start at the head has no expected ordinal
         // until its first accepted line sets one.
         var next: UInt64?
@@ -118,20 +138,23 @@ struct CodexPaginatedBuilder {
                 continue
             }
             if let record = line.outcome.record {
-                apply(record, line: line, segment: segment, at: Position(segment: index, offset: line.offset))
+                records.append((record, line))
             }
         }
+        return records
     }
 
     private mutating func apply(_ record: CodexRecord, line: CodexStoredLine, segment: CodexSegment, at position: Position) {
         switch record {
         case .turnStarted(let started, let root, let times):
             var turnID = started
-            if let root, turns[root] != nil {
+            if let root, namedTurns.contains(root) {
                 forwardedTurns[started] = root
                 turnID = root
             }
             touch(turnID, at: position)
+            // A review turn has no start of its own; its reviewer's stands
+            // for it.
             turns[turnID]?.sawStart = true
             note(times, of: turnID)
             setStatus(.inProgress, of: turnID, ending: nil, line: line, segment: segment, at: position)

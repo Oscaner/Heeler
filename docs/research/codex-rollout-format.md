@@ -99,7 +99,7 @@ on source reading only (Not verified against real files).
 | Record | Carries | Notes |
 | --- | --- | --- |
 | `session_meta`, line 1 | The segment header | `id`, `session_id`, `cwd`, `cli_version`, `history_mode`, `history_base?`, `forked_from_id?`, `subagent_history_start_ordinal?` (`protocol.rs:3123-3270`). Later `session_meta` lines can be ignored. |
-| `task_started`, `turn_started` | A turn's start | Opens turn `turn_id`. The legacy builder finishes the current turn first (`thread_history.rs:1292-1302`). |
+| `task_started`, `turn_started` | A turn's start | Opens turn `turn_id`; `root_turn_id?` equals `turn_id` for an ordinary turn, and a turn started under another turn that a loaded line names joins it (see [Paginated turns](#paginated-turns)). The legacy builder finishes the current turn first (`thread_history.rs:1292-1302`). |
 | `task_complete`, `turn_complete` | A turn's end | `failed` when `error: ErrorEvent{message}` is set, else `completed` (`protocol.rs:2152-2176`). The first terminal state wins, and a turn never opened is created. |
 | `turn_aborted` | A turn's end | Needs `turn_id`. `reason` is `interrupted`, `budget_limited`, `replaced` or `review_ended`. Without an id, the paginated projection ignores it and the legacy builder applies it to the current turn (`thread_history.rs:1254-1290`). |
 | `item_completed` | A turn item | Payload `{type, thread_id, turn_id, item, started_at_ms?, completed_at_ms}` (`protocol.rs:1947-1964`); see [Turn items](#turn-items). |
@@ -287,8 +287,14 @@ The app server projects a paginated rollout like this
   (the prompt Codex wrote for it, `thread_id` = the reviewer's thread),
   its commands and reasoning, and finally `ExitedReviewMode` and the answer
   in the review turn. The reviewer turn never completes. Heeler folds such
-  a turn into its root turn (when the root is already in the file) and
-  drops its `UserMessage`, so the review reads as one turn.
+  a turn into its root turn, when any loaded line names the root (before
+  or after the reviewer's start), and drops its `UserMessage`, so the
+  review reads as one turn. A subagent child rollout's `root_turn_id`
+  names the parent's spawning turn, which its own file never names, so
+  that turn stays its own. A window that starts after the reviewer's
+  `task_started` cannot tell its lines from an ordinary turn's (only the
+  items' `thread_id`, which Heeler does not read, differs), so the
+  reviewer's prompt shows until Load Earlier reaches the start.
 
 When a thread is not running, the app server marks every turn still in
 progress as interrupted

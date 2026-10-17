@@ -39,8 +39,51 @@ struct CodexToolSummaryTests {
         builder.agentMessage("rv", id: "a1", text: "No issues.")
         builder.turnComplete("rv")
 
-        let entries = builder.reducer().transcript(ChatProjectionContext(activity: .idle)).entries
-        let shapes: [String] = entries.map { entry in
+        #expect(
+            Self.shapes(builder.reducer().transcript(ChatProjectionContext(activity: .idle)))
+                == ["notice Review started", "tool git diff", "notice Review finished", "assistant No issues."])
+    }
+
+    @Test("A reviewer turn joins its review turn when the review's own lines all come after it")
+    func reviewForwardedTurnBeforeItsRoot() {
+        // A window that starts at the reviewer's task_started.
+        var builder = CodexRolloutBuilder()
+        builder.event(
+            "task_started", [("turn_id", "child"), ("root_turn_id", "rv"), ("started_at", 1_791_266_142)])
+        builder.userMessage("child", id: "u1", text: "Review the current code changes and provide findings.")
+        builder.command("child", id: "c1", argv: ["/bin/zsh", "-lc", "git diff"])
+        builder.item(
+            "rv",
+            [
+                "type": "ExitedReviewMode", "id": "x1",
+                "review_output": ["findings": [], "overall_explanation": "No issues."],
+            ])
+        builder.agentMessage("rv", id: "a1", text: "No issues.")
+        builder.turnComplete("rv")
+
+        let transcript = builder.reducer().transcript(ChatProjectionContext(activity: .idle))
+        #expect(Self.shapes(transcript) == ["tool git diff", "notice Review finished", "assistant No issues."])
+        #expect(transcript.turns.count == 1)
+    }
+
+    @Test("A turn started under a turn the file never names stays its own turn with its prompt")
+    func turnUnderAnAbsentRoot() {
+        // A Codex 0.162.1 subagent child rollout: root_turn_id is the
+        // parent's spawning turn, which lives in the parent's file.
+        var builder = CodexRolloutBuilder()
+        builder.event(
+            "task_started", [("turn_id", "child"), ("root_turn_id", "parent-turn"), ("started_at", 1_791_266_142)])
+        builder.userMessage("child", id: "u1", text: "Look into the flaky test")
+        builder.agentMessage("child", id: "a1", text: "Found it.")
+        builder.turnComplete("child")
+
+        let transcript = builder.reducer().transcript(ChatProjectionContext(activity: .idle))
+        #expect(Self.shapes(transcript) == ["user Look into the flaky test", "assistant Found it."])
+        #expect(transcript.turns.map(\.firstEntryID) == [transcript.entries.first?.id])
+    }
+
+    private static func shapes(_ transcript: ChatTranscript) -> [String] {
+        transcript.entries.map { entry in
             switch entry.content {
             case .user(let message): "user \(message.text)"
             case .assistant(let message): "assistant \(message.text)"
@@ -49,7 +92,6 @@ struct CodexToolSummaryTests {
             default: "other"
             }
         }
-        #expect(shapes == ["notice Review started", "tool git diff", "notice Review finished", "assistant No issues."])
     }
 
     @Test("Turn items become tool rows")
