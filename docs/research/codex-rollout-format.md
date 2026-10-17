@@ -134,6 +134,16 @@ on source reading only (Not verified against real files).
 | `EnteredReviewMode`, `ExitedReviewMode` | `user_facing_hint`; `review_output?` | Review mode changes |
 | Unknown | | Ignored |
 
+A `Reasoning` row's time is its event's `completed_at_ms` minus
+`started_at_ms`. Codex 0.162.1 with gpt-6.1-sol, whose models cache sets
+`default_reasoning_summary` to `none`, wrote no summary to show (live,
+2026-10-17): every `turn_context` said `summary: none`, even when
+`-c model_reasoning_summary=detailed` put `reasoning_summary: detailed` in
+`thread_settings_applied`. A low-effort turn wrote no reasoning item, and a
+medium one wrote `Reasoning` with `summary_text: []` and `raw_content: []`,
+which shows no row. Reasoning rows with a time are covered by synthetic
+rollouts only.
+
 Phases are `commentary` and `final_answer`; upstream main adds
 `partial_answer` (`codex-rs/protocol/src/models.rs:927-952`). Any phase reads
 as assistant text.

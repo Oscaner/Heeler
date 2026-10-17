@@ -317,6 +317,65 @@ struct CodexMessageDisplayTests {
                 ChatUserMessage(text: "start"), ChatUserMessage(text: "also this", wasQueued: true),
             ])
     }
+
+    @Test("A reasoning summary takes its time from the item's start and completion")
+    func reasoningSummaryDuration() {
+        var builder = CodexRolloutBuilder()
+        builder.turnStarted("t1")
+        builder.userMessage("t1", id: "u1", text: "Is 17 prime?")
+        builder.event(
+            "item_completed",
+            [
+                ("thread_id", "thread-1"), ("turn_id", "t1"),
+                (
+                    "item",
+                    [
+                        "type": "Reasoning", "id": "rs_1",
+                        "summary_text": ["**Checking divisors**", "Nothing up to 4 divides 17."],
+                        "raw_content": [],
+                    ]
+                ),
+                ("started_at_ms", 1_792_189_637_596), ("completed_at_ms", 1_792_189_650_030),
+            ])
+        builder.agentMessage("t1", id: "a1", text: "Yes.")
+        builder.turnComplete("t1")
+
+        let reasoning = builder.reducer().transcript(idle).entries.compactMap { entry -> ChatReasoning? in
+            if case .reasoning(let reasoning) = entry.content { reasoning } else { nil }
+        }
+        #expect(
+            reasoning == [
+                ChatReasoning(
+                    text: "**Checking divisors**\n\nNothing up to 4 divides 17.", durationMilliseconds: 12_434)
+            ])
+    }
+
+    /// Codex 0.162.1 with a model whose turn context says `summary: none`
+    /// writes this pair for a medium-effort turn (E2E run 2026-10-17).
+    @Test("A reasoning item with no summary text shows no row")
+    func reasoningWithoutSummary() {
+        var builder = CodexRolloutBuilder()
+        builder.turnStarted("t1")
+        builder.userMessage("t1", id: "u1", text: "Is 17 prime?")
+        builder.event(
+            "item_completed",
+            [
+                ("thread_id", "thread-1"), ("turn_id", "t1"),
+                ("item", ["type": "Reasoning", "id": "rs_1", "summary_text": [], "raw_content": []]),
+                ("started_at_ms", 1_792_189_637_596), ("completed_at_ms", 1_792_189_638_030),
+            ])
+        builder.response(
+            "reasoning", [("id", "rs_1"), ("summary", []), ("encrypted_content", "gAAAAA")])
+        builder.agentMessage("t1", id: "a1", text: "Yes.")
+        builder.turnComplete("t1")
+
+        let entries = builder.reducer().transcript(idle).entries
+        #expect(entries.compactMap(\.assistant).map(\.text) == ["Yes."])
+        #expect(
+            !entries.contains {
+                if case .reasoning = $0.content { true } else { false }
+            })
+    }
 }
 
 /// `$name` prompts and whether they read as `/name`
