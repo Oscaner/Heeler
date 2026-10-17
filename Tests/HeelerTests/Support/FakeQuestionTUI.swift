@@ -47,6 +47,7 @@ actor FakeQuestionTUI {
     private var ignoredKeys: Set<String> = []
     private var drawnTexts: [Int: String] = [:]
     private var drawnAnswers: [Int: String] = [:]
+    private var unreadablePages: Set<Int> = []
 
     /// `width` matches the captures; the widest footer needs 87 columns.
     init(_ program: ChatProgram, _ questions: [Question], width: Int = 120, reviewWidth: Int? = nil) {
@@ -67,6 +68,12 @@ actor FakeQuestionTUI {
     /// Draws a question with other text than the call's.
     func draw(question index: Int, as text: String) {
         drawnTexts[index] = text
+    }
+
+    /// Claude: draws `page` (`questions.count` for the review) as rows no
+    /// parser takes for a dialog.
+    func drawUnreadable(page: Int) {
+        unreadablePages.insert(page)
     }
 
     /// Claude's review page lists another answer for a question.
@@ -201,6 +208,9 @@ actor FakeQuestionTUI {
     private func claudeRows() -> [String] {
         let rule = R.reset + R.inactive + String(repeating: "─", count: width) + R.reset
         var rows = ["", "⏺ Asking.", "", rule, tabBar(), ""]
+        if unreadablePages.contains(page) {
+            return rows + ["  ┌ Preview ─────┐", "  │ ░░░░░░░░ │", "  └──────────────┘"]
+        }
         guard page < questions.count else { return rows + reviewRows() }
         let question = questions[page]
         let count = question.options.count

@@ -167,6 +167,34 @@ struct QuestionFormTests {
         #expect(store.notice?.hasPrefix("Heeler stopped at question 1:") == true)
     }
 
+    /// The keys took, so the notice names the next page, not the answered
+    /// one.
+    @Test func aTurnedPageHeelerCantReadStopsTheAnswersAfterTheLastThatTook() async throws {
+        let colors = [["1"], ["3"], ["down"], ["down"], ["down"], ["down"], ["enter"]]
+        let tui = FakeQuestionTUI(.claude, Self.claudeQuestions)
+        await tui.drawUnreadable(page: 1)
+        let store = try await Self.store(tui, request: Self.claudeRequest)
+
+        await store.submit([.options([0, 2]), .option(0)])
+
+        #expect(await tui.keys == colors)
+        #expect(await tui.answers == ["Red, Blue", nil])
+        #expect(
+            store.notice == "Heeler answered question 1 and can't read question 2. Finish here or in the terminal.")
+        #expect(store.progress == .ready)
+
+        let review = FakeQuestionTUI(.claude, Self.claudeQuestions)
+        await review.drawUnreadable(page: 2)
+        let reviewStore = try await Self.store(review, request: Self.claudeRequest)
+
+        await reviewStore.submit([.options([0, 2]), .option(0)])
+
+        #expect(await review.keys == colors + [["1"]])
+        #expect(
+            reviewStore.notice
+                == "Heeler answered question 2 and can't read Claude's review. Finish here or in the terminal.")
+    }
+
     @Test func aReviewListingOtherAnswersIsNeverSubmitted() async throws {
         let tui = FakeQuestionTUI(.claude, Self.claudeQuestions)
         await tui.review(question: 1, as: "Large")

@@ -286,6 +286,8 @@ final class BlockedCardStore {
             let stopped =
                 "Heeler stopped at question \(index + 1): the dialog didn't respond the way it expected. "
                 + Self.finishThere
+            let next = index == form.questions.count - 1 ? "Claude's review" : "question \(index + 2)"
+            let answered = "Heeler answered question \(index + 1) and can't read \(next). " + Self.finishThere
             let plan: DialogActionPlan
             do {
                 plan = try DialogActionPlanner.plan(
@@ -298,7 +300,10 @@ final class BlockedCardStore {
                 }
                 return
             }
-            guard case .sent(let turned) = await send(plan.steps, to: page.fingerprint, stopReason: stopped) else {
+            guard
+                case .sent(let turned) = await send(
+                    plan.steps, to: page.fingerprint, stopReason: stopped, turnedReason: answered)
+            else {
                 return
             }
             // Codex submits every answer with the last one.
@@ -446,9 +451,13 @@ final class BlockedCardStore {
 
     /// Sends `steps` to the dialog with `fingerprint`, checking each
     /// expectation before the next step.
+    ///
+    /// - Parameter turnedReason: Why it stopped when a page turn's check
+    ///   failed on a screen without the dialog: the keys took, and the next
+    ///   page is one Heeler can't read.
     private func send(
         _ steps: [DialogStep], to fingerprint: DialogFingerprint,
-        stopReason: String = BlockedCardStore.stoppedMessage
+        stopReason: String = BlockedCardStore.stoppedMessage, turnedReason: String? = nil
     ) async -> StepsOutcome {
         var checked: DialogObservation?
         for step in steps {
@@ -465,7 +474,13 @@ final class BlockedCardStore {
                         expectation.isMet(by: $0, fingerprint: fingerprint)
                     }
                     guard check.isMet else {
-                        stopPartWay(on: fingerprint, last: check.last, reason: stopReason)
+                        var reason = stopReason
+                        if case .page = expectation, let turnedReason, let last = check.last,
+                            last.result.fingerprint != fingerprint
+                        {
+                            reason = turnedReason
+                        }
+                        stopPartWay(on: fingerprint, last: check.last, reason: reason)
                         return .stopped
                     }
                     checked = check.last
