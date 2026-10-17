@@ -746,7 +746,7 @@ private struct ChatToolRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if tool.questions.isEmpty, tool.note == nil {
-                Text(tool.status == .running && !tool.isNotUpdating ? "Running…" : "No output.")
+                Text(Self.noOutputText(for: tool))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -761,6 +761,13 @@ private struct ChatToolRow: View {
         case .failed(let message)?, .unavailable(let message)?: message
         case .read?, nil: preview.isTruncated ? "Output continues in the terminal." : nil
         }
+    }
+
+    /// What a row with nothing to read says: a call running when last seen
+    /// may have printed since.
+    private static func noOutputText(for tool: ChatToolActivity) -> String {
+        guard tool.status == .running else { return "No output." }
+        return tool.isNotUpdating ? "No output when last seen." : "Running…"
     }
 
     /// What a row with no preview says about its read; nil when the read

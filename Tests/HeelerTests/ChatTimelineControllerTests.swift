@@ -1530,6 +1530,10 @@ struct ChatRowViewTests {
         tool.isNotUpdating = true
         let labels = try await Self.labels(of: tool)
         #expect(labels.contains { $0.contains("Running when last seen") })
+        // Open, it claims no more than the last read showed.
+        let expanded = try await Self.labels(of: tool, isExpanded: true)
+        #expect(expanded.contains { $0.contains("No output when last seen.") }, "\(expanded)")
+        #expect(!expanded.contains("No output."), "\(expanded)")
     }
 
     /// A call that never ran says nothing about output it has none of
