@@ -497,7 +497,7 @@ private struct Builder {
         let answer = callID.flatMap { answers[$0] }
         let outcome = answer?.outcome
         let structured = answer?.record.toolResult?.result
-        var status = outcome?.status ?? unansweredStatus(after: record.byteOffset)
+        var status = outcome?.status ?? unansweredStatus(of: use, after: record.byteOffset)
         if status == .succeeded, let launch = structured?.status, launch == "async_launched" || launch == "remote_launched" {
             status = backgroundStatus(callID, launchedAt: record.byteOffset)
         } else if status == .succeeded, structured?.status == "teammate_spawned" {
@@ -596,12 +596,14 @@ private struct Builder {
     }
 
     /// A call without a result: still running, waiting on the user, or left
-    /// behind by a turn that moved on.
-    private func unansweredStatus(after offset: UInt64) -> ChatToolActivity.Status {
+    /// behind by a turn that moved on. herdr reports Claude idle on some
+    /// AskUserQuestion screens, so an open question waits like its card
+    /// (`BlockedCardStore.readsIdleQuestion`).
+    private func unansweredStatus(of use: ClaudeToolUse, after offset: UInt64) -> ChatToolActivity.Status {
         if turnEnded(after: offset) { return .noResult }
         switch activity {
         case .blocked: return .awaitingApproval
-        case .idle: return .noResult
+        case .idle: return use.name == "AskUserQuestion" ? .awaitingApproval : .noResult
         case .working, .unknown: return .running
         }
     }

@@ -349,6 +349,12 @@ struct ClaudeTranscriptReducerTests {
         ])
     }
 
+    @Test("An idle Claude's open question waits, as its card reads the screen")
+    func idleOpenQuestionWaits() throws {
+        let transcript = try Self.transcript(activity: .idle) { $0.offset < 20502 }
+        #expect(Self.tool("tool:toolu_019oBhnhaxeeZbkHonqnhwsE", in: transcript)?.status == .awaitingApproval)
+    }
+
     @Test("Pending questions and plans carry what a Blocked card shows")
     func pendingQuestionsAndPlans() throws {
         let questions = try Self.transcript(activity: .blocked) { $0.offset < 20502 }

@@ -120,7 +120,8 @@ Entries reference the pull request that made the change.
   counts, show `$` Python runs as notices, and no longer show the plan
   hand-off to `xd://propose` as a created file. (#425)
 - Blocked cards appear for Claude Code's question review page and questions
-  with previews, which herdr reports as idle, and Claude Code's Read file
+  with previews, which herdr reports as idle, with the question row reading
+  Waiting rather than "No result", and Claude Code's Read file
   dialog gets its own card. After "The Agent hasn't responded yet." the
   answers stay off on the same dialog, so a second tap can't send the key
   again; Stop and the terminal still work. (#425)
