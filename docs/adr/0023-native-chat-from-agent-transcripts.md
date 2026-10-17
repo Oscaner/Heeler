@@ -93,8 +93,12 @@ running, and for 15 seconds after a change, a send or a status change, every
 separator; rolled-back turns are hidden. When a sent message has not appeared
 after 10 seconds, Chat reads the Agent's record again, because the program may
 have moved to a session herdr reports later. While Chat shows an idle Agent,
-it reads the record every 5 seconds: `/clear`, `/new` or `/resume` typed in
-the terminal moves the Agent to another session, and no event says so. The
+it reads the record at its idle poll, at least 5 seconds apart (about every
+8 seconds at the 4-second pace): Claude Code's `/clear` and Pi's and Oh My
+Pi's `/new` and `/resume` typed in the terminal move the Agent to another
+session, and no event says so. Codex reports a new thread only with its
+first prompt, when the Agent is working again. Hidden and working Chats
+don't read it on that pace. The
 list is a `UICollectionView`
 of hosted SwiftUI rows with its own single-column layout: it opens at the
 newest row and keeps the reader's place while rows above it measure, which

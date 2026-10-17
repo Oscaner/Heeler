@@ -134,8 +134,9 @@ Entries reference the pull request that made the change.
   message Stop put back in the input box, and Waiting for Conversation
   explains that Codex reports a resumed conversation after its first prompt.
   (#425)
-- Chat follows `/clear`, `/new` or `/resume` typed in the terminal within
-  seconds while the Agent stays idle, and a steer cleared in the terminal no
+- Chat follows Claude Code's `/clear` and Pi's and Oh My Pi's `/new` or
+  `/resume` typed in the terminal within about ten seconds while the Agent
+  stays idle, and a steer cleared in the terminal no
   longer stays under a newer turn. (#425)
 - While the Host is away or the conversation comes from the cache, the newest
   turn no longer ticks "Working for" and running rows read Running when last
