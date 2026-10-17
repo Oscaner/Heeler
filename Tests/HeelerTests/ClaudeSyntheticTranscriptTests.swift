@@ -749,6 +749,25 @@ struct ClaudeSyntheticTranscriptTests {
             ClaudeSample.entry("think:r2", in: transcript) == .reasoning(ChatReasoning(text: "", durationMilliseconds: 3)))
     }
 
+    // MARK: - Tool rows
+
+    @Test(
+        "A Read that showed an image offers its absolute Host path for a preview",
+        arguments: [
+            ("/tmp/proj/dot.png", "image", "/tmp/proj/dot.png"), ("/tmp/proj/notes.txt", "text", nil),
+            ("dot.png", "image", nil),
+        ] as [(String, String, String?)])
+    func imageRead(path: String, type: String, expected: String?) {
+        // Claude Code 2.1.301 (CL-32).
+        let (transcript, _) = Self.read(
+            Self.firstTurn + "\n" + #"""
+                {"type":"user","uuid":"p2","parentUuid":"t1","message":{"role":"user","content":"Read it"},"promptSource":"typed","origin":{"kind":"human"}}
+                {"type":"assistant","uuid":"a2","parentUuid":"p2","message":{"id":"m2","role":"assistant","content":[{"type":"tool_use","id":"toolu_read","name":"Read","input":{"file_path":"\#(path)"}}]},"apiBlockIndex":0}
+                {"type":"user","uuid":"r2","parentUuid":"a2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_read","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgo"}}]}]},"toolUseResult":{"type":"\#(type)","file":{"type":"image/png"}}}
+                """#)
+        #expect(Self.tool("tool:toolu_read", in: transcript)?.imagePath == expected)
+    }
+
     // MARK: - Links and unknown records
 
     @Test("Links are the newest relocation and a hand-off the session did not continue past")

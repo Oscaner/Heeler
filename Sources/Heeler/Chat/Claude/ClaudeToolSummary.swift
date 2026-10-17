@@ -143,6 +143,15 @@ struct ClaudeToolSummary: Sendable, Equatable {
         return changes
     }
 
+    /// The Host file a Read showed as an image, which the row previews: the
+    /// absolute path its input names (Claude Code 2.1.301).
+    static func imagePath(for use: ClaudeToolUse, details: ClaudeToolResultDetails?) -> String? {
+        guard use.name == "Read" || use.name == "NotebookRead", details?.result?.type == "image",
+            let path = use.input.filePath, RemoteHostPath.isAbsolute(path)
+        else { return nil }
+        return path
+    }
+
     private static func todoLine(_ todo: ClaudeTodo) -> String {
         switch todo.status {
         case "completed": "[x] \(todo.content)"

@@ -502,6 +502,7 @@ private struct Builder {
             }
             row.fileChanges = ClaudeToolSummary.fileChanges(
                 for: use, details: answer.record.toolResult, outcome: outcome)
+            row.imagePath = ClaudeToolSummary.imagePath(for: use, details: answer.record.toolResult)
         }
         if Self.isWorkflow(use, result: structured), let name = structured?.workflowName, !name.isEmpty {
             row.title = name
