@@ -388,9 +388,14 @@ private struct Builder {
                     add("text:\(record.uuid)\(suffix)", at: record, .assistant(ChatAssistantMessage(text: text)))
                 }
             case .thinking(let text):
-                add(
-                    "think:\(record.uuid)\(suffix)", at: record,
-                    .reasoning(ChatReasoning(text: text, durationMilliseconds: record.thinkingDurationMilliseconds)))
+                if Self.isNarration(text, durationMilliseconds: record.thinkingDurationMilliseconds) {
+                    add("text:\(record.uuid)\(suffix)", at: record, .assistant(ChatAssistantMessage(text: text)))
+                } else {
+                    add(
+                        "think:\(record.uuid)\(suffix)", at: record,
+                        .reasoning(
+                            ChatReasoning(text: text, durationMilliseconds: record.thinkingDurationMilliseconds)))
+                }
             case .redactedThinking:
                 add(
                     "think:\(record.uuid)\(suffix)", at: record,
@@ -407,6 +412,20 @@ private struct Builder {
                 break
             }
         }
+    }
+
+    /// Thinking that took less than this is narration. Claude Code 2.1.301
+    /// records some of the text it says between calls as a signed thinking
+    /// block of 2 ms, and 2.1.291 as unsigned ones of 1-23 ms, which the
+    /// terminal draws as ordinary text; real thinking takes longer (647 ms
+    /// at the shortest in the probes) and 2.1.301 records it with no text.
+    static let narrationThinkingLimit = 200
+
+    /// A thinking block the terminal draws as the model's text: it has text
+    /// and took almost no time, or says nothing about how long it took.
+    static func isNarration(_ text: String, durationMilliseconds: Int?) -> Bool {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        return durationMilliseconds.map { $0 < narrationThinkingLimit } ?? true
     }
 
     private mutating func addToolUse(_ use: ClaudeToolUse, in record: ClaudeRecord) {

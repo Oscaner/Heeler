@@ -721,6 +721,34 @@ struct ClaudeSyntheticTranscriptTests {
                 == .reasoning(ChatReasoning(text: "", durationMilliseconds: 1_200)))
     }
 
+    @Test(
+        "Thinking with text that took almost no time is narration the terminal draws as text",
+        arguments: [
+            (#","thinkingDurationMs":2"#, true), (#","thinkingDurationMs":4000"#, false), ("", true),
+        ])
+    func narrationThinking(duration: String, isNarration: Bool) {
+        // Claude Code 2.1.301 (CL-08): a signed thinking block of 2 ms.
+        let narration = "README.md is short; next I'll read notes.txt."
+        let (transcript, _) = Self.read(
+            #"""
+            {"type":"user","uuid":"p1","parentUuid":null,"message":{"role":"user","content":"Explain before each call"},"promptSource":"typed","origin":{"kind":"human"}}
+            {"type":"assistant","uuid":"r1","parentUuid":"p1"\#(duration),"message":{"id":"m1","role":"assistant","content":[{"type":"thinking","thinking":"\#(narration)","signature":"EuYBCkQIBxgCKkA"}]},"apiBlockIndex":0}
+            {"type":"assistant","uuid":"r2","parentUuid":"r1","thinkingDurationMs":3,"message":{"id":"m1","role":"assistant","content":[{"type":"thinking","thinking":"","signature":"EuYBCkQIBxgCKkA"}]},"apiBlockIndex":1}
+            """#)
+        if isNarration {
+            #expect(transcript.entries.map(\.id.rawValue) == ["user:p1", "text:r1", "think:r2"])
+            #expect(ClaudeSample.entry("text:r1", in: transcript) == .assistant(ChatAssistantMessage(text: narration)))
+        } else {
+            #expect(transcript.entries.map(\.id.rawValue) == ["user:p1", "think:r1", "think:r2"])
+            #expect(
+                ClaudeSample.entry("think:r1", in: transcript)
+                    == .reasoning(ChatReasoning(text: narration, durationMilliseconds: 4_000)))
+        }
+        // Empty thinking stays Reasoning however short.
+        #expect(
+            ClaudeSample.entry("think:r2", in: transcript) == .reasoning(ChatReasoning(text: "", durationMilliseconds: 3)))
+    }
+
     // MARK: - Links and unknown records
 
     @Test("Links are the newest relocation and a hand-off the session did not continue past")
