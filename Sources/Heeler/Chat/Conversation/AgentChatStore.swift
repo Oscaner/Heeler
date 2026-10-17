@@ -912,6 +912,10 @@ final class AgentChatStore {
                 statuses[send.id] = .returned
             } else if discardedSends.contains(send.id), send.generation == conversationGeneration {
                 statuses[send.id] = .discarded
+            } else if returnedSends.contains(send.id) || discardedSends.contains(send.id) {
+                // Put back or cleared in an earlier conversation: the new
+                // one, still unwritten, is not waiting for it.
+                statuses[send.id] = .abandoned
             } else if isUnwritten || date.timeIntervalSince(deliveredAt) < timing.echoTimeout {
                 statuses[send.id] = .awaiting
             } else if send.generation == conversationGeneration {

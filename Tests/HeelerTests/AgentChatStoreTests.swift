@@ -1080,7 +1080,7 @@ struct AgentChatStoreTests {
 
     private static func skillStore(
         _ program: ChatProgram, clock: Clock = Clock(), cache: VolatileChatTranscriptCache = VolatileChatTranscriptCache(),
-        screen: BlockedScreenIO = .unavailable
+        screen: BlockedScreenIO = .unavailable, server: Server? = nil
     ) throws -> (
         files: VirtualHostFiles, store: AgentChatStore, path: String, sent: String
     ) {
@@ -1090,7 +1090,8 @@ struct AgentChatStoreTests {
         let store = AgentChatStore(
             agentID: ConsoleAgent.ID(hostID: host, paneID: agent.paneID), agent: agent, program: program,
             source: AgentChatSource(
-                hostID: host, socketLocation: .defaultSession, files: files.hostFiles(), agentInfo: { agent },
+                hostID: host, socketLocation: .defaultSession, files: files.hostFiles(),
+                agentInfo: { try await server?.read() ?? agent },
                 cache: cache,
                 adapter: try #require(ChatTranscriptAdapter.standard(for: program)), screen: screen),
             timing: AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)),
@@ -1175,11 +1176,11 @@ struct AgentChatStoreTests {
     /// Steers sent while Pi works, then Esc before the turn takes them: Pi
     /// puts the text back in its editor (pi-36) and never records it.
     private static func stoppedSteers(
-        _ program: ChatProgram, texts: [String], screen: ANSIScreen? = nil
+        _ program: ChatProgram, texts: [String], screen: ANSIScreen? = nil, server: Server? = nil
     ) async throws -> (files: VirtualHostFiles, store: AgentChatStore, pane: Pane, clock: Clock, ids: [UUID]) {
         let clock = Clock()
         let pane = Pane(try screen ?? ScreenFixture.screen("pi-36-steer-back-in-editor"))
-        let (files, store, path, _) = try Self.skillStore(program, clock: clock, screen: pane.io)
+        let (files, store, path, _) = try Self.skillStore(program, clock: clock, screen: pane.io, server: server)
         await files.write(Self.piHeader + "\n" + Self.ompMessage("u1", parent: nil, role: "user", "go"), at: path)
         await store.step()
         store.agentDidChange(Self.piAgent(program, status: .working))
@@ -1196,9 +1197,10 @@ struct AgentChatStoreTests {
     }
 
     private static func stoppedSteer(
-        _ program: ChatProgram, text: String, screen: ANSIScreen? = nil
+        _ program: ChatProgram, text: String, screen: ANSIScreen? = nil, server: Server? = nil
     ) async throws -> (files: VirtualHostFiles, store: AgentChatStore, pane: Pane, clock: Clock, id: UUID) {
-        let (files, store, pane, clock, ids) = try await stoppedSteers(program, texts: [text], screen: screen)
+        let (files, store, pane, clock, ids) = try await stoppedSteers(
+            program, texts: [text], screen: screen, server: server)
         return (files, store, pane, clock, try #require(ids.first))
     }
 
@@ -1626,6 +1628,45 @@ struct AgentChatStoreTests {
 
         #expect(store.conversation.phase == .following(path: path))
         #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    /// A steer Stop put back, kept or cleared, belongs to the conversation
+    /// it was sent into; a new one that is still unwritten does not wait
+    /// for it, only for what is sent into it.
+    @Test(arguments: [false, true])
+    func anEarlierConversationsReturnedSteerDoesNotWaitInTheNext(cleared: Bool) async throws {
+        let server = Server(Self.piAgent(.pi))
+        let (_, store, pane, clock, old) = try await Self.stoppedSteer(
+            .pi, text: "Queued steer: say MANGO. ", server: server)
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(store.sendStatuses[old] == .returned)
+        if cleared {
+            await pane.show(try Self.piEditor())
+            await Self.nextIdleSpell(store, .pi, clock: clock)
+            #expect(store.sendStatuses[old] == .discarded)
+        }
+
+        // `/new` in the pane: herdr reports a session whose file Pi writes
+        // with the first reply.
+        let next = Agent(
+            terminalID: "term-1", kind: "pi", title: "", status: .idle, workspaceID: "w1",
+            tabID: "t1", paneID: "w1:p1", cwd: Self.cwd, revision: 2,
+            agentSession: AgentSessionInfo(
+                agent: "pi", kind: .path, source: "herdr:pi",
+                value: "/home/dev/.pi/agent/sessions/--home-dev-proj--/2026-10-15_01a14046-b00d-75aa-98ce-000000000002.jsonl"))
+        await server.set(next)
+        store.agentDidChange(next)
+        await store.step()
+        #expect(store.conversation.phase == .unavailable(.awaitingFirstMessage(.pi)))
+        let sent = UUID()
+        store.updateSends([Self.sent(old, "Queued steer: say MANGO. "), Self.sent(sent, "hello ", delivered: false)])
+        store.updateSends([Self.sent(old, "Queued steer: say MANGO. "), Self.sent(sent, "hello ")])
+        clock.now = clock.now.addingTimeInterval(60)
+        await store.step()
+
+        #expect(store.sendStatuses[old] == .abandoned)
+        #expect(store.sendStatuses[sent] == .awaiting)
     }
 
     @Test func fileAppearingAfterFirstTurnIsFollowed() async throws {
