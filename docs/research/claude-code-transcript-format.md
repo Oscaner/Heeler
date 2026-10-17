@@ -513,8 +513,8 @@ How the 2.1.291 CLI turns a submitted prompt into a record
    the input box takes queued prompts back with a `popAll` that carries
    their `content`; the binary also writes `content` on `popOne`, but not on
    `dequeue`. Chat shows an enqueue with no later prompt of the same text
-   and no later operation carrying it as a Queued bubble while the turn
-   runs; the delivery's bubble replaces it.
+   and no later operation carrying it as a bubble marked Sent while
+   working while the turn runs; the delivery's bubble replaces it.
 5. `UserPromptSubmit` hooks may rewrite the prompt or append to it.
 
 herdr's `agent.prompt` writes the text as a bracketed paste when the program

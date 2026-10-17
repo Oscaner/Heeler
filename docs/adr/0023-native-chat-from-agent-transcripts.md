@@ -327,7 +327,7 @@ model's text at its end. Everything between folds behind one "Worked for 35s"
 row above the answer, wall time from the record that opened the turn to the
 one that closed it (Claude Code's `turn_duration` or interrupt marker,
 Codex's turn-complete event), or "Details" when the records give none. Pinned rows stay above that row: plans,
-questions, queued messages, compaction separators, task notifications,
+questions, messages sent while working, compaction separators, task notifications,
 interruptions, stops, errors, calls waiting on the user, and Subagent
 launches. A turn with nothing before its answer, with no answer, or that was
 interrupted or failed does not fold, and neither does the newest one while
