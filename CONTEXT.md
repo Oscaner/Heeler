@@ -286,7 +286,9 @@ a tab in the Agent's launch directory only as a fallback or explicit choice.
 Existing shells use direct terminal attach without takeover; Take Over is an
 explicit action when another client owns the terminal. libghostty renders it, and direct keyboard
 input and PTY resize go straight to the remote terminal — no Composer, no
-Agent semantics, no notification routing. It replaces Agent detail while open.
+Agent semantics, no notification routing. Open Terminal on an iPhone pushes it
+over Agent detail, so Back returns to the Agent; otherwise it replaces Agent
+detail while open.
 Like Agent detail it has no title bar: the terminal runs up to the status bar,
 and Back and Close Terminal sit behind the More button on its always-present
 input row, headed by the terminal's title.
