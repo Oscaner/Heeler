@@ -425,6 +425,11 @@ no Attach at all.
 - Following makes SFTP requests on the Host's connection at every poll. While
   a Workflow is listed, each poll also looks at up to two journals: a stat
   each, and for one that grew, reads of what it added, up to 128 KiB.
+- So that cached conversations open at once, after each connect the Console
+  reads every listed Agent's transcript once, with its Chat hidden, and again
+  when the Agent's status changes. A missing one is looked for a few times,
+  then not again until the Agent's status or session changes or the Host
+  reconnects; an open Chat keeps looking on its own.
 - Stop interrupts the running turn, unlike the Blocked card's Stop, which
   answers a dialog and leaves a Stopped row. Codex 0.162.1 records a Chat
   send during a turn at once, as a steer, so Esc only aborts the turn and the
