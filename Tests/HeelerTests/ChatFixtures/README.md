@@ -74,6 +74,12 @@ capture.
   `request_user_input_async` questions folded under "Queued follow-up
   inputs" while a command runs, the count row carrying Codex's countdown
   (`? 2 questions · 20s`).
+- `codex-19-x3-implement-plan` is derived, not captured: Codex 0.162.1's
+  `Implement this plan?` selector after a Plan-mode turn on herdr 0.9.5
+  (2026-10-17), rebuilt from that run's plain-text pane read, rows as read,
+  with the styles of `codex-06` and `codex-15`: a bold reverse pointed row,
+  dim descriptions and footer, and a bold-dim `›` on the history's prompt.
+  Replace it with a capture when one is taken.
 - `claude-27`, `-28`, `-30` and `-31` keep the live rendering residue after
   option 4 (`No` followed by a stale grey `r you`).
 - `claude-32` through `claude-37` come from Claude Code 2.1.301 on herdr

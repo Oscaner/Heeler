@@ -78,8 +78,12 @@ extension InputBoxState {
             "The Agent isn't taking messages: \(explanation)"
         case .overlay:
             "A menu is open over the Agent's input box. Close it in the terminal first."
-        case .dialog:
-            "The Agent is showing a dialog. Answer it in the terminal first."
+        case .dialog(let title):
+            if program == .codex, title == CodexPlanPrompt.title {
+                "Codex is asking whether to implement the plan. Answer it in the terminal first."
+            } else {
+                "The Agent is showing a dialog. Answer it in the terminal first."
+            }
         case .unknown:
             "Heeler can't find the Agent's input box on screen."
         }

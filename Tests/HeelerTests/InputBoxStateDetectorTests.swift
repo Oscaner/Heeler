@@ -10,7 +10,10 @@ struct InputBoxStateDetectorTests {
         "claude-25-c8-after-digit3", "claude-29-c3-after-immediate",
     ]
     static let codexEmpty = ["codex-00-ready", "codex-03-x2-after-esc", "codex-11-x4-after-skip"]
-    static let dialogScreens = ScreenFixture.all.filter { !claudeEmpty.contains($0) && !codexEmpty.contains($0) }
+    static let codexPlanPrompt = "codex-19-x3-implement-plan"
+    static let dialogScreens = ScreenFixture.all.filter {
+        !claudeEmpty.contains($0) && !codexEmpty.contains($0) && $0 != codexPlanPrompt
+    }
 
     private static let cursor = SGR.reverse + " " + SGR.reset
 
@@ -30,14 +33,19 @@ struct InputBoxStateDetectorTests {
 
     @Test("A dialog in place of the box", arguments: dialogScreens)
     func dialog(stem: String) throws {
-        #expect(try state(stem) == .dialog)
+        #expect(try state(stem) == .dialog(title: nil))
+    }
+
+    @Test("Codex's plan selector is a dialog named by its title")
+    func codexPlanPromptIsNamed() throws {
+        #expect(try state(Self.codexPlanPrompt) == .dialog(title: "Implement this plan?"))
     }
 
     @Test("Only an empty box is sendable")
     func sendable() {
         #expect(InputBoxState.empty(placeholder: nil).isSendable)
         #expect(!InputBoxState.text("draft").isSendable)
-        #expect(!InputBoxState.dialog.isSendable)
+        #expect(!InputBoxState.dialog(title: nil).isSendable)
         #expect(!InputBoxState.unknown("why").isSendable)
     }
 
@@ -45,12 +53,12 @@ struct InputBoxStateDetectorTests {
         "omp-23-approval-a-ctrlq-early", "omp-24-approval-a-dialog", "omp-24-approval-d-typed-abc",
     ])
     func ompApprovalWithComposerBelowIsDialog(stem: String) throws {
-        #expect(try state(stem) == .dialog)
+        #expect(try state(stem) == .dialog(title: nil))
     }
 
     @Test("Oh My Pi: the plan review is a dialog")
     func ompPlanReviewIsDialog() throws {
-        #expect(try state("omp-31-plan-review") == .dialog)
+        #expect(try state("omp-31-plan-review") == .dialog(title: nil))
     }
 
     // MARK: Claude, synthetic until captured

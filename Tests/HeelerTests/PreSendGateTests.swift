@@ -17,7 +17,7 @@ struct PreSendGateTests {
         "Every other state holds the message",
         arguments: [
             InputBoxState.text("draft"), .shellMode("ls"), .shellMode(""), .disabled("Input disabled."),
-            .overlay("/compact"), .dialog, .unknown("Claude's input box is not on screen."),
+            .overlay("/compact"), .dialog(title: nil), .unknown("Claude's input box is not on screen."),
         ])
     func holds(state: InputBoxState) {
         #expect(PreSendGate.check(state, activity: .idle) == .hold(state))
@@ -30,10 +30,13 @@ struct PreSendGateTests {
         #expect(PreSendGate.check(try ScreenFixture.screen("codex-00-ready"), program: .codex, activity: .idle) == .send)
         let bash = try ScreenFixture.screen("claude-02-c1-bash-blocked")
         #expect(PreSendGate.check(bash, program: .claude, activity: .blocked) == .holdBlocked)
-        #expect(PreSendGate.check(bash, program: .claude, activity: .unknown) == .hold(.dialog))
+        #expect(PreSendGate.check(bash, program: .claude, activity: .unknown) == .hold(.dialog(title: nil)))
         // The composer stays in view while asynchronous questions wait.
         let collapsed = try ScreenFixture.screen("codex-08-x4-async-collapsed")
-        #expect(PreSendGate.check(collapsed, program: .codex, activity: .working) == .hold(.dialog))
+        #expect(PreSendGate.check(collapsed, program: .codex, activity: .working) == .hold(.dialog(title: nil)))
+        // herdr reports Codex idle under its plan selector.
+        let plan = try ScreenFixture.screen("codex-19-x3-implement-plan")
+        #expect(PreSendGate.check(plan, program: .codex, activity: .idle) == .hold(.dialog(title: "Implement this plan?")))
     }
 }
 
@@ -42,7 +45,7 @@ struct DeliveryCheckTests {
     @Test("The box emptied, or a dialog or Blocked took over: delivered")
     func delivered() {
         #expect(DeliveryCheck.verdict(.empty(placeholder: nil), activity: .working) == .delivered)
-        #expect(DeliveryCheck.verdict(.dialog, activity: .unknown) == .delivered)
+        #expect(DeliveryCheck.verdict(.dialog(title: nil), activity: .unknown) == .delivered)
         #expect(DeliveryCheck.verdict(.unknown("why"), activity: .blocked) == .delivered)
     }
 

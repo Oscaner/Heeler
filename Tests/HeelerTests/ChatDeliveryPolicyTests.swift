@@ -71,6 +71,18 @@ struct ChatDeliveryPolicyTests {
         #expect(!InputBoxState.text("draft").holdReason(for: .claude).contains("Stop"))
     }
 
+    /// herdr reports Codex idle under its plan selector, so no card names
+    /// it; the hold does. Every other dialog keeps the general copy.
+    @Test func aCodexPlanSelectorIsNamedInTheHold() {
+        let plan = InputBoxState.dialog(title: "Implement this plan?")
+        #expect(
+            plan.holdReason(for: .codex)
+                == "Codex is asking whether to implement the plan. Answer it in the terminal first.")
+        let general = "The Agent is showing a dialog. Answer it in the terminal first."
+        #expect(InputBoxState.dialog(title: nil).holdReason(for: .codex) == general)
+        #expect(plan.holdReason(for: .claude) == general)
+    }
+
     /// Codex 0.162.1's Esc puts a follow-up queued with Tab back into the
     /// composer, which then holds Chat's next message.
     @Test func aCodexDraftMentionsWhatStopPutBack() {
@@ -134,7 +146,7 @@ struct ChatDeliveryPolicyTests {
         #expect(try ending(await blocked("hello")) == [.idle, .working, .done, .unknown])
         #expect(try ending(busy.validate("/compact")) == [.idle, .done])
         #expect(try ending(await unreadable("hello")) == statuses)
-        for state in [InputBoxState.text("draft"), .disabled("Working."), .overlay("/compact"), .dialog, .unknown("")] {
+        for state in [InputBoxState.text("draft"), .disabled("Working."), .overlay("/compact"), .dialog(title: nil), .unknown("")] {
             #expect(try ending(.inputNotReady(state.holdReason(for: program))) == statuses)
         }
         for refusal in [busy.validate("!ls"), busy.validate("/nope")] {

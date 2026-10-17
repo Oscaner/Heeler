@@ -19,8 +19,9 @@ enum InputBoxState: Equatable, Sendable {
     /// A popup, picker, help view or transient hint over the box: the row
     /// that shows it.
     case overlay(String)
-    /// A dialog took the box's place.
-    case dialog
+    /// A dialog took the box's place: its title when Chat names it in the
+    /// hold.
+    case dialog(title: String?)
     /// The screen does not show a box Heeler recognizes; why.
     case unknown(String)
 
@@ -33,7 +34,10 @@ enum InputBoxStateDetector {
     static func detect(_ screen: ANSIScreen, program: ChatProgram) -> InputBoxState {
         switch BlockedDialogParser.parse(screen, program: program) {
         case .dialog, .unrecognized:
-            return .dialog
+            // herdr reports Codex idle under its plan selector, so no card
+            // names it; the hold does.
+            let isPlanPrompt = program == .codex && CodexPlanPrompt.shows(in: screen)
+            return .dialog(title: isPlanPrompt ? CodexPlanPrompt.title : nil)
         case .none:
             break
         }

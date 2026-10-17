@@ -38,6 +38,22 @@ struct CodexComposer: Sendable, Hashable {
     }
 }
 
+/// Codex's selector after a Plan-mode turn: `Implement this plan?` above
+/// `1. Yes, implement this plan`, `2. Yes, clear context and implement` and
+/// `3. No, stay in Plan mode`.
+enum CodexPlanPrompt {
+    static let title = "Implement this plan?"
+
+    /// Whether the title sits directly above a first numbered option.
+    static func shows(in screen: ANSIScreen) -> Bool {
+        let rows = screen.rows
+        guard let titleRow = rows.lastIndex(where: { $0.trimmedText == title }),
+            let next = rows[(titleRow + 1)...].first(where: { !$0.isBlank })
+        else { return false }
+        return DialogRowScanner.numberedOption(in: next, pointer: DialogRowScanner.codexPointer)?.number == 1
+    }
+}
+
 /// Codex's notice for answers waiting to be sent:
 /// `• Messages to be submitted after next tool call …`, then
 /// `↳ > <question>` and the answer per queued reply.
