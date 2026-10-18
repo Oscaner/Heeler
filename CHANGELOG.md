@@ -123,7 +123,9 @@ Entries reference the pull request that made the change.
   show an answer's note without its `user_note:` key. (#425)
 - Oh My Pi rows show a `write` as a written file with its text and line
   counts, show `$` Python runs as notices, and no longer show the plan
-  hand-off to `xd://propose` as a created file. (#425)
+  hand-off to `xd://propose` as a created file. An edit of its plan file
+  reads by its `local://` name rather than the account's session path.
+  (#425)
 - Blocked cards appear for Claude Code's question review page and questions
   with previews, which herdr reports as idle, with the question row reading
   Waiting rather than "No result", and Claude Code's Read file

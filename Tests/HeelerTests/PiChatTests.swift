@@ -624,6 +624,28 @@ struct PiChatTests {
         #expect(expanded == changes)
     }
 
+    /// Oh My Pi 18.11.2 refining its plan (V3 OMP-04): the patch names
+    /// `local://append-delta-plan.md`, and the result's details resolve it
+    /// into the account's session directory. The row keeps the name the
+    /// read and write rows beside it show.
+    @Test func ompEditOfASessionLocalFileIsTitledByItsLocalPath() throws {
+        let resolved =
+            "/Users/dev/.omp/agent/sessions/-tmp-proj/2026-10-17T20-32-17-663Z_01a14b90/local/append-delta-plan.md"
+        var reducer = PiTranscriptReducer()
+        reducer.append(
+            Self.lines([
+                #"{"type":"session","version":3,"id":"01a14b90","timestamp":"2026-10-17T20:32:17.663Z","cwd":"/tmp/proj"}"#,
+                #"{"type":"message","id":"u","parentId":null,"message":{"role":"user","content":[{"type":"text","text":"Refine the plan"}],"attribution":"user"}}"#,
+                #"{"type":"message","id":"a","parentId":"u","message":{"role":"assistant","content":[{"type":"toolCall","id":"c","name":"edit","arguments":{"input":"*** Begin Patch\n[local://append-delta-plan.md#7A3E]\nPUT 1.=1:\n+## Step 1\n*** End Patch\n"}}],"stopReason":"toolUse"}}"#,
+                #"{"type":"message","id":"r","parentId":"a","message":{"role":"toolResult","toolCallId":"c","toolName":"edit","content":[{"type":"text","text":"[local://append-delta-plan.md#F075]\n1:## Step 1"}],"details":{"diff":"-1|## Step\n+1|## Step 1","firstChangedLine":1,"op":"update","path":"\#(resolved)"},"isError":false}}"#,
+            ]))
+        let tool = try #require(Self.toolRow(reducer.transcript(.init())))
+
+        #expect(tool.title == "local://append-delta-plan.md")
+        #expect(tool.diff == ChatDiffStats(added: 1, removed: 1))
+        #expect(tool.fileChanges?.files.map(\.path) == [resolved])
+    }
+
     /// While Oh My Pi waits for approval, the patch's section header names
     /// the file the result will.
     @Test func ompPendingEditIsTitledByItsPatchHeader() throws {

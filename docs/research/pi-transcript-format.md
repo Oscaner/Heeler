@@ -102,6 +102,13 @@ Observed live on 2026-10-15 with Pi 0.85.1 and Oh My Pi 18.11.1 on herdr
   plan-ready notice instead of an interruption, and the `xd://propose` call
   and its result (`details.xdev.tool: propose`) show no row and count no
   file.
+- OMP's plan file is `local://<slug>-plan.md`, which 18.11.2 resolves to
+  `<session file without .jsonl>/local/<slug>-plan.md` in the session
+  directory (live 2026-10-18). Its `write` and `read` rows show the
+  `local://` path from their arguments; a free-form `edit` names it only in
+  its patch header (`[local://append-delta-plan.md#7A3E]`), and its result's
+  `details.path` is the resolved absolute path. Chat titles that edit by
+  the `local://` name its patch gave the file.
 - OMP 18.11 mounts discoverable tools (MCP tools, `generate_image`,
   `report_issue`) as `xd://<tool>` devices when `tools.xdev` is on (the
   default), driven by `write` with the tool's JSON arguments in `content`;

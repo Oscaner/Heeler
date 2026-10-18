@@ -99,6 +99,8 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
         /// The path each call names in its arguments, which Pi's edit
         /// result leaves out.
         var callPaths: [String: String] = [:]
+        /// The `local://` files a free-form edit's patch names, by call id.
+        var localPatchPaths: [String: [String]] = [:]
         /// The text each write call names, which its result leaves out,
         /// and the call's line, which an expanded row reads it from again.
         var writes: [String: (content: String, call: ChatOutputReference)] = [:]
@@ -294,6 +296,10 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                                 }
                             calls[callID] = transcript.entries.count
                             callPaths[callID] = device == nil ? path : nil
+                            if device == nil, path == nil, let input = block["arguments"]?["input"]?.stringValue {
+                                let local = PiFileChanges.patchPaths(input).filter { $0.hasPrefix(Self.localScheme) }
+                                if !local.isEmpty { localPatchPaths[callID] = local }
+                            }
                             if device == nil, name.lowercased() == "write",
                                 let content = block["arguments"]?["content"]?.stringValue
                             {
@@ -383,7 +389,9 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
                         if let changes = PiFileChanges.changes(
                             details: message["details"], callPath: callPaths[callID], directory: directory)
                         {
-                            Self.show(changes, in: &tool, namedByCall: callPaths[callID] != nil)
+                            Self.show(
+                                changes, in: &tool, namedByCall: callPaths[callID] != nil,
+                                localPaths: localPatchPaths[callID] ?? [])
                         } else if let path = callPaths[callID], !path.isEmpty, let write = writes[callID],
                             !write.content.isEmpty
                         {
@@ -485,16 +493,28 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
 
     /// Lists an edit's files under its row. A call whose arguments named no
     /// path, such as Oh My Pi's free-form patch, takes its title from them,
-    /// read as the list reads them.
-    private static func show(_ changes: ChatFileChanges, in tool: inout ChatToolActivity, namedByCall: Bool) {
+    /// read as the list reads them. A file the patch named as
+    /// `local://name`, which Oh My Pi resolves into the session's own
+    /// `<session>/local/name`, keeps that name, as the read and write rows
+    /// of the same file show it, rather than the account's session path.
+    private static func show(
+        _ changes: ChatFileChanges, in tool: inout ChatToolActivity, namedByCall: Bool, localPaths: [String] = []
+    ) {
         tool.fileChanges = changes
         tool.diff = ChatDiffStats(
             added: changes.files.reduce(0) { $0 + $1.added }, removed: changes.files.reduce(0) { $0 + $1.removed },
             files: changes.files.count + changes.moreFiles)
         if !namedByCall, !changes.files.isEmpty {
-            tool.title = String(changes.files.map { changes.displayPath(of: $0) }.joined(separator: ", ").prefix(500))
+            let names = changes.files.map { file in
+                localPaths.first { file.path.hasSuffix("/local/" + $0.dropFirst(localScheme.count)) }
+                    ?? changes.displayPath(of: file)
+            }
+            tool.title = String(names.joined(separator: ", ").prefix(500))
         }
     }
+
+    /// Oh My Pi's scheme for the session's own planning files.
+    private static let localScheme = "local://"
 
     private static func tool(
         name: String, arguments: JSONValue?, callID: String, activity: ChatAgentActivity, directory: String?
