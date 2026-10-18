@@ -213,8 +213,8 @@ private struct PairingCeremonyView: View {
             }
 
             Section {
-                ForEach(ceremonySteps, id: \.self) { step in
-                    stepRow(step)
+                ForEach(ceremonySteps, id: \.self) { @Sendable step in
+                    MainActorContent { stepRow(step) }
                 }
             } header: {
                 Text("Pairing")

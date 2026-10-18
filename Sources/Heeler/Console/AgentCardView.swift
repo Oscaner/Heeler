@@ -44,8 +44,33 @@ struct AgentCardView: View {
                 AgentStatusBadge(status: agent.agent.status)
             }
             let additionalRows = Array(presentation.rows.dropFirst())
-            ForEach(Array(additionalRows.enumerated()), id: \.offset) { index, row in
-                let isLast = index == additionalRows.count - 1
+            additionalRowViews(additionalRows)
+            if additionalRows.isEmpty {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Spacer(minLength: 0)
+                    hostText
+                    if let totalsSource {
+                        ChangesRowTotals(source: totalsSource).layoutPriority(1)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        // Terminal blank rows become bounded extra card spacing on a phone.
+        .padding(.bottom, CGFloat(min(layout.rowGap, 3)) * 8)
+    }
+
+    /// The rows after Row 1: the Host ends the first and the totals the last.
+    ///
+    /// SwiftUI can build these rows on its async render thread, as it built
+    /// the file counts in `ChangesRowTotals.fileCounts(_:style:)` (#471), so
+    /// the content is `@Sendable` and builds each row in `MainActorContent`.
+    func additionalRowViews(
+        _ rows: [[RenderedToken]]
+    ) -> ForEach<[(offset: Int, element: [RenderedToken])], Int, some View> {
+        ForEach(Array(rows.enumerated()), id: \.offset) { @Sendable index, row in
+            let isLast = index == rows.count - 1
+            MainActorContent {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     AgentRowText(tokens: row, isSecondary: true)
                         .font(.caption)
@@ -64,19 +89,7 @@ struct AgentCardView: View {
                     }
                 }
             }
-            if additionalRows.isEmpty {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Spacer(minLength: 0)
-                    hostText
-                    if let totalsSource {
-                        ChangesRowTotals(source: totalsSource).layoutPriority(1)
-                    }
-                }
-            }
         }
-        .padding(.vertical, 4)
-        // Terminal blank rows become bounded extra card spacing on a phone.
-        .padding(.bottom, CGFloat(min(layout.rowGap, 3)) * 8)
     }
 
     private var hostText: some View {

@@ -25,7 +25,7 @@ struct DiffLineRow: View {
         let numberWidth = digitWidth * CGFloat(max(numberDigits, 1))
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: DiffLayoutPolicy.numberSpacing) {
-                ForEach(Array(numbers.enumerated()), id: \.offset) { _, number in
+                ForEach(Array(numbers.enumerated()), id: \.offset) { @Sendable _, number in
                     Text(verbatim: number.map(String.init) ?? "")
                         .font(.caption2.monospaced())
                         .frame(width: numberWidth, alignment: .trailing)

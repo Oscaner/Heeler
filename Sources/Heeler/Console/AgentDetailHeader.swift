@@ -50,10 +50,12 @@ struct AgentDetailHeader: View {
             Spacer(minLength: 0)
             if isExpanded, !actions.isEmpty {
                 HStack(spacing: 0) {
-                    ForEach(actions) { action in
-                        AgentDetailHeaderButton(
-                            action.title, systemImage: action.systemImage,
-                            width: Self.capsuleButtonWidth, action: action.perform)
+                    ForEach(actions) { @Sendable action in
+                        MainActorContent {
+                            AgentDetailHeaderButton(
+                                action.title, systemImage: action.systemImage,
+                                width: Self.capsuleButtonWidth, action: action.perform)
+                        }
                     }
                 }
                 .padding(.horizontal, Self.capsuleInset)
@@ -84,13 +86,16 @@ struct AgentDetailHeader: View {
     }
 }
 
-/// One of `AgentDetailHeader`'s trailing buttons.
+/// One of `AgentDetailHeader`'s trailing buttons. Isolated to the main
+/// actor, which makes it Sendable: the header's `ForEach` content is
+/// `@Sendable` and hands each action to `MainActorContent` (#471).
+@MainActor
 struct AgentDetailHeaderAction: Identifiable {
     let title: LocalizedStringKey
     let systemImage: String
     let perform: () -> Void
 
-    var id: String { systemImage }
+    nonisolated var id: String { systemImage }
 }
 
 /// An icon button inside `AgentDetailHeader`. It has no surface of its own:

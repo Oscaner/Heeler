@@ -50,7 +50,7 @@ struct AcknowledgementsView: View {
     private func noticeList(_ notices: [LicenseNotice]) -> some View {
         List {
             Section {
-                ForEach(notices) { notice in
+                ForEach(notices) { @Sendable notice in
                     NavigationLink {
                         LicenseNoticeDetailView(notice: notice)
                     } label: {

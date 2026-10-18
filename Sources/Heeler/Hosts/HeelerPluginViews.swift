@@ -60,15 +60,15 @@ struct PluginNoticeSheet: View {
                             PluginNoticeIcon(tone: notice.tone)
                         }
                         .accessibilityIdentifier("hosts.detail.plugin.notice")
-                        ForEach(notice.commands, id: \.self) { command in
-                            CommandBlock(command: command)
+                        ForEach(notice.commands, id: \.self) { @Sendable command in
+                            MainActorContent { CommandBlock(command: command) }
                         }
                     }
                     .padding(.vertical, 4)
                 } footer: {
                     if !notice.notes.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
-                            ForEach(notice.notes, id: \.self) { note in
+                            ForEach(notice.notes, id: \.self) { @Sendable note in
                                 Text(note)
                             }
                         }

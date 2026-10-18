@@ -194,14 +194,16 @@ struct AgentActionMenuContent: View {
     var restoreComposerThen: ((@escaping () -> Void) -> Void)? = nil
 
     var body: some View {
-        ForEach(sections, id: \.self) { section in
-            let visible = section.items.filter {
-                AgentActionMenuPolicy.isVisible($0, actions: actions)
-            }
-            if !visible.isEmpty {
-                Section {
-                    ForEach(visible, id: \.self) { item in
-                        button(for: item)
+        ForEach(sections, id: \.self) { @Sendable section in
+            MainActorContent {
+                let visible = section.items.filter {
+                    AgentActionMenuPolicy.isVisible($0, actions: actions)
+                }
+                if !visible.isEmpty {
+                    Section {
+                        ForEach(visible, id: \.self) { @Sendable item in
+                            MainActorContent { button(for: item) }
+                        }
                     }
                 }
             }

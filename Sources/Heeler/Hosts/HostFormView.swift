@@ -184,11 +184,11 @@ struct HostFormView: View {
     /// Every route, one row each opening its own page, then Add Route.
     private var routesSection: some View {
         Section {
-            ForEach(draft.routes) { route in
+            ForEach(draft.routes) { @Sendable [routeCount = draft.routes.count] route in
                 NavigationLink(value: HostRoutePage.route(route.id)) {
                     HostRouteRow(route: route)
                 }
-                .deleteDisabled(draft.routes.count < 2)
+                .deleteDisabled(routeCount < 2)
             }
             .onDelete { draft.removeRoutes(atOffsets: $0) }
             .onMove { draft.moveRoutes(fromOffsets: $0, toOffset: $1) }

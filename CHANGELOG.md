@@ -26,6 +26,12 @@ Entries reference the pull request that made the change.
 - Gboard and other third-party keyboards no longer drop doubled letters
   (`https` became `htps`) or leave the misspelled word behind when they
   paste or autocorrect in Direct Input and shell terminals. (#461)
+- On iOS 18, Heeler no longer crashes while it shows an Agent's Changes as
+  file counts, as it does when the Checkout has changes but no added or
+  removed lines (only untracked files, for example). (#473)
+- Heeler no longer risks being terminated by iOS when it is still
+  disconnecting from its Hosts as its time in the background runs out.
+  (#473)
 
 ## [0.1.14] - 2026-10-15
 

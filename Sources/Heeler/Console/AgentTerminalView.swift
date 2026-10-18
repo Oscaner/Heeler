@@ -1816,8 +1816,8 @@ struct AgentTerminalView: View {
                 title: presentation.title,
                 accessibilityLabel: presentation.accessibilityLabel
             ) {
-                ForEach(presentation.commands, id: \.self) { command in
-                    stagingCommandButton(command)
+                ForEach(presentation.commands, id: \.self) { @Sendable command in
+                    MainActorContent { stagingCommandButton(command) }
                 }
             }
         }
@@ -1949,33 +1949,35 @@ private struct AttachLinksView: View {
 
     var body: some View {
         NavigationStack {
-            List(links) { link in
-                Button {
-                    open(link)
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(link.host)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                        Text(link.target)
-                            .font(.footnote.monospaced())
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
+            List(links) { @Sendable link in
+                MainActorContent {
+                    Button {
+                        open(link)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(link.host)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            Text(link.target)
+                                .font(.footnote.monospaced())
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(link.host)
-                .accessibilityValue(link.target)
-                .accessibilityHint("Opens in your default browser")
-                .accessibilityAction(named: "Copy Link") {
-                    copy(link)
-                }
-                .contextMenu {
-                    Button("Copy Link", systemImage: "doc.on.doc") {
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(link.host)
+                    .accessibilityValue(link.target)
+                    .accessibilityHint("Opens in your default browser")
+                    .accessibilityAction(named: "Copy Link") {
                         copy(link)
+                    }
+                    .contextMenu {
+                        Button("Copy Link", systemImage: "doc.on.doc") {
+                            copy(link)
+                        }
                     }
                 }
             }
