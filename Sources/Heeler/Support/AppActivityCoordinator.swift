@@ -92,9 +92,12 @@ final class UIKitBackgroundExecutionGranter: BackgroundExecutionGranting {
 @Observable
 final class AppActivityCoordinator {
     /// iOS grants a background-execution assertion on the order of 30
-    /// seconds. Stopping well short of that keeps the deliberate teardown
-    /// inside our own budget rather than racing the expiration handler.
-    static let defaultGracePeriod: Duration = .seconds(20)
+    /// seconds, and on device it has expired as early as 25.5 seconds in.
+    /// Stopping well short of that keeps the deliberate teardown inside our
+    /// own budget rather than racing the expiration handler. 20 seconds left
+    /// it 5 to 6: on a weak network the SSH and overlay teardown overran
+    /// that, and the process froze mid-close (#474).
+    static let defaultGracePeriod: Duration = .seconds(15)
 
     private(set) var phase: AppActivityPhase = .active
 

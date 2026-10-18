@@ -186,12 +186,19 @@ public struct TailscaleConfiguration: Sendable, Equatable {
     public var authKey: String?
     /// Custom coordination server (Headscale); nil uses Tailscale's.
     public var controlURL: URL?
+    /// Where tsnet's own log lines go, timestamped (`TailscaleLogFile`);
+    /// nil discards them.
+    public var logFile: URL?
 
-    public init(stateDirectory: URL, hostname: String, authKey: String?, controlURL: URL?) {
+    public init(
+        stateDirectory: URL, hostname: String, authKey: String?, controlURL: URL?,
+        logFile: URL? = nil
+    ) {
         self.stateDirectory = stateDirectory
         self.hostname = hostname
         self.authKey = authKey
         self.controlURL = controlURL
+        self.logFile = logFile
     }
 }
 

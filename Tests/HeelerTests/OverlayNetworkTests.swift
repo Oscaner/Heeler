@@ -1306,6 +1306,35 @@ struct OverlayNetworkRuntimeLifecycleTests {
                 == ["n0.dial", "n0.stop.begin", "n0.stop.end", "n1.dial"])
     }
 
+    /// A stop that outlasts the dial's own timeout (a tsnet close hung for
+    /// minutes in #474) fails the dial retryably on time instead of holding
+    /// it until the stop returns, and still builds no node beside the old
+    /// one. The next dial after the stop goes through.
+    @Test func aDialGivesUpOnAStopThatOutlastsItsTimeout() async throws {
+        let factory = FakeNodeFactory(stopDelay: .seconds(1))
+        let runtime = OverlayNetworkRuntime(
+            secrets: VolatileSecretStore(), stateRoot: temporaryStateRoot(), makeNode: factory.make)
+        runtime.publish([.init(network: zeroTier)])
+        _ = try await runtime.dial(networkID: zeroTier.id, host: "box", port: 22, timeout: .seconds(1))
+
+        async let suspended: Void = runtime.suspend()
+        try await Task.sleep(for: .milliseconds(20))
+        let expected = TransportError.overlayFailed(
+            network: "ZT", reason: .notReady("Its previous session is still shutting down"))
+        #expect(expected.isRetryable)
+        await #expect(throws: expected) {
+            _ = try await runtime.dial(
+                networkID: zeroTier.id, host: "box", port: 22, timeout: .milliseconds(100))
+        }
+        #expect(factory.events.all == ["n0.dial", "n0.stop.begin"])
+
+        await suspended
+        _ = try await runtime.dial(networkID: zeroTier.id, host: "box", port: 22, timeout: .seconds(1))
+        #expect(
+            factory.events.all
+                == ["n0.dial", "n0.stop.begin", "n0.stop.end", "n1.dial"])
+    }
+
     @Test func aRenameKeepsTheNode() async throws {
         let factory = FakeNodeFactory()
         let runtime = OverlayNetworkRuntime(
