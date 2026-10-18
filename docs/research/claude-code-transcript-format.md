@@ -541,7 +541,9 @@ What follows for matching a sent prompt to its record:
 - A `/command` the running CLI doesn't know records no prompt; its
   `Unknown command: /name` record, with the arguments its
   `Args from unknown skill:` child names, stands for it (2.1.301, live
-  2026-10-17).
+  2026-10-17). 2.1.302 records the same for a skill whose `SKILL.md`
+  frontmatter says `user-invocable: false`, and loads a skill added after it
+  started, so that 2.1.301 case no longer arises (live 2026-10-18).
 - Forks and `/clear` start a new session id and file, so a prompt without an
   echo may have landed in another transcript (Not verified for `/clear`; see
   [Location](#location)).

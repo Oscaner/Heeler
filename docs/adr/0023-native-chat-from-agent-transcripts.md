@@ -170,8 +170,12 @@ request, under rules that stand in for the screen the user cannot see:
   `/name`; a Codex skill is sent as `$name`. For Pi and Oh My Pi the menu, and
   Chat's Skills list, hold only `/skill:` skills, sent as `/skill:name` (typed
   that way too); prompt templates stay out because one named like a built-in
-  runs the built-in. A leading path is text, and any other leading `/word` is
-  refused with a pointer to the menu or the terminal.
+  runs the built-in. A Claude Code skill whose `SKILL.md` frontmatter says
+  `user-invocable: false` stays out too: Claude Code 2.1.302 answers
+  "Unknown command" when it is typed. Codex's `allow_implicit_invocation` and
+  Pi's `disable-model-invocation` limit only the model, so their skills stay.
+  A leading path is text, and any other leading `/word` is refused with a
+  pointer to the menu or the terminal.
 - Invisible characters are removed and exactly one trailing space is appended,
   so a final `/name` or `@path` cannot leave a completion popup open when
   Enter arrives. Oh My Pi's `/compact` is the exception: it goes without the

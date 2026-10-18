@@ -303,6 +303,30 @@ struct ChatSendRulesTests {
         #expect(rules.validate("/skill:compact") == .unknownCommand("skill:compact"))
     }
 
+    /// Claude Code answers "Unknown command" for a `user-invocable: false`
+    /// skill; the other programs have no such key and take every skill.
+    @Test(arguments: ChatProgram.allCases)
+    func onlyClaudeHidesASkillNotUserInvocable(program: ChatProgram) {
+        let prefix = Self.skillPrefix(program)
+        let catalog = [
+            AgentSkill(scope: .project, name: "review", description: nil, commandPrefix: prefix),
+            AgentSkill(
+                scope: .project, name: "e2e-hidden", description: nil, commandPrefix: prefix,
+                isUserInvocable: false),
+        ]
+        let rules = ChatSendRules(
+            program: program,
+            commands: ChatCommandMenu.commands(skills: catalog, agentIsIdle: true, program: program))
+        let names = rules.commands.map(\.name)
+
+        if program == .claude {
+            #expect(names == ["compact", "review"])
+            #expect(rules.validate("/e2e-hidden") == .unknownCommand("e2e-hidden"))
+        } else {
+            #expect(names == ["compact", "review", "e2e-hidden"])
+        }
+    }
+
     @Test func aSkillFormIsOnlyReadForSkillCommands() {
         let rules = Self.rules(.claude)
 

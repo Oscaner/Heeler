@@ -209,6 +209,23 @@ struct SkillProbeTests {
         #expect(skills.map(\.insertionText) == ["/skill:pdf-tools ", "$plan "])
     }
 
+    @Test func userInvocableRidesTheSkill() {
+        let skills = SkillProbe.skills(
+            fromProbeOutput: output(
+                """
+                \(marker(0))/repo/.claude/skills/e2e-hidden/SKILL.md
+                ---
+                user-invocable: false
+                ---
+                \(SkillProbe.endMarker)
+                \(marker(0))/repo/.claude/skills/review/SKILL.md
+                \(SkillProbe.endMarker)
+                """),
+            sources: claudeSources)
+        #expect(skills.map(\.name) == ["e2e-hidden", "review"])
+        #expect(skills.map(\.isUserInvocable) == [false, true])
+    }
+
     @Test func projectShadowsSameNamedGlobal() {
         let skills = SkillProbe.skills(
             fromProbeOutput: output(

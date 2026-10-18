@@ -29,11 +29,16 @@ enum ChatCommandMenu {
 
     /// Whether Chat offers a skill to a program. Pi and Oh My Pi get only
     /// their `/skill:` skills: a prompt template is a plain `/name`, which
-    /// runs the built-in command instead when one shares its name.
+    /// runs the built-in command instead when one shares its name. Claude
+    /// Code answers "Unknown command" for a skill marked
+    /// `user-invocable: false`; Codex and Pi have no such key (their
+    /// `allow_implicit_invocation` and `disable-model-invocation` limit only
+    /// the model).
     static func offers(_ skill: AgentSkill, for program: ChatProgram) -> Bool {
         switch program {
         case .pi, .omp: skill.commandPrefix == skillCommandPrefix
-        case .claude, .codex: true
+        case .claude: skill.isUserInvocable
+        case .codex: true
         }
     }
 

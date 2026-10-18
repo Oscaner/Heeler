@@ -106,8 +106,10 @@ Entries reference the pull request that made the change.
   an Agent the app reopened at launch. (#425)
 - Chat explains a `/` command the running Claude Code doesn't know, such as a
   skill added after the Agent started, instead of leaving the message waiting
-  with no reason. A `/compact` that Pi or Oh My Pi refuses with nothing to
-  compact now says so. (#425)
+  with no reason, and its `/` menu leaves out skills marked
+  `user-invocable: false`, which Claude Code refuses as commands. A
+  `/compact` that Pi or Oh My Pi refuses with nothing to compact now says so.
+  (#425)
 - Context compacted previews skip Claude Code's fixed preamble, and Pi's
   compaction and branch summaries show without their Markdown marks. Inline
   code is tinted, so it stands out in Chinese text too. (#425)

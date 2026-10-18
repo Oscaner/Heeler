@@ -27,16 +27,20 @@ struct AgentSkill: Identifiable, Sendable, Equatable, Hashable {
     /// Where the probe found the file on the Host, so the full document can
     /// be fetched on demand.
     let path: String
+    /// False when the frontmatter says `user-invocable: false`: the skill
+    /// is the model's to run, and Claude Code refuses it as a typed command.
+    let isUserInvocable: Bool
 
     init(
         scope: Scope, name: String, description: String?,
-        commandPrefix: String = "/", path: String = ""
+        commandPrefix: String = "/", path: String = "", isUserInvocable: Bool = true
     ) {
         self.scope = scope
         self.name = name
         self.description = description
         self.commandPrefix = commandPrefix
         self.path = path
+        self.isUserInvocable = isUserInvocable
     }
 
     /// The invocation as the agent's composer expects it: `/code-review`,
