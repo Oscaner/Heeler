@@ -164,10 +164,11 @@ struct HostLiveActivityCoordinatorTests {
         _ comment: Comment, timeout: Duration = .seconds(2),
         condition: () async throws -> Bool
     ) async throws {
-        let deadline = ContinuousClock.now + timeout
-        while ContinuousClock.now < deadline {
+        var budget = PollBudget(timeout)
+        while budget.hasTimeLeft {
             if try await condition() { break }
             try await Task.sleep(for: .milliseconds(5))
+            budget.charge()
         }
         let satisfied = try await condition()
         if !satisfied { printTrace() }

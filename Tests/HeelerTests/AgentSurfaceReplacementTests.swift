@@ -908,23 +908,15 @@ struct AgentSurfaceReplacementTests {
             closePane: {})
     }
 
-    /// Polls `condition` until it holds or `timeout` has passed, counting no
-    /// gap between polls as more than a second. A loaded CI runner can stall
-    /// the main actor for longer than the timeout, and work a test waits on,
-    /// such as image staging, may need the main actor too, so it cannot
-    /// finish during the stall either.
     private static func eventually(
         timeout: Duration = .seconds(5),
         condition: () async -> Bool
     ) async throws -> Bool {
-        var polled = Duration.zero
-        var lastPoll = ContinuousClock.now
-        while polled < timeout {
+        var budget = PollBudget(timeout)
+        while budget.hasTimeLeft {
             if await condition() { return true }
             try await Task.sleep(for: .milliseconds(5))
-            let now = ContinuousClock.now
-            polled += min(lastPoll.duration(to: now), .seconds(1))
-            lastPoll = now
+            budget.charge()
         }
         return await condition()
     }
