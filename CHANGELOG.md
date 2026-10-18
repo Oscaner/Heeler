@@ -26,7 +26,7 @@ Entries reference the pull request that made the change.
   say it is still shutting down and keep retrying until it has, instead of
   waiting without a word. Heeler now closes its connections 15 seconds
   after you leave it instead of 20, so they finish closing before iOS
-  takes back its background time. (#474)
+  takes back its background time. (#476)
 - Closing a connection through a Tailscale network no longer risks shutting
   down an unrelated connection that reused its file descriptor. Tailscale
   networks now run libtailscale 0.2.0 with Tailscale v1.104.1. (#463)
