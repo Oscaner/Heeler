@@ -413,8 +413,10 @@ struct OverlayNetworkDetailView: View {
             } else {
                 // A config server's networks, one section each.
                 let groups = OverlayPeerList.assignedGroups(peers, assigned: assigned)
-                ForEach(groups) { group in
-                    assignedNetworkSection(group, isLast: group.id == groups.last?.id)
+                ForEach(groups) { @Sendable group in
+                    MainActorContent {
+                        assignedNetworkSection(group, isLast: group.id == groups.last?.id)
+                    }
                 }
             }
         }
@@ -425,8 +427,10 @@ struct OverlayNetworkDetailView: View {
             if peers.isEmpty {
                 emptyMachines(network)
             } else {
-                ForEach(OverlayPeerList.sorted(peers.map(OverlayPeerCandidate.init))) { candidate in
-                    machineRow(candidate)
+                ForEach(
+                    OverlayPeerList.sorted(peers.map(OverlayPeerCandidate.init))
+                ) { @Sendable candidate in
+                    MainActorContent { machineRow(candidate) }
                 }
             }
         } header: {
@@ -499,8 +503,8 @@ struct OverlayNetworkDetailView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(OverlayPeerList.sorted(group.peers.map(OverlayPeerCandidate.init))) {
-                    candidate in
-                    machineRow(candidate)
+                    @Sendable candidate in
+                    MainActorContent { machineRow(candidate) }
                 }
             }
         } header: {
@@ -520,8 +524,8 @@ struct OverlayNetworkDetailView: View {
                 Text(kind == .tailscale ? "No matching machines" : "No matching peers")
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(matches) { candidate in
-                    machineRow(candidate)
+                ForEach(matches) { @Sendable candidate in
+                    MainActorContent { machineRow(candidate) }
                 }
             }
         } footer: {
@@ -562,7 +566,7 @@ struct OverlayNetworkDetailView: View {
                             + "IP is in ZeroTier Central or your controller.")
                 }
             } else {
-                ForEach(members) { member in
+                ForEach(members) { @Sendable member in
                     ZeroTierMemberRow(peer: member.peer)
                 }
             }
@@ -783,7 +787,7 @@ private struct OverlayDeviceAddresses: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 OverlayCardCopyButton(value: primary, accessibilityLabel: "Copy \(primary)")
             }
-            ForEach(addresses.filter { $0 != primary }, id: \.self) { address in
+            ForEach(addresses.filter { $0 != primary }, id: \.self) { @Sendable address in
                 Text(address)
                     .font(.footnote.monospaced())
                     .foregroundStyle(.secondary)
@@ -792,9 +796,11 @@ private struct OverlayDeviceAddresses: View {
         }
         .padding(.vertical, 2)
         .contextMenu {
-            ForEach(addresses, id: \.self) { address in
-                OverlayCopyAddressButton(address: address, among: addresses) {
-                    OverlayCardCopyButton.copy(address)
+            ForEach(addresses, id: \.self) { @Sendable address in
+                MainActorContent {
+                    OverlayCopyAddressButton(address: address, among: addresses) {
+                        OverlayCardCopyButton.copy(address)
+                    }
                 }
             }
         }
@@ -846,7 +852,7 @@ private struct OverlayAssignedAddresses: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
-                ForEach(lines) { line in
+                ForEach(lines) { @Sendable line in
                     GridRow {
                         Text(line.network)
                             .font(.footnote)
@@ -857,9 +863,11 @@ private struct OverlayAssignedAddresses: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        OverlayCardCopyButton(
-                            value: line.address, size: 30,
-                            accessibilityLabel: "Copy the address on \(line.network)")
+                        MainActorContent {
+                            OverlayCardCopyButton(
+                                value: line.address, size: 30,
+                                accessibilityLabel: "Copy the address on \(line.network)")
+                        }
                     }
                     .accessibilityElement(children: .contain)
                 }
@@ -990,9 +998,11 @@ private struct OverlayMachineRow: View {
             if !candidate.addresses.isEmpty {
                 Divider()
             }
-            ForEach(candidate.addresses, id: \.self) { address in
-                OverlayCopyAddressButton(address: address, among: candidate.addresses) {
-                    UIPasteboard.general.string = address
+            ForEach(candidate.addresses, id: \.self) { @Sendable address in
+                MainActorContent {
+                    OverlayCopyAddressButton(address: address, among: candidate.addresses) {
+                        UIPasteboard.general.string = address
+                    }
                 }
             }
         }
@@ -1066,8 +1076,8 @@ private struct ZeroTierMemberRow: View {
         .accessibilityElement(children: .combine)
         .contextMenu {
             copyButton("Copy Node ID", value: peer.id)
-            ForEach(OverlayStatusCopy.uniquePaths(peer), id: \.self) { path in
-                copyButton("Copy Path", value: path)
+            ForEach(OverlayStatusCopy.uniquePaths(peer), id: \.self) { @Sendable path in
+                MainActorContent { copyButton("Copy Path", value: path) }
             }
         }
     }
@@ -1188,7 +1198,7 @@ struct OverlayDiagnosticsView: View {
             } else {
                 if !roots.isEmpty {
                     Section {
-                        ForEach(roots) { peer in
+                        ForEach(roots) { @Sendable peer in
                             ZeroTierPeerRow(peer: peer)
                         }
                     } header: {
@@ -1201,7 +1211,9 @@ struct OverlayDiagnosticsView: View {
                     }
                 }
                 Section("State") {
-                    ForEach(Array(diagnostics.entries.enumerated()), id: \.offset) { _, entry in
+                    ForEach(
+                        Array(diagnostics.entries.enumerated()), id: \.offset
+                    ) { @Sendable _, entry in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(entry.label)
                                 .font(.footnote)
@@ -1218,7 +1230,9 @@ struct OverlayDiagnosticsView: View {
                         Text("No events yet")
                             .foregroundStyle(.secondary)
                     }
-                    ForEach(Array(diagnostics.events.reversed().enumerated()), id: \.offset) { _, event in
+                    ForEach(
+                        Array(diagnostics.events.reversed().enumerated()), id: \.offset
+                    ) { @Sendable _, event in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(event.date.formatted(date: .omitted, time: .standard))
                                 .font(.footnote.monospacedDigit())

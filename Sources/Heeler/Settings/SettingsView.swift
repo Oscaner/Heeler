@@ -188,8 +188,8 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    ForEach(Self.aboutRows) { row in
-                        aboutRow(row)
+                    ForEach(Self.aboutRows) { @Sendable row in
+                        MainActorContent { aboutRow(row) }
                     }
                 } header: {
                     Text("About")
@@ -261,7 +261,7 @@ struct SettingsView: View {
                 get: { appearance.selection },
                 set: { appearance.select($0) })
         ) {
-            ForEach(AppAppearanceOption.allCases) { option in
+            ForEach(AppAppearanceOption.allCases) { @Sendable option in
                 Text(option.title).tag(option)
             }
         } label: {

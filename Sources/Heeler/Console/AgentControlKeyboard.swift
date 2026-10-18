@@ -116,7 +116,7 @@ private struct AgentQuickKeyPad: View {
     let isEnabled: Bool
     let send: (AgentQuickKey) -> Void
 
-    private static let rows: [[AgentQuickKey]] = [
+    private nonisolated static let rows: [[AgentQuickKey]] = [
         [.escape, .tab, .backspace],
         [.left, .up, .right],
         [.shiftTab, .down, .enter],
@@ -124,10 +124,10 @@ private struct AgentQuickKeyPad: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            ForEach(Self.rows.indices, id: \.self) { row in
+            ForEach(Self.rows.indices, id: \.self) { @Sendable row in
                 HStack(spacing: 8) {
-                    ForEach(Self.rows[row], id: \.self) { key in
-                        Group {
+                    ForEach(Self.rows[row], id: \.self) { @Sendable key in
+                        MainActorContent {
                             if key == .backspace {
                                 TerminalBackspaceButton {
                                     UIImpactFeedbackGenerator(style: .light).impactOccurred()

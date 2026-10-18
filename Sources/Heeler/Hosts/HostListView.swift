@@ -306,17 +306,21 @@ struct HostListView: View {
                     }
                 } else {
                     List {
-                        ForEach(HostListEntry.grouped(entries)) { section in
-                            let isCollapsed = isCollapsed(section.group)
-                            Section {
-                                if !isCollapsed {
-                                    ForEach(section.entries) { row(for: $0) }
+                        ForEach(HostListEntry.grouped(entries)) { @Sendable section in
+                            MainActorContent {
+                                let isCollapsed = isCollapsed(section.group)
+                                Section {
+                                    if !isCollapsed {
+                                        ForEach(section.entries) { @Sendable entry in
+                                            MainActorContent { row(for: entry) }
+                                        }
+                                    }
+                                } header: {
+                                    HostGroupHeader(
+                                        group: section.group, count: section.entries.count,
+                                        isCollapsed: isCollapsed
+                                    ) { toggle(section.group) }
                                 }
-                            } header: {
-                                HostGroupHeader(
-                                    group: section.group, count: section.entries.count,
-                                    isCollapsed: isCollapsed
-                                ) { toggle(section.group) }
                             }
                         }
                     }

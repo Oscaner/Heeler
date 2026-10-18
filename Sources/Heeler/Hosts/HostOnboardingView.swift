@@ -75,8 +75,8 @@ struct HostOnboardingView: View {
             }
 
             Section {
-                ForEach(PreflightCheck.allCases, id: \.self) { check in
-                    PreflightCheckRow(check: check, status: status(for: check))
+                ForEach(PreflightCheck.allCases, id: \.self) { @Sendable check in
+                    MainActorContent { PreflightCheckRow(check: check, status: status(for: check)) }
                 }
             } header: {
                 preflightHeader
@@ -371,18 +371,20 @@ struct HostOnboardingView: View {
     private var routesSection: some View {
         let status = routeStatus
         return Section {
-            ForEach(store.host.routes) { route in
-                let failure = status.routeFailures[route.id]
-                HostRouteLabel(kind: HostRouteKind(route)) {
-                    Text(route.endpointDescription)
-                        .font(.body.monospaced())
-                } subtitle: {
-                    Text(failure ?? routeDescription(route))
-                } trailing: {
-                    if route.id == status.inUseRouteID {
-                        HostRouteTag(text: "In Use", tint: .green)
-                    } else if failure != nil {
-                        HostRouteTag(text: "Failed", tint: .red)
+            ForEach(store.host.routes) { @Sendable route in
+                MainActorContent {
+                    let failure = status.routeFailures[route.id]
+                    HostRouteLabel(kind: HostRouteKind(route)) {
+                        Text(route.endpointDescription)
+                            .font(.body.monospaced())
+                    } subtitle: {
+                        Text(failure ?? routeDescription(route))
+                    } trailing: {
+                        if route.id == status.inUseRouteID {
+                            HostRouteTag(text: "In Use", tint: .green)
+                        } else if failure != nil {
+                            HostRouteTag(text: "Failed", tint: .red)
+                        }
                     }
                 }
             }
@@ -494,24 +496,26 @@ struct HostOnboardingView: View {
     private var availableSessionsSection: some View {
         if !store.availableSessions.isEmpty || store.sessionDiscoveryError != nil {
             Section {
-                ForEach(store.availableSessions, id: \.name) { session in
-                    Button {
-                        select(session)
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(session.name)
-                                Text(session.isRunning ? "Running" : "Stopped")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if isSelected(session) {
-                                Image(systemName: "checkmark")
+                ForEach(store.availableSessions, id: \.name) { @Sendable session in
+                    MainActorContent {
+                        Button {
+                            select(session)
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(session.name)
+                                    Text(session.isRunning ? "Running" : "Stopped")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if isSelected(session) {
+                                    Image(systemName: "checkmark")
+                                }
                             }
                         }
+                        .disabled(isSelected(session) || (!session.isDefault && !session.isRunning))
                     }
-                    .disabled(isSelected(session) || (!session.isDefault && !session.isRunning))
                 }
                 if let error = store.sessionDiscoveryError {
                     Label(error, systemImage: "exclamationmark.triangle")

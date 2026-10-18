@@ -1439,6 +1439,24 @@ struct AgentCardChangesTotalsTests {
         #expect(Self.identifier(of: element) == "agent-row-changes.exact")
     }
 
+    /// SwiftUI can build the card's rows on its async render thread, as it
+    /// built the file counts in #471. A row closure isolated to the main
+    /// actor traps there, so a regression crashes this test.
+    @Test func buildsAdditionalRowsOffTheMainThread() async throws {
+        let card = AgentCardView(agent: Self.agent, layout: .consoleDefault)
+        let rows = Array(
+            AgentCardPresentation(agent: Self.agent, layout: .consoleDefault).rows.dropFirst())
+        try #require(rows.count > 1)
+        let forEach = card.additionalRowViews(rows)
+        let row = UncheckedSendable(value: forEach.content)
+        let elements = Array(rows.enumerated())
+        await Task.detached {
+            for element in elements {
+                _ = row.value(element)
+            }
+        }.value
+    }
+
     /// With more rows, the Host ends the first one after Row 1 and the
     /// totals end the last.
     @Test func theHostEndsTheFirstDetailLineAndTheTotalsTheLast() async throws {

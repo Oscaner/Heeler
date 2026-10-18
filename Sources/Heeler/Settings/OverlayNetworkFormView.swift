@@ -465,8 +465,8 @@ private struct OverlayKindPicker: View {
             ? AnyLayout(VStackLayout(spacing: 10))
             : AnyLayout(HStackLayout(alignment: .top, spacing: 10))
         layout {
-            ForEach(OverlayKind.allCases, id: \.self) { kind in
-                card(kind)
+            ForEach(OverlayKind.allCases, id: \.self) { @Sendable kind in
+                MainActorContent { card(kind) }
             }
         }
         .accessibilityElement(children: .contain)

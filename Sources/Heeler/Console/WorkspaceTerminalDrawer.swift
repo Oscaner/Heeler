@@ -223,8 +223,8 @@ struct WorkspaceTerminalDrawer: View {
             .frame(height: Self.headerHeight)
             ScrollView(.vertical) {
                 VStack(spacing: Self.rowSpacing) {
-                    ForEach(orderedTerminals) { item in
-                        row(item)
+                    ForEach(orderedTerminals) { @Sendable item in
+                        MainActorContent { row(item) }
                     }
                 }
                 .padding(.horizontal, 6)

@@ -103,8 +103,8 @@ struct AgentDirectInputChrome: View {
         HStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
-                    ForEach(strip.leadingItems, id: \.self) { item in
-                        sizedStripItem(item)
+                    ForEach(strip.leadingItems, id: \.self) { @Sendable item in
+                        MainActorContent { sizedStripItem(item) }
                     }
                 }
                 .padding(.leading, 8)
@@ -112,8 +112,8 @@ struct AgentDirectInputChrome: View {
             }
 
             HStack(spacing: 4) {
-                ForEach(strip.trailingItems, id: \.self) { item in
-                    sizedStripItem(item)
+                ForEach(strip.trailingItems, id: \.self) { @Sendable item in
+                    MainActorContent { sizedStripItem(item) }
                 }
             }
             .padding(.leading, 4)

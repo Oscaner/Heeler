@@ -37,21 +37,25 @@ struct OverlayNetworksSettingsView: View {
                 }
             } else {
                 Section {
-                    ForEach(store.networks) { network in
-                        OverlayNetworkRow(
-                            network: network, store: store,
-                            onOpen: { opened = OpenedNetwork(id: network.id) },
-                            onSignIn: { opened = OpenedNetwork(id: network.id, startsOnAppear: true) }
-                        )
-                        // No `.destructive` role: List would animate the row
-                        // out while the confirmation is still up.
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button {
-                                pendingDeletion = network
-                            } label: {
-                                Label("Delete", systemImage: "trash")
+                    ForEach(store.networks) { @Sendable network in
+                        MainActorContent {
+                            OverlayNetworkRow(
+                                network: network, store: store,
+                                onOpen: { opened = OpenedNetwork(id: network.id) },
+                                onSignIn: {
+                                    opened = OpenedNetwork(id: network.id, startsOnAppear: true)
+                                }
+                            )
+                            // No `.destructive` role: List would animate the row
+                            // out while the confirmation is still up.
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button {
+                                    pendingDeletion = network
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                                .tint(.red)
                             }
-                            .tint(.red)
                         }
                     }
                 } footer: {
