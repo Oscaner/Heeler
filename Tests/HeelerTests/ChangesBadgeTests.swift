@@ -105,6 +105,27 @@ struct ChangesBadgeTests {
         #expect(!removals.showsAdded && removals.showsRemoved)
     }
 
+    /// SwiftUI can build the file-count cells on its async render thread, as
+    /// it did in #471. A cell closure isolated to the main actor traps there,
+    /// so a regression crashes this test rather than failing it.
+    @Test func buildsFileCountsOffTheMainThread() async throws {
+        let badge = try #require(Self.badge(TideGitItemTests.changes(files: [
+            TideGitItemTests.file("app.swift", staging: .unstaged),
+            TideGitItemTests.file("notes/", kind: .untracked, staging: nil),
+        ], untracked: 1)))
+        try #require(badge.showsFiles)
+        let totals = ChangesRowTotals(source: .sample(badge))
+        for style in ChangesBadge.Style.allCases {
+            let cell = UncheckedSendable(value: totals.fileCounts(badge, style: style).content)
+            let counts = badge.fileCounts
+            await Task.detached {
+                for count in counts {
+                    _ = cell.value(count)
+                }
+            }.value
+        }
+    }
+
     @Test func aTruncatedCountReadsAsALowerBound() throws {
         var changes = try Self.read(added: 12, removed: 7).changes
         changes.totals.linesAreComplete = false
@@ -1475,4 +1496,10 @@ struct AgentCardChangesTotalsTests {
             #expect(labels.contains("devbox"))
         }
     }
+}
+
+/// Hands a closure SwiftUI never marks Sendable to another thread, as
+/// SwiftUI's async renderer does.
+private struct UncheckedSendable<Value>: @unchecked Sendable {
+    let value: Value
 }
