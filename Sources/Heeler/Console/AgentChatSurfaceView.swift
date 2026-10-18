@@ -970,23 +970,26 @@ private struct BackgroundWorkInset: View {
     }
 }
 
-/// The list's soft edge under chrome: rows passing beneath blur into the
-/// material instead of meeting the status bar, the header's controls or the
-/// Composer's status line. At full strength for `solid` from the screen's
-/// edge, then fading out across the rest of `height`.
+/// The list's soft edge under chrome: rows passing beneath the status bar,
+/// the header's controls or the Composer soften behind a thin material
+/// rather than vanish. At full strength for `solid` from the screen's edge,
+/// then fading out across the rest of `height`.
 private struct ChatScrollEdgeEffect: View {
     let edge: VerticalEdge
     let height: CGFloat
     let solid: CGFloat
+    /// How much of the material shows at full strength: rows stay visible
+    /// through it, softened rather than hidden.
+    var strength: Double = 0.6
 
     var body: some View {
         Rectangle()
-            .fill(.regularMaterial)
+            .fill(.ultraThinMaterial)
             .mask {
                 LinearGradient(
                     stops: [
-                        .init(color: .black, location: 0),
-                        .init(color: .black, location: height > 0 ? min(1, max(0, solid / height)) : 1),
+                        .init(color: .black.opacity(strength), location: 0),
+                        .init(color: .black.opacity(strength), location: height > 0 ? min(1, max(0, solid / height)) : 1),
                         .init(color: .clear, location: 1),
                     ],
                     startPoint: edge == .top ? .top : .bottom,
