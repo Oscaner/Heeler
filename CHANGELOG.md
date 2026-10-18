@@ -78,6 +78,9 @@ Entries reference the pull request that made the change.
 - Chat's conversation runs edge to edge: messages scroll under the status
   bar and behind the Composer down to the home indicator, softening under
   the chrome instead of stopping at a blank band. (#425)
+- The Agent detail header's Agent Terminal segment shows a code glyph and
+  Workspace Terminals shows stacked terminals, so the two buttons no longer
+  share one icon. (#425)
 - Where Agent detail is pushed over the list (iPhone, or a compact iPad
   window), Open Terminal in an Agent's More menu opens the Shell Terminal over
   the Agent, so Back in the terminal's header, or the edge swipe, returns to

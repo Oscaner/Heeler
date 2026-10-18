@@ -925,7 +925,7 @@ struct AgentChatSurfaceView: View {
         var actions: [AgentDetailHeaderAction] = []
         if workspaceDrawer != nil {
             actions.append(AgentDetailHeaderAction(
-                title: "Workspace Terminals", systemImage: "terminal"
+                title: "Workspace Terminals", systemImage: "apple.terminal.on.rectangle"
             ) {
                 withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
                     isHeaderDrawerOpen.toggle()
