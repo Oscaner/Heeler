@@ -29,6 +29,9 @@ Entries reference the pull request that made the change.
 - On iOS 18, Heeler no longer crashes while it shows an Agent's Changes as
   file counts, as it does when the Checkout has changes but no added or
   removed lines (only untracked files, for example). (#471)
+- Heeler no longer risks being terminated by iOS when it is still
+  disconnecting from its Hosts as its time in the background runs out.
+  (#472)
 
 ## [0.1.14] - 2026-10-15
 
