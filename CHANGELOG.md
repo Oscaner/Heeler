@@ -75,6 +75,9 @@ Entries reference the pull request that made the change.
 - The terminal font "System" is now named JetBrains Mono, the face it
   always drew, and the duplicate JetBrains Mono choice folds into it. Menlo
   and Courier New join IBM Plex Mono as other choices. (#425)
+- Chat's conversation runs edge to edge: messages scroll under the status
+  bar and behind the Composer down to the home indicator, softening under
+  the chrome instead of stopping at a blank band. (#425)
 - Where Agent detail is pushed over the list (iPhone, or a compact iPad
   window), Open Terminal in an Agent's More menu opens the Shell Terminal over
   the Agent, so Back in the terminal's header, or the edge swipe, returns to

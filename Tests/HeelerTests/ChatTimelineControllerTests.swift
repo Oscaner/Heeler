@@ -686,6 +686,38 @@ struct ChatTimelineControllerTests {
         }
     }
 
+    @Test func rowsAtRestClearTheChromeOverTheBottomEdge() async throws {
+        let controller = ChatTimelineController(actions: ChatTimelineActions())
+        let rows = await ChatRowBuilder().rows(for: ChatTimelineInput(entries: Self.entries(0..<40)))
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.apply(Self.state(rows))
+            await Self.settle(controller)
+            let view = controller.timeline
+            let newest = try #require(rows.last?.id)
+
+            controller.setBottomObstruction(120)
+            await Self.settle(controller)
+            #expect(controller.isFollowing)
+            // The list still runs under the chrome; only its rows stop short.
+            #expect(view.bounds.height == Self.frame.height)
+            let resting = try #require(Self.screenMaxY(of: newest, in: controller))
+            #expect(resting <= Self.frame.height - 120)
+            #expect(resting >= Self.frame.height - 120 - 24)
+
+            controller.setBottomObstruction(200)
+            await Self.settle(controller)
+            let lifted = try #require(Self.screenMaxY(of: newest, in: controller))
+            #expect(abs(lifted - resting + 80) <= 0.5)
+
+            // Room given back leaves no blank space past the end.
+            controller.setBottomObstruction(0)
+            await Self.settle(controller)
+            #expect(abs(view.contentOffset.y - view.maxOffsetY) <= 0.5)
+            let lowered = try #require(Self.screenMaxY(of: newest, in: controller))
+            #expect(abs(lowered - resting - 120) <= 0.5)
+        }
+    }
+
     // MARK: Folds
 
     @Test func openingAFinishedTurnKeepsItsHeaderWhereItWas() async throws {
@@ -1367,6 +1399,10 @@ struct ChatTimelineControllerTests {
 
     private static func screenY(of id: ChatRowID, in controller: ChatTimelineController) -> CGFloat? {
         controller.cellFrame(of: id).map { $0.minY - controller.timeline.contentOffset.y }
+    }
+
+    private static func screenMaxY(of id: ChatRowID, in controller: ChatTimelineController) -> CGFloat? {
+        controller.cellFrame(of: id).map { $0.maxY - controller.timeline.contentOffset.y }
     }
 
     private static func firstFullyVisibleRow(

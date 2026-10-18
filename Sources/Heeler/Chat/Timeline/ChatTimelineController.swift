@@ -85,6 +85,9 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
     /// edge, and how much of it the bottom inset keeps clear right now.
     private var collapseControlClearance: CGFloat = 0
     private var collapseControlReserve: CGFloat = 0
+    /// The chrome floating over the list's bottom edge: the Composer and
+    /// what sits on it, down to the screen's edge.
+    private var bottomObstruction: CGFloat = 0
     /// Set when the list may rest with its end under Collapse Steps; the
     /// next layout pass, which knows the end, moves it clear.
     private var wantsEndClearOfCollapseControl = false
@@ -378,6 +381,18 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         collectionView.setNeedsLayout()
     }
 
+    /// Keeps `height` at the bottom clear of rows at rest, for chrome that
+    /// floats over the list's bottom edge; rows still scroll beneath it.
+    func setBottomObstruction(_ height: CGFloat) {
+        loadViewIfNeeded()
+        guard bottomObstruction != height else { return }
+        bottomObstruction = height
+        applyBottomInset()
+        // A short list's blank space above its rows follows the room.
+        layout.invalidateLayout()
+        collectionView.setNeedsLayout()
+    }
+
     /// Keeps `height` at the bottom clear of rows while Collapse Steps
     /// shows, so the button never covers the newest row.
     func setCollapseControlClearance(_ height: CGFloat) {
@@ -391,17 +406,27 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         let reserve = reportedCanCollapse ? collapseControlClearance : 0
         guard collapseControlReserve != reserve else { return }
         collapseControlReserve = reserve
-        collectionView.contentInset.bottom = Self.contentInsets.bottom + reserve
+        applyBottomInset()
+        if reserve > 0 { wantsEndClearOfCollapseControl = true }
+        // A short list's blank space above its rows follows the room.
+        layout.invalidateLayout()
+        collectionView.setNeedsLayout()
+    }
+
+    private func applyBottomInset() {
+        collectionView.contentInset.bottom = Self.contentInsets.bottom + bottomObstruction + collapseControlReserve
+        collectionView.verticalScrollIndicatorInsets.bottom = bottomObstruction
         // Room given back leaves no blank space past the end at rest.
         if !collectionView.isTracking, !collectionView.isDecelerating,
             collectionView.contentOffset.y > collectionView.maxOffsetY
         {
             collectionView.contentOffset.y = collectionView.maxOffsetY
         }
-        if reserve > 0 { wantsEndClearOfCollapseControl = true }
-        // A short list's blank space above its rows follows the room.
-        layout.invalidateLayout()
-        collectionView.setNeedsLayout()
+    }
+
+    /// Where rows stop being readable: the bottom chrome covers the rest.
+    private var visibleBottom: CGFloat {
+        collectionView.contentOffset.y + collectionView.bounds.height - bottomObstruction
     }
 
     /// A list resting with its end under Collapse Steps, or past the bottom
@@ -448,8 +473,7 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
             view.minOffsetY,
             view.contentSize.height + view.adjustedContentInset.bottom - collapseControlReserve - view.bounds.height)
         let top = min(view.contentOffset.y, unreservedEnd) + view.adjustedContentInset.top
-        let bottom = view.contentOffset.y + view.bounds.height
-        for index in layout.geometry.indices(from: top, to: bottom) {
+        for index in layout.geometry.indices(from: top, to: visibleBottom) {
             guard let id = layout.id(at: index), let scope = trajectoryByRow[id] else { continue }
             let trajectory = trajectories[scope]
             // A folded turn ending at the top edge leaves the open turn
@@ -543,7 +567,6 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         }
         if latch.isFollowing { return .end }
         let visibleTop = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
-        let visibleBottom = collectionView.contentOffset.y + collectionView.bounds.height
         let range = layout.geometry.indices(from: visibleTop, to: visibleBottom)
         let rows = range.compactMap { index -> (ChatRowID, CGFloat)? in
             guard let id = layout.id(at: index) else { return nil }

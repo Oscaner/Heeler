@@ -11,6 +11,8 @@ struct ChatTimelineView: UIViewControllerRepresentable {
     var collapseRequest: Int = 0
     /// Height of the chrome floating over the list's top edge.
     var topObstruction: CGFloat = 0
+    /// Height of the chrome floating over the list's bottom edge.
+    var bottomObstruction: CGFloat = 0
     /// Height of the Collapse Steps button over the list's bottom edge.
     var collapseControlClearance: CGFloat = 0
     /// Chat's own text size; nil follows the system's.
@@ -26,6 +28,7 @@ struct ChatTimelineView: UIViewControllerRepresentable {
         let controller = ChatTimelineController(actions: actions)
         controller.setTypography(size: textSize, font: font)
         controller.setTopObstruction(topObstruction)
+        controller.setBottomObstruction(bottomObstruction)
         controller.setCollapseControlClearance(collapseControlClearance)
         controller.apply(state)
         return controller
@@ -35,6 +38,7 @@ struct ChatTimelineView: UIViewControllerRepresentable {
         controller.actions = actions
         controller.setTypography(size: textSize, font: font)
         controller.setTopObstruction(topObstruction)
+        controller.setBottomObstruction(bottomObstruction)
         controller.setCollapseControlClearance(collapseControlClearance)
         controller.apply(state)
         let coordinator = context.coordinator

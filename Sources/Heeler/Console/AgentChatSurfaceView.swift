@@ -44,6 +44,9 @@ struct AgentChatSurfaceView: View {
     @State private var isFollowing = true
     /// The banners' height over the timeline's top edge.
     @State private var bannerHeight: CGFloat = 0
+    /// The Composer and what sits on it, over the timeline's bottom edge,
+    /// down to the screen's.
+    @State private var bottomChromeHeight: CGFloat = 0
     @State private var surfaceHeight: CGFloat = 0
     @State private var jumpRequest = 0
     @State private var followRequest = 0
@@ -449,18 +452,22 @@ struct AgentChatSurfaceView: View {
 
     private static let floatingControlsBottomPadding: CGFloat = 12
 
-    /// The timeline runs under the back header and the banners, which
-    /// float over its top edge; at rest its rows start below them.
+    /// The timeline runs edge to edge: under the status bar, the back
+    /// header and the banners over its top, and under the Composer and the
+    /// home indicator below. At rest its rows sit between them.
     private var conversation: some View {
         ZStack(alignment: .top) {
             ChatTimelineView(
                 state: timeline.state, jumpRequest: jumpRequest, followRequest: followRequest,
                 collapseRequest: collapseRequest,
-                topObstruction: headerObstruction + bannerHeight,
+                topObstruction: topInset + headerObstruction + bannerHeight,
+                bottomObstruction: bottomChromeHeight,
                 collapseControlClearance: collapseControlHeight + Self.floatingControlsBottomPadding,
                 textSize: ChatTextSettings.size(system: dynamicTypeSize, offset: textSizeOffset),
                 font: chatFont,
                 actions: timelineActions)
+            .padding(.top, -topInset)
+            .ignoresSafeArea(.container, edges: .bottom)
             .accessibilityHidden(presentation != .timeline)
             if presentation != .timeline {
                 GeometryReader { proxy in
@@ -472,13 +479,23 @@ struct AgentChatSurfaceView: View {
                 }
                 .padding(.top, headerObstruction + bannerHeight)
             }
-            ChatTopEdgeFade(height: headerObstruction)
+            ChatScrollEdgeEffect(
+                edge: .bottom, height: bottomChromeHeight,
+                solid: bottomChromeHeight - Self.bottomEdgeFadeLength)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .ignoresSafeArea(.container, edges: .bottom)
+            ChatScrollEdgeEffect(edge: .top, height: topInset + headerObstruction, solid: topInset)
+                .padding(.top, -topInset)
             banners
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bannerHeight = $0 }
                 .padding(.top, headerObstruction)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { bottomChromeHeight = $0 }
     }
+
+    /// How far rows fade into the bottom chrome's edge before they blur.
+    private static let bottomEdgeFadeLength: CGFloat = 24
 
     /// The back header's band over the conversation's top edge.
     private var headerObstruction: CGFloat {
@@ -953,23 +970,31 @@ private struct BackgroundWorkInset: View {
     }
 }
 
-/// Fades rows out where the back header floats over the timeline, as the
-/// system's soft scroll edge does under a navigation bar.
-private struct ChatTopEdgeFade: View {
+/// The list's soft edge under chrome: rows passing beneath blur into the
+/// material instead of meeting the status bar, the header's controls or the
+/// Composer's status line. At full strength for `solid` from the screen's
+/// edge, then fading out across the rest of `height`.
+private struct ChatScrollEdgeEffect: View {
+    let edge: VerticalEdge
     let height: CGFloat
+    let solid: CGFloat
 
     var body: some View {
-        let background = Color(uiColor: .systemBackground)
-        LinearGradient(
-            stops: [
-                .init(color: background, location: 0),
-                .init(color: background.opacity(0.85), location: 0.55),
-                .init(color: background.opacity(0), location: 1),
-            ],
-            startPoint: .top, endPoint: .bottom)
-        .frame(height: height)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        Rectangle()
+            .fill(.regularMaterial)
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: height > 0 ? min(1, max(0, solid / height)) : 1),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: edge == .top ? .top : .bottom,
+                    endPoint: edge == .top ? .bottom : .top)
+            }
+            .frame(height: height)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
