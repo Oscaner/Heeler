@@ -39,6 +39,8 @@ struct AgentChatSurfaceView: View {
     /// This view's token with the Chat store, which follows the
     /// conversation while any window shows it.
     @State private var viewerID = UUID()
+    /// Waits, after a disappear, for the router to say Chat left.
+    @State private var stageExit: Task<Void, Never>?
     @State private var isFollowing = true
     /// The banners' height over the timeline's top edge.
     @State private var bannerHeight: CGFloat = 0
@@ -268,6 +270,8 @@ struct AgentChatSurfaceView: View {
     private var lifecycleSurface: some View {
         chatSurface
         .onAppear {
+            stageExit?.cancel()
+            stageExit = nil
             if isOnStage() {
                 // The outgoing surface may have paused the shared inset for
                 // its tools dock.
@@ -281,9 +285,8 @@ struct AgentChatSurfaceView: View {
         .onDisappear {
             // SwiftUI also hands out disappears nobody caused; the router
             // says whether Chat really left.
-            Task { @MainActor in
-                await Task.yield()
-                guard !isOnStage() else { return }
+            stageExit?.cancel()
+            stageExit = ChatStageExit.watch(isOnStage: isOnStage) { [chat, viewerID] in
                 chat?.hide(viewerID)
             }
         }
@@ -961,5 +964,29 @@ private struct ChatTopEdgeFade: View {
         .frame(height: height)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// Hides Chat once the router says it left, after a disappear. SwiftUI also
+/// hands out disappears nobody caused, and after one it may never report the
+/// real departure, so a disappear while Chat is still on stage keeps checking
+/// until it isn't, or until the view appears again and cancels the wait.
+@MainActor
+enum ChatStageExit {
+    static func watch(
+        isOnStage: @escaping () -> Bool,
+        interval: Duration = .seconds(1),
+        hide: @escaping () -> Void
+    ) -> Task<Void, Never> {
+        Task { @MainActor in
+            await Task.yield()
+            while !Task.isCancelled {
+                if !isOnStage() {
+                    hide()
+                    return
+                }
+                try? await Task.sleep(for: interval)
+            }
+        }
     }
 }

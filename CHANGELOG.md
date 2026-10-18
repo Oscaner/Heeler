@@ -150,6 +150,9 @@ Entries reference the pull request that made the change.
 - The Console stops looking for a hidden Agent's missing conversation after a
   few tries, until the Agent's status or session changes, instead of searching
   the Host every half minute. (#425)
+- Chat stops reading an Agent's conversation once you leave it on iPhone,
+  instead of reading it every few seconds in the background until the app
+  relaunches. (#425)
 
 ## [0.1.14] - 2026-10-15
 

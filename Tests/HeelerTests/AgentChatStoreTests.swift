@@ -2085,3 +2085,39 @@ struct AgentChatStoreTests {
         Issue.record("Timed out waiting")
     }
 }
+
+@MainActor
+@Suite("Chat stage exit")
+struct ChatStageExitTests {
+    @Test func aDisappearOffStageHidesAtOnce() async {
+        var hides = 0
+        let watch = ChatStageExit.watch(isOnStage: { false }, interval: .milliseconds(5)) { hides += 1 }
+        await watch.value
+        #expect(hides == 1)
+    }
+
+    /// The disappear SwiftUI sends while Chat still shows may be the only
+    /// one: the real departure then comes with none.
+    @Test func aDisappearOnStageHidesOnceChatLeaves() async throws {
+        var onStage = true
+        var hides = 0
+        let watch = ChatStageExit.watch(isOnStage: { onStage }, interval: .milliseconds(5)) { hides += 1 }
+        try await Task.sleep(for: .milliseconds(40))
+        #expect(hides == 0)
+        onStage = false
+        await watch.value
+        #expect(hides == 1)
+    }
+
+    @Test func appearingAgainCancelsTheWait() async throws {
+        var onStage = true
+        var hides = 0
+        let watch = ChatStageExit.watch(isOnStage: { onStage }, interval: .milliseconds(5)) { hides += 1 }
+        try await Task.sleep(for: .milliseconds(20))
+        watch.cancel()
+        await watch.value
+        onStage = false
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(hides == 0)
+    }
+}
