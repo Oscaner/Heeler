@@ -147,21 +147,25 @@ struct ChatFileChangesList: View {
             if let note = changes.soleNote {
                 ChatFileChangesNote(text: note)
             } else {
-                ForEach(changes.files.indices, id: \.self) { index in
-                    let file = changes.files[index]
-                    let isExpanded = expandedFiles.contains(file.path)
-                    VStack(alignment: .leading, spacing: 6) {
-                        ChatFileChangeLine(
-                            file: file, path: changes.displayPath(of: file), isExpanded: isExpanded
-                        ) { actions.toggle(file.path) }
-                        if isExpanded {
-                            ChatInlineFileDiff(
-                                file: file, read: read, missingOutputText: missingOutputText, actions: actions)
+                ForEach(changes.files.indices, id: \.self) { @Sendable index in
+                    MainActorContent {
+                        let file = changes.files[index]
+                        let isExpanded = expandedFiles.contains(file.path)
+                        VStack(alignment: .leading, spacing: 6) {
+                            ChatFileChangeLine(
+                                file: file, path: changes.displayPath(of: file), isExpanded: isExpanded
+                            ) { actions.toggle(file.path) }
+                            if isExpanded {
+                                ChatInlineFileDiff(
+                                    file: file, read: read, missingOutputText: missingOutputText, actions: actions)
+                            }
                         }
                     }
                 }
-                ForEach(changes.notes, id: \.self) { note in
-                    ChatFileChangesNote(text: note)
+                ForEach(changes.notes, id: \.self) { @Sendable note in
+                    MainActorContent {
+                        ChatFileChangesNote(text: note)
+                    }
                 }
             }
         }
@@ -353,16 +357,20 @@ struct ChatFileDiffRows: View {
     let diff: ChatFileDiff
 
     var body: some View {
-        ForEach(diff.hunks) { hunk in
-            if let gap = hunk.unchangedBefore {
-                ChatDiffGap(count: gap)
-            }
-            ForEach(hunk.diff.lines) { line in
-                DiffLineRow(
-                    line: line, numbers: [ChatFileDiff.number(of: line)], numberDigits: diff.numberDigits,
-                    gutterLeading: DiffLayoutPolicy.numberSpacing, wordChanges: diff.wordChanges[line.id] ?? [])
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(line.accessibilityLabel)
+        ForEach(diff.hunks) { @Sendable hunk in
+            MainActorContent {
+                if let gap = hunk.unchangedBefore {
+                    ChatDiffGap(count: gap)
+                }
+                ForEach(hunk.diff.lines) { @Sendable line in
+                    MainActorContent {
+                        DiffLineRow(
+                            line: line, numbers: [ChatFileDiff.number(of: line)], numberDigits: diff.numberDigits,
+                            gutterLeading: DiffLayoutPolicy.numberSpacing, wordChanges: diff.wordChanges[line.id] ?? [])
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(line.accessibilityLabel)
+                    }
+                }
             }
         }
     }

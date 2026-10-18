@@ -30,9 +30,11 @@ struct GenericDialogCard: View {
             .clipShape(.rect(cornerRadius: 12, style: .continuous))
             if !numbers.isEmpty {
                 VStack(spacing: 8) {
-                    ForEach(numbers, id: \.self) { number in
-                        BlockedOptionButton(label: "\(number). \(excerpt.numbered[number] ?? "")", emphasis: .plain) {
-                            Task { await store.press(number: number) }
+                    ForEach(numbers, id: \.self) { @Sendable number in
+                        MainActorContent {
+                            BlockedOptionButton(label: "\(number). \(excerpt.numbered[number] ?? "")", emphasis: .plain) {
+                                Task { await store.press(number: number) }
+                            }
                         }
                     }
                 }
@@ -95,17 +97,19 @@ private struct GenericExcerptView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                switch line {
-                case .text(let text):
-                    Text(verbatim: text)
-                        .fixedSize(horizontal: false, vertical: true)
-                case .rule:
-                    Divider()
-                        .padding(.vertical, 4)
-                case .gap:
-                    Spacer()
-                        .frame(height: 6)
+            ForEach(Array(lines.enumerated()), id: \.offset) { @Sendable _, line in
+                MainActorContent {
+                    switch line {
+                    case .text(let text):
+                        Text(verbatim: text)
+                            .fixedSize(horizontal: false, vertical: true)
+                    case .rule:
+                        Divider()
+                            .padding(.vertical, 4)
+                    case .gap:
+                        Spacer()
+                            .frame(height: 6)
+                    }
                 }
             }
         }

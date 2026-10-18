@@ -62,19 +62,21 @@ private struct ChatBackgroundWorkRows: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(presentation.stripRows) { row in
-                Button { open(row.id) } label: {
-                    ChatBackgroundWorkRowLabel(row: row, glyphColumn: glyphColumn)
-                        .padding(.vertical, 6)
-                        .contentShape(.rect)
+            ForEach(presentation.stripRows) { @Sendable row in
+                MainActorContent {
+                    Button { open(row.id) } label: {
+                        ChatBackgroundWorkRowLabel(row: row, glyphColumn: glyphColumn)
+                            .padding(.vertical, 6)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .hoverEffect(.highlight)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(row.accessibilityLabel)
+                    .accessibilityHint(ChatBackgroundWorkStyle.hint)
+                    .accessibilityAddTraits(row.status == .running ? [.isButton, .updatesFrequently] : .isButton)
+                    .accessibilityIdentifier("chat.background-work.\(row.id)")
                 }
-                .buttonStyle(.plain)
-                .hoverEffect(.highlight)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(row.accessibilityLabel)
-                .accessibilityHint(ChatBackgroundWorkStyle.hint)
-                .accessibilityAddTraits(row.status == .running ? [.isButton, .updatesFrequently] : .isButton)
-                .accessibilityIdentifier("chat.background-work.\(row.id)")
             }
             if presentation.overflow > 0 {
                 Button { open(nil) } label: {

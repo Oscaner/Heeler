@@ -20,9 +20,11 @@ struct ChatMarkdownView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(blocks.indices, id: \.self) { index in
-                ChatMarkdownBlockView(block: blocks[index], isMuted: isMuted)
-                    .padding(.top, gap(before: index))
+            ForEach(blocks.indices, id: \.self) { @Sendable index in
+                MainActorContent {
+                    ChatMarkdownBlockView(block: blocks[index], isMuted: isMuted)
+                        .padding(.top, gap(before: index))
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -98,10 +100,12 @@ private struct ChatMarkdownBlockView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            ForEach(0..<block.quoteDepth, id: \.self) { _ in
-                Capsule()
-                    .fill(Color(uiColor: .tertiaryLabel))
-                    .frame(width: 3)
+            ForEach(0..<block.quoteDepth, id: \.self) { @Sendable _ in
+                MainActorContent {
+                    Capsule()
+                        .fill(Color(uiColor: .tertiaryLabel))
+                        .frame(width: 3)
+                }
             }
             content
                 .foregroundStyle(block.quoteDepth > 0 || isMuted ? .secondary : .primary)
@@ -205,22 +209,26 @@ struct ChatMarkdownTableView: View {
 
     private var grid: some View {
         ChatMarkdownTableLayout(columns: table.columns.count, minimumColumnWidth: minimumColumnWidth) {
-            ForEach(table.rows.indices, id: \.self) { row in
-                ForEach(table.columns.indices, id: \.self) { column in
-                    let alignment = alignment(for: table.columns[column])
-                    Text(ChatMarkdownView.styled(table.rows[row][column], in: .subheadline))
-                        .font(row == 0 ? .subheadline.weight(.semibold) : .subheadline)
-                        .multilineTextAlignment(textAlignment(for: table.columns[column]))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
-                        .padding(8)
-                        .background(Color(uiColor: row == 0 ? .secondarySystemBackground : .systemBackground))
-                        .overlay(alignment: .bottom) {
-                            Rectangle().fill(Color(uiColor: .separator)).frame(height: 0.5)
+            ForEach(table.rows.indices, id: \.self) { @Sendable row in
+                MainActorContent {
+                    ForEach(table.columns.indices, id: \.self) { @Sendable column in
+                        MainActorContent {
+                            let alignment = alignment(for: table.columns[column])
+                            Text(ChatMarkdownView.styled(table.rows[row][column], in: .subheadline))
+                                .font(row == 0 ? .subheadline.weight(.semibold) : .subheadline)
+                                .multilineTextAlignment(textAlignment(for: table.columns[column]))
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+                                .padding(8)
+                                .background(Color(uiColor: row == 0 ? .secondarySystemBackground : .systemBackground))
+                                .overlay(alignment: .bottom) {
+                                    Rectangle().fill(Color(uiColor: .separator)).frame(height: 0.5)
+                                }
+                                .overlay(alignment: .trailing) {
+                                    Rectangle().fill(Color(uiColor: .separator)).frame(width: 0.5)
+                                }
+                                .accessibilityAddTraits(row == 0 ? .isHeader : [])
                         }
-                        .overlay(alignment: .trailing) {
-                            Rectangle().fill(Color(uiColor: .separator)).frame(width: 0.5)
-                        }
-                        .accessibilityAddTraits(row == 0 ? .isHeader : [])
+                    }
                 }
             }
         }

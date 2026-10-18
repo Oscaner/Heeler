@@ -77,21 +77,25 @@ struct QuestionFormCard: View {
     private var options: some View {
         if question.isMultiSelect {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
-                    BlockedToggleRow(
-                        label: option.label, detail: option.detail, isOn: selections[page].contains(index)
-                    ) {
-                        selections[page].formSymmetricDifference([index])
+                ForEach(Array(question.options.enumerated()), id: \.offset) { @Sendable index, option in
+                    MainActorContent {
+                        BlockedToggleRow(
+                            label: option.label, detail: option.detail, isOn: selections[page].contains(index)
+                        ) {
+                            selections[page].formSymmetricDifference([index])
+                        }
                     }
                 }
             }
         } else {
             VStack(spacing: 8) {
-                ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
-                    BlockedOptionButton(
-                        label: option.label, detail: option.detail, emphasis: isChosen(index) ? .primary : .plain
-                    ) {
-                        choose(index)
+                ForEach(Array(question.options.enumerated()), id: \.offset) { @Sendable index, option in
+                    MainActorContent {
+                        BlockedOptionButton(
+                            label: option.label, detail: option.detail, emphasis: isChosen(index) ? .primary : .plain
+                        ) {
+                            choose(index)
+                        }
                     }
                 }
             }

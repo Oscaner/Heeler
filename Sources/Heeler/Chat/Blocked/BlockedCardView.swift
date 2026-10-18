@@ -158,19 +158,23 @@ private struct BlockedDialogCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         case .claudeQuestionReview, .ompQuestionReview:
-            ForEach(Array(subject.reviewAnswers.enumerated()), id: \.offset) { _, pair in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: pair.question)
-                        .font(.subheadline.weight(.semibold))
-                    Text(verbatim: pair.answer)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+            ForEach(Array(subject.reviewAnswers.enumerated()), id: \.offset) { @Sendable _, pair in
+                MainActorContent {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: pair.question)
+                            .font(.subheadline.weight(.semibold))
+                        Text(verbatim: pair.answer)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         case .claudeWorkspaceTrust:
             BlockedCodeBox(text: subject.workspacePath ?? "")
-            ForEach(Array(dialog.body.filter { $0 != subject.workspacePath }.enumerated()), id: \.offset) {
-                BlockedCardText($0.element)
+            ForEach(Array(dialog.body.filter { $0 != subject.workspacePath }.enumerated()), id: \.offset) { @Sendable item in
+                MainActorContent {
+                    BlockedCardText(item.element)
+                }
             }
         case .codexAsyncCollapsed:
             BlockedCardText("Codex asked \(dialog.title). Its turn goes on, and the answers go with its next step.")
@@ -183,8 +187,10 @@ private struct BlockedDialogCard: View {
             }
             // The other rows OMP gives the tool, such as `Origin:`.
             let details = dialog.body.filter { !$0.hasPrefix("Command:") && !$0.hasPrefix("Reason:") }
-            ForEach(Array(details.enumerated()), id: \.offset) {
-                BlockedCardText($0.element)
+            ForEach(Array(details.enumerated()), id: \.offset) { @Sendable item in
+                MainActorContent {
+                    BlockedCardText(item.element)
+                }
             }
         case .codexNetwork:
             EmptyView()
@@ -203,11 +209,13 @@ private struct BlockedDialogCard: View {
     private var choices: some View {
         if isMultiSelect {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(dialog.options.filter { $0.role == .answer }, id: \.ordinal) { option in
-                    BlockedToggleRow(
-                        label: option.label, detail: option.detail, isOn: selection.contains(option.ordinal)
-                    ) {
-                        selection.formSymmetricDifference([option.ordinal])
+                ForEach(dialog.options.filter { $0.role == .answer }, id: \.ordinal) { @Sendable option in
+                    MainActorContent {
+                        BlockedToggleRow(
+                            label: option.label, detail: option.detail, isOn: selection.contains(option.ordinal)
+                        ) {
+                            selection.formSymmetricDifference([option.ordinal])
+                        }
                     }
                 }
             }
@@ -221,8 +229,10 @@ private struct BlockedDialogCard: View {
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.roundedRectangle(radius: 12))
             .disabled(selection.isEmpty || dialog.answersHeldByDraft)
-            ForEach(dialog.options.filter { $0.role == .chat }, id: \.ordinal) { option in
-                BlockedOptionButton(option: option, emphasis: .plain) { perform(.choose(ordinal: option.ordinal)) }
+            ForEach(dialog.options.filter { $0.role == .chat }, id: \.ordinal) { @Sendable option in
+                MainActorContent {
+                    BlockedOptionButton(option: option, emphasis: .plain) { perform(.choose(ordinal: option.ordinal)) }
+                }
             }
         } else {
             let buttons = dialog.options.filter { $0.role != .otherText && $0.role != .next }
@@ -231,9 +241,11 @@ private struct BlockedDialogCard: View {
             // switches the mode never leads.
             let lead = buttons.first { [.approve, .trust, .submit].contains($0.role) }?.ordinal
             VStack(spacing: 8) {
-                ForEach(buttons, id: \.ordinal) { option in
-                    BlockedOptionButton(option: option, emphasis: emphasis(of: option, leads: option.ordinal == lead)) {
-                        perform(.choose(ordinal: option.ordinal))
+                ForEach(buttons, id: \.ordinal) { @Sendable option in
+                    MainActorContent {
+                        BlockedOptionButton(option: option, emphasis: emphasis(of: option, leads: option.ordinal == lead)) {
+                            perform(.choose(ordinal: option.ordinal))
+                        }
                     }
                 }
             }
@@ -791,12 +803,14 @@ private struct BlockedChangeBox: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(lines.prefix(Self.lineLimit).enumerated()), id: \.offset) { _, line in
-                Text(verbatim: line)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .background(tint(of: line))
+            ForEach(Array(lines.prefix(Self.lineLimit).enumerated()), id: \.offset) { @Sendable _, line in
+                MainActorContent {
+                    Text(verbatim: line)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .background(tint(of: line))
+                }
             }
             if lines.count > Self.lineLimit {
                 Text("\(lines.count - Self.lineLimit) more lines")

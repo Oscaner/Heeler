@@ -509,11 +509,13 @@ struct AgentChatSurfaceView: View {
     private var banners: some View {
         let banners = bannerContent
         return VStack(spacing: 6) {
-            ForEach(banners) { banner in
-                ChatBanner(
-                    systemImage: banner.systemImage, text: banner.text,
-                    showsProgress: banner.showsProgress, actionTitle: banner.actionTitle,
-                    action: banner.action)
+            ForEach(banners) { @Sendable banner in
+                MainActorContent {
+                    ChatBanner(
+                        systemImage: banner.systemImage, text: banner.text,
+                        showsProgress: banner.showsProgress, actionTitle: banner.actionTitle,
+                        action: banner.action)
+                }
             }
         }
         .chatContentColumn()
@@ -521,6 +523,9 @@ struct AgentChatSurfaceView: View {
         .padding(.bottom, banners.isEmpty ? 0 : 2)
     }
 
+    /// Main-actor isolated, and so Sendable for `banners`' `@Sendable`
+    /// rows, like `AgentDetailHeaderAction` (#471).
+    @MainActor
     private struct Banner: Identifiable {
         let id: String
         let systemImage: String

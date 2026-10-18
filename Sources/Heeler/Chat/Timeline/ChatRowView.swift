@@ -191,9 +191,11 @@ private struct ChatAttachmentChips: View {
                     message.imageCount == 1 ? "1 image" : "\(message.imageCount) images",
                     systemImage: "photo")
             }
-            ForEach(message.attachmentLabels.indices, id: \.self) { index in
-                Label(message.attachmentLabels[index], systemImage: "paperclip")
-                    .lineLimit(1)
+            ForEach(message.attachmentLabels.indices, id: \.self) { @Sendable index in
+                MainActorContent {
+                    Label(message.attachmentLabels[index], systemImage: "paperclip")
+                        .lineLimit(1)
+                }
             }
             if message.wasQueued {
                 Label("Sent while working", systemImage: "clock")
@@ -508,7 +510,7 @@ private struct ChatSubagentActivityRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         agentIcon.frame(width: displayedIconWidth, height: displayedIconWidth)
-                            .alignmentGuide(.firstTextBaseline) { dimensions in
+                            .alignmentGuide(.firstTextBaseline) { [titleCapHeight] dimensions in
                                 dimensions[VerticalAlignment.center] + titleCapHeight / 2
                             }
                         Text(verbatim: presentation.name)
@@ -538,10 +540,12 @@ private struct ChatSubagentActivityRow: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    ForEach(presentation.history) { event in
-                        Label(event.label, systemImage: ChatSubagentPresentation.symbol(for: event.kind))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    ForEach(presentation.history) { @Sendable event in
+                        MainActorContent {
+                            Label(event.label, systemImage: ChatSubagentPresentation.symbol(for: event.kind))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .padding(.leading, detailIndent)
@@ -701,19 +705,21 @@ private struct ChatToolRow: View {
                 ChatQuestionsView(questions: tool.questions)
             }
             if tool.showsDiffAsOutput, let changes = tool.fileChanges {
-                ForEach(changes.files.indices, id: \.self) { index in
-                    let file = changes.files[index]
-                    if changes.files.count > 1 {
-                        ChatFileDiffHeading(file: file, path: changes.displayPath(of: file))
-                    }
-                    if file.lineCount > 0 {
-                        ChatInlineFileDiff(
-                            file: file, read: tool.outputRead, missingOutputText: fileMissingOutputText,
-                            actions: files)
-                    } else {
-                        Text("No lines changed.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                ForEach(changes.files.indices, id: \.self) { @Sendable index in
+                    MainActorContent {
+                        let file = changes.files[index]
+                        if changes.files.count > 1 {
+                            ChatFileDiffHeading(file: file, path: changes.displayPath(of: file))
+                        }
+                        if file.lineCount > 0 {
+                            ChatInlineFileDiff(
+                                file: file, read: tool.outputRead, missingOutputText: fileMissingOutputText,
+                                actions: files)
+                        } else {
+                            Text("No lines changed.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             } else if let preview = tool.preview {
@@ -943,33 +949,35 @@ private struct ChatQuestionsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(questions.indices, id: \.self) { index in
-                let question = questions[index]
-                VStack(alignment: .leading, spacing: 2) {
-                    if let header = question.header, !header.isEmpty {
-                        Text(verbatim: header)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(verbatim: question.text)
-                        .font(.subheadline)
-                    if let answer = question.answer {
-                        Label {
-                            Text(verbatim: answer)
-                        } icon: {
-                            Image(systemName: "arrow.turn.down.right")
+            ForEach(questions.indices, id: \.self) { @Sendable index in
+                MainActorContent {
+                    let question = questions[index]
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let header = question.header, !header.isEmpty {
+                            Text(verbatim: header)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
                         }
-                        .font(.subheadline.weight(.medium))
-                    } else if let answer = question.queuedAnswer {
-                        Label {
-                            Text(verbatim: answer)
-                        } icon: {
-                            Image(systemName: "clock")
+                        Text(verbatim: question.text)
+                            .font(.subheadline)
+                        if let answer = question.answer {
+                            Label {
+                                Text(verbatim: answer)
+                            } icon: {
+                                Image(systemName: "arrow.turn.down.right")
+                            }
+                            .font(.subheadline.weight(.medium))
+                        } else if let answer = question.queuedAnswer {
+                            Label {
+                                Text(verbatim: answer)
+                            } icon: {
+                                Image(systemName: "clock")
+                            }
+                            .font(.subheadline.weight(.medium))
+                            Text("Queued. Codex sends it after its next tool call.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
-                        .font(.subheadline.weight(.medium))
-                        Text("Queued. Codex sends it after its next tool call.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
                 }
             }

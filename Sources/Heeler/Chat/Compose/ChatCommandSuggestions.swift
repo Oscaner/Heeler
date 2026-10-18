@@ -34,8 +34,10 @@ struct ChatCommandSuggestions: View {
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(commands) { command in
-                        row(for: command)
+                    ForEach(commands) { @Sendable command in
+                        MainActorContent {
+                            row(for: command)
+                        }
                     }
                 }
                 .onGeometryChange(for: CGFloat.self) { proxy in

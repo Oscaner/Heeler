@@ -63,15 +63,19 @@ struct ChatBackgroundWorkSheet: View {
         List {
             if !presentation.unfinished.isEmpty {
                 Section("Running") {
-                    ForEach(presentation.unfinished) { row in
-                        item(row)
+                    ForEach(presentation.unfinished) { @Sendable row in
+                        MainActorContent {
+                            item(row)
+                        }
                     }
                 }
             }
             if !presentation.finished.isEmpty {
                 Section {
-                    ForEach(presentation.finished) { row in
-                        item(row)
+                    ForEach(presentation.finished) { @Sendable row in
+                        MainActorContent {
+                            item(row)
+                        }
                     }
                 } header: {
                     Text("Finished")
@@ -91,8 +95,10 @@ struct ChatBackgroundWorkSheet: View {
             ChatBackgroundWorkSheetRow(row: row)
         } else {
             DisclosureGroup(isExpanded: isExpanded(row.id)) {
-                ForEach(row.agents) { agent in
-                    ChatBackgroundWorkAgentRow(agent: agent)
+                ForEach(row.agents) { @Sendable agent in
+                    MainActorContent {
+                        ChatBackgroundWorkAgentRow(agent: agent)
+                    }
                 }
             } label: {
                 ChatBackgroundWorkSheetRow(row: row)
