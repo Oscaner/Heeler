@@ -31,7 +31,7 @@ struct AppActivityCoordinatorTests {
     }
 
     /// Deliberately configured away from `defaultGracePeriod`, and with an
-    /// absence that straddles the two: 30s is past the 20s default but short
+    /// absence that straddles the two: 30s is past the 15s default but short
     /// of this coordinator's own 60s. A comparison written against the static
     /// default instead of the injected value passes every other test in this
     /// suite and fails only here.
@@ -41,7 +41,7 @@ struct AppActivityCoordinatorTests {
             gracePeriod: .seconds(60),
             granter: FakeBackgroundExecutionGranter(),
             now: { clock })
-        #expect(AppActivityCoordinator.defaultGracePeriod == .seconds(20))
+        #expect(AppActivityCoordinator.defaultGracePeriod == .seconds(15))
 
         coordinator.didEnterBackground()
         clock = clock.advanced(by: .seconds(30))
