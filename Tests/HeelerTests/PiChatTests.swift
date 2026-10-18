@@ -1107,6 +1107,8 @@ struct PiChatTests {
         #expect(branch.detail?.contains("• Assistant replied with “four”") == true)
         #expect(compaction.detail?.hasPrefix("Goal\n• Simple reply tasks (trust fixture, say words)\n") == true)
         #expect(compaction.detail?.hasSuffix("build directly on that prompt.") == true)
+        #expect(compaction.accessibilityPreview?.split(separator: "\n").count == ChatDivider.previewLines)
+        #expect(compaction.accessibilityPreview.map { compaction.detail?.hasPrefix($0) == true } == true)
         // Copy keeps the summary as Pi wrote it.
         #expect(branch.rawDetail?.contains("## Goal\n") == true)
     }

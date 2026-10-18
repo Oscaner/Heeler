@@ -174,8 +174,7 @@ struct PiTranscriptReducer: ChatTranscriptReducer {
             case "compaction":
                 // Pi writes its summaries in Markdown, which neither row
                 // draws: they preview, and read aloud, as plain lines.
-                let summary = record.value["summary"]?.stringValue
-                add(record, .divider(ChatDivider(kind: .compaction, detail: summary.map(ChatMarkdown.plainText))))
+                add(record, .divider(.compaction(summary: record.value["summary"]?.stringValue)))
             case "branch_summary":
                 // Oh My Pi's atomic rewrite records the entry it dropped as
                 // an empty summary, which is nothing to show.

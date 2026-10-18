@@ -833,7 +833,7 @@ private struct Builder {
         else { return }
         let summary = record.texts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !summary.isEmpty else { return }
-        divider.detail = ChatToolPreview(capping: ClaudeTranscriptProjection.compactionPreview(summary)).text
+        divider.detail = ChatDivider.compaction(summary: ClaudeTranscriptProjection.compactionPreview(summary)).detail
         entries[index].content = .divider(divider)
     }
 

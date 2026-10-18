@@ -799,6 +799,43 @@ struct ClaudeSyntheticTranscriptTests {
         #expect(ClaudeTranscriptProjection.compactionPreview(bare) == bare)
     }
 
+    @Test("A compaction's divider previews Claude Code's Markdown summary as plain lines")
+    func compactionDividerPlainText() throws {
+        // Claude Code 2.1.302 (V1 CL-22): the summary is Markdown lists.
+        let summary = ClaudeTranscriptProjection.compactionPreamble + """
+
+
+            Summary:
+            1. Primary Request and Intent:
+               - 用户要求在 `README.md` 末尾加一行
+
+            2. Key Technical Concepts:
+               - **SwiftUI** sheets
+
+            3. Files and Code Sections:
+               - README.md
+            """
+        let content = try #require(String(data: try JSONEncoder().encode(summary), encoding: .utf8))
+        let (transcript, _) = Self.read(
+            Self.firstTurn + "\n" + #"""
+                {"type":"system","subtype":"compact_boundary","uuid":"b1","parentUuid":null,"logicalParentUuid":"t1","content":"Conversation compacted","compactMetadata":{"trigger":"manual","preTokens":5200}}
+                """# + "\n"
+                + #"{"type":"user","uuid":"s1","parentUuid":"b1","isCompactSummary":true,"isVisibleInTranscriptOnly":true,"message":{"role":"user","content":"#
+                + content + "}}")
+        guard case .divider(let divider) = ClaudeSample.entry("compact:b1", in: transcript) else {
+            Issue.record("no compaction divider")
+            return
+        }
+        let detail = try #require(divider.detail)
+        #expect(detail.hasPrefix("• 用户要求在 README.md 末尾加一行\n"))
+        #expect(!detail.contains("`") && !detail.contains("**") && !detail.contains("- "))
+        #expect(detail.contains("◦ SwiftUI sheets"))
+        // VoiceOver reads the lines the divider shows, not every section.
+        #expect(
+            divider.accessibilityPreview
+                == "• 用户要求在 README.md 末尾加一行\n2. Key Technical Concepts:\n◦ SwiftUI sheets")
+    }
+
     // MARK: - Tool rows
 
     @Test(

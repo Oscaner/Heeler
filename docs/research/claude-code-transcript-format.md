@@ -79,7 +79,8 @@ Each line is one JSON object with a `type`. Chain records carry `uuid` and
   (`probe2-transcript.jsonl:109`), with optional `interruptedMessageId` (an
   assistant `message.id`) and `interruptedByShutdown`.
 - **Compaction summary.** `isCompactSummary` and `isVisibleInTranscriptOnly`,
-  with string content.
+  with string content: a fixed preamble, then `Summary:` and numbered
+  sections of Markdown lists (2.1.302, live 2026-10-18).
 - **Tagged text.** See [Special flows](#special-flows).
 
 ### Assistant records

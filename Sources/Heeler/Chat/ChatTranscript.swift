@@ -846,6 +846,25 @@ struct ChatDivider: Equatable, Codable, Sendable {
         self.kind = kind
         self.detail = detail
     }
+
+    /// How many of the preview's lines the divider shows and reads aloud.
+    static let previewLines = 3
+
+    /// A compaction divider previewing `summary`. Every program writes its
+    /// summary in Markdown, which the divider does not draw: it previews as
+    /// plain lines (`ChatMarkdown.plainText`), capped like a row's output.
+    static func compaction(summary: String?) -> ChatDivider {
+        let preview = summary.map { ChatToolPreview(capping: ChatMarkdown.plainText($0)).text }
+        return ChatDivider(kind: .compaction, detail: preview?.isEmpty == false ? preview : nil)
+    }
+
+    /// What VoiceOver reads after the title: the lines the divider shows,
+    /// not the whole multi-section summary.
+    var accessibilityPreview: String? {
+        guard kind == .compaction, let detail, !detail.isEmpty else { return nil }
+        return detail.split(separator: "\n", omittingEmptySubsequences: true)
+            .prefix(Self.previewLines).joined(separator: "\n")
+    }
 }
 
 /// A request the transcript shows as unresolved: a tool call without a

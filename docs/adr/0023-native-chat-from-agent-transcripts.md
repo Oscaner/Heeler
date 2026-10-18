@@ -90,7 +90,8 @@ the user scrolls up, and reads what the program appends: every second while
 the Agent is Working or Blocked, while a live read shows Background Work
 running, and for 15 seconds after a change, a send or a status change, every
 4 seconds otherwise. Compaction keeps the history above a
-separator; rolled-back turns are hidden. When a sent message has not appeared
+separator, which previews the program's Markdown summary as plain lines and
+reads only its three preview lines aloud; rolled-back turns are hidden. When a sent message has not appeared
 after 10 seconds, Chat reads the Agent's record again, because the program may
 have moved to a session herdr reports later. While Chat shows an idle Agent,
 it reads the record at its idle poll, at least 5 seconds apart (about every

@@ -1055,11 +1055,13 @@ private struct ChatDividerRow: View {
                 Text(verbatim: detail)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-                    .lineLimit(3)
+                    .lineLimit(ChatDivider.previewLines)
                     .multilineTextAlignment(.center)
             }
         }
-        .accessibilityElement(children: .combine)
+        // The preview's lines, not the whole summary the detail holds.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: [title, divider.accessibilityPreview].compactMap { $0 }.joined(separator: ", ")))
     }
 
     private var line: some View {

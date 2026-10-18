@@ -110,8 +110,9 @@ Entries reference the pull request that made the change.
   `user-invocable: false`, which Claude Code refuses as commands. A
   `/compact` that Pi or Oh My Pi refuses with nothing to compact now says so.
   (#425)
-- Context compacted previews skip Claude Code's fixed preamble, and Pi's
-  compaction and branch summaries show without their Markdown marks. Inline
+- Context compacted previews skip Claude Code's fixed preamble, every
+  program's compaction summary and Pi's branch summaries show without their
+  Markdown marks, and VoiceOver reads only a compaction's preview lines. Inline
   code is tinted, so it stands out in Chinese text too. (#425)
 - An expanded Declined, Interrupted or Stopped row no longer says "No output."
   for a call that never ran. (#425)
