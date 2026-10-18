@@ -72,6 +72,9 @@ Entries reference the pull request that made the change.
 - Settings › Appearance gathers the app's theme, the terminal's font, text
   size and themes, and Chat's appearance, in place of the separate
   Appearance picker and Terminal Appearance page. (#425)
+- The terminal font "System" is now named JetBrains Mono, the face it
+  always drew, and the duplicate JetBrains Mono choice folds into it. Menlo
+  and Courier New join IBM Plex Mono as other choices. (#425)
 - Where Agent detail is pushed over the list (iPhone, or a compact iPad
   window), Open Terminal in an Agent's More menu opens the Shell Terminal over
   the Agent, so Back in the terminal's header, or the edge swipe, returns to
