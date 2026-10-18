@@ -7,6 +7,13 @@ Entries reference the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- Read a guide on why SELinux blocks Heeler's herdr socket on Fedora, RHEL,
+  CentOS Stream, AlmaLinux and Rocky Linux, how to confirm it from the audit
+  log, and the small policy module that allows it, in English or Simplified
+  Chinese. (#477)
+
 ## [0.1.15] - 2026-10-19
 
 ### Added
