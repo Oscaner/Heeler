@@ -7,6 +7,8 @@ Entries reference the pull request that made the change.
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-10-19
+
 ### Added
 
 - Collapse the current turn's expanded reasoning and tool details from a
