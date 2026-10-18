@@ -1,5 +1,6 @@
 import Foundation
 import HeelerOverlay
+import OSLog
 import Synchronization
 
 extension OverlayError {
@@ -95,6 +96,10 @@ actor OverlayNetworkRuntime {
 
     static let shared = OverlayNetworkRuntime()
 
+    /// Node stops, which can hang in native code (#474): a "Stopping" line
+    /// with no matching "Stopped" is one that never returned.
+    private static let log = Logger(subsystem: "dev.bybee.heeler", category: "Overlay")
+
     /// Consecutive start failures of one network revision reported as the
     /// retryable `.notReady` before they become the terminal `.startFailed`.
     /// With the Console's backoff this covers a few minutes — long enough
@@ -108,6 +113,19 @@ actor OverlayNetworkRuntime {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first?
             .appendingPathComponent("Overlay", isDirectory: true)
+    }
+
+    /// `Caches/OverlayLogs` in debug builds, where each Tailscale network's
+    /// node keeps tsnet's own log lines for diagnosis (#474); nil in release
+    /// builds, which discard them.
+    static var defaultLogRoot: URL? {
+        #if DEBUG
+            FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)
+                .first?
+                .appendingPathComponent("OverlayLogs", isDirectory: true)
+        #else
+            nil
+        #endif
     }
 
     /// Planet files larger than this are not ZeroTier roots definitions;
@@ -133,6 +151,7 @@ actor OverlayNetworkRuntime {
     private let catalog = Mutex(Catalog())
     private let secrets: any SecretStore
     private let stateRoot: URL?
+    private let logRoot: URL?
     private let makeNode: NodeFactory
     private let generateZeroTierIdentity: @Sendable () throws -> Data
     private let zeroTierSession = Mutex(ZeroTierSession())
@@ -161,6 +180,7 @@ actor OverlayNetworkRuntime {
     init(
         secrets: any SecretStore = KeychainSecretStore(service: OverlaySecretAccount.service),
         stateRoot: URL? = OverlayNetworkRuntime.defaultStateRoot,
+        logRoot: URL? = OverlayNetworkRuntime.defaultLogRoot,
         makeNode: @escaping NodeFactory = OverlayNetworkRuntime.liveNode,
         generateZeroTierIdentity: @escaping @Sendable () throws -> Data = {
             try ZeroTierIdentity.generate()
@@ -168,6 +188,7 @@ actor OverlayNetworkRuntime {
     ) {
         self.secrets = secrets
         self.stateRoot = stateRoot
+        self.logRoot = logRoot
         self.makeNode = makeNode
         self.generateZeroTierIdentity = generateZeroTierIdentity
     }
@@ -259,12 +280,14 @@ actor OverlayNetworkRuntime {
             throw TransportError.overlayFailed(
                 network: published.network.displayName, reason: .signedOut)
         }
-        let entry = try await entry(for: networkID)
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        let entry = try await entry(for: networkID, until: deadline)
         try checkCancellation()
         let use = beginUse(networkID)
         do {
             let stream = try await withTaskCancellationHandler {
-                try await entry.node.dial(host: host, port: port, timeout: timeout)
+                try await entry.node.dial(
+                    host: host, port: port, timeout: ContinuousClock.now.duration(to: deadline))
             } onCancel: {
                 Task { await self.abandonUse(use, of: networkID, entry) }
             }
@@ -311,12 +334,13 @@ actor OverlayNetworkRuntime {
     private func performStart(networkID: UUID, timeout: Duration) async throws {
         startFailures[networkID] = nil
         clearSignedOut(networkID)
-        let entry = try await entry(for: networkID)
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        let entry = try await entry(for: networkID, until: deadline)
         try checkCancellation()
         let use = beginUse(networkID)
         do {
             try await withTaskCancellationHandler {
-                try await entry.node.start(timeout: timeout)
+                try await entry.node.start(timeout: ContinuousClock.now.duration(to: deadline))
             } onCancel: {
                 Task { await self.abandonUse(use, of: networkID, entry) }
             }
@@ -604,7 +628,11 @@ actor OverlayNetworkRuntime {
     /// Ids of networks that currently hold a node, for tests.
     var activeNetworkIDs: Set<UUID> { Set(nodes.keys) }
 
-    private func entry(for networkID: UUID) async throws -> Entry {
+    /// The network's node, built if needed. Waiting for a previous node to
+    /// stop counts against `deadline`, like the dial or start it serves.
+    private func entry(
+        for networkID: UUID, until deadline: ContinuousClock.Instant
+    ) async throws -> Entry {
         while true {
             let published = try publishedNetwork(networkID)
             if let existing = nodes[networkID] {
@@ -619,8 +647,20 @@ actor OverlayNetworkRuntime {
                 continue
             }
             // A node of this network is still stopping: wait, then look
-            // again from the top.
-            if await awaitRetirements(blocking: networkID) {
+            // again from the top. A stop can hang in native code (a tsnet
+            // close outlived a whole foreground return, #474), so the wait is
+            // bounded: the caller fails retryably and its next attempt waits
+            // again, rather than sitting on Connecting with nothing to say.
+            // The new node is still never built beside the old one.
+            if let retirement = retirements[networkID] {
+                guard await Self.waitForRetirement(retirement.task, until: deadline) else {
+                    throw TransportError.overlayFailed(
+                        network: published.network.displayName,
+                        reason: .notReady("Its previous session is still shutting down"))
+                }
+                if retirements[networkID]?.task == retirement.task {
+                    retirements[networkID] = nil
+                }
                 continue
             }
             validateState(of: networkID, against: published)
@@ -775,7 +815,12 @@ actor OverlayNetworkRuntime {
         let previous = retirements[networkID]?.task
         let task = Task {
             await previous?.value
+            let kind = entry.node.kind.rawValue
+            let started = ContinuousClock.now
+            Self.log.notice("Stopping a \(kind, privacy: .public) node")
             await entry.node.stop()
+            let elapsed = started.duration(to: .now).formatted(.units(fractionalPart: .show(length: 1)))
+            Self.log.notice("Stopped a \(kind, privacy: .public) node in \(elapsed, privacy: .public)")
             let isRemoved = self.catalog.withLock { catalog in
                 if case .published = catalog.state {
                     return catalog.networks[networkID] == nil
@@ -793,7 +838,9 @@ actor OverlayNetworkRuntime {
     /// Awaits the retirement of `networkID`'s previous node, which must
     /// finish before a new one may start. Networks never wait for each
     /// other: every EasyTier network is an instance of its own. Returns
-    /// whether it waited, so the caller re-reads every decision.
+    /// whether it waited, so the caller re-reads every decision. Unbounded,
+    /// so only for sign-out, which the user is watching; dials and starts
+    /// wait with a deadline (`entry(for:until:)`).
     private func awaitRetirements(blocking networkID: UUID) async -> Bool {
         guard let retirement = retirements[networkID] else { return false }
         await retirement.task.value
@@ -801,6 +848,24 @@ actor OverlayNetworkRuntime {
             retirements[networkID] = nil
         }
         return true
+    }
+
+    /// Whether `retirement` finished by `deadline`. Giving up leaves it
+    /// running; only this wait ends.
+    private static func waitForRetirement(
+        _ retirement: Task<Void, Never>, until deadline: ContinuousClock.Instant
+    ) async -> Bool {
+        let wait = Task { try await returningOnCancellation { await retirement.value } }
+        let timer = Task {
+            try await Task.sleep(until: deadline, clock: .continuous)
+            wait.cancel()
+        }
+        defer { timer.cancel() }
+        return await withTaskCancellationHandler {
+            (try? await wait.value) != nil
+        } onCancel: {
+            wait.cancel()
+        }
     }
 
     // MARK: Errors
@@ -873,7 +938,9 @@ actor OverlayNetworkRuntime {
                     stateDirectory: directory,
                     hostname: hostname,
                     authKey: try secret(OverlaySecretAccount.secret(for: network)),
-                    controlURL: controlURL))
+                    controlURL: controlURL,
+                    logFile: logRoot?.appendingPathComponent(
+                        "tailscale-\(network.id.uuidString).log", isDirectory: false)))
         case .zerotier(let networkIDText, let moons, let planet):
             guard let networkID = OverlayNetwork.zeroTierNetworkID(networkIDText) else {
                 throw misconfigured("The network ID must be 16 hexadecimal digits")

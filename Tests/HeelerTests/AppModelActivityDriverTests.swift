@@ -141,8 +141,8 @@ struct AppModelActivityDriverTests {
         activity.didBecomeActive()
 
         if crossesGracePeriod {
-            // The foreground event is queued while overlay teardown still
-            // owns the lifecycle. It must not resume a node in parallel.
+            // The resume is queued behind overlay teardown, which still
+            // owns the nodes. It must not resume one in parallel.
             await Task.yield()
             #expect(callbacks.events == ["suspend started"])
             callbacks.finishSuspending()
@@ -154,6 +154,62 @@ struct AppModelActivityDriverTests {
             callbacks.events == (crossesGracePeriod
                 ? ["suspend started", "suspend finished", "resumed"]
                 : ["resumed"]))
+    }
+
+    /// Overlay teardown runs native node shutdowns with no deadline. One
+    /// that never returns must not hold every Host on Paused after the app
+    /// comes back (#474): the Console reactivates at once, while the pending
+    /// sign-in resume still waits for overlay teardown.
+    @Test func stalledOverlayTeardownDoesNotHoldTheConsolePaused() async throws {
+        let host = Host.fixture()
+        let console = ConsoleStore(snapshotRetryDelay: .milliseconds(10)) { _, subscriptions in
+            EventsSession(
+                subscriptions: subscriptions,
+                connect: { ScriptedTransport(snapshot: .fixture()) },
+                reconnectPolicy: ReconnectPolicy(
+                    initialDelay: .milliseconds(10), multiplier: 2,
+                    maxDelay: .milliseconds(50)),
+                keepalive: .default)
+        }
+        let activity = AppActivityCoordinator(
+            gracePeriod: .milliseconds(20), granter: RecordingBackgroundExecutionGranter())
+        let callbacks = RecordingActivityCallbacks()
+        let driver = Task {
+            await ConsoleActivityDriver(
+                activity: activity,
+                console: console,
+                afterSuspend: { await callbacks.suspend() },
+                afterResume: { await callbacks.resume() }
+            ).run()
+        }
+        defer {
+            callbacks.finishSuspending()
+            driver.cancel()
+            console.setHosts([])
+        }
+
+        console.setHosts([host])
+        await console.resume()
+        try await waitUntil("the Host should come up connected") {
+            console.hostStatuses[host.id] == .connected
+        }
+
+        activity.didEnterBackground()
+        try await waitUntil("overlay teardown should start after the Console's") {
+            console.hostStatuses[host.id] == .suspended
+                && callbacks.events == ["suspend started"]
+        }
+        activity.didBecomeActive()
+
+        try await waitUntil("the Host should reconnect while overlay teardown is stalled") {
+            console.hostStatuses[host.id] == .connected
+        }
+        #expect(callbacks.events == ["suspend started"])
+
+        callbacks.finishSuspending()
+        try await waitUntil("pending sign-in should resume once overlay teardown ends") {
+            callbacks.events == ["suspend started", "suspend finished", "resumed"]
+        }
     }
 
     /// Polls until `condition` holds, yielding so the model's tasks progress.

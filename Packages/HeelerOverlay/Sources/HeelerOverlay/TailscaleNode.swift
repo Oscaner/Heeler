@@ -376,8 +376,13 @@ struct LiveTailscaleNative: TailscaleNative {
             guard status == 0 else { return fail(status, "Could not set the coordination server") }
         }
         // -1 discards tsnet's own log lines.
-        status = tailscale_set_logfd(handle, -1)
-        guard status == 0 else { return fail(status, "Could not configure logging") }
+        let logDescriptor = configuration.logFile.map(TailscaleLogFile.open) ?? -1
+        status = tailscale_set_logfd(handle, logDescriptor)
+        guard status == 0 else {
+            // Never handed over, so close it here; that also ends its pump.
+            if logDescriptor >= 0 { Darwin.close(logDescriptor) }
+            return fail(status, "Could not configure logging")
+        }
         status = tailscale_start(handle)
         guard status == 0 else { return fail(status, "Tailscale did not start") }
         return .success(handle)
