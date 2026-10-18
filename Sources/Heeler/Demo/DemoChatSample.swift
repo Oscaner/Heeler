@@ -607,8 +607,12 @@
             advance(4)
         }
 
+        /// Thinking that took its time; a block without a duration reads
+        /// as narration.
         mutating func thinking(_ text: String) {
-            assistant(#"{"type":"thinking","thinking":\#(sampleJSON(text)),"signature":"demo"}"#)
+            assistant(
+                #"{"type":"thinking","thinking":\#(sampleJSON(text)),"signature":"demo"}"#,
+                fields: #","thinkingDurationMs":3000"#)
             advance(3)
         }
 
@@ -689,13 +693,13 @@
             record(#""type":"user",\#(fields)"#)
         }
 
-        private mutating func assistant(_ block: String) {
+        private mutating func assistant(_ block: String, fields: String = "") {
             if response == nil {
                 responses += 1
                 response = "msg_demo_\(sessionID.prefix(8))_\(responses)"
             }
             record(
-                #""type":"assistant","message":{"id":"\#(response ?? "")","type":"message","role":"assistant","content":[\#(block)]}"#
+                #""type":"assistant","message":{"id":"\#(response ?? "")","type":"message","role":"assistant","content":[\#(block)]}\#(fields)"#
             )
         }
 
