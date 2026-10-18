@@ -262,6 +262,53 @@ enum CodexToolSummary {
             diff: ChatDiffStats(added: added, removed: removed, files: titles.count))
     }
 
+    /// The string literals a code-mode script passes to `call`
+    /// (`tools.apply_patch("*** Begin Patch\n…")`), unescaped. A call
+    /// whose argument is not a quoted literal, such as a variable, gives
+    /// nothing.
+    static func codeModePatches(in script: String, call: String) -> [String] {
+        var patches: [String] = []
+        var rest = script[...]
+        while let found = rest.range(of: call) {
+            rest = rest[found.upperBound...].drop { $0.isWhitespace }
+            guard let quote = rest.first, quote == "\"" || quote == "'" || quote == "`" else { continue }
+            var literal = ""
+            var index = rest.index(after: rest.startIndex)
+            var closed = false
+            while index < rest.endIndex {
+                let character = rest[index]
+                index = rest.index(after: index)
+                if character == quote {
+                    closed = true
+                    break
+                }
+                guard character == "\\", index < rest.endIndex else {
+                    literal.append(character)
+                    continue
+                }
+                let escaped = rest[index]
+                index = rest.index(after: index)
+                switch escaped {
+                case "n": literal.append("\n")
+                case "t": literal.append("\t")
+                case "r": literal.append("\r")
+                case "u":
+                    let hex = rest[index...].prefix(4)
+                    if hex.count == 4, let value = UInt32(hex, radix: 16), let scalar = Unicode.Scalar(value) {
+                        literal.unicodeScalars.append(scalar)
+                        index = hex.endIndex
+                    } else {
+                        literal.append(escaped)
+                    }
+                default: literal.append(escaped)
+                }
+            }
+            rest = rest[index...]
+            if closed { patches.append(literal) }
+        }
+        return patches
+    }
+
     /// Lines in a file's content: a trailing newline does not start another.
     static func lineCount(_ content: String) -> Int {
         guard !content.isEmpty else { return 0 }

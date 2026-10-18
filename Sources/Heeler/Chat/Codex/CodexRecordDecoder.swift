@@ -477,11 +477,18 @@ enum CodexRecordDecoder {
             }
             return legacy ? decodeCall(type, line, classification, context) : shapeChecked(line)
         case "custom_tool_call", "local_shell_call":
-            return legacy ? decodeCall(type, line, classification, context) : shapeChecked(line)
+            if legacy { return decodeCall(type, line, classification, context) }
+            if type == "custom_tool_call", classification.name == "exec",
+                let patch = codeModePatch(line, context)
+            {
+                return patch
+            }
+            return shapeChecked(line)
         case "function_call_output":
             return decodeOutput(line, classification, context)
         case "custom_tool_call_output":
-            return legacy ? decodeOutput(line, classification, context) : shapeChecked(line)
+            if legacy { return decodeOutput(line, classification, context) }
+            return abortedOutput(line) ?? shapeChecked(line)
         case "message" where legacy && classification.role == "user":
             guard !line.isTruncated, line.data.range(of: Data("<hook_prompt".utf8)) != nil else {
                 return shapeChecked(line)
@@ -501,6 +508,45 @@ enum CodexRecordDecoder {
     private static func reclassified(_ line: ChatLine) -> CodexLineClassification? {
         guard line.data.count > CodexLineClassifier.prefixLimit else { return nil }
         return CodexLineClassifier.classify(line.data, limit: line.data.count)
+    }
+
+    /// What a code-mode script passes to `tools.apply_patch`.
+    private static let codeModePatchCall = "tools.apply_patch("
+    /// How a code-mode output starts when the user stopped the call.
+    private static let abortedByUser = "aborted by user"
+
+    /// A paginated rollout's code-mode `exec` call, read only when its
+    /// script applies a patch: Codex 0.163.0 records a patch declined on
+    /// its card as this call and an "aborted by user" output alone, with no
+    /// `FileChange` item, so the row comes from the patch text. Nil for
+    /// any other script, or one whose patch text is not a string literal.
+    private static func codeModePatch(_ line: ChatLine, _ context: Context) -> CodexLineOutcome? {
+        guard !line.isTruncated, line.data.range(of: Data(codeModePatchCall.utf8)) != nil,
+            let response = envelope(line, CodexRawResponse.self)?.payload, let callID = response.callID,
+            let script = response.input
+        else { return nil }
+        let patches = CodexToolSummary.codeModePatches(in: script, call: codeModePatchCall)
+        guard !patches.isEmpty,
+            let summary = CodexToolSummary.patchSummary(patches.joined(separator: "\n"), cwd: context.cwd)
+        else { return nil }
+        // Only a declined or stopped call shows this row, and nothing was
+        // applied: no output and no line counts, as an aborted FileChange.
+        let snapshot = CodexToolSnapshot(
+            kind: summary.kind, name: "apply_patch", title: summary.title, status: nil, callID: callID,
+            output: reference(line))
+        return CodexLineOutcome(
+            record: .codeModePatch(CodexCodeModePatch(callID: callID, turnID: response.turnID, snapshot: snapshot)))
+    }
+
+    /// A paginated rollout's custom tool output, read only when the user
+    /// aborted the call; Chat shows no other output of these calls.
+    private static func abortedOutput(_ line: ChatLine) -> CodexLineOutcome? {
+        guard !line.isTruncated, line.data.range(of: Data(abortedByUser.utf8)) != nil,
+            let response = envelope(line, CodexRawResponse.self)?.payload, let callID = response.callID,
+            response.output?.text.hasPrefix(abortedByUser) == true
+        else { return nil }
+        return CodexLineOutcome(
+            record: .callOutput(CodexCallOutput(callID: callID, isAbortedByUser: true, output: reference(line))))
     }
 
     private static func decodeQuestionCall(_ line: ChatLine, _ context: Context) -> CodexLineOutcome {

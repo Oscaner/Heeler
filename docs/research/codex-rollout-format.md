@@ -384,6 +384,16 @@ In a paginated rollout, tool calls appear only as turn items.
   (`probe2-rollout.jsonl:32` says 9.7s, `:98` 9.6s). A command it never
   started has no item (`probe2-rollout.jsonl:96-101`), while a patch it
   started still completes as a failed `FileChange` (`:36`).
+- Codex 0.163.0 (observed live 2026-10-18, `-a on-request -s read-only`)
+  writes no `FileChange` for a patch declined on its card: the turn holds
+  the commentary, the `exec` cell whose input is
+  `text(await tools.apply_patch("*** Begin Patch\n*** Add File: <abs path>\n+probe\n*** End Patch"));`,
+  its output `aborted by user after 11.8s`, a developer `<turn_aborted>`
+  message and `turn_aborted` with `reason: interrupted`. The TUI still
+  draws "Added patch2.txt (+1 -0)". Chat derives an Interrupted file row
+  from the cell's patch literal (title and kind from the patch headers, no
+  line counts, since nothing applied), and drops it when the turn also
+  holds a `FileChange` for the same files, as 0.160.1 and 0.162.1 write.
 
 ### Command executions
 

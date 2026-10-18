@@ -969,21 +969,34 @@ struct CodexCallOutput: Equatable, Sendable {
     var answers: [String: String]?
     /// Codex closed the question without answers.
     var isCancelled: Bool
+    /// The user stopped the call: a code-mode `exec` output that starts
+    /// "aborted by user".
+    var isAbortedByUser: Bool
     var exitCode: Int?
     var preview: ChatToolPreview?
     var output: ChatOutputReference
 
     init(
-        callID: String, answers: [String: String]? = nil, isCancelled: Bool = false,
+        callID: String, answers: [String: String]? = nil, isCancelled: Bool = false, isAbortedByUser: Bool = false,
         exitCode: Int? = nil, preview: ChatToolPreview? = nil, output: ChatOutputReference
     ) {
         self.callID = callID
         self.answers = answers
         self.isCancelled = isCancelled
+        self.isAbortedByUser = isAbortedByUser
         self.exitCode = exitCode
         self.preview = preview
         self.output = output
     }
+}
+
+/// A code-mode `exec` call whose script runs `tools.apply_patch`: the row
+/// Chat shows for the patch when the user aborts the call, which Codex
+/// 0.163.0 then records no `FileChange` item for.
+struct CodexCodeModePatch: Equatable, Sendable {
+    var callID: String
+    var turnID: String?
+    var snapshot: CodexToolSnapshot
 }
 
 /// A legacy rollout's tool call response item, paired with its output by
@@ -1034,6 +1047,7 @@ enum CodexRecord: Equatable, Sendable {
     case questionCall(CodexQuestionCall)
     case verifiedAnswer(CodexVerifiedAnswer)
     case callOutput(CodexCallOutput)
+    case codeModePatch(CodexCodeModePatch)
     // Legacy rollouts.
     case userMessage(CodexUserContent)
     case agentMessage(CodexAgentContent)

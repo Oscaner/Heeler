@@ -36,9 +36,12 @@ struct CodexOrdinalDiagnostics: Equatable, Sendable {
 /// is not the user's message.
 ///
 /// Response items are never rows (their `item_completed` twins are). The
-/// exception is the sync `request_user_input` call, which has no turn item:
-/// its question row pairs the call with the `verified_answer` or tool
-/// output by `call_id`.
+/// exceptions have no turn item: the sync `request_user_input` call, whose
+/// question row pairs the call with the `verified_answer` or tool output by
+/// `call_id`, and a code-mode patch the user aborted, which Codex 0.163.0
+/// records only as the `exec` call and its "aborted by user" output. That
+/// row yields to a `FileChange` item for the same files, which earlier
+/// versions also write.
 struct CodexPaginatedBuilder {
     /// Orders lines across segments: older segments first, then file order.
     private struct Position: Comparable {
@@ -56,6 +59,17 @@ struct CodexPaginatedBuilder {
         /// Set for a sync question row, whose content is built at the end
         /// from everything that answered it.
         var question: CodexQuestionBuild?
+        /// Set for a row derived from an aborted code-mode patch.
+        var isCodeModePatch = false
+    }
+
+    /// A code-mode patch call waiting for its output.
+    private struct PendingPatch {
+        var turnID: String
+        var position: Position
+        var line: CodexStoredLine
+        var segment: CodexSegment
+        var snapshot: CodexToolSnapshot
     }
 
     private struct Turn {
@@ -76,6 +90,8 @@ struct CodexPaginatedBuilder {
     private var turns: [String: Turn] = [:]
     /// Question calls by `call_id`, with the turn holding their row.
     private var questionTurns: [String: String] = [:]
+    /// Code-mode patch calls by `call_id`, until an output aborts them.
+    private var pendingPatches: [String: PendingPatch] = [:]
     /// The turn last started, for a question call without a turn id.
     private var currentTurnID: String?
     /// Turns whose items join their root turn, by turn id.
@@ -203,6 +219,24 @@ struct CodexPaginatedBuilder {
             updateQuestion(answer.callID, in: turnID, line: line, segment: segment, at: position) {
                 $0.verified = answer.answers
             }
+        case .codeModePatch(let call):
+            guard let named = call.turnID ?? currentTurnID else { return }
+            pendingPatches[call.callID] = PendingPatch(
+                turnID: forwardedTurns[named] ?? named, position: position, line: line, segment: segment,
+                snapshot: call.snapshot)
+        case .callOutput(let output) where output.isAbortedByUser:
+            guard let patch = pendingPatches.removeValue(forKey: output.callID) else { return }
+            touch(patch.turnID, at: patch.position)
+            guard var turn = turns[patch.turnID] else { return }
+            var snapshot = patch.snapshot
+            snapshot.status = .interrupted
+            turn.items[output.callID] = Item(
+                position: patch.position,
+                entry: entry(
+                    output.callID, itemID: nil, in: patch.turnID, content: .item(.tool(snapshot)), patch.line,
+                    patch.segment),
+                isCodeModePatch: true)
+            turns[patch.turnID] = turn
         case .callOutput(let output):
             // Outputs of other calls are not rows in a paginated rollout.
             guard let turnID = questionTurns[output.callID] else { return }
@@ -281,11 +315,32 @@ struct CodexPaginatedBuilder {
             itemID: itemID, rolloutID: segment.rolloutID, path: segment.path, content: content)
     }
 
+    /// The files a patch row names, as a set, so one whose patch lists them
+    /// in another order still matches.
+    private static func patchFiles(of item: Item) -> Set<String>? {
+        guard case .item(.tool(let snapshot)) = item.entry.content else { return nil }
+        return Set(snapshot.title.components(separatedBy: ", "))
+    }
+
+    private static func recordedPatchFiles(in turn: Turn) -> Set<Set<String>> {
+        Set(
+            turn.items.values.compactMap { item in
+                guard case .item(.tool(let snapshot)) = item.entry.content, snapshot.name == "FileChange" else {
+                    return nil
+                }
+                return patchFiles(of: item)
+            })
+    }
+
     private func timeline() -> CodexTimeline {
         let ordered = turns.values.sorted { $0.position < $1.position }
         return CodexTimeline(
             turns: ordered.map { turn in
-                let items = turn.items.sorted { $0.value.position < $1.value.position }
+                let recorded = Self.recordedPatchFiles(in: turn)
+                let items = turn.items.filter { _, item in
+                    !item.isCodeModePatch || Self.patchFiles(of: item).map { !recorded.contains($0) } ?? true
+                }
+                .sorted { $0.value.position < $1.value.position }
                 return CodexTimelineTurn(
                     id: turn.id, status: turn.status,
                     entries: items.map { key, item in

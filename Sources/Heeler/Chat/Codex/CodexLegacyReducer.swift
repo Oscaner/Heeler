@@ -124,7 +124,7 @@ struct CodexLegacyBuilder {
                 return
             }
             place(item, placement, line: line)
-        case .item, .questionCall:
+        case .item, .questionCall, .codeModePatch:
             // Paginated records.
             break
         }

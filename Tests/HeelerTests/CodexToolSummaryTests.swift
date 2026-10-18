@@ -227,6 +227,82 @@ struct CodexToolSummaryTests {
         #expect(tools.first?.diff == nil)
     }
 
+    /// Codex 0.163.0 in code mode (V2 CXB-05): a patch declined on its card
+    /// leaves only the `exec` call that wrapped it and its "aborted by user"
+    /// output, with no `FileChange` item.
+    private static func codeModeTurn(
+        _ builder: inout CodexRolloutBuilder, script: String, output: String, fileChange: Bool = false
+    ) {
+        builder.turnStarted("t1")
+        let passthrough: CodexJSON = ["turn_id": "t1"]
+        builder.response(
+            "custom_tool_call",
+            [
+                ("id", "ctc_1"), ("status", "completed"), ("call_id", "call_x"), ("name", "exec"),
+                ("input", .string(script)), ("internal_chat_message_metadata_passthrough", passthrough),
+            ])
+        builder.response(
+            "custom_tool_call_output",
+            [
+                ("id", "ctco_1"), ("call_id", "call_x"), ("output", .string(output)),
+                ("internal_chat_message_metadata_passthrough", passthrough),
+            ])
+        if fileChange {
+            // Codex 0.160.1 and 0.162.1 also record the patch itself.
+            builder.item(
+                "t1",
+                [
+                    "type": "FileChange", "id": "exec-1",
+                    "changes": ["/work/patch2.txt": ["type": "add", "content": "probe\n"]],
+                    "status": "failed", "stdout": "", "stderr": "execution error: TurnAborted",
+                ])
+        }
+        builder.turnAborted("t1")
+    }
+
+    private static let patchScript =
+        #"text(await tools.apply_patch("*** Begin Patch\n*** Add File: /work/patch2.txt\n+probe\n*** End Patch"));"#
+        + "\n"
+
+    @Test("A code-mode patch the user declined reads as an interrupted file row")
+    func declinedCodeModePatch() {
+        var builder = CodexRolloutBuilder()
+        Self.codeModeTurn(&builder, script: Self.patchScript, output: "aborted by user after 11.8s")
+        let lines = builder.chatLines
+
+        let tools = builder.reducer().transcript(ChatProjectionContext(activity: .idle)).entries.compactMap(\.tool)
+        #expect(
+            tools == [
+                ChatToolActivity(
+                    kind: .fileWrite, name: "apply_patch", title: "patch2.txt", status: .interrupted,
+                    callID: "call_x", output: ChatOutputReference(offset: lines[2].offset, length: lines[2].length))
+            ])
+    }
+
+    @Test(
+        "A code-mode call shows no row unless it was an aborted patch",
+        arguments: [
+            (Self.patchScript, "Script completed\nSuccess. Updated the following files:\nA patch2.txt"),
+            ("text(await tools.exec_command({cmd: \"ls\"}));\n", "aborted by user after 2.0s"),
+        ])
+    func codeModeCallWithoutRow(script: String, output: String) {
+        var builder = CodexRolloutBuilder()
+        Self.codeModeTurn(&builder, script: script, output: output)
+
+        let tools = builder.reducer().transcript(ChatProjectionContext(activity: .idle)).entries.compactMap(\.tool)
+        #expect(tools.isEmpty)
+    }
+
+    @Test("A declined code-mode patch that Codex also recorded shows once")
+    func declinedCodeModePatchWithItsFileChange() {
+        var builder = CodexRolloutBuilder()
+        Self.codeModeTurn(&builder, script: Self.patchScript, output: "aborted by user after 9.7s", fileChange: true)
+
+        let tools = builder.reducer().transcript(ChatProjectionContext(activity: .idle)).entries.compactMap(\.tool)
+        #expect(tools.map(\.name) == ["FileChange"])
+        #expect(tools.map(\.status) == [.interrupted])
+    }
+
     @Test("A legacy patch end aborted before it applied is interrupted")
     func abortedLegacyPatch() {
         var builder = CodexRolloutBuilder(.legacy)

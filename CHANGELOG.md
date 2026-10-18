@@ -117,8 +117,9 @@ Entries reference the pull request that made the change.
 - An expanded Declined, Interrupted or Stopped row no longer says "No output."
   for a call that never ran. (#425)
 - Codex rows show a failed turn's API error message instead of its JSON, read
-  a patch aborted before it applied as Interrupted instead of Failed, and show
-  an answer's note without its `user_note:` key. (#425)
+  a patch aborted before it applied as Interrupted instead of Failed, also
+  when Codex 0.163 declines it in code mode without recording the patch, and
+  show an answer's note without its `user_note:` key. (#425)
 - Oh My Pi rows show a `write` as a written file with its text and line
   counts, show `$` Python runs as notices, and no longer show the plan
   hand-off to `xd://propose` as a created file. (#425)
