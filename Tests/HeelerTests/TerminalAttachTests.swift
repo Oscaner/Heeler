@@ -2173,10 +2173,11 @@ struct TerminalAttachTests {
         timeout: Duration = .seconds(5),
         _ condition: @MainActor () -> Bool
     ) async -> Bool {
-        let deadline = ContinuousClock.now + timeout
-        while ContinuousClock.now < deadline {
+        var budget = PollBudget(timeout)
+        while budget.hasTimeLeft {
             if condition() { return true }
             try? await Task.sleep(for: .milliseconds(5))
+            budget.charge()
         }
         return condition()
     }

@@ -2023,14 +2023,15 @@ struct AgentDirectInputTests {
         in root: UIView,
         timeout: Duration = .seconds(5)
     ) async throws -> HeelerTerminalView? {
-        let deadline = ContinuousClock.now + timeout
-        while ContinuousClock.now < deadline {
+        var budget = PollBudget(timeout)
+        while budget.hasTimeLeft {
             root.setNeedsLayout()
             root.layoutIfNeeded()
             if let terminal = terminals(in: root).first(where: { feed.isAttached(to: $0) }) {
                 return terminal
             }
             try await Task.sleep(for: .milliseconds(5))
+            budget.charge()
         }
         root.setNeedsLayout()
         root.layoutIfNeeded()
@@ -2164,10 +2165,11 @@ struct AgentDirectInputTests {
         timeout: Duration = .seconds(5),
         _ condition: @escaping () async -> Bool
     ) async throws -> Bool {
-        let deadline = ContinuousClock.now + timeout
-        while ContinuousClock.now < deadline {
+        var budget = PollBudget(timeout)
+        while budget.hasTimeLeft {
             if await condition() { return true }
             try await Task.sleep(for: .milliseconds(5))
+            budget.charge()
         }
         return await condition()
     }

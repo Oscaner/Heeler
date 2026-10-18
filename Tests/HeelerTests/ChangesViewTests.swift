@@ -340,10 +340,11 @@ struct ChangesViewTests {
         timeout: Duration = .seconds(5),
         _ condition: @escaping () async -> Bool
     ) async throws -> Bool {
-        let deadline = ContinuousClock.now + timeout
-        while ContinuousClock.now < deadline {
+        var budget = PollBudget(timeout)
+        while budget.hasTimeLeft {
             if await condition() { return true }
             try await Task.sleep(for: .milliseconds(10))
+            budget.charge()
         }
         return await condition()
     }
