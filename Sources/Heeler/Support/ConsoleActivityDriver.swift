@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Drives the Console's Host connections from app activity: the one place
 /// that turns a suspension into a teardown and a foreground return into a
@@ -16,6 +17,8 @@ import Foundation
 /// that never returns left every Host Paused after the app came back (#474).
 @MainActor
 struct ConsoleActivityDriver {
+    private static let log = Logger(subsystem: "dev.bybee.heeler", category: "Activity")
+
     let activity: AppActivityCoordinator
     let console: ConsoleStore
     /// Runs after the Console's teardown, still under the background
@@ -33,7 +36,9 @@ struct ConsoleActivityDriver {
             guard !Task.isCancelled else { return }
             switch event {
             case .activated:
+                Self.log.notice("Reactivating the Console")
                 await console.reactivate()
+                Self.log.notice("Reactivated the Console")
                 if let afterResume {
                     overlay.enqueue { await afterResume() }
                 }
@@ -42,12 +47,15 @@ struct ConsoleActivityDriver {
                 // also finishes, so the SSH and node teardown both complete
                 // before the process freezes. A later suspension's assertion
                 // is that suspension's to release.
+                Self.log.notice("Suspending the Console")
                 await console.suspend()
+                Self.log.notice("Suspended the Console")
                 let suspension = overlay.beginSuspension()
                 let activity = activity
                 let afterSuspend = afterSuspend
                 overlay.enqueue {
                     await afterSuspend?()
+                    Self.log.notice("Finished overlay suspension \(suspension, privacy: .public)")
                     guard overlay.isLatestSuspension(suspension) else { return }
                     activity.didFinishSuspending()
                 }

@@ -1,5 +1,6 @@
 import Foundation
 import HeelerOverlay
+import OSLog
 import Synchronization
 
 extension OverlayError {
@@ -95,6 +96,10 @@ actor OverlayNetworkRuntime {
 
     static let shared = OverlayNetworkRuntime()
 
+    /// Node stops, which can hang in native code (#474): a "Stopping" line
+    /// with no matching "Stopped" is one that never returned.
+    private static let log = Logger(subsystem: "dev.bybee.heeler", category: "Overlay")
+
     /// Consecutive start failures of one network revision reported as the
     /// retryable `.notReady` before they become the terminal `.startFailed`.
     /// With the Console's backoff this covers a few minutes — long enough
@@ -108,6 +113,19 @@ actor OverlayNetworkRuntime {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first?
             .appendingPathComponent("Overlay", isDirectory: true)
+    }
+
+    /// `Caches/OverlayLogs` in debug builds, where each Tailscale network's
+    /// node keeps tsnet's own log lines for diagnosis (#474); nil in release
+    /// builds, which discard them.
+    static var defaultLogRoot: URL? {
+        #if DEBUG
+            FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)
+                .first?
+                .appendingPathComponent("OverlayLogs", isDirectory: true)
+        #else
+            nil
+        #endif
     }
 
     /// Planet files larger than this are not ZeroTier roots definitions;
@@ -133,6 +151,7 @@ actor OverlayNetworkRuntime {
     private let catalog = Mutex(Catalog())
     private let secrets: any SecretStore
     private let stateRoot: URL?
+    private let logRoot: URL?
     private let makeNode: NodeFactory
     private let generateZeroTierIdentity: @Sendable () throws -> Data
     private let zeroTierSession = Mutex(ZeroTierSession())
@@ -161,6 +180,7 @@ actor OverlayNetworkRuntime {
     init(
         secrets: any SecretStore = KeychainSecretStore(service: OverlaySecretAccount.service),
         stateRoot: URL? = OverlayNetworkRuntime.defaultStateRoot,
+        logRoot: URL? = OverlayNetworkRuntime.defaultLogRoot,
         makeNode: @escaping NodeFactory = OverlayNetworkRuntime.liveNode,
         generateZeroTierIdentity: @escaping @Sendable () throws -> Data = {
             try ZeroTierIdentity.generate()
@@ -168,6 +188,7 @@ actor OverlayNetworkRuntime {
     ) {
         self.secrets = secrets
         self.stateRoot = stateRoot
+        self.logRoot = logRoot
         self.makeNode = makeNode
         self.generateZeroTierIdentity = generateZeroTierIdentity
     }
@@ -794,7 +815,12 @@ actor OverlayNetworkRuntime {
         let previous = retirements[networkID]?.task
         let task = Task {
             await previous?.value
+            let kind = entry.node.kind.rawValue
+            let started = ContinuousClock.now
+            Self.log.notice("Stopping a \(kind, privacy: .public) node")
             await entry.node.stop()
+            let elapsed = started.duration(to: .now).formatted(.units(fractionalPart: .show(length: 1)))
+            Self.log.notice("Stopped a \(kind, privacy: .public) node in \(elapsed, privacy: .public)")
             let isRemoved = self.catalog.withLock { catalog in
                 if case .published = catalog.state {
                     return catalog.networks[networkID] == nil
@@ -912,7 +938,9 @@ actor OverlayNetworkRuntime {
                     stateDirectory: directory,
                     hostname: hostname,
                     authKey: try secret(OverlaySecretAccount.secret(for: network)),
-                    controlURL: controlURL))
+                    controlURL: controlURL,
+                    logFile: logRoot?.appendingPathComponent(
+                        "tailscale-\(network.id.uuidString).log", isDirectory: false)))
         case .zerotier(let networkIDText, let moons, let planet):
             guard let networkID = OverlayNetwork.zeroTierNetworkID(networkIDText) else {
                 throw misconfigured("The network ID must be 16 hexadecimal digits")
