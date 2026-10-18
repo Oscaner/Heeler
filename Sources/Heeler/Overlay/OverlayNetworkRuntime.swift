@@ -259,12 +259,14 @@ actor OverlayNetworkRuntime {
             throw TransportError.overlayFailed(
                 network: published.network.displayName, reason: .signedOut)
         }
-        let entry = try await entry(for: networkID)
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        let entry = try await entry(for: networkID, until: deadline)
         try checkCancellation()
         let use = beginUse(networkID)
         do {
             let stream = try await withTaskCancellationHandler {
-                try await entry.node.dial(host: host, port: port, timeout: timeout)
+                try await entry.node.dial(
+                    host: host, port: port, timeout: ContinuousClock.now.duration(to: deadline))
             } onCancel: {
                 Task { await self.abandonUse(use, of: networkID, entry) }
             }
@@ -311,12 +313,13 @@ actor OverlayNetworkRuntime {
     private func performStart(networkID: UUID, timeout: Duration) async throws {
         startFailures[networkID] = nil
         clearSignedOut(networkID)
-        let entry = try await entry(for: networkID)
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        let entry = try await entry(for: networkID, until: deadline)
         try checkCancellation()
         let use = beginUse(networkID)
         do {
             try await withTaskCancellationHandler {
-                try await entry.node.start(timeout: timeout)
+                try await entry.node.start(timeout: ContinuousClock.now.duration(to: deadline))
             } onCancel: {
                 Task { await self.abandonUse(use, of: networkID, entry) }
             }
@@ -604,7 +607,11 @@ actor OverlayNetworkRuntime {
     /// Ids of networks that currently hold a node, for tests.
     var activeNetworkIDs: Set<UUID> { Set(nodes.keys) }
 
-    private func entry(for networkID: UUID) async throws -> Entry {
+    /// The network's node, built if needed. Waiting for a previous node to
+    /// stop counts against `deadline`, like the dial or start it serves.
+    private func entry(
+        for networkID: UUID, until deadline: ContinuousClock.Instant
+    ) async throws -> Entry {
         while true {
             let published = try publishedNetwork(networkID)
             if let existing = nodes[networkID] {
@@ -619,8 +626,20 @@ actor OverlayNetworkRuntime {
                 continue
             }
             // A node of this network is still stopping: wait, then look
-            // again from the top.
-            if await awaitRetirements(blocking: networkID) {
+            // again from the top. A stop can hang in native code (a tsnet
+            // close outlived a whole foreground return, #474), so the wait is
+            // bounded: the caller fails retryably and its next attempt waits
+            // again, rather than sitting on Connecting with nothing to say.
+            // The new node is still never built beside the old one.
+            if let retirement = retirements[networkID] {
+                guard await Self.waitForRetirement(retirement.task, until: deadline) else {
+                    throw TransportError.overlayFailed(
+                        network: published.network.displayName,
+                        reason: .notReady("Its previous session is still shutting down"))
+                }
+                if retirements[networkID]?.task == retirement.task {
+                    retirements[networkID] = nil
+                }
                 continue
             }
             validateState(of: networkID, against: published)
@@ -793,7 +812,9 @@ actor OverlayNetworkRuntime {
     /// Awaits the retirement of `networkID`'s previous node, which must
     /// finish before a new one may start. Networks never wait for each
     /// other: every EasyTier network is an instance of its own. Returns
-    /// whether it waited, so the caller re-reads every decision.
+    /// whether it waited, so the caller re-reads every decision. Unbounded,
+    /// so only for sign-out, which the user is watching; dials and starts
+    /// wait with a deadline (`entry(for:until:)`).
     private func awaitRetirements(blocking networkID: UUID) async -> Bool {
         guard let retirement = retirements[networkID] else { return false }
         await retirement.task.value
@@ -801,6 +822,24 @@ actor OverlayNetworkRuntime {
             retirements[networkID] = nil
         }
         return true
+    }
+
+    /// Whether `retirement` finished by `deadline`. Giving up leaves it
+    /// running; only this wait ends.
+    private static func waitForRetirement(
+        _ retirement: Task<Void, Never>, until deadline: ContinuousClock.Instant
+    ) async -> Bool {
+        let wait = Task { try await returningOnCancellation { await retirement.value } }
+        let timer = Task {
+            try await Task.sleep(until: deadline, clock: .continuous)
+            wait.cancel()
+        }
+        defer { timer.cancel() }
+        return await withTaskCancellationHandler {
+            (try? await wait.value) != nil
+        } onCancel: {
+            wait.cancel()
+        }
     }
 
     // MARK: Errors
