@@ -61,7 +61,9 @@ final class ChatTimelineLayout: UICollectionViewLayout {
         guard let collectionView else { return }
         let ids = itemIDs()
         let width = collectionView.bounds.width
-        let category = collectionView.traitCollection.preferredContentSizeCategory.rawValue
+        // A row measured in another font is as stale as one in another size.
+        let traits = collectionView.traitCollection
+        let category = "\(traits.preferredContentSizeCategory.rawValue)|\(traits.chatFont.rawValue)"
         if ids != self.ids || width != self.width || category != contentSizeCategory {
             self.ids = ids
             self.width = width

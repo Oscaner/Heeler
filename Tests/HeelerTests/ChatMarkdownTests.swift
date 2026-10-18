@@ -493,7 +493,7 @@ struct ChatMarkdownTests {
         #expect(ChatMarkdownView.boldingStrongEmphasis(block.content, in: .body) == block.content)
     }
 
-    @Test("Inline code gets a background in every script and keeps its code intent")
+    @Test("Inline code gets a background in every script and keeps its code intent and face")
     func inlineCodeTint() throws {
         let block = try #require(ChatMarkdown.blocks(from: "a `代码` **b** `swift`").first)
         let content = ChatMarkdownView.styled(block.content, in: .body)
@@ -510,6 +510,10 @@ struct ChatMarkdownTests {
         let intents = content.runs.filter { $0.inlinePresentationIntent?.contains(.code) == true }
             .map { String(content[$0.range].characters) }
         #expect(intents == ["代码", "swift"])
+        // Chat's font design would draw code in it; a run font keeps it monospaced.
+        let codeFonts = content.runs.filter { $0.inlinePresentationIntent?.contains(.code) == true }
+            .map { $0[AttributeScopes.SwiftUIAttributes.FontAttribute.self] }
+        #expect(codeFonts == [Font.body.monospaced(), Font.body.monospaced()])
     }
 
     @Test("Plain text drops heading marks, task boxes, HTML blocks and breaks")

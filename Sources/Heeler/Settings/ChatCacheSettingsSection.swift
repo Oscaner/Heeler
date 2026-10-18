@@ -40,12 +40,16 @@ enum ChatFoldSettings {
     static let defaultsKey = "chat.fold-finished-turns"
 }
 
-/// Settings' Chat section: Fold Finished Turns, the cache size and Clear.
-/// Four rows do not earn a navigation level.
+/// Settings' Chat section: the conversation's font and text size with a
+/// sample, Fold Finished Turns, the cache size and Clear. A handful of rows
+/// do not earn a navigation level.
 struct ChatCacheSettingsSection: View {
     @State private var model: ChatCacheSettingsModel
     @State private var confirmsClear = false
     @AppStorage(ChatFoldSettings.defaultsKey) private var foldsFinishedTurns = true
+    @AppStorage(ChatTextSettings.sizeOffsetKey) private var textSizeOffset = ChatTextSettings.defaultSizeOffset
+    @AppStorage(ChatTextSettings.fontKey) private var font = ChatFontOption.system
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(cache: any ChatTranscriptCache) {
         _model = State(initialValue: ChatCacheSettingsModel(cache: cache))
@@ -53,6 +57,25 @@ struct ChatCacheSettingsSection: View {
 
     var body: some View {
         Section {
+            Picker("Font", selection: $font) {
+                ForEach(ChatFontOption.allCases) { @Sendable option in
+                    Text(option.title).tag(option)
+                }
+            }
+            .accessibilityIdentifier("settings.chat.font")
+            Stepper(value: $textSizeOffset, in: ChatTextSettings.sizeOffsetRange) {
+                LabeledContent("Text Size") {
+                    Text("\(Int(ChatTextSettings.bodyPointSize(at: textSize).rounded())) pt")
+                        .monospacedDigit()
+                }
+            }
+            .accessibilityValue("\(Int(ChatTextSettings.bodyPointSize(at: textSize).rounded())) points")
+            .accessibilityIdentifier("settings.chat.textSize")
+            Text("Agents reply here as they would in Chat.")
+                .dynamicTypeSize(textSize)
+                .fontDesign(font.design)
+                .padding(.vertical, 4)
+                .accessibilityIdentifier("settings.chat.textSample")
             Toggle("Fold Finished Turns", isOn: $foldsFinishedTurns)
                 .accessibilityIdentifier("settings.chat.foldFinishedTurns")
             LabeledContent("Cached Messages") {
@@ -82,11 +105,17 @@ struct ChatCacheSettingsSection: View {
             Text("Chat")
         } footer: {
             Text(
-                "A finished turn's steps fold behind one line above its answer; a turn stays open "
+                "Font and Text Size set the conversation; code stays monospaced, and the size "
+                    + "follows the system's text size from there. "
+                    + "A finished turn's steps fold behind one line above its answer; a turn stays open "
                     + "while it runs or while its background work does. "
                     + "Recent Chat messages stay on this device for up to 30 days, within 300 MB. "
                     + "Removing a Host deletes its messages.")
         }
         .task { await model.refresh() }
+    }
+
+    private var textSize: DynamicTypeSize {
+        ChatTextSettings.size(system: dynamicTypeSize, offset: textSizeOffset)
     }
 }

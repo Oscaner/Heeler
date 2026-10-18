@@ -606,7 +606,7 @@ private struct ChatToolRow: View {
                             .frame(width: 18)
                         Text(verbatim: tool.title)
                             .font(.subheadline)
-                            .fontDesign(titleIsCode ? .monospaced : nil)
+                            .modifier(ChatFontDesign(isCode: titleIsCode))
                             .lineLimit(isExpanded ? nil : 2)
                         Spacer(minLength: 4)
                         if let diff = tool.diff {
@@ -619,7 +619,7 @@ private struct ChatToolRow: View {
                     if let subtitle = tool.subtitle, !subtitle.isEmpty {
                         Text(verbatim: subtitle)
                             .font(.caption)
-                            .fontDesign(subtitleIsCode ? .monospaced : nil)
+                            .modifier(ChatFontDesign(isCode: subtitleIsCode))
                             .foregroundStyle(.secondary)
                             .lineLimit(isExpanded ? nil : 1)
                             .padding(.leading, 26)
@@ -993,7 +993,7 @@ private struct ChatNoticeRow: View {
         VStack(alignment: .leading, spacing: 4) {
             Label {
                 Text(verbatim: titlePrefix + notice.title)
-                    .fontDesign(isCode ? .monospaced : nil)
+                    .modifier(ChatFontDesign(isCode: isCode))
             } icon: {
                 Image(systemName: symbol)
             }

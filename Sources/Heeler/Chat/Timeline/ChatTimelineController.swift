@@ -123,6 +123,25 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         fatalError("init(coder:) is unavailable")
     }
 
+    /// Chat's text size and font, which every cell reads from its traits;
+    /// a change re-measures the rows like a system text size change.
+    /// A nil size leaves the system's in place. Overrides are read only
+    /// once set: reading an unset one throws.
+    func setTypography(size: DynamicTypeSize?, font: ChatFontOption) {
+        let sizeTrait = UITraitPreferredContentSizeCategory.self
+        if let size {
+            let category = UIContentSizeCategory(size)
+            if !traitOverrides.contains(sizeTrait) || traitOverrides.preferredContentSizeCategory != category {
+                traitOverrides.preferredContentSizeCategory = category
+            }
+        } else if traitOverrides.contains(sizeTrait) {
+            traitOverrides.remove(sizeTrait)
+        }
+        if !traitOverrides.contains(ChatFontTrait.self) || traitOverrides.chatFont != font {
+            traitOverrides.chatFont = font
+        }
+    }
+
     /// The rows' breathing room inside the list's edges.
     private static let contentInsets = UIEdgeInsets(top: 8, left: 0, bottom: 12, right: 0)
 
@@ -163,6 +182,7 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
             let actions = rowActions
             cell.contentConfiguration = UIHostingConfiguration {
                 ChatRowView(row: row, isExpanded: isExpanded, expandedFiles: files, actions: actions)
+                    .modifier(ChatFontDesign())
             }
             .margins(.all, 0)
             .minSize(width: 0, height: 0)
@@ -173,7 +193,7 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
             collectionView.dequeueConfiguredReusableCell(using: registration, for: indexPath, item: id)
         }
         view = collectionView
-        registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) {
+        registerForTraitChanges([UITraitPreferredContentSizeCategory.self, ChatFontTrait.self]) {
             (self: Self, _: UITraitCollection) in
             self.layout.invalidateLayout()
         }
@@ -883,7 +903,8 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
 
     private func selectText(_ text: String) {
         TerminalTextSelectionPresenter.present(
-            text: text, font: .preferredFont(forTextStyle: .body), adjustsFontForContentSizeCategory: true,
+            text: text, font: .preferredFont(forTextStyle: .body, compatibleWith: collectionView.traitCollection),
+            adjustsFontForContentSizeCategory: true,
             accessibilityIdentifier: "chat.text-selection", from: collectionView)
     }
 }

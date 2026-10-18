@@ -55,7 +55,9 @@ Entries reference the pull request that made the change.
   cards, lists background agents and Workflows, and stays readable offline
   from its cache. Sending checks the Agent's input box before and after and
   never resends. Chat and the terminal swap from a pair of buttons beside
-  Show Header. (#425)
+  Show Header. Settings sets Chat's font (System, Rounded, Serif or
+  Monospaced) and text size, a little smaller than the system's by default.
+  (#425)
 - Pair a Host whose herdr runs outside your own config, such as one bundled
   in a desktop app, from a version 2 Pairing Code. The Host keeps that
   herdr's socket and launcher, shows them in Host detail, and runs every

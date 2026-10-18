@@ -115,6 +115,36 @@ struct ChatTimelineControllerTests {
         }
     }
 
+    /// Chat's own text size and font reach the hosted rows through the
+    /// controller's traits and re-measure them.
+    @Test func chatTextSizeAndFontRemeasureTheRows() async throws {
+        let controller = ChatTimelineController(actions: ChatTimelineActions())
+        let entries = Self.entries(2..<3)
+        let id = ChatRowID.entry(try #require(entries.first).id)
+        let rows = await ChatRowBuilder().rows(for: ChatTimelineInput(entries: entries))
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.apply(Self.state(rows))
+            controller.setTypography(size: .large, font: .system)
+            await Self.settle(controller)
+            let large = try #require(controller.cellFrame(of: id)).height
+
+            controller.setTypography(size: .xSmall, font: .system)
+            await Self.settle(controller)
+            let small = try #require(controller.cellFrame(of: id)).height
+            #expect(small < large)
+
+            // Monospaced letters are wider, so the paragraph takes more lines.
+            controller.setTypography(size: .xSmall, font: .monospaced)
+            await Self.settle(controller)
+            #expect(try #require(controller.cellFrame(of: id)).height > small)
+
+            controller.setTypography(size: nil, font: .system)
+            await Self.settle(controller)
+            #expect(controller.timeline.traitCollection.preferredContentSizeCategory
+                == controller.view.window?.traitCollection.preferredContentSizeCategory)
+        }
+    }
+
     @Test func opensAtTheNewestRowWithVisibleRowsMeasured() async throws {
         let controller = ChatTimelineController(actions: ChatTimelineActions())
         let rows = await ChatRowBuilder().rows(for: ChatTimelineInput(entries: Self.entries(0..<60)))

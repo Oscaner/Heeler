@@ -75,10 +75,8 @@ struct ChatMarkdownView: View {
 
     /// The content with its inline code on a tinted background.
     ///
-    /// The code intent only asks for the monospaced design, which has no
-    /// CJK glyphs, so code in Chinese would read as body text. The tint
-    /// marks it in every script; the intent stays, so Latin code keeps its
-    /// monospaced face.
+    /// The monospaced design has no CJK glyphs, so code in Chinese would
+    /// read as body text. The tint marks it in every script.
     nonisolated static func tintingCode(_ content: AttributedString) -> AttributedString {
         var result = content
         for run in content.runs where run.inlinePresentationIntent?.contains(.code) == true {
@@ -88,8 +86,17 @@ struct ChatMarkdownView: View {
     }
 
     /// The content as a text block draws it in `font`.
+    ///
+    /// Chat's font sets a design on the whole conversation, which outranks
+    /// the code intent's monospaced one; a run font outranks the design, so
+    /// code keeps its face in every Chat font.
     nonisolated static func styled(_ content: AttributedString, in font: Font) -> AttributedString {
-        tintingCode(boldingStrongEmphasis(content, in: font))
+        var result = tintingCode(boldingStrongEmphasis(content, in: font))
+        for run in result.runs where run.inlinePresentationIntent?.contains(.code) == true {
+            let runFont = run[AttributeScopes.SwiftUIAttributes.FontAttribute.self] ?? font
+            result[run.range].font = runFont.monospaced()
+        }
+        return result
     }
 }
 

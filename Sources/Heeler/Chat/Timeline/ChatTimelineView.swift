@@ -13,6 +13,9 @@ struct ChatTimelineView: UIViewControllerRepresentable {
     var topObstruction: CGFloat = 0
     /// Height of the Collapse Steps button over the list's bottom edge.
     var collapseControlClearance: CGFloat = 0
+    /// Chat's own text size; nil follows the system's.
+    var textSize: DynamicTypeSize?
+    var font: ChatFontOption = .system
     let actions: ChatTimelineActions
 
     func makeCoordinator() -> Coordinator {
@@ -21,6 +24,7 @@ struct ChatTimelineView: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> ChatTimelineController {
         let controller = ChatTimelineController(actions: actions)
+        controller.setTypography(size: textSize, font: font)
         controller.setTopObstruction(topObstruction)
         controller.setCollapseControlClearance(collapseControlClearance)
         controller.apply(state)
@@ -29,6 +33,7 @@ struct ChatTimelineView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: ChatTimelineController, context: Context) {
         controller.actions = actions
+        controller.setTypography(size: textSize, font: font)
         controller.setTopObstruction(topObstruction)
         controller.setCollapseControlClearance(collapseControlClearance)
         controller.apply(state)

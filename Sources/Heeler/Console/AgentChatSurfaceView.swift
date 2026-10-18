@@ -77,6 +77,9 @@ struct AgentChatSurfaceView: View {
     /// Shared with the terminal: one reading preference across surfaces.
     @AppStorage("agent.back-header-expanded") private var isBackHeaderExpanded = false
     @AppStorage(ChatFoldSettings.defaultsKey) private var foldsFinishedTurns = true
+    @AppStorage(ChatTextSettings.sizeOffsetKey) private var textSizeOffset = ChatTextSettings.defaultSizeOffset
+    @AppStorage(ChatTextSettings.fontKey) private var chatFont = ChatFontOption.system
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -455,6 +458,8 @@ struct AgentChatSurfaceView: View {
                 collapseRequest: collapseRequest,
                 topObstruction: headerObstruction + bannerHeight,
                 collapseControlClearance: collapseControlHeight + Self.floatingControlsBottomPadding,
+                textSize: ChatTextSettings.size(system: dynamicTypeSize, offset: textSizeOffset),
+                font: chatFont,
                 actions: timelineActions)
             .accessibilityHidden(presentation != .timeline)
             if presentation != .timeline {
