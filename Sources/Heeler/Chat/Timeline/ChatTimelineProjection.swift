@@ -382,8 +382,11 @@ enum ChatTimelineProjection {
     /// order. Files count once per path as the rows show it, relative to
     /// where the call ran; a write over an existing file, as its recorded
     /// change says, counts as an edit, and a write that cannot tell counts
-    /// as written. A row without its own file list (a Codex patch) names
-    /// all its files in one title, so it counts as many as its diff has.
+    /// as written. A path changed more than once counts once, under what
+    /// its first change did, so a file created and then edited is one
+    /// created file; reading it still counts as a read. A row without its
+    /// own file list (a Codex patch) names all its files in one title, so
+    /// it counts as many as its diff has.
     static func summary(of tools: [ChatToolActivity]) -> String {
         func count(_ kind: ChatToolActivity.Kind) -> Int {
             tools.filter { $0.kind == kind }.count
@@ -392,6 +395,17 @@ enum ChatTimelineProjection {
         var paths: [FileVerb: Set<String>] = [:]
         var more: [FileVerb: Int] = [:]
         var titled: [FileVerb: [String: Int]] = [:]
+        var firstChange: [String: FileVerb] = [:]
+        /// Whether `key` counts under `verb`.
+        @discardableResult
+        func note(_ key: String, _ verb: FileVerb) -> Bool {
+            if verb != .read {
+                if let first = firstChange[key], first != verb { return false }
+                firstChange[key] = verb
+            }
+            paths[verb, default: []].insert(key)
+            return true
+        }
         for (index, tool) in tools.enumerated() {
             let verb: FileVerb
             switch tool.kind {
@@ -409,13 +423,12 @@ enum ChatTimelineProjection {
                         case (.created, _): .edited
                         default: verb
                         }
-                    paths[fileVerb, default: []].insert(changes.displayPath(of: file))
+                    note(changes.displayPath(of: file), fileVerb)
                 }
                 more[verb, default: 0] += changes.moreFiles
             } else {
                 let key = tool.title.isEmpty ? "\u{0}\(index)" : tool.title
-                paths[verb, default: []].insert(key)
-                if let files = tool.diff?.files, files > 1 {
+                if note(key, verb), let files = tool.diff?.files, files > 1 {
                     titled[verb, default: [:]][key] = max(titled[verb]?[key] ?? 0, files - 1)
                 }
             }

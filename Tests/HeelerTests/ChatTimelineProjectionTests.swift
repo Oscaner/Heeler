@@ -442,6 +442,34 @@ struct ChatTimelineProjectionTests {
         #expect(summary([adds, patch]) == "Edited 2 files, Created 2 files")
     }
 
+    /// A file a turn changes more than once is one changed file, under
+    /// what the first change did; reading it stays a read of its own.
+    @Test func aFileChangedTwiceCountsOnceUnderItsFirstChange() {
+        func change(_ kind: ChatToolActivity.Kind, _ path: String, _ change: ChatFileChange.Kind) -> ChatToolActivity {
+            var tool = ChatToolActivity(kind: kind, name: "T", title: path, status: .succeeded)
+            tool.fileChanges = ChatFileChanges(
+                files: [ChatFileChange(path: path, kind: change, added: 1, removed: 0, lineCount: 1)])
+            return tool
+        }
+        let summary = ChatTimelineProjection.summary(of:)
+        let create = change(.fileWrite, "v4.txt", .created)
+        let edit = change(.fileEdit, "v4.txt", .updated)
+        let other = change(.fileEdit, "w.txt", .updated)
+        #expect(summary([create, edit]) == "Created 1 file")
+        #expect(summary([edit, create]) == "Edited 1 file")
+        #expect(summary([create, edit, other]) == "Edited 1 file, Created 1 file")
+        #expect(summary([change(.fileWrite, "v4.txt", .written), edit]) == "Wrote 1 file")
+        let read = ChatToolActivity(kind: .fileRead, name: "Read", title: "v4.txt", status: .succeeded)
+        #expect(summary([read, edit]) == "Edited 1 file, Read 1 file")
+
+        // Codex patch rows count by their titles the same way.
+        var adds = ChatToolActivity(kind: .fileWrite, name: "T", title: "a.txt, b.txt", status: .succeeded)
+        adds.diff = ChatDiffStats(added: 2, removed: 0, files: 2)
+        var patch = ChatToolActivity(kind: .fileEdit, name: "T", title: "a.txt, b.txt", status: .succeeded)
+        patch.diff = ChatDiffStats(added: 1, removed: 1, files: 2)
+        #expect(summary([adds, patch]) == "Created 2 files")
+    }
+
     // MARK: Subagents
 
     private static func subagent(_ id: String, path: String?, event: String) -> ChatRow {
