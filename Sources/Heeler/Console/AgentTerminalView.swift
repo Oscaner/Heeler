@@ -982,6 +982,7 @@ struct AgentTerminalView: View {
 
     private func makeWorktreeStore(checkout: RepositoryCheckout) -> WorktreeDetailStore {
         let hostID = agent.hostID
+        let host = hosts.first(where: { $0.id == hostID })
         let workspaceID = agent.agent.workspaceID
         let request = WorktreeRemovalRequest(
             identity: WorktreeIdentity(
@@ -996,7 +997,8 @@ struct AgentTerminalView: View {
             request: request,
             workspaceLabel: agent.workspaceLabel ?? checkout.repoName,
             checkout: checkout,
-            sessionName: hosts.first(where: { $0.id == hostID })?.sessionName ?? "",
+            sessionName: host?.sessionName ?? "",
+            endpoint: host?.herdrEndpoint,
             list: { [console] workspaceID in
                 try await console.listWorktrees(
                     forWorkspaceID: workspaceID, on: hostID)

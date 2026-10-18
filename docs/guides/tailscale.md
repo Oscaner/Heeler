@@ -45,10 +45,14 @@ If you've changed your tailnet's access rules, make sure Heeler can reach the Ma
 
 Add the Host with these values (details in [Connect from Heeler](overlay-networks.md#connect-from-heeler)):
 
-1. Under **Network**, select your Tailscale network.
-2. Tap **Choose from Tailnet…**, keep **Fill In** on **IP Address**, and tap the Mac. (Or tap **Add** beside the Mac on the network's screen.)
-3. Use port `22`, your Mac username, and the sign-in method you picked. Leave **Jump Host** blank.
+1. On the network's screen, tap **Add** beside the Mac to pre-fill its route; or go to **Hosts > Add Host**, tap **Add Route** under **Routes**, select your Tailscale network under **Network**, tap **Choose from Tailnet…** (with **Fill In** on **IP Address**), and pick the Mac.
+2. Keep port `22` and leave **Jump Host** blank on the route, then save the route if you opened **Add Route**.
+3. In **Add Host**, enter your Mac username (`User`) and the sign-in method you picked.
 4. Save, and trust the fingerprint only if it matches the Mac's.
+
+<a href="images/overlay-networks/tailscale-machines.png"><img src="images/overlay-networks/tailscale-machines.png" width="300" alt="Connected tailnet showing This device above the Machines list, with Add beside a server and Host beside the saved Mac"></a>
+
+Use the Mac's address under **Machines**, not the phone's address under **This device**. This screenshot shows the Mac after it has been added: its button reads **Host**, while another machine still offers **Add**. Names and addresses have been anonymized. Tap the image to enlarge it.
 
 ## 5. Check that it works
 
@@ -92,7 +96,7 @@ chmod 700 "$TS_STATE_DIR"
   --socket="$TS_STATE_DIR/tailscaled.socket"
 ```
 
-Leave Terminal A open. Tailscale runs only while this window is open.
+Leave Terminal A open until you finish signing in and checking the connection. To run without an open terminal after that, set up [automatic startup](#5-start-automatically-after-login-optional).
 
 ### 4. Sign the Mac in
 
@@ -116,18 +120,100 @@ TS_STATE_DIR="$HOME/.local/share/heeler-tailscale"
 
 Then continue with [Join the same tailnet from Heeler](#3-join-the-same-tailnet-from-heeler) through [Check that it works](#5-check-that-it-works). In [Add the Mac as a Host](#4-add-the-mac-as-a-host), tap `heeler-mac-userspace` in **Choose from Tailnet…**, or type the IPv4 address you wrote down. Keep the Mac awake and Terminal A open while you use Heeler.
 
+### 5. Start automatically after login (optional)
+
+Use a user LaunchAgent to start this same userspace daemon whenever you log in to the Mac, and restart it if it exits. No `sudo` or system VPN is needed. It reuses the state directory above, so you keep the same Tailscale identity and IP without signing in again unless authorization expires.
+
+This starts **after you log in**, not before login after a reboot. It cannot run at the FileVault unlock screen or keep a sleeping Mac reachable. For unattended access before user login, a system LaunchDaemon requires separate administrator setup; that is not covered here.
+
+First, press **Control-C** in Terminal A. Do not run the manual daemon and the LaunchAgent at the same time.
+
+In Terminal B, find the absolute paths and create the LaunchAgents directory:
+
+```sh
+brew --prefix tailscale
+printf '%s\n' "$HOME"
+mkdir -p "$HOME/Library/LaunchAgents"
+```
+
+Create `~/Library/LaunchAgents/dev.heeler.tailscaled.plist` with the following content. Replace every `TAILSCALE_PREFIX` with the first command's output (normally `/opt/homebrew/opt/tailscale` on Apple Silicon or `/usr/local/opt/tailscale` on Intel), and every `MAC_HOME` with the second command's output. Use absolute paths, not `~`, `$HOME`, or shell commands inside the plist.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.heeler.tailscaled</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>TAILSCALE_PREFIX/bin/tailscaled</string>
+        <string>--tun=userspace-networking</string>
+        <string>--statedir=MAC_HOME/.local/share/heeler-tailscale</string>
+        <string>--socket=MAC_HOME/.local/share/heeler-tailscale/tailscaled.socket</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>StandardOutPath</key>
+    <string>MAC_HOME/.local/share/heeler-tailscale/tailscaled.log</string>
+    <key>StandardErrorPath</key>
+    <string>MAC_HOME/.local/share/heeler-tailscale/tailscaled.log</string>
+</dict>
+</plist>
+```
+
+Validate and load it from a terminal in your Mac desktop session:
+
+```sh
+PLIST="$HOME/Library/LaunchAgents/dev.heeler.tailscaled.plist"
+chmod 600 "$PLIST"
+plutil -lint "$PLIST" && launchctl bootstrap "gui/$(id -u)" "$PLIST"
+launchctl print "gui/$(id -u)/dev.heeler.tailscaled"
+```
+
+If validation fails, fix the plist before loading it. The service should show `state = running`. Check that Tailscale is still signed in and its IP matches the one you recorded:
+
+```sh
+"$(brew --prefix tailscale)/bin/tailscale" \
+  --socket="$HOME/.local/share/heeler-tailscale/tailscaled.socket" status
+"$(brew --prefix tailscale)/bin/tailscale" \
+  --socket="$HOME/.local/share/heeler-tailscale/tailscaled.socket" ip -4
+```
+
+You can now close both terminals. Check the Host from Heeler again, then repeat the check after restarting the Mac and logging in. To diagnose startup failures, inspect `launchctl print` above and the log:
+
+```sh
+tail -n 50 "$HOME/.local/share/heeler-tailscale/tailscaled.log"
+```
+
+To stop the managed daemon, unload it rather than killing its process (which `KeepAlive` restarts):
+
+```sh
+launchctl bootout "gui/$(id -u)/dev.heeler.tailscaled"
+```
+
+Load it again with the `bootstrap` command above. To disable automatic startup permanently, also remove the plist after unloading it:
+
+```sh
+rm "$HOME/Library/LaunchAgents/dev.heeler.tailscaled.plist"
+```
+
 ### Stop or remove the Mac
 
-To stop tailnet access to the Mac, press **Control-C** in Terminal A. To start again, run [Start Tailscale](#3-start-tailscale) again. Tailscale also stops when you restart the Mac or log out.
+For a manual daemon, press **Control-C** in Terminal A to stop tailnet access. To start again, run [Start Tailscale](#3-start-tailscale). It also stops when you restart the Mac or log out. If you set up automatic startup, use `bootout` above instead; the LaunchAgent starts again at your next login unless you remove its plist.
 
-To remove the Mac from the tailnet, run this while Terminal A is still running:
+To remove the Mac from the tailnet, run this while the daemon is still running (manually or under the LaunchAgent):
 
 ```sh
 "$(brew --prefix tailscale)/bin/tailscale" \
   --socket="$HOME/.local/share/heeler-tailscale/tailscaled.socket" logout
 ```
 
-Then press **Control-C** in Terminal A and delete the saved state:
+Then stop the daemon. For the LaunchAgent, unload it and remove its plist as described above; for a manual daemon, press **Control-C** in Terminal A. Only then delete the saved state:
 
 ```sh
 rm -rf "$HOME/.local/share/heeler-tailscale"
@@ -144,10 +230,10 @@ If the Mac still appears in the Tailscale admin console, remove it there.
 | SSH sign-in fails | Use the Mac account's key or password, not your Tailscale login. |
 | SSH works but herdr checks fail | Recheck herdr in [Prepare the Host](overlay-networks.md#prepare-the-host). |
 | **Not signed in** or **Signed out** | Tap **Sign In** on the network's row, or open the network and tap **Sign In with Browser**. |
-| Without a VPN: Terminal B can't connect to Tailscale, or shows a different machine | Keep Terminal A running, and copy the commands in Terminal B exactly. |
+| Without a VPN: Terminal B can't connect to Tailscale, or shows a different machine | Keep Terminal A running or check the LaunchAgent, and use the guide's exact socket path. |
 | Without a VPN: the Mac is online but SSH times out | Check that `nc -vz 127.0.0.1 22` works on the Mac, and that your access rules allow Heeler to reach the Mac on `tcp:22`. |
 | Without a VPN: other Mac apps can't reach tailnet devices | Expected. In this mode, the Mac's own apps get no tailnet access. Tailnet devices can still reach the Mac. |
-| Without a VPN: it stopped working after a restart | Run [Start Tailscale](#3-start-tailscale) again in Terminal A. |
+| Without a VPN: it stopped working after a restart | With [automatic startup](#5-start-automatically-after-login-optional), log in to the Mac and check the service and log. Otherwise, run [Start Tailscale](#3-start-tailscale) again in Terminal A. |
 
 ## Sign out or remove Heeler
 

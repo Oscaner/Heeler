@@ -5,6 +5,17 @@ import Testing
 /// The herdr command lines Heeler shows for the user to run on a Host.
 @Suite("herdr command line")
 struct HerdrCommandLineTests {
+    @Test func anEndpointOverridesTheSessionWithoutShellExpansion() throws {
+        let endpoint = try #require(HerdrEndpoint(
+            socketPath: "/tmp/herdr test/$USER/herdr/herdr.sock",
+            executablePath: "/tmp/herdr test/launcher"))
+        #expect(
+            HerdrCommandLine.render(
+                session: "other", endpoint: endpoint,
+                arguments: ["worktree", "remove", "--workspace", "w $(id)", "--force"])
+                == #"/bin/sh -c 'export HERDR_SOCKET_PATH="$1"; shift; exec "$@"' herdr '/tmp/herdr test/$USER/herdr/herdr.sock' '/tmp/herdr test/launcher' worktree remove --workspace 'w $(id)' --force"#)
+    }
+
     @Test func theDefaultSessionGetsTheShortForm() {
         #expect(
             HerdrCommandLine.render(session: "", arguments: ["plugin", "enable", "heeler"])

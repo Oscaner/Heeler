@@ -55,5 +55,16 @@ extension SSHTransportSettings {
             hostKeyPolicy: hostKeyPolicy,
             hostKeyTrust: .host(host.id),
             socket: host.socketLocation)
+        // A Pairing Code v2 endpoint (ADR 0023) replaces the `herdr` on the
+        // SSH PATH for every herdr exec; `socket` already names its socket.
+        if let endpoint = host.herdrEndpoint,
+            let launcher = HerdrLauncher(
+                executablePath: endpoint.executablePath, socketPath: endpoint.socketPath)
+        {
+            herdrLauncher = launcher
+            sessionListCommand = launcher.sessionListCommand
+            pluginListCommand = launcher.pluginListCommand
+            notificationConfigDirCommand = launcher.notificationConfigDirCommand
+        }
     }
 }

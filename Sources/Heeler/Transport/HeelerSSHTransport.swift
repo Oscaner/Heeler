@@ -337,6 +337,9 @@ actor HeelerSSHTransport: Transport {
     private let stageDirectoryCommand: String
     private let pluginListCommand: String
     private let notificationConfigDirCommand: String
+    /// The Host's herdr endpoint launcher (ADR 0023); nil runs the `herdr` on
+    /// the SSH PATH.
+    private let herdrLauncher: HerdrLauncher?
     private let channelAdmission: SSHChannelAdmission
     private let environment = SharedAsyncOperation<RemoteHostEnvironment>(cachesSuccess: true)
     private let windowsBridgeCheck = SharedAsyncOperation<Void>(cachesSuccess: true)
@@ -559,6 +562,7 @@ actor HeelerSSHTransport: Transport {
         pluginListCommand = SSHTransportSettings.defaultPluginListCommand
         notificationConfigDirCommand =
             SSHTransportSettings.defaultNotificationConfigDirCommand
+        herdrLauncher = nil
         channelAdmission = SSHChannelAdmission()
     }
 
@@ -577,6 +581,7 @@ actor HeelerSSHTransport: Transport {
         stageDirectoryCommand = settings.stageDirectoryCommand
         pluginListCommand = settings.pluginListCommand
         notificationConfigDirCommand = settings.notificationConfigDirCommand
+        herdrLauncher = settings.herdrLauncher
         channelAdmission = SSHChannelAdmission()
     }
 
@@ -1663,9 +1668,20 @@ actor HeelerSSHTransport: Transport {
     private func resolveNotificationConfigDirectory() async throws -> String {
         let listOutput = try await runNotificationPluginProbe(command: pluginListCommand)
         let pluginID = try installedNotificationPluginID(in: listOutput)
-        let configDirCommand = notificationConfigDirCommand.replacingOccurrences(
-            of: SSHTransportSettings.notificationPluginIDToken,
-            with: pluginID)
+        var configDirCommand = notificationConfigDirCommand
+        if herdrLauncher != nil {
+            // The launcher's paths follow the body's single token and may
+            // contain any text, so only that first occurrence is the id.
+            if let token = configDirCommand.range(
+                of: SSHTransportSettings.notificationPluginIDToken)
+            {
+                configDirCommand.replaceSubrange(token, with: pluginID)
+            }
+        } else {
+            configDirCommand = configDirCommand.replacingOccurrences(
+                of: SSHTransportSettings.notificationPluginIDToken,
+                with: pluginID)
+        }
         let output = try await runNotificationPluginProbe(command: configDirCommand)
         guard
             let directory = Self.markerValue(
@@ -1711,7 +1727,7 @@ actor HeelerSSHTransport: Transport {
             let result = try await runExec(
                 Self.cLocaleCommand(HerdrHostPath.wrappingBareHerdr(command)))
             if let missing = HerdrHostPath.missingBinaryError(
-                exitStatus: result.exitStatus, command: command)
+                exitStatus: result.exitStatus, command: command, launcher: herdrLauncher)
             {
                 throw missing
             }
@@ -1726,6 +1742,8 @@ actor HeelerSSHTransport: Transport {
             throw TransportError.timedOut
         } catch TransportError.herdrBinaryNotFound {
             throw TransportError.herdrBinaryNotFound
+        } catch TransportError.herdrLauncherNotFound(let path) {
+            throw TransportError.herdrLauncherNotFound(path: path)
         } catch let error as NotificationRegistrationError {
             throw error
         } catch {
@@ -2258,7 +2276,8 @@ actor HeelerSSHTransport: Transport {
                 let command = try Self.wakeExecCommand(
                     wakeCommand: self.wakeCommand,
                     socketPath: socketPath,
-                    socketLocation: self.socketLocation)
+                    socketLocation: self.socketLocation,
+                    launcher: self.herdrLauncher)
                 let result = try await self.runExec(command)
                 guard result.exitStatus == 0, result.reachedEOF else {
                     throw TransportError.channelFailed(
@@ -2303,7 +2322,18 @@ actor HeelerSSHTransport: Transport {
         {
             return .posix(home: "/")
         }
-        return try await remoteEnvironment()
+        let environment = try await remoteEnvironment()
+        if environment.isWindows { try refuseHerdrEndpointOnWindows() }
+        return environment
+    }
+
+    /// A herdr endpoint is a POSIX contract (ADR 0023): its launcher runs
+    /// under `/bin/sh`. A native Windows Host refuses it outright rather than
+    /// reaching for `herdr.exe` or a Windows socket path.
+    private func refuseHerdrEndpointOnWindows() throws {
+        guard herdrLauncher != nil else { return }
+        throw TransportError.hostFeatureUnavailable(
+            feature: "A herdr endpoint from a Pairing Code is supported only on macOS and Linux Hosts")
     }
 
     func remoteHomeDirectory() async throws -> String {
@@ -2348,7 +2378,9 @@ actor HeelerSSHTransport: Transport {
 
     /// Offline Unix CLI commands do not need HOME or a live herdr endpoint.
     private func hostCommandEnvironment() async throws -> RemoteHostEnvironment {
-        isWindowsHost ? try await remoteEnvironment() : .posix(home: "/")
+        guard isWindowsHost else { return .posix(home: "/") }
+        try refuseHerdrEndpointOnWindows()
+        return try await remoteEnvironment()
     }
 
     private func checkWindowsBridge() async throws {
@@ -2392,8 +2424,11 @@ actor HeelerSSHTransport: Transport {
                 }
                 let result = try await self.runExec(
                     invocation)
+                // Only the session list runs herdr here; Agent discovery and
+                // skill probes never reach the endpoint's launcher.
                 if let missing = HerdrHostPath.missingBinaryError(
-                    exitStatus: result.exitStatus, command: command)
+                    exitStatus: result.exitStatus, command: command,
+                    launcher: command == self.sessionListCommand ? self.herdrLauncher : nil)
                 {
                     throw missing
                 }
@@ -2681,12 +2716,19 @@ actor HeelerSSHTransport: Transport {
     /// The exec command that wakes a stopped herdr server (#6). A named
     /// session scopes the wake to its own state directory, so the spawned
     /// server serves the socket the request is actually waiting on.
+    ///
+    /// An endpoint `launcher` (ADR 0023) replaces `wakeCommand`: it runs the
+    /// launcher's `remote-client-bridge` with no PATH export.
     static func wakeExecCommand(
-        wakeCommand: String, socketPath: String, socketLocation: HerdrSocketLocation
+        wakeCommand: String, socketPath: String, socketLocation: HerdrSocketLocation,
+        launcher: HerdrLauncher? = nil
     ) throws -> String {
         guard let quotedSocketPath = RemoteShellPath.quotedAbsolute(socketPath) else {
             throw TransportError.channelFailed(
                 detail: "The remote socket path cannot be quoted safely.")
+        }
+        if let launcher {
+            return cLocaleCommand(launcher.wakeCommand(quotedSocketPath: quotedSocketPath))
         }
         let command: String
         switch socketLocation {
@@ -2963,7 +3005,8 @@ actor HeelerSSHTransport: Transport {
                         agentAttachCommand: attachCommand,
                         terminalAttachCommand: terminalAttachCommand,
                         request: request,
-                        socketPath: socketPath)
+                        socketPath: socketPath,
+                        launcher: herdrLauncher)
                     channel = try await connection.openPTY(
                         command: command,
                         columns: request.cols,
@@ -3015,11 +3058,16 @@ actor HeelerSSHTransport: Transport {
     /// can still reach the PTY; the handshake marker is printed immediately
     /// before `exec` of attach so the bootstrap gate can drop everything earlier.
     /// See `AttachBootstrapHandshake`.
+    ///
+    /// An endpoint `launcher` (ADR 0023) replaces both injectable commands:
+    /// it runs the launcher's `agent attach` or `terminal attach` with no
+    /// PATH export. Target and socket validation are the same.
     static func attachExecCommand(
         agentAttachCommand: String,
         terminalAttachCommand: String,
         request: TerminalAttachRequest,
-        socketPath: String
+        socketPath: String,
+        launcher: HerdrLauncher? = nil
     ) throws -> String {
         let attachCommand = attachCommand(
             agentAttachCommand: agentAttachCommand,
@@ -3044,6 +3092,16 @@ actor HeelerSSHTransport: Transport {
             throw TransportError.channelFailed(
                 detail: "The remote socket path cannot be quoted safely.")
         }
+        if let launcher {
+            return launcher.attachCommand(
+                subcommand: Self.attachCommand(
+                    agentAttachCommand: "agent attach",
+                    terminalAttachCommand: "terminal attach",
+                    target: request.target),
+                target: target,
+                takeover: request.takeover,
+                quotedSocketPath: quotedSocketPath)
+        }
         let takeover = request.takeover ? " --takeover" : ""
         // The marker goes out last thing before the exec, so earlier startup
         // chatter can be dropped.
@@ -3058,13 +3116,15 @@ actor HeelerSSHTransport: Transport {
     static func attachExecCommand(
         attachCommand: String,
         request: TerminalAttachRequest,
-        socketPath: String
+        socketPath: String,
+        launcher: HerdrLauncher? = nil
     ) throws -> String {
         try attachExecCommand(
             agentAttachCommand: attachCommand,
             terminalAttachCommand: attachCommand,
             request: request,
-            socketPath: socketPath)
+            socketPath: socketPath,
+            launcher: launcher)
     }
 
     private static func attachCommand(
@@ -3083,10 +3143,14 @@ actor HeelerSSHTransport: Transport {
     /// Maps a remote attach exit onto the Transport taxonomy. Exit 127 is
     /// `herdrBinaryNotFound` only when the exec'd command is still a bare
     /// `herdr` word; injectable scripts keep the generic exit with its output.
+    /// With an endpoint `launcher`, exit 126 or 127 is
+    /// `herdrLauncherNotFound` instead.
     static func attachChannelFailure(
-        exitStatus: Int32, output: String? = nil, attachCommand: String
+        exitStatus: Int32, output: String? = nil, attachCommand: String,
+        launcher: HerdrLauncher? = nil
     ) -> TransportError {
-        HerdrHostPath.missingBinaryError(exitStatus: exitStatus, command: attachCommand)
+        HerdrHostPath.missingBinaryError(
+            exitStatus: exitStatus, command: attachCommand, launcher: launcher)
             ?? .attachExited(status: exitStatus, output: output)
     }
 
@@ -3096,13 +3160,16 @@ actor HeelerSSHTransport: Transport {
     /// `SSHError` takes the Transport's operation mapping. An SSH failure
     /// that mapping leaves unclassified names only the side that failed: its
     /// case name is no explanation, and the detail reaches the user.
-    static func attachFailure(_ error: any Error, attachCommand: String) -> TransportError {
+    static func attachFailure(
+        _ error: any Error, attachCommand: String, launcher: HerdrLauncher? = nil
+    ) -> TransportError {
         let underlying: any Error
         let prefix: String
         switch error as? HeelerSSHAttachPumpError {
         case .remoteExit(let status, let output):
             return attachChannelFailure(
-                exitStatus: status, output: output, attachCommand: attachCommand)
+                exitStatus: status, output: output, attachCommand: attachCommand,
+                launcher: launcher)
         case .input(let inputError):
             (underlying, prefix) = (inputError, "attach input")
         case .output(let outputError):
@@ -3149,7 +3216,8 @@ actor HeelerSSHTransport: Transport {
                 failure = nil
             } else {
                 noteOperationFailure(error)
-                failure = Self.attachFailure(error, attachCommand: attachCommand)
+                failure = Self.attachFailure(
+                    error, attachCommand: attachCommand, launcher: herdrLauncher)
             }
         }
 

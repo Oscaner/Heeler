@@ -97,6 +97,13 @@ extension TransportError {
                 detail: nil,
                 recoverySuggestion:
                     "Put herdr's install directory on the account's non-interactive SSH PATH.")
+        case .herdrLauncherNotFound(let path):
+            TransportErrorPresentation(
+                summary: "The herdr launcher could not run",
+                detail: path,
+                recoverySuggestion:
+                    "Check that this launcher exists, is executable, and can start herdr. "
+                    + "Pair the Host again if its path changed.")
         case .streamLocalOpenFailed:
             TransportErrorPresentation(
                 summary: "herdr is not running on this Host",
@@ -170,6 +177,18 @@ extension TransportError {
                 },
                 recoverySuggestion: nil)
         }
+    }
+
+    /// `presentation` for a Host. An endpoint Host's socket comes from its
+    /// Pairing Code (ADR 0023): no session setting can bring a missing one
+    /// back; recovery targets the configured instance.
+    func presentation(usesHerdrEndpoint: Bool) -> TransportErrorPresentation {
+        let shared: TransportErrorPresentation = presentation
+        guard usesHerdrEndpoint, case .socketNotFound = self else { return shared }
+        return TransportErrorPresentation(
+            summary: shared.summary, detail: shared.detail,
+            recoverySuggestion:
+                "Start the herdr instance configured for this Host and verify its socket path.")
     }
 
     /// herdr's own sentence may already end in a period; `explanation`

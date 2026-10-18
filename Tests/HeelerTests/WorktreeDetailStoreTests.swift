@@ -355,6 +355,25 @@ struct WorktreeDetailStoreTests {
                 == "herdr --session work worktree remove --workspace w1 --force")
     }
 
+    @Test func anEndpointScopesTheForcedRemovalInsteadOfTheSession() async throws {
+        let endpoint = try #require(HerdrEndpoint(
+            socketPath: "/tmp/custom herdr/herdr/herdr.sock",
+            executablePath: "/tmp/custom herdr/launch"))
+        let store = try await refusedStore(
+            sessionName: "wrong", endpoint: endpoint,
+            showChanges: { _ in },
+            error: HerdrAPIError(
+                code: "dirty_worktree_requires_force", message: Self.submoduleMessage))
+        let command = #"/bin/sh -c 'export HERDR_SOCKET_PATH="$1"; shift; exec "$@"' herdr '/tmp/custom herdr/herdr/herdr.sock' '/tmp/custom herdr/launch' worktree remove --workspace w1 --force"#
+        #expect(store.refusalCommand == command)
+        guard case .failed(let message) = store.removalPhase else {
+            Issue.record("Expected a refusal with a recovery command")
+            return
+        }
+        #expect(message.contains(command))
+        #expect(store.refusalOffersChanges)
+    }
+
     @Test func dismissingASubmoduleRefusalWithdrawsTheCommand() async throws {
         let store = try await refusedStore(
             showChanges: { _ in },
@@ -538,12 +557,14 @@ struct WorktreeDetailStoreTests {
     private func refusedStore(
         workspaceID: String = "w1",
         sessionName: String = "",
+        endpoint: HerdrEndpoint? = nil,
         showChanges: @escaping (String) -> Void,
         error: some Error
     ) async throws -> WorktreeDetailStore {
         let store = makeStore(
             workspaceID: workspaceID,
             sessionName: sessionName,
+            endpoint: endpoint,
             list: { _ in Self.list(branch: "feat/issue-99") },
             remove: { _ in throw error },
             showChanges: showChanges)
@@ -556,6 +577,7 @@ struct WorktreeDetailStoreTests {
     private func makeStore(
         workspaceID: String = "w1",
         sessionName: String = "",
+        endpoint: HerdrEndpoint? = nil,
         list: @escaping (String) async throws -> WorktreeListResponse,
         remove: @escaping (WorktreeRemovalRequest) async throws -> WorktreeRemovalReceipt,
         showChanges: ((String) -> Void)? = nil
@@ -573,6 +595,7 @@ struct WorktreeDetailStoreTests {
             workspaceLabel: "issue-99",
             checkout: checkout,
             sessionName: sessionName,
+            endpoint: endpoint,
             list: list,
             remove: remove,
             hasWorkingAgent: { true },

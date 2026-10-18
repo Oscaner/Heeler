@@ -1,4 +1,4 @@
-<!-- Translated from docs/guides/overlay-networks.md at 9fe5247e -->
+<!-- Translated from docs/guides/overlay-networks.md at 93baae40 -->
 
 # 通过 Overlay Network 连接 Heeler
 
@@ -65,30 +65,35 @@ Heeler 会直接加入 Overlay Network，因此手机上无需安装 Tailscale�
 
 当 Mac 与 Heeler 已加入同一个 Overlay Network 后，从服务商指南回到这里继续操作。
 
-1. 打开 **Hosts** 并轻点 **Add Host**。对于 Tailscale 和 EasyTier，也可以直接在 Settings 中打开对应网络，轻点 Mac 旁的 **Add**，系统会自动填入地址。
-2. 将表单顶部的 **Network** 设为你保存的 Overlay Network。（**Direct** 表示不使用 Overlay Network 直连。）
-3. 按下表填写字段并保存。
-4. 仅在显示的指纹与 Mac 上的指纹一致时轻点 **Trust**。如果某项检查未通过，请排查后轻点 **Run Checks Again**。
+1. 打开 **Hosts** 并轻点 **Add Host**。在 **Routes** 下轻点 **Add Route**，将 **Network** 设为你保存的 Overlay Network，填写 **Address** 和 **Port** 后轻点 **Save**。对于 Tailscale 和 EasyTier，也可以直接在 Settings 中打开对应网络，轻点 Mac 旁的 **Add**，系统会自动填入该路由。（**Direct** 表示不使用 Overlay Network 直连。）
+2. 返回 **Add Host** 页面，按下表填写其余字段并轻点 **Save**。
+3. 仅在显示的指纹与 Mac 上的指纹一致时轻点 **Trust**。如果某项检查未通过，请排查后轻点 **Run Checks Again**。
 
 | 字段 | 值 |
 | --- | --- |
 | Name | 标识这台 Mac 的任意名称 |
-| Address | Mac 在该 Overlay Network 中的 IP 地址（不带端口号或 `/24` 等后缀） |
-| Port | `22`（除非具体指南另有说明） |
 | User | 你的 Mac 用户名（来自 `id -un`） |
+| Network（在 Route 中） | 你保存的 Overlay Network |
+| Address（在 Route 中） | Mac 在该 Overlay Network 中的 IP 地址（不带端口号或 `/24` 等后缀） |
+| Port（在 Route 中） | `22`（除非具体指南另有说明） |
+| Jump Host（在 Route 中） | 留空 |
 | Authentication | 你在上面选择的登录方式 |
 | herdr Session | 会话名称，留空则使用默认会话 |
-| Jump Host | 留空 |
 
-填写地址时，Tailscale 支持 **Choose from Tailnet…**（保持选中 **IP Address**），EasyTier 支持 **Choose from Network…**。对于 ZeroTier，请从 ZeroTier Central 复制 Mac 的 IP 地址。
+在路由页面填写地址时，Tailscale 支持 **Choose from Tailnet…**（保持选中 **IP Address**），EasyTier 支持 **Choose from Network…**。对于 ZeroTier，请从 ZeroTier Central 复制 Mac 的 IP 地址。
 
 ## 验证连接
 
+<a href="../images/overlay-networks/networks-connected.png"><img src="../images/overlay-networks/networks-connected.png" width="300" alt="Overlay Networks 列表，三个网络均显示已连接且开关已开启"></a>
+
+这里的 **Connected** 表示 Heeler 已加入网络，不代表 Host 正在使用它。请继续按下方步骤验证 Host 路由。网络名称已匿名化；你只需配置所选网络，不必同时添加三个。轻点图片可放大查看。
+
 1. 在 **Settings > Overlay Networks** 中，该网络显示为 **Connected**。
-2. Host 各项检查全部通过，会话中的 Agent 或终端正常加载。
-3. 打开一个 **New Terminal**，运行 `pwd` 能输出 Mac 上的目录。测试时请新建终端，不要在正在运行的 Agent 终端里测试。
-4. 关闭手机 Wi-Fi，在蜂窝网络下重复上述测试。
-5. 切出 Heeler 超过 20 秒后再返回，确认 Host 和终端能够自动重连。（切到后台期间 Heeler 会断开 Overlay Network 连接，它不是常驻后台的系统 VPN。）
+2. 从 **Hosts** 打开目标 Host，查看 **Routes** 下标记为 **In Use** 的路由，确认它使用的是本次要测试的 Overlay Network。如果其他路由胜出，这次连接不能证明目标 Overlay 路由可用。参见[查看当前使用的路由](host-routes.md#查看当前使用的路由)。
+3. Host 各项检查全部通过，会话中的 Agent 或终端正常加载。
+4. 打开一个 **New Terminal**，运行 `pwd` 能输出 Mac 上的目录。测试时请新建终端，不要在正在运行的 Agent 终端里测试。
+5. 关闭手机 Wi-Fi，在蜂窝网络下重复上述测试，并再次检查 **In Use**。其他可用路由（例如跳板机或另一个 Overlay Network）仍可能胜出。
+6. 切出 Heeler 超过 20 秒后再返回，确认 Host 和终端能够自动重连，并再次检查 **In Use**，确认重连使用的路由。（切到后台期间 Heeler 会断开 Overlay Network 连接，它不是常驻后台的系统 VPN。）
 
 ## 故障排查
 
@@ -99,10 +104,10 @@ Heeler 会直接加入 Overlay Network，因此手机上无需安装 Tailscale�
 | **Waiting for approval**（Tailscale） | 在 Tailscale 管理控制台中批准该设备。 |
 | **Waiting for authorization**（ZeroTier） | 在 ZeroTier Central 中授权 Heeler 设备。 |
 | **Waiting for a network**（EasyTier Config Server） | 在 EasyTier 控制台中为 Heeler 的 Machine ID 分配网络。 |
-| 网络已连接，但 SSH 超时 | 检查 Host 的 Network、地址和端口；确认 Mac 未休眠且已开启“远程登录”。 |
+| 网络已连接，但 SSH 超时 | 检查路由的 Network、地址和端口；确认 Mac 未休眠且已开启“远程登录”。 |
 | SSH 登录失败 | 检查用户名、“远程登录”访问权限，以及所用的密钥或密码。 |
 | SSH 正常，但 herdr 检查失败 | 查看未通过的具体检查项；通常是该账户下未安装 herdr，或会话名称有误。 |
-| 手动关闭网络开关后又自动开启 | 有 Host 正在使用该网络。如需保持关闭，请修改对应 Host 的 **Network** 或删除该 Host。 |
+| 手动关闭网络开关后又自动开启 | 有 Host 路由正在使用该网络。如需保持关闭，请修改对应路由的 **Network** 或删除该 Host。 |
 
 最后核对于 2026-10-09（macOS）。
 

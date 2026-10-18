@@ -58,6 +58,10 @@ struct RequestFailurePresentationTests {
         #expect(
             NotificationPreferencesStore.message(for: TransportError.herdrBinaryNotFound)
                 == TransportError.herdrBinaryNotFound.presentation.message)
+        let launcher = TransportError.herdrLauncherNotFound(path: "/opt/example/bin/herdr")
+        #expect(
+            NotificationPreferencesStore.message(for: launcher)
+                == launcher.presentation.message)
     }
 
     @Test func attachKeepsItsContextSpecificArms() {
@@ -81,6 +85,8 @@ struct RequestFailurePresentationTests {
         #expect(
             AttachTerminalStore.message(for: TransportError.herdrBinaryNotFound)
                 == TransportError.herdrBinaryNotFound.presentation.message)
+        let launcher = TransportError.herdrLauncherNotFound(path: "/opt/example/bin/herdr")
+        #expect(AttachTerminalStore.message(for: launcher) == launcher.presentation.message)
         let dropped = TransportError.channelFailed(detail: "terminal controller: gone")
         #expect(
             AttachTerminalStore.message(for: dropped)
@@ -139,5 +145,7 @@ struct RequestFailurePresentationTests {
         #expect(
             AgentComposerStore.message(for: TransportError.herdrBinaryNotFound)
                 == TransportError.herdrBinaryNotFound.presentation.message)
+        let launcher = TransportError.herdrLauncherNotFound(path: "/opt/example/bin/herdr")
+        #expect(AgentComposerStore.message(for: launcher) == launcher.presentation.message)
     }
 }

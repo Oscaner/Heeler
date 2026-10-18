@@ -1,4 +1,4 @@
-<!-- Translated from docs/guides/zerotier.md at 2b014a24 -->
+<!-- Translated from docs/guides/zerotier.md at b9b2cbc3 -->
 
 # 通过 ZeroTier 连接 Heeler
 
@@ -60,17 +60,18 @@ ZeroTier 有新旧两个控制台。2025 年 11 月 5 日之后注册的账号�
 
 ## 4. Heeler：将 Mac 添加为 Host
 
-按[从 Heeler 连接](overlay-networks.md#从-heeler-连接)的步骤填写以下字段：
+前往 **Hosts > Add Host**，在 **Routes** 下轻点 **Add Route**，按[从 Heeler 连接](overlay-networks.md#从-heeler-连接)的步骤填写以下字段：
 
-| Host 字段 | 值 |
+| 字段 | 值 |
 | --- | --- |
-| Network | 刚才连接的 ZeroTier 网络 |
-| Address | Mac 的受管 IP（不带 `/24` 后缀） |
-| Port | Mac 的 SSH 端口，通常为 `22` |
-| User and Authentication | 你的 Mac 用户名和所选的登录方式 |
-| Jump Host | 留空 |
+| User | 你的 Mac 用户名 |
+| Network（在 Route 中） | 刚才连接的 ZeroTier 网络 |
+| Address（在 Route 中） | Mac 的受管 IP（不带 `/24` 后缀） |
+| Port（在 Route 中） | Mac 的 SSH 端口，通常为 `22` |
+| Jump Host（在 Route 中） | 留空 |
+| Authentication | 你所选的登录方式 |
 
-请在 Address 中填写 IP 地址，不要填写设备名称或 Node ID。
+请在 Address 中填写 IP 地址，不要填写设备名称或 Node ID。先保存路由，再保存 Host。
 
 核对 SSH 指纹，等待 Host 检查通过，然后完成[验证连接](overlay-networks.md#验证连接)。
 
@@ -91,6 +92,8 @@ ZeroTier 有新旧两个控制台。2025 年 11 月 5 日之后注册的账号�
 ## 进阶：Planet 与 Moon 设置
 
 使用官方 ZeroTier Central 时请保持留空。如果你自建了 ZeroTier 控制器，请使用管理员提供的文件和 ID 配置 **Import Planet File…** 与 **Add Moon**，并在自建控制器中授权 Heeler。
+
+**隐私提示：** Heeler 加入的所有 ZeroTier 网络共享一组根服务器，包括各网络配置的根与 ZeroTier 官方根。地址查询和中继流量可能经过其中任意根服务器。自建根的运营者可能获知你的设备为其他网络查询的 ZeroTier 地址，官方根也可能获知自建网络中的地址查询。请只添加你信任其运营者的根；分别创建网络条目并不能隔离这些查询。
 
 ## 停用或移除网络
 
