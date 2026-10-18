@@ -42,7 +42,9 @@ struct AgentCardView: View {
                         .accessibilityLabel("Pinned")
                 }
                 Spacer(minLength: 8)
-                AgentStatusBadge(status: agent.agent.status)
+                if agent.agent.status.displayTitle != nil {
+                    AgentStatusBadge(status: agent.agent.status)
+                }
             }
             let additionalRows = Array(presentation.rows.dropFirst())
             additionalRowViews(additionalRows)
@@ -226,7 +228,7 @@ struct AgentStatusBadge: View {
                 SolvingOrbView(size: 12)
                     .accessibilityHidden(true)
             }
-            Text(status.rawValue.capitalized)
+            Text(status.displayTitle ?? "")
                 .font(.caption2.weight(.semibold))
         }
         .padding(.horizontal, 6)

@@ -545,8 +545,8 @@ final class TerminalAgentChip: UIControl {
         updatePulse()
 
         accessibilityLabel = item.qualifier.map { "\(item.title), \($0)" } ?? item.title
-        let statusValue = item.status.rawValue.capitalized
-        accessibilityValue = item.isPinned ? "Pinned, \(statusValue)" : statusValue
+        let value = [item.isPinned ? "Pinned" : nil, item.status.displayTitle].compactMap { $0 }
+        accessibilityValue = value.isEmpty ? nil : value.joined(separator: ", ")
         accessibilityTraits = selected ? [.button, .selected] : .button
         accessibilityHint = selected ? nil : "Switches to that Agent"
     }

@@ -243,6 +243,14 @@ struct ConsoleWorkspace: Identifiable, Hashable, Sendable {
 }
 
 extension AgentStatus {
+    /// The status as the UI spells it, or nil when there is nothing to say:
+    /// herdr reports `unknown` for an Agent whose state it cannot read, and
+    /// the word on its own tells the user nothing, so it is left out rather
+    /// than shown. Statuses this build does not recognize are still shown.
+    var displayTitle: String? {
+        self == .unknown ? nil : rawValue.capitalized
+    }
+
     /// Console sort bucket: Blocked > Done > Working > Idle. The order tracks
     /// how much of the user's attention each status is asking for — Blocked
     /// has stopped and is waiting on an answer, Done has a result to read,
