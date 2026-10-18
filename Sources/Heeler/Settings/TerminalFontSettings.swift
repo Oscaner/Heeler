@@ -17,14 +17,6 @@ enum TerminalFontOption: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var detail: String {
-        switch self {
-        case .system: "Menlo, whatever iOS resolves for a monospace face"
-        case .jetBrainsMono: "Tall, open letterforms drawn for reading code"
-        case .ibmPlexMono: "A quieter, more humanist monospace"
-        }
-    }
-
     /// The CoreText family name ghostty resolves. `nil` sets no `font-family`
     /// at all, leaving the platform's own choice in place.
     var familyName: String? {

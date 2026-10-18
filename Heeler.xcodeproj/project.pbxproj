@@ -58,7 +58,6 @@
 		14E762C3B70EA05D37216CF2 /* AgentSessionUsageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8351C76E39718F8E22210B8F /* AgentSessionUsageStore.swift */; };
 		14F3A10674FAF72C63042108 /* PairingConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EEAD52089A35D4B2D47AF25 /* PairingConnector.swift */; };
 		1565FE6BD35E1BF904B19595 /* SidebarLayoutVectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F868101495226A8BE768AC9 /* SidebarLayoutVectorTests.swift */; };
-		1566E45603CB8F83337BD9C3 /* TerminalAppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4273AC6F39EB1E015820E614 /* TerminalAppearanceSettingsView.swift */; };
 		15F48A8DDF0D76F41D8562A6 /* AgentInputModeSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D588CA22544907E638437FEA /* AgentInputModeSettingsTests.swift */; };
 		1677F9BCF3908565FCE2361A /* FileDiffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23C88AFF1D51D19671636D2 /* FileDiffView.swift */; };
 		1706E607DD6100E20479457C /* HeelerOverlay in Frameworks */ = {isa = PBXBuildFile; productRef = 91A9C5576393F944C6406F2C /* HeelerOverlay */; };
@@ -387,6 +386,7 @@
 		8668C3C60FB9539A7DD1A4EC /* Base64URL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32413805C1AA874DBEE37547 /* Base64URL.swift */; };
 		86EA13918F2EE2103B2DEFB3 /* AgentLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6A9489C21BDCFA7616782BF /* AgentLiveActivityWidget.swift */; };
 		88084FF5E3CBAF501DAFEF44 /* RemoteFiles+HeelerSSH.swift in Sources */ = {isa = PBXBuildFile; fileRef = C153200B3B3D2360D295D806 /* RemoteFiles+HeelerSSH.swift */; };
+		8852391AB553C278DECC94AB /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710F0F2EAD8E14489F3454CA /* AppearanceSettingsView.swift */; };
 		887C814EDEEAB7EC78D27D1A /* CodexIncrementalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D90FC76C9682026600DC1AC5 /* CodexIncrementalTests.swift */; };
 		8893F7C54FA49133EF850EB2 /* SidebarLayoutVectorFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88DA44F3EA811A40E96E06F2 /* SidebarLayoutVectorFile.swift */; };
 		88B077F195BA4B6B46FD330C /* notification-session-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = CC9851A5A6E65C7F52290A20 /* notification-session-v1.json */; };
@@ -982,7 +982,6 @@
 		41234EB3A4D26FF87A07F9D3 /* WorkspaceTerminalDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceTerminalDrawer.swift; sourceTree = "<group>"; };
 		414B652A16576BEDEE9AE000 /* ClosePaneStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClosePaneStoreTests.swift; sourceTree = "<group>"; };
 		423EDC5B2A1A0A20551CF9D9 /* ChatConversationStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatConversationStatus.swift; sourceTree = "<group>"; };
-		4273AC6F39EB1E015820E614 /* TerminalAppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAppearanceSettingsView.swift; sourceTree = "<group>"; };
 		427512344847A84699F819A0 /* TerminalFontSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalFontSettingsTests.swift; sourceTree = "<group>"; };
 		431389855EAA66004BCCB5B9 /* AgentRowLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRowLayoutTests.swift; sourceTree = "<group>"; };
 		43DC74615D7A661E18B7C9BA /* ClaudeTranscriptRecordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeTranscriptRecordTests.swift; sourceTree = "<group>"; };
@@ -1123,6 +1122,7 @@
 		70329190BDE5019584E5CF51 /* ChatLineFramerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLineFramerTests.swift; sourceTree = "<group>"; };
 		704EA74EEA72112672BCF9A6 /* PreSendGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreSendGate.swift; sourceTree = "<group>"; };
 		70EB6C147704B87ED1E31263 /* ChangesReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChangesReference.swift; sourceTree = "<group>"; };
+		710F0F2EAD8E14489F3454CA /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
 		733AB85D0EBE3F90487289EA /* AgentDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetailView.swift; sourceTree = "<group>"; };
 		73FE6F616BC224304FEBA2F8 /* ConsoleSheetPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleSheetPresentationTests.swift; sourceTree = "<group>"; };
 		7461B7A0FD2A4CDF34352D45 /* PairingCodeVectorFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCodeVectorFile.swift; sourceTree = "<group>"; };
@@ -2584,6 +2584,7 @@
 				775417BCAF4E4110FDEF5A75 /* AgentListFieldsPreview.swift */,
 				AAE86260EA6111621498F139 /* AgentListFieldsSettingsView.swift */,
 				DAEAF21DF91A1BCE4C9F79A3 /* AppAppearanceSettings.swift */,
+				710F0F2EAD8E14489F3454CA /* AppearanceSettingsView.swift */,
 				75AD4D2E9AF7A381719AB084 /* ChatCacheSettingsSection.swift */,
 				F9255BA36958DA6DB7BF58CF /* ChatTextSettings.swift */,
 				12FBBE02202C285590EC5736 /* EdgeDockSettings.swift */,
@@ -2597,7 +2598,6 @@
 				2C6805573EEF14C24FAE65F2 /* OverlayNetworksSettingsView.swift */,
 				CBC80D00F652CB84103C246F /* SettingsView.swift */,
 				57EAD92008AF144C63F5582E /* TerminalAppearancePane.swift */,
-				4273AC6F39EB1E015820E614 /* TerminalAppearanceSettingsView.swift */,
 				5CB08528C0328AA9AFE358CE /* TerminalFontSettings.swift */,
 				5A3319D35C3BBCD2CB151843 /* TerminalSettings.swift */,
 				9469465EF16322DDC174CD5E /* TerminalThemePickerView.swift */,
@@ -2903,6 +2903,7 @@
 				1A160820CAA7EC1D8F987602 /* AgentWindowDrag.swift in Sources */,
 				54D3A4F4FBF8F3F6C154BACE /* AppActivityCoordinator.swift in Sources */,
 				8D9ED28E1DB5A72B471CBD45 /* AppAppearanceSettings.swift in Sources */,
+				8852391AB553C278DECC94AB /* AppearanceSettingsView.swift in Sources */,
 				76EAFFA9DAD45987F02DC536 /* AsyncDeadline.swift in Sources */,
 				3C5AFE8D3844A13198DDBEEA /* AttachLinkIndex.swift in Sources */,
 				A25418700A3D7FCCC08026BF /* AttachRestorationTrace.swift in Sources */,
@@ -3185,7 +3186,6 @@
 				6B34378D8F7396BBF0DBB825 /* StartAgentView.swift in Sources */,
 				09C7B75B4780E79E3221E9C4 /* TerminalAgentSwitcher.swift in Sources */,
 				A000D3550C034E2978E8B485 /* TerminalAppearancePane.swift in Sources */,
-				1566E45603CB8F83337BD9C3 /* TerminalAppearanceSettingsView.swift in Sources */,
 				959E4E2F852C4CCF7A9770AA /* TerminalAttach.swift in Sources */,
 				DCF17C97836787E5481B5673 /* TerminalBackspaceButton.swift in Sources */,
 				C99BC52057BA048DDC4DE046 /* TerminalByteFeed.swift in Sources */,
