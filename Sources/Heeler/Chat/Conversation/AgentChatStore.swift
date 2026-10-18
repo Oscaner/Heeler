@@ -1099,7 +1099,7 @@ final class AgentChatStore {
         compactChecked.formUnion(ids)
         defer { matchSends() }
         guard let screen else { return }
-        if screen.rows.contains(where: { $0.text.contains(Self.compactingSpinner) }) {
+        if screen.rows.contains(where: { Self.showsRunningCompaction($0.text) }) {
             compactChecked.subtract(ids)
             for id in ids { compactingSeen[id] = now() }
             return
@@ -1113,7 +1113,13 @@ final class AgentChatStore {
         }
     }
 
-    /// Pi 0.85.1's and Oh My Pi 18.11's row while a compaction runs.
+    /// Pi 0.85.1's and Oh My Pi 18.11's row while a compaction runs, or
+    /// Pi's countdown before it retries a failed summarization call
+    /// ("Retrying (1/3) in 2s... (escape to cancel)").
+    private static func showsRunningCompaction(_ row: String) -> Bool {
+        row.contains(compactingSpinner) || row.contains(/Retrying \(\d+\/\d+\) in \d+s\.\.\./)
+    }
+
     private static let compactingSpinner = "Compacting context..."
 
     /// The last "Compaction failed:" row, when nothing but blank rows, the

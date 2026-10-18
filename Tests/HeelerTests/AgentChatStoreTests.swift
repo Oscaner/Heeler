@@ -1760,6 +1760,26 @@ struct AgentChatStoreTests {
         #expect(store.sendStatuses[id] == .overdue)
     }
 
+    /// Pi 0.85.1 retries a failed summarization call after a countdown
+    /// that takes the spinner's row for about 2 s: the compaction still
+    /// runs, so a read that lands on the countdown keeps the echo awaiting.
+    @Test func aCompactionRetryCountdownKeepsItsEchoAwaiting() async throws {
+        let capture = try ScreenFixture.text("pi-39-compacting-empty")
+        let retrying = capture.replacingOccurrences(
+            of: "Compacting context... (escape to cancel)", with: "Retrying (1/3) in 2s... (escape to cancel)")
+        #expect(retrying != capture)
+        let (_, store, pane, clock, id) = try await Self.sentCompact(.pi, screen: ANSIScreenDecoder.decode(retrying))
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        await store.step()
+        #expect(await pane.reads == 2)
+        #expect(store.sendStatuses[id] == .awaiting)
+    }
+
     /// A real Pi compaction runs 10 to 18 s while herdr reports the Agent
     /// idle (V3 PI-03): the echo stays awaiting, never "hasn't appeared",
     /// while the screen shows "Compacting context...", and the compaction's
