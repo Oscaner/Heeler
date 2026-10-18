@@ -37,6 +37,20 @@ struct OMPDialogParserTests {
         #expect(dialog.options.allSatisfy { $0.number == nil })
     }
 
+    /// Oh My Pi 18.12.1 lists the approval's choices under the details,
+    /// the pointer on the focused one. The keys still approve and deny, so
+    /// the card keeps its two options and leaves the list out of the body.
+    @Test func approvalChoiceListIsLeftOutOfTheBody() throws {
+        let dialog = try dialog("omp-36-approval-edit-18-12")
+        #expect(dialog.kind == .ompApproval)
+        #expect(dialog.title == "Allow tool: edit")
+        #expect(dialog.subject.toolName == "edit")
+        #expect(dialog.body == ["File: notes.txt"])
+        #expect(dialog.rows == 30..<38)
+        #expect(dialog.options.map(\.label) == ["Approve", "Deny"])
+        #expect(dialog.options.map(\.shortcut) == ["ctrl+q", "esc"])
+    }
+
     /// Typing during an approval goes to the prompt below and turns the
     /// footer's `type to steer instead` into `deny and send`.
     @Test func fingerprintIgnoresDraftFooterAndCountdown() throws {

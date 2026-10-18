@@ -42,7 +42,8 @@ enum OMPDialogParser {
         guard keys.contains(" approve"), keys.contains(" deny") else {
             return unrecognized(panel, on: screen, "The approval's keys are not on screen.")
         }
-        let body = panel.sections.dropLast().flatMap { $0 }.map(\.text)
+        let details = panel.sections.dropLast().flatMap { $0 }
+        let body = (keys.contains(" choose") ? withoutChoiceList(details) : details).map(\.text)
         var subject = DialogSubject()
         subject.toolName = String(title.dropFirst(approvalPrefix.count)).trimmingCharacters(in: .whitespaces)
         subject.command = value(of: "Command:", in: body).map { command in
@@ -64,6 +65,19 @@ enum OMPDialogParser {
                     program: .omp, kind: .ompApproval, title: title, sourceSuffix: nil, body: body, progress: nil,
                     options: options),
                 focus: DialogFocusState(), subject: subject))
+    }
+
+    /// Oh My Pi 18.12 lists the approval's choices below the details: the
+    /// focused one led by the pointer, the others indented to its label.
+    /// The keys approve and deny as before, so the list is left out.
+    private static func withoutChoiceList(_ lines: [OMPPanel.Line]) -> [OMPPanel.Line] {
+        guard let focused = lines.firstIndex(where: { pointed($0.text)?.isFocused == true }) else { return lines }
+        let sibling = lines[focused].indent + 2
+        var start = focused
+        while start > lines.startIndex, lines[start - 1].indent == sibling { start -= 1 }
+        var end = focused + 1
+        while end < lines.endIndex, lines[end].indent == sibling { end += 1 }
+        return Array(lines[..<start] + lines[end...])
     }
 
     /// `Ask`, one page per question. Several questions add a tab row above
