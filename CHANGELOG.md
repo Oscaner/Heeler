@@ -55,8 +55,8 @@ Entries reference the pull request that made the change.
 
 - Where Agent detail is pushed over the list (iPhone, or a compact iPad
   window), Open Terminal in an Agent's More menu opens the Shell Terminal over
-  the Agent, so Back returns to the Agent's Chat or terminal instead of the
-  Agents list. The Agent's notifications still show as banners there, and
+  the Agent, so Back in the terminal's header, or the edge swipe, returns to
+  the Agent's Chat or terminal instead of the Agents list. The Agent's notifications still show as banners there, and
   tapping one returns to the Agent. Beside the list it still selects the
   terminal there. (#425)
 - On a connected Host, Agent Gone says the Agent may have exited while its

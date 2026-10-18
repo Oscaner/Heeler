@@ -626,6 +626,11 @@ struct AgentDetailView: View {
             keyboardHandoff: keyboardHandoff,
             backTitle: "Back to Agent",
             onBack: { shellRoute = nil })
+        // A pushed screen takes the stack's environment, not this detail's,
+        // and the Console sets Back inside the stack: without this the
+        // terminal's header drew no Back, where a Terminals-tab push draws
+        // one, and only the edge swipe returned to the Agent.
+        .environment(\.showsDetailBackButton, isPushedOverList)
     }
 
     /// Open Terminal routes back to the tab this detail already created;
