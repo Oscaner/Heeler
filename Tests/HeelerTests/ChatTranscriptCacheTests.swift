@@ -334,6 +334,32 @@ struct ChatTranscriptCacheTests {
         #expect(renamed.first?.consoleAgent(for: changed).hostName == "Renamed Host")
     }
 
+    /// An endpoint's socket names the herdr server; its launcher only runs
+    /// herdr for it, so replacing the launcher keeps the bindings.
+    @Test(arguments: [false, true])
+    func agentDirectoryFollowsTheHerdrEndpointSocket(volatile: Bool) async throws {
+        let fixture = Fixture()
+        defer { fixture.cleanUp() }
+        let cache: any ChatTranscriptCache = volatile ? VolatileChatTranscriptCache() : fixture.cache
+        var host = Host(id: Self.hostA, address: "host.example", username: "dev")
+        host.herdrEndpoint = try #require(HerdrEndpoint(
+            socketPath: "/opt/app/herdr/herdr.sock", executablePath: "/opt/app/bin/herdr"))
+        let cached = Self.cachedAgent(for: host)
+        await cache.saveAgentDirectory([cached], for: host)
+
+        var relaunched = host
+        relaunched.herdrEndpoint = HerdrEndpoint(
+            socketPath: "/opt/app/herdr/herdr.sock", executablePath: "/opt/app2/bin/herdr")
+        #expect(await cache.loadAgentDirectory(for: relaunched) == [cached])
+        var moved = host
+        moved.herdrEndpoint = HerdrEndpoint(
+            socketPath: "/opt/other/herdr/herdr.sock", executablePath: "/opt/app/bin/herdr")
+        #expect(await cache.loadAgentDirectory(for: moved).isEmpty)
+        var plain = host
+        plain.herdrEndpoint = nil
+        #expect(await cache.loadAgentDirectory(for: plain).isEmpty)
+    }
+
     private static func trust(
         _ byte: UInt8, algorithm: String = "ssh-ed25519", for hostID: UUID,
         in knownHosts: InMemoryKnownHostsStore
@@ -368,6 +394,12 @@ struct ChatTranscriptCacheTests {
         #expect(await cache.loadAgentDirectory(for: changed).isEmpty)
         changed = rerouted
         changed.username = "other"
+        #expect(await cache.loadAgentDirectory(for: changed).isEmpty)
+        // So does a Herdr Endpoint's socket, which is another herdr server.
+        changed = rerouted
+        changed.herdrEndpoint = HerdrEndpoint(
+            socketPath: "/opt/app/herdr/herdr.sock", executablePath: "/opt/app/bin/herdr")
+        #expect(changed.herdrEndpoint != nil)
         #expect(await cache.loadAgentDirectory(for: changed).isEmpty)
         // Trusting the machine's key for another algorithm keeps them.
         await Self.trust(2, algorithm: "rsa-sha2-512", for: host.id, in: fixture.knownHosts)

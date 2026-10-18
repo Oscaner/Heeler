@@ -90,6 +90,10 @@ struct ChatAgentDirectory: Codable, Equatable, Sendable {
         /// sorted. Nil in directories saved before Routes or before the Host
         /// had a key of its own.
         let hostKeys: [Data]?
+        /// The socket of the Host's Herdr Endpoint, which names the herdr
+        /// server as `sessionName` does for herdr's own layout. Nil for the
+        /// default socket and in directories saved before endpoints.
+        let herdrSocketPath: String?
 
         init(_ host: Host, hostKeys: Set<Data>) {
             let route = host.primaryRoute
@@ -102,6 +106,7 @@ struct ChatAgentDirectory: Codable, Equatable, Sendable {
             jumpPort = route.jumpPort
             jumpUsername = host.jumpUsername(on: route)
             self.hostKeys = hostKeys.isEmpty ? nil : hostKeys.sorted { $0.lexicographicallyPrecedes($1) }
+            herdrSocketPath = host.herdrEndpoint?.socketPath
         }
 
         /// Whether a directory saved under this identity belongs to `current`.
@@ -109,7 +114,9 @@ struct ChatAgentDirectory: Codable, Equatable, Sendable {
         /// can trust a key per algorithm, and adding one keeps the others.
         func admits(_ current: HostIdentity) -> Bool {
             guard id == current.id, username == current.username,
-                sessionName == current.sessionName else { return false }
+                sessionName == current.sessionName,
+                herdrSocketPath == current.herdrSocketPath
+            else { return false }
             if let saved = hostKeys, let trusted = current.hostKeys {
                 return !Set(saved).isDisjoint(with: trusted)
             }
