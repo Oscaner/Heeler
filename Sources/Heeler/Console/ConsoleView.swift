@@ -15,6 +15,7 @@ struct ConsoleView: View {
     let console: ConsoleStore
     let terminal: TerminalSettings
     let inputMode: AgentInputModeSettings
+    let detailSurface: AgentDetailSurfaceSettings
     let appearance: AppAppearanceSettings
     let pushRegistration: PushRegistrationStore
     let notificationPreferences: NotificationPreferencesStore
@@ -66,6 +67,12 @@ struct ConsoleView: View {
     /// The Agent whose detail shows Changes in place of its terminal; the
     /// window's chrome then follows the app, not the terminal theme.
     @State private var agentShowingChanges: ConsoleAgent.ID?
+    /// The Agent whose detail shows Chat in place of its terminal, for the
+    /// same reason.
+    @State private var agentShowingChat: ConsoleAgent.ID?
+    /// The Shell Terminal pushed over the Agent on the path, kept here so a
+    /// detail remounted by a size-class change still shows it.
+    @State private var agentShellRoute: AgentShellRoute?
     /// Each list tab's last selection. In regular width both lists sit
     /// beside their own detail, so a list tab comes back to what it showed
     /// rather than to the other list's pick.
@@ -289,6 +296,7 @@ struct ConsoleView: View {
         }
         .animation(.snappy, value: bannerStore.banner)
         .onChange(of: notificationRouter.path) { old, path in
+            if agentShellRoute?.agentID != path.last { agentShellRoute = nil }
             guard !path.isEmpty else { return }
             bringAgentForward(
                 parking: old.last.map { .agent($0) } ?? selectedTerminal.map { .terminal($0) })
@@ -1080,6 +1088,18 @@ struct ConsoleView: View {
         return nil
     }
 
+    private func shellRoute(over id: ConsoleAgent.ID) -> Binding<WorkspaceTerminalRoute?> {
+        Binding(
+            get: { agentShellRoute?.agentID == id ? agentShellRoute?.route : nil },
+            set: { route in
+                if let route {
+                    agentShellRoute = AgentShellRoute(agentID: id, route: route)
+                } else if agentShellRoute?.agentID == id {
+                    agentShellRoute = nil
+                }
+            })
+    }
+
     private func selectAgent(_ id: ConsoleAgent.ID) {
         changeSelection {
             showAgentsList(parking: parkedSelection)
@@ -1163,7 +1183,9 @@ struct ConsoleView: View {
             return terminal.themes.selection(for: colorScheme)
                 .chromeColorScheme(for: colorScheme)
         }
-        guard let id = notificationRouter.path.last, agentShowingChanges != id else { return nil }
+        guard let id = notificationRouter.path.last, agentShowingChanges != id,
+            agentShowingChat != id
+        else { return nil }
         let showsTerminalSurface = console.agents.contains(where: { $0.id == id })
         let showsTerminalSyncSurface = !showsTerminalSurface
             && MissingAgentPresentation(agentID: id, console: console, hosts: hosts)
@@ -1182,12 +1204,13 @@ struct ConsoleView: View {
         if let id = notificationRouter.path.last {
             if let receipt = matchingRemovedWorktreeReceipt(for: id) {
                 removedWorktreeSurface(receipt)
-            } else if let agent = console.agents.first(where: { $0.id == id }) {
+            } else if let agent = console.chatDisplayAgents.first(where: { $0.id == id }) {
                 AgentDetailView(
                     agent: agent,
                     console: console,
                     terminal: terminal,
                     inputMode: inputMode,
+                    detailSurface: detailSurface,
                     hosts: hosts.hosts,
                     activity: activity,
                     keyboardHandoff: keyboardHandoff,
@@ -1198,7 +1221,7 @@ struct ConsoleView: View {
                         // terminal on a spurious reappearance.
                         isVisible: { [notificationRouter] in
                             notificationRouter.path.last == id
-                                && console.agents.contains(where: { $0.id == id })
+                                && console.chatDisplayAgents.contains(where: { $0.id == id })
                                 && currentTab == tab
                         },
                         terminalAccess: { [sceneRouting] in
@@ -1213,7 +1236,16 @@ struct ConsoleView: View {
                         } else if agentShowingChanges == id {
                             agentShowingChanges = nil
                         }
-                    }
+                    },
+                    onShowsChat: { shows in
+                        if shows {
+                            agentShowingChat = id
+                        } else if agentShowingChat == id {
+                            agentShowingChat = nil
+                        }
+                    },
+                    repeatLandings: notificationRouter.repeatLandings,
+                    shellRoute: shellRoute(over: id)
                 )
                 // Selecting another Agent must tear down the previous terminal
                 // pipeline; without the explicit identity the detail column
@@ -1390,9 +1422,10 @@ struct ConsoleView: View {
     @ViewBuilder
     private var flatAgentListRows: some View {
         agentHostIssueRows
+        let qualifiers = agentTitleQualifiers
         ForEach(filteredAgents) { @Sendable agent in
             MainActorContent {
-                agentRow(agent)
+                agentRow(agent, qualifier: qualifiers[agent.id])
                     // Right under an iPad sidebar's bar, a rule over the
                     // first row would crowd it.
                     .listRowSeparator(
@@ -1406,12 +1439,13 @@ struct ConsoleView: View {
     @ViewBuilder
     private var workspaceAgentListRows: some View {
         agentHostIssueRows
+        let qualifiers = agentTitleQualifiers
         ForEach(workspaceSections) { @Sendable section in
             MainActorContent {
                 Section {
                     if !section.isCollapsed {
                         ForEach(section.agents) { @Sendable agent in
-                            MainActorContent { agentRow(agent) }
+                            MainActorContent { agentRow(agent, qualifier: qualifiers[agent.id]) }
                         }
                     }
                 } header: {
@@ -1432,6 +1466,7 @@ struct ConsoleView: View {
 
     @ViewBuilder
     private var groupedAgentListRows: some View {
+        let qualifiers = agentTitleQualifiers
         ForEach(hostSections) { @Sendable section in
             MainActorContent {
                 let opensDetail = connectionDetail(for: section.hostID) != nil
@@ -1443,7 +1478,7 @@ struct ConsoleView: View {
                             ConsoleHostIssueRow(issue: issue) { openHostIssue($0) }
                         }
                         ForEach(section.agents) { @Sendable agent in
-                            MainActorContent { agentRow(agent) }
+                            MainActorContent { agentRow(agent, qualifier: qualifiers[agent.id]) }
                         }
                     }
                 } header: {
@@ -1463,14 +1498,15 @@ struct ConsoleView: View {
         }
     }
 
-    private func agentRow(_ agent: ConsoleAgent) -> some View {
+    private func agentRow(_ agent: ConsoleAgent, qualifier: String?) -> some View {
         NavigationLink(value: ConsoleSelection.agent(agent.id)) {
             AgentCardView(
                 agent: agent,
                 layout: console.rowLayout(for: agent.hostID),
                 isPinned: console.pins.isPinned(
                     hostID: agent.hostID, paneID: agent.agent.paneID),
-                changes: console.rowChanges.store(for: agent))
+                changes: console.rowChanges.store(for: agent),
+                qualifier: qualifier)
             .modifier(ConsoleRowSelectionContent())
         }
         // The list reads what it shows: a row on screen reads its Agent's
@@ -1515,7 +1551,8 @@ struct ConsoleView: View {
                     agent: agent,
                     layout: console.rowLayout(for: agent.hostID),
                     isPinned: console.pins.isPinned(
-                        hostID: agent.hostID, paneID: agent.agent.paneID))
+                        hostID: agent.hostID, paneID: agent.agent.paneID),
+                    qualifier: qualifier)
             })
         .modifier(
             AgentWindowDrag(
@@ -1660,7 +1697,7 @@ struct ConsoleView: View {
 
     private var workspaceSections: [ConsoleWorkspaceSection] {
         listPresentation.workspaceSections(
-            hosts: hosts.hosts, agents: console.agents,
+            hosts: hosts.hosts, console: console,
             filteredHostID: hostFilter, searchQuery: agentSearchText)
     }
 
@@ -1693,16 +1730,27 @@ struct ConsoleView: View {
         }
     }
 
+    private var hostFilteredAgents: [ConsoleAgent] {
+        guard let hostFilter else { return console.chatDisplayAgents }
+        return console.chatDisplayAgents.filter { $0.hostID == hostFilter }
+    }
+
     private var filteredAgents: [ConsoleAgent] {
-        let hostFiltered: [ConsoleAgent]
-        if let hostFilter {
-            hostFiltered = console.agents.filter { $0.hostID == hostFilter }
-        } else {
-            hostFiltered = console.agents
-        }
+        let hostFiltered = hostFilteredAgents
         let needle = agentSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return hostFiltered }
         return hostFiltered.filter { $0.matchesAgentSearch(needle) }
+    }
+
+    /// Program names for rows whose cards would otherwise read the same.
+    /// Judged before the search, so a row's title does not change as the
+    /// user types.
+    private var agentTitleQualifiers: [ConsoleAgent.ID: String] {
+        AgentTitleQualifier.qualifiers(for: hostFilteredAgents) { agent in
+            let card = AgentCardPresentation(
+                agent: agent, layout: console.rowLayout(for: agent.hostID))
+            return .init(title: card.headline, namesAgent: card.namesAgent(inFirst: card.rows.count))
+        }
     }
 
     /// Host issues shown in the list: all of them, or the filtered Host's
@@ -2208,15 +2256,25 @@ struct MissingAgentPresentation: Equatable {
                 cause = .paneGone
                 title = "Agent Gone"
                 systemImage = "rectangle.on.rectangle.slash"
-                message = "This Agent's pane is no longer reported."
+                message = Self.paneGoneMessage
             }
         case .ended, nil:
+            // No live inventory says why: an ended session, or a deleted
+            // Host whose projection is gone, where no Agent comes back.
             cause = .paneGone
             title = "Agent Gone"
             systemImage = "rectangle.on.rectangle.slash"
-            message = "This Agent's pane is no longer reported."
+            message = Self.unreportedMessage
         }
     }
+
+    /// herdr drops an Agent whose program exits from a pane that stays, as
+    /// it does one whose pane closed; the same pane rebinds when an Agent
+    /// starts in it again.
+    static let paneGoneMessage =
+        "The Agent in this pane has exited, or the pane was closed. It shows here again if an Agent starts in the pane."
+
+    static let unreportedMessage = "This Agent's pane is no longer reported."
 
     /// What the Console's detail column shows when the selected Agent is not
     /// in the list.

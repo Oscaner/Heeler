@@ -16,6 +16,9 @@ struct AgentCardView: View {
     var changes: ChangesStore? = nil
     /// Totals shown in place of a read, for the Agent List Fields preview.
     var sampleChanges: ChangesBadge? = nil
+    /// The program name after Row 1 when another row reads the same; see
+    /// `AgentTitleQualifier`.
+    var qualifier: String? = nil
 
     private var totalsSource: ChangesRowTotals.Source? {
         if let changes { .store(changes) } else { sampleChanges.map { .sample($0) } }
@@ -30,9 +33,7 @@ struct AgentCardView: View {
             // Centered, not baseline-aligned: the status capsule is smaller
             // type with padding, so baseline alignment drops it below Row 1.
             HStack(alignment: .center) {
-                AgentRowText(tokens: presentation.rows.first ?? [])
-                    .font(.headline)
-                    .lineLimit(1)
+                AgentCardTitle(tokens: presentation.rows.first ?? [], qualifier: qualifier)
                 if isPinned {
                     Image(systemName: "pin.fill")
                         .font(.caption2)
@@ -41,7 +42,9 @@ struct AgentCardView: View {
                         .accessibilityLabel("Pinned")
                 }
                 Spacer(minLength: 8)
-                AgentStatusBadge(status: agent.agent.status)
+                if agent.agent.status.displayTitle != nil {
+                    AgentStatusBadge(status: agent.agent.status)
+                }
             }
             let additionalRows = Array(presentation.rows.dropFirst())
             additionalRowViews(additionalRows)
@@ -100,6 +103,28 @@ struct AgentCardView: View {
     }
 }
 
+/// Row 1 of a card, with the program name after it when one is needed. The
+/// title truncates first: the name is the part that tells the rows apart.
+private struct AgentCardTitle: View {
+    let tokens: [RenderedToken]
+    let qualifier: String?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            AgentRowText(tokens: tokens)
+                .lineLimit(1)
+            if let qualifier {
+                Text(verbatim: "· \(qualifier)")
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                    .accessibilityLabel(Text(verbatim: qualifier))
+            }
+        }
+        .font(.headline)
+    }
+}
+
 /// Keep per-field emphasis through the final Text instead of flattening the
 /// rendered tokens into a String. Separators retain the row's base emphasis.
 struct AgentRowText: View {
@@ -150,6 +175,44 @@ struct AgentCardPresentation: Equatable, Sendable {
         let singleLine = headline.components(separatedBy: .newlines).joined(separator: " ")
         return singleLine.count > 48 ? String(singleLine.prefix(47)) + "…" : singleLine
     }
+
+    /// Whether the first `rowCount` rows already name the Agent itself, so
+    /// two Agents sharing a title are told apart without help.
+    func namesAgent(inFirst rowCount: Int) -> Bool {
+        rows.prefix(rowCount).contains { row in row.contains { $0.token == .agent } }
+    }
+}
+
+/// The program name that follows an Agent's title when another Agent on
+/// screen reads the same: two programs in one workspace, under a layout that
+/// leads with the workspace, are otherwise told apart only by position. The
+/// name is the one notifications use ("proj · Pi"), and only titles that
+/// collide get one, and only when the program actually separates them.
+enum AgentTitleQualifier {
+    /// Each Agent's title as shown, and whether what is shown already names
+    /// the Agent.
+    struct Shown {
+        let title: String
+        let namesAgent: Bool
+    }
+
+    static func qualifiers(
+        for agents: [ConsoleAgent], shown: (ConsoleAgent) -> Shown
+    ) -> [ConsoleAgent.ID: String] {
+        let entries = agents.map {
+            (id: $0.id, shown: shown($0), program: AgentNotificationIdentity.kindLabel($0.agent.kind))
+        }
+        let programsByTitle = Dictionary(grouping: entries, by: \.shown.title)
+            .mapValues { Set($0.map(\.program)) }
+        var qualifiers: [ConsoleAgent.ID: String] = [:]
+        for entry in entries where !entry.shown.namesAgent {
+            guard let programs = programsByTitle[entry.shown.title], programs.count > 1 else {
+                continue
+            }
+            qualifiers[entry.id] = entry.program
+        }
+        return qualifiers
+    }
 }
 
 /// Status rendered as a tinted capsule; Blocked gets the loudest color
@@ -165,7 +228,7 @@ struct AgentStatusBadge: View {
                 SolvingOrbView(size: 12)
                     .accessibilityHidden(true)
             }
-            Text(status.rawValue.capitalized)
+            Text(status.displayTitle ?? "")
                 .font(.caption2.weight(.semibold))
         }
         .padding(.horizontal, 6)

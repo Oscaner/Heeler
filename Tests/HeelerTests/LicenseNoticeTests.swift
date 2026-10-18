@@ -22,6 +22,7 @@ struct LicenseNoticeInventoryTests {
         "Go",
         "IBMPlexMono",
         "JetBrainsMono",
+        "Lucide",
         "MSDisplayLink",
         "OpenSSL",
         "Tailscale",
@@ -745,7 +746,6 @@ struct TerminalFontNoticeRelocationTests {
     @Test func bundledFacesStillRegisterUnderTheNamesGhosttyLooksUp() {
         let families = TerminalFontCatalog.registerBundledFonts()
 
-        #expect(families.contains("JetBrains Mono"))
         #expect(families.contains("IBM Plex Mono"))
     }
 
@@ -754,8 +754,6 @@ struct TerminalFontNoticeRelocationTests {
         // subdirectory. Licence files moved under Notices/; the faces must not
         // have followed them.
         for face in [
-            "JetBrainsMono-Regular",
-            "JetBrainsMono-Bold",
             "IBMPlexMono-Regular",
             "IBMPlexMono-Bold",
         ] {

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "dependencyCoverage": {
     "packageResolved": {
-      "libghostty-spm": ["libghostty-spm", "Ghostty", "GhosttyTheme"],
+      "libghostty-spm": ["libghostty-spm", "Ghostty", "GhosttyTheme", "JetBrainsMono"],
       "msdisplaylink": ["MSDisplayLink"]
     },
     "heelerSSHBinaryTargets": {
@@ -15,13 +15,12 @@
       "CEasyTier": ["EasyTier", "heeler-easytier", "EasyTier-Rust-crates"]
     },
     "projectPackages": {
-      "GhosttyTerminal": ["libghostty-spm", "Ghostty", "GhosttyTheme"],
+      "GhosttyTerminal": ["libghostty-spm", "Ghostty", "GhosttyTheme", "JetBrainsMono"],
       "HeelerSSH": ["libssh2", "libssh2-bcrypt_pbkdf", "libssh2-cipher-chachapoly", "OpenSSL"],
       "HeelerOverlay": ["libtailscale", "Tailscale", "Go", "Tailscale-Go-modules", "libzt", "ZeroTier-Heeler-modifications", "ZeroTierOne", "ZeroTierOne-LZ4", "lwIP", "lwIP-contrib", "miniupnpc", "libnatpmp", "prometheus-cpp-lite", "concurrentqueue", "EasyTier", "heeler-easytier", "EasyTier-Rust-crates"]
     },
     "bundledFontFamilies": {
-      "IBMPlexMono": ["IBMPlexMono"],
-      "JetBrainsMono": ["JetBrainsMono"]
+      "IBMPlexMono": ["IBMPlexMono"]
     }
   },
   "components": [
@@ -77,9 +76,17 @@
       "id": "JetBrainsMono",
       "displayName": "JetBrains Mono",
       "version": null,
-      "source": "Sources/Heeler/Resources/Fonts",
+      "source": "https://github.com/JetBrains/JetBrainsMono (embedded in the libghostty binary as Ghostty's default terminal font)",
       "spdx": "OFL-1.1",
       "notice": "JetBrainsMono-OFL-1.1.txt"
+    },
+    {
+      "id": "Lucide",
+      "displayName": "Lucide (Bot icon)",
+      "version": "a04f228cd01185e09c188b7227b9600c08c565ec",
+      "source": "https://github.com/lucide-icons/lucide/blob/a04f228cd01185e09c188b7227b9600c08c565ec/icons/bot.svg",
+      "spdx": "ISC",
+      "notice": "Lucide-ISC.txt"
     },
     {
       "id": "MSDisplayLink",

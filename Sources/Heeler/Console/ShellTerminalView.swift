@@ -388,7 +388,7 @@ struct ShellTerminalView: View {
 
     private var backHeaderActions: [AgentDetailHeaderAction] {
         guard workspaceDrawer != nil else { return [] }
-        return [AgentDetailHeaderAction(title: "Workspace Terminals", systemImage: "terminal") {
+        return [AgentDetailHeaderAction(title: "Workspace Terminals", systemImage: "apple.terminal.on.rectangle") {
             withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
                 isHeaderDrawerOpen.toggle()
             }

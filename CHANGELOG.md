@@ -9,6 +9,55 @@ Entries reference the pull request that made the change.
 
 ### Added
 
+- Collapse the current turn's expanded reasoning and tool details from a
+  floating Chat button, bringing its header back into view without adding
+  blank space below a short last turn. (#464)
+- Extend native Chat to Pi and Oh My Pi Agents, with messages, reasoning,
+  paired tool results, edit diffs, current-branch history and compaction
+  boundaries. Reads the JSONL session path reported by herdr, including custom
+  session directories, and shows a new conversation as empty until its first
+  reply is saved, instead of as missing. Skill invocations show as `/name`
+  commands; Oh My Pi questions keep their options and answers, denied
+  approvals and dismissed questions read as declined, Stop during a Pi tool
+  reads as an interruption, and an Oh My Pi plan proposal reads as ready for
+  review. A message that steers a running turn shows inside it, marked Sent
+  while working, and an Oh My Pi conversation survives Oh My Pi rewriting its
+  session file. Oh My Pi's `$` Python runs show as notices, a file it writes
+  shows its text as added lines ("Wrote 1 file"), its plan hand-off adds no
+  file row, and compaction and branch summaries preview as plain text.
+  Unrecognized input surfaces remain available in the terminal. Extends the
+  Chat infrastructure in #425. (#464)
+- Send to Pi and Oh My Pi from Chat. Chat recognizes Oh My Pi 18.11's
+  nerd-font status band and Pi's editor in any project directory. Pi takes
+  messages while it works, which steer the turn, and a steer that Stop puts
+  back in the input box shows as not delivered; for Oh My Pi, Chat holds a
+  message while a turn runs or an approval or question panel is open. Sending
+  refuses Oh My Pi's exit words, `$` Python, Continue and queue shorthands,
+  and pastes of 100 lines or more. The `/` menu and Skills list offer only
+  skills, sent as `/skill:name`, including Oh My Pi's `.omp/skills`,
+  `~/.omp/agent/skills`, `~/.agents/skills` and `~/.agent/skills`; prompt
+  templates stay in the terminal. (#464)
+- Answer Oh My Pi tool approvals and single-select questions from native
+  Blocked cards. Approve presses ctrl+q once Oh My Pi accepts it and Deny
+  presses Esc; questions are answered with arrow keys, page by page through
+  the review, and the card says so when a draft in Oh My Pi's prompt would
+  take the keys. Multi-select questions and typed answers stay in the
+  terminal. (#464)
+- Approve an Oh My Pi 18.12 tool for the rest of the session from its
+  Blocked card when the approval offers it ("Approve edit for this session").
+  The card moves to that row one arrow key at a time, checking the selection
+  after each, and stops without answering if it doesn't move; a draft in Oh
+  My Pi's prompt leaves this choice to the terminal. (#425)
+- Chat for Claude Code and Codex Agents: the Agent's conversation as native
+  rows in the terminal's place, read from the transcript its program writes on
+  the Host, with nothing installed there. Chat folds finished turns, groups
+  tool calls, shows file changes as diffs, answers Blocked dialogs with native
+  cards, lists background agents and Workflows, and stays readable offline
+  from its cache. Sending checks the Agent's input box before and after and
+  never resends. Chat and the terminal swap from a pair of buttons beside
+  Show Header. Settings › Appearance sets Chat's font (System, Rounded,
+  Serif or Monospaced) and text size, a little smaller than the system's by
+  default. (#425)
 - Pair a Host whose herdr runs outside your own config, such as one bundled
   in a desktop app, from a version 2 Pairing Code. The Host keeps that
   herdr's socket and launcher, shows them in Host detail, and runs every
@@ -18,8 +67,138 @@ Entries reference the pull request that made the change.
   Pair, since pairing runs its launcher on the Host. A Pairing Code version
   this app does not know now asks you to update Heeler. (#432)
 
+### Changed
+
+- Settings › Appearance gathers the app's theme, the terminal's font, text
+  size and themes, and Chat's appearance, in place of the separate
+  Appearance picker and Terminal Appearance page. (#425)
+- The terminal font "System" is now named JetBrains Mono, the face it
+  always drew, and the duplicate JetBrains Mono choice folds into it. Menlo
+  and Courier New join IBM Plex Mono as other choices. (#425)
+- Chat's conversation runs edge to edge: messages scroll under the status
+  bar and behind the Composer down to the home indicator, softening under
+  the chrome instead of stopping at a blank band. (#425)
+- The Agent detail header's Agent Terminal segment shows a code glyph and
+  Workspace Terminals shows stacked terminals, so the two buttons no longer
+  share one icon. (#425)
+- Where Agent detail is pushed over the list (iPhone, or a compact iPad
+  window), Open Terminal in an Agent's More menu opens the Shell Terminal over
+  the Agent, so Back in the terminal's header, or the edge swipe, returns to
+  the Agent's Chat or terminal instead of the Agents list. The Agent's notifications still show as banners there, and
+  tapping one returns to the Agent. Beside the list it still selects the
+  terminal there. (#425)
+- On a connected Host, Agent Gone says the Agent may have exited while its
+  pane stays open, and that the Agent shows again once one starts in that
+  pane. (#425)
+- Chat shows Claude Code narration that its transcript records as thinking as
+  the Agent's text, as the terminal does, rather than as a collapsed Reasoning
+  row. (#425)
+- Chat titles Claude Code task rows by their subject and status ("Task #2:
+  completed") and ToolSearch rows by the tools they loaded ("Loaded
+  WebFetch"). A spawned teammate reads Started, not Done, and choosing "Chat
+  about this" reads Chat Instead, not Declined. (#425)
+- Chat counts a directory listing as a listed folder rather than a search,
+  counts images in a step group without calling them viewed, counts every
+  file a Codex patch touched rather than one per patch, counts a file changed
+  more than once in a group once, under its first change (a file created and
+  then edited reads "Created 1 file"), and folds Codex's waits for subagents
+  into the turn instead of pinning a row for each. (#425)
+- A message that reached a running turn is marked Sent while working instead
+  of Queued, which stays true once the turn ends or is stopped. (#425)
+
 ### Fixed
 
+- Chat for an Agent whose Host is offline, with nothing of its conversation
+  saved on the device, says it waits for the Host instead of looking for the
+  conversation forever. (#425)
+- Chat renders Markdown tables as aligned columns with wrapping cells, inline
+  formatting and header styling; wide tables scroll within the message. (#464)
+- Chat restores a saved conversation when a live Agent temporarily omits its
+  session ID, including while the local directory is still loading. (#425)
+- Chat keeps disclosure headers in place while expanding downward, including
+  short conversations, and aligns tool icons with the first title line. (#425)
+- Opening a short last turn no longer leaves its newest rows under the
+  floating Collapse Steps button, where a tap meant for a row collapsed the
+  turn; the list moves up just enough to show them above it. (#425)
+- Chat preloads conversations after connecting, restores saved conversations
+  before contacting the Host, and keeps them available from the Agent list
+  after an offline relaunch while reconnecting. (#425)
+- Chat previews recorded image files on long press, including images a Claude
+  Code Read showed, opens them with zoom, and aligns tool icons with their
+  titles above subtitles. (#425)
+- Chat groups each Subagent's activity into one card per turn, with
+  a Lucide Bot icon beside its title and expandable history, and no longer marks message exchanges
+  as completed work. (#425)
+- Chat explains a missing session ID without incorrectly suggesting that the
+  integration needs installing, and shows failed session queries with a retry
+  while keeping messages already loaded. (#425)
+- Two Agents whose Agents list title or switcher chip reads the same, such as
+  different programs in one Workspace, now show which program each one is
+  ("proj · Pi"). (#425)
+- The app no longer hangs when the Agent switcher reorders its chips after
+  an Agent's status changes, and the strip keeps the open Agent's chip in
+  view when it reorders, such as after an Agent restarts in its pane. (#425)
+- The app no longer hangs on iPhone when going back to the Agents list from
+  an Agent the app reopened at launch. (#425)
+- Chat explains a `/` command the running Claude Code doesn't know, such as a
+  skill added after the Agent started, instead of leaving the message waiting
+  with no reason, and its `/` menu leaves out skills marked
+  `user-invocable: false`, which Claude Code refuses as commands. A
+  `/compact` that Pi or Oh My Pi refuses with nothing to compact now says so,
+  and one still compacting no longer reads as not yet in the conversation.
+  (#425)
+- Context compacted previews skip Claude Code's fixed preamble, every
+  program's compaction summary and Pi's branch summaries show without their
+  Markdown marks, and VoiceOver reads only a compaction's preview lines. Inline
+  code is tinted, so it stands out in Chinese text too. (#425)
+- An expanded Declined, Interrupted or Stopped row no longer says "No output."
+  for a call that never ran. (#425)
+- Codex rows show a failed turn's API error message instead of its JSON, read
+  a patch aborted before it applied as Interrupted instead of Failed, also
+  when Codex 0.163 declines it in code mode without recording the patch, and
+  show an answer's note without its `user_note:` key. (#425)
+- Oh My Pi rows show a `write` as a written file with its text and line
+  counts, show `$` Python runs as notices, and no longer show the plan
+  hand-off to `xd://propose` as a created file. An edit of its plan file
+  reads by its `local://` name rather than the account's session path.
+  (#425)
+- Blocked cards appear for Claude Code's question review page and questions
+  with previews, which herdr reports as idle, with the question row reading
+  Waiting rather than "No result", and Claude Code's Read file
+  dialog gets its own card. After "The Agent hasn't responded yet." the
+  answers stay off on the same dialog, so a second tap can't send the key
+  again; Stop and the terminal still work. (#425)
+- A Claude Code question form that stops on a page Heeler can't read names the
+  next question rather than the one already answered, the folder-access option
+  says it lasts the session instead of saving a rule, and the folded card's
+  buttons stay on one line. (#425)
+- Generic cards for Codex lists show only the option labels, an Oh My Pi
+  panel's text shows without borders or private-use glyphs, an Oh My Pi
+  question's answers are off while a draft would take the keys, and a Codex
+  asynchronous answer confirms as soon as its question leaves the screen and
+  is marked on the question asked in the running turn, not on an earlier
+  turn's question with the same title. (#425)
+- A send that Codex holds names its "Implement this plan?" selector or a
+  message Stop put back in the input box, and Waiting for Conversation
+  explains that Codex reports a resumed conversation after its first prompt.
+  (#425)
+- Chat follows Claude Code's `/clear` and Pi's and Oh My Pi's `/new` or
+  `/resume` typed in the terminal within about ten seconds while the Agent
+  stays idle, and a steer cleared in the terminal no
+  longer stays under a newer turn. (#425)
+- While the Host is away or the conversation comes from the cache, the newest
+  turn no longer ticks "Working for" and running rows read Running when last
+  seen instead of spinning; the connecting banner says it shows saved
+  messages. (#425)
+- The Console stops looking for a hidden Agent's missing conversation after a
+  few tries, until the Agent's status or session changes, instead of searching
+  the Host every half minute. (#425)
+- A command Codex leaves running after a turn ends no longer unfolds that
+  turn when it finishes, below the answer; it joins the turn's folded steps.
+  (#425)
+- Chat stops reading an Agent's conversation once you leave it on iPhone,
+  instead of reading it every few seconds in the background until the app
+  relaunches. (#425)
 - Hosts no longer stay Paused after you return to Heeler while an overlay
   network is still shutting down from the previous trip to the background.
   Hosts reconnect right away. Hosts reached through that overlay network

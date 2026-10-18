@@ -311,6 +311,40 @@ struct AgentCardPresentationTests {
         #expect(AgentCardPresentation(agent: agent()).headline == "reviewer")
     }
 
+    /// A card already names its Agent under the default layout's second row,
+    /// so cards sharing Row 1 need a program name only under a layout that
+    /// never shows the Agent field.
+    @Test func rowsSharingTheirTitleGetTheProgramOnlyWhenTheCardDoesNotNameIt() {
+        let agents = [
+            programAgent(pane: "p1", kind: "omp"),
+            programAgent(pane: "p2", kind: "pi"),
+            programAgent(pane: "p3", kind: "pi", workspace: "docs"),
+        ]
+        func qualifiers(_ layout: AgentRowLayout) -> [String?] {
+            let found = AgentTitleQualifier.qualifiers(for: agents) { agent in
+                let card = AgentCardPresentation(agent: agent, layout: layout)
+                return .init(
+                    title: card.headline, namesAgent: card.namesAgent(inFirst: card.rows.count))
+            }
+            return agents.map { found[$0.id] }
+        }
+        #expect(qualifiers(.consoleDefault) == [nil, nil, nil])
+        let workspaceOnly = AgentRowLayout(rows: [[.init(.workspace)], [.init(.directory)]])
+        #expect(qualifiers(workspaceOnly) == ["OMP", "Pi", nil])
+    }
+
+    private func programAgent(pane: String, kind: String, workspace: String = "proj-omp")
+        -> ConsoleAgent
+    {
+        ConsoleAgent(
+            hostID: UUID(uuidString: "00000000-0000-0000-0000-000000000001") ?? UUID(),
+            hostName: "devbox",
+            agent: Agent(
+                terminalID: "term_\(pane)", kind: kind, title: "", status: .idle,
+                workspaceID: "w1", tabID: "w1:t1", paneID: pane, cwd: "/work", revision: 1),
+            workspaceLabel: workspace, repositoryCheckout: nil)
+    }
+
     private func agent(workspace: String? = nil) -> ConsoleAgent {
         ConsoleAgent(
             hostID: UUID(), hostName: "devbox",

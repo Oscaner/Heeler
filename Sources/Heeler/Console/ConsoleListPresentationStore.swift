@@ -211,13 +211,26 @@ final class ConsoleListPresentationStore {
     ) -> [ConsoleHostSection] {
         sections(
             hosts: hosts,
-            agents: console.agents,
+            agents: console.chatDisplayAgents,
             hostStatuses: console.hostStatuses,
             hostStandingFailures: console.hostStandingFailures,
             hostsAwaitingSnapshot: console.hostsAwaitingSnapshot,
             hostSyncErrors: console.hostSyncErrors,
             filteredHostID: filteredHostID,
             searchQuery: searchQuery)
+    }
+
+    /// Reads the same inventory as `sections(hosts:console:)`, so saved Chat
+    /// entry points of an unproven Host appear By Workspace too.
+    func workspaceSections(
+        hosts: [Host],
+        console: ConsoleStore,
+        filteredHostID: Host.ID? = nil,
+        searchQuery: String = ""
+    ) -> [ConsoleWorkspaceSection] {
+        workspaceSections(
+            hosts: hosts, agents: console.chatDisplayAgents,
+            filteredHostID: filteredHostID, searchQuery: searchQuery)
     }
 
     /// Projects one section per catalog Host, in catalog order. `agents` is

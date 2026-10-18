@@ -61,7 +61,7 @@ enum SettingsOverlayNetworksDestination: String, Sendable {
 }
 
 /// The Settings tab's root, or on iPad a sheet's: a shallow menu into Agent
-/// fields, appearance and notifications.
+/// fields, notifications and appearance (theme, terminal and Chat).
 /// Keeping it a menu means the per-Host notification rows can grow without
 /// pushing the appearance controls out of reach, and vice versa.
 struct SettingsView: View {
@@ -165,11 +165,10 @@ struct SettingsView: View {
                     } label: {
                         Label("Notifications", systemImage: "bell.badge")
                     }
-                    appearancePicker
                     NavigationLink {
-                        TerminalAppearanceSettingsView(terminal: terminal)
+                        AppearanceSettingsView(terminal: terminal, appearance: appearance)
                     } label: {
-                        Label("Terminal Appearance", systemImage: "paintpalette")
+                        Label("Appearance", systemImage: "paintpalette")
                     }
                 }
 
@@ -186,6 +185,8 @@ struct SettingsView: View {
                         Text("Connections")
                     }
                 }
+
+                ChatCacheSettingsSection(cache: console.chatCache)
 
                 Section {
                     ForEach(Self.aboutRows) { @Sendable row in
@@ -250,22 +251,6 @@ struct SettingsView: View {
             if let privacyURL = NotificationPrivacyCopy.privacyPolicyURL {
                 ExternalLinkRow("Privacy Policy", systemImage: "hand.raised", destination: privacyURL)
             }
-        }
-    }
-
-    /// The app's own light/dark override. A menu picker, not a pushed screen:
-    /// three options do not earn a navigation level.
-    private var appearancePicker: some View {
-        Picker(
-            selection: Binding(
-                get: { appearance.selection },
-                set: { appearance.select($0) })
-        ) {
-            ForEach(AppAppearanceOption.allCases) { @Sendable option in
-                Text(option.title).tag(option)
-            }
-        } label: {
-            Label("Appearance", systemImage: "circle.lefthalf.filled")
         }
     }
 
