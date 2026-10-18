@@ -175,6 +175,9 @@ final class AgentChatStore {
     @ObservationIgnored private var refusedSends: [UUID: String] = [:]
     /// Overdue `/compact` sends already looked for on the screen, once each.
     @ObservationIgnored private var compactChecked: Set<UUID> = []
+    /// When the screen last showed a `/compact` send's compaction running:
+    /// its echo waits `Timing.echoTimeout` from then, not from delivery.
+    @ObservationIgnored private var compactingSeen: [UUID: Date] = [:]
     /// When herdr last reported the Agent idle, while it still is.
     @ObservationIgnored private var idleSince: Date?
     /// When herdr last reported a turn starting. Esc puts back only the
@@ -431,6 +434,7 @@ final class AgentChatStore {
         returnChecked.formIntersection(ids)
         refusedSends = refusedSends.filter { ids.contains($0.key) }
         compactChecked.formIntersection(ids)
+        compactingSeen = compactingSeen.filter { ids.contains($0.key) }
         for message in messages {
             if let index = sends.firstIndex(where: { $0.id == message.id }) {
                 guard message.isDelivered != (sends[index].deliveredAt != nil) else { continue }
@@ -999,7 +1003,9 @@ final class AgentChatStore {
                 // and a refused one nowhere: with a prompt after it and no
                 // compaction, it never ran, whatever the screen read found.
                 statuses[send.id] = .abandoned
-            } else if isUnwritten || date.timeIntervalSince(deliveredAt) < timing.echoTimeout {
+            } else if isUnwritten || date.timeIntervalSince(deliveredAt) < timing.echoTimeout
+                || awaitsCompaction(send, at: date)
+            {
                 statuses[send.id] = .awaiting
             } else if send.generation == conversationGeneration {
                 statuses[send.id] = .overdue
@@ -1057,25 +1063,45 @@ final class AgentChatStore {
         observeInputBox(InputBoxStateDetector.detect(screen, program: program), for: ids)
     }
 
+    /// Whether a Pi or Oh My Pi `/compact` past its echo timeout still
+    /// waits: until the screen has been read for it while the Agent is
+    /// idle, or while the compaction last seen running there is recent.
+    private func awaitsCompaction(_ send: TrackedSend, at date: Date) -> Bool {
+        guard program == .pi || program == .omp, send.key == "/compact" else { return false }
+        if let seen = compactingSeen[send.id] { return date.timeIntervalSince(seen) < timing.echoTimeout }
+        return !compactChecked.contains(send.id) && ChatAgentActivity(agent.status) == .idle
+    }
+
     /// Pi and Oh My Pi refuse a `/compact` with nothing to compact on
     /// screen ("Error: Compaction failed: Nothing to compact (session too
     /// small)") and record nothing, so its echo would stay overdue. The
     /// Agent often never leaves idle for it, so the screen is read once for
-    /// each overdue `/compact` while herdr reports the Agent idle, whenever
-    /// it last turned so. herdr stays idle through a compaction that runs
-    /// too, so a read that finds its spinner counts for nothing and the next
-    /// step reads again.
+    /// each `/compact` past its echo timeout while herdr reports the Agent
+    /// idle, whenever it last turned so; the echo awaits that read. herdr
+    /// stays idle through a compaction that runs too ("Compacting
+    /// context...", 10 to 18 s for a small Pi session): a read that finds
+    /// its spinner keeps the echo awaiting and the next step reads again,
+    /// and once it is gone the echo waits the echo timeout from the last
+    /// read that saw it, for the compaction's record.
     private func checkRefusedCompactions() async {
         guard program == .pi || program == .omp, ChatAgentActivity(agent.status) == .idle else { return }
-        let candidates = sends.filter {
-            $0.key == "/compact" && sendStatuses[$0.id] == .overdue && !compactChecked.contains($0.id)
+        let date = now()
+        let candidates = sends.filter { send in
+            guard send.key == "/compact", !compactChecked.contains(send.id), let deliveredAt = send.deliveredAt,
+                sendStatuses[send.id] == .awaiting || sendStatuses[send.id] == .overdue
+            else { return false }
+            return compactingSeen[send.id] != nil || date.timeIntervalSince(deliveredAt) >= timing.echoTimeout
         }
         guard !candidates.isEmpty else { return }
         let ids = Set(candidates.map(\.id))
+        let screen = try? await source.screen.readScreen()
+        guard !Task.isCancelled else { return }
         compactChecked.formUnion(ids)
-        guard let screen = try? await source.screen.readScreen(), !Task.isCancelled else { return }
+        defer { matchSends() }
+        guard let screen else { return }
         if screen.rows.contains(where: { $0.text.contains(Self.compactingSpinner) }) {
             compactChecked.subtract(ids)
+            for id in ids { compactingSeen[id] = now() }
             return
         }
         guard let failure = Self.latestCompactionFailure(in: screen, program: program) else { return }
@@ -1085,7 +1111,6 @@ final class AgentChatStore {
         for send in candidates {
             refusedSends[send.id] = refusal
         }
-        matchSends()
     }
 
     /// Pi 0.85.1's and Oh My Pi 18.11's row while a compaction runs.

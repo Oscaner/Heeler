@@ -1730,8 +1730,10 @@ struct AgentChatStoreTests {
     }
 
     /// herdr stays idle while Pi compacts: a read that finds the spinner
-    /// waits for the next step, and a failure row with conversation below
-    /// it is an earlier attempt's, not this one's refusal.
+    /// keeps the echo awaiting and waits for the next step, and a failure
+    /// row with conversation below it is an earlier attempt's, not this
+    /// one's refusal. Once the spinner is gone the echo waits the echo
+    /// timeout from the last read that saw it.
     @Test func aCompactionStillRunningOrAnEarlierFailureIsNoRefusal() async throws {
         let (_, store, pane, clock, id) = try await Self.sentCompact(
             .pi, screen: try ScreenFixture.screen("pi-39-compacting-empty"))
@@ -1739,7 +1741,7 @@ struct AgentChatStoreTests {
         clock.now = clock.now.addingTimeInterval(10)
         await store.step()
         #expect(await pane.reads == 1)
-        #expect(store.sendStatuses[id] == .overdue)
+        #expect(store.sendStatuses[id] == .awaiting)
 
         let capture = try ScreenFixture.text("pi-39-compacting-empty")
         await pane.show(
@@ -1747,10 +1749,40 @@ struct AgentChatStoreTests {
                 capture.replacingOccurrences(of: "Compacting context... (escape to cancel)", with: "")))
         await store.step()
         #expect(await pane.reads == 2)
-        #expect(store.sendStatuses[id] == .overdue)
+        #expect(store.sendStatuses[id] == .awaiting)
 
         await store.step()
         #expect(await pane.reads == 2)
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        #expect(await pane.reads == 2)
+        #expect(store.sendStatuses[id] == .overdue)
+    }
+
+    /// A real Pi compaction runs 10 to 18 s while herdr reports the Agent
+    /// idle (V3 PI-03): the echo stays awaiting, never "hasn't appeared",
+    /// while the screen shows "Compacting context...", and the compaction's
+    /// record settles it.
+    @Test(arguments: [ChatProgram.pi, .omp])
+    func aRunningCompactionKeepsItsEchoAwaiting(program: ChatProgram) async throws {
+        let (files, store, pane, clock, id) = try await Self.sentCompact(
+            program, screen: try ScreenFixture.screen("pi-39-compacting-empty"))
+
+        for _ in 0..<4 {
+            clock.now = clock.now.addingTimeInterval(5)
+            await store.step()
+            #expect(store.sendStatuses[id] == .awaiting)
+        }
+        // From +10 s on, one read each step.
+        #expect(await pane.reads == 3)
+
+        await files.append(
+            #"{"type":"compaction","id":"c1","parentId":"u1","summary":"summary","firstKeptEntryId":"u1"}"# + "\n",
+            to: Self.piPath(program))
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .recorded)
     }
 
     /// Any other compaction failure is refused too, and a compaction the

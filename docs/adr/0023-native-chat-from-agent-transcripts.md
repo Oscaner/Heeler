@@ -91,9 +91,13 @@ the Agent is Working or Blocked, while a live read shows Background Work
 running, and for 15 seconds after a change, a send or a status change, every
 4 seconds otherwise. Compaction keeps the history above a
 separator, which previews the program's Markdown summary as plain lines and
-reads only its three preview lines aloud; rolled-back turns are hidden. When a sent message has not appeared
-after 10 seconds, Chat reads the Agent's record again, because the program may
-have moved to a session herdr reports later. While Chat shows an idle Agent,
+reads only its three preview lines aloud; rolled-back turns are hidden. When a
+sent message has not appeared after 10 seconds, Chat reads the Agent's record
+again, because the program may have moved to a session herdr reports later. A
+Pi or Oh My Pi `/compact` waits for one screen read first, and keeps waiting
+while that read shows its compaction running ("Compacting context..."), which
+herdr reports as idle; the 10 seconds then count from the last read that saw
+it. While Chat shows an idle Agent,
 it reads the record at its idle poll, at least 5 seconds apart (about every
 8 seconds at the 4-second pace): Claude Code's `/clear` and Pi's and Oh My
 Pi's `/new` and `/resume` typed in the terminal move the Agent to another

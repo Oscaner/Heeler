@@ -108,7 +108,8 @@ Entries reference the pull request that made the change.
   skill added after the Agent started, instead of leaving the message waiting
   with no reason, and its `/` menu leaves out skills marked
   `user-invocable: false`, which Claude Code refuses as commands. A
-  `/compact` that Pi or Oh My Pi refuses with nothing to compact now says so.
+  `/compact` that Pi or Oh My Pi refuses with nothing to compact now says so,
+  and one still compacting no longer reads as not yet in the conversation.
   (#425)
 - Context compacted previews skip Claude Code's fixed preamble, every
   program's compaction summary and Pi's branch summaries show without their

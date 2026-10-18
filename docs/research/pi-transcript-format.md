@@ -145,7 +145,10 @@ Observed live on 2026-10-15 with Pi 0.85.1 and Oh My Pi 18.11.1 on herdr
 - Pi's compaction records `{summary, firstKeptEntryId, tokensBefore,
   details{readFiles, modifiedFiles}, usage, fromHook: false}`, with
   `firstKeptEntryId` the last assistant message. `/compact` with nothing to
-  compact records nothing in either program.
+  compact records nothing in either program. A real compaction of a
+  ~10k-token Pi 0.85.1 session (grok-4.5, live 2026-10-18) showed
+  "Compacting context... (escape to cancel)" for 10 to 18 s while herdr
+  reported the Agent idle, and wrote the record when the row went.
 
 ## Input and limits
 
