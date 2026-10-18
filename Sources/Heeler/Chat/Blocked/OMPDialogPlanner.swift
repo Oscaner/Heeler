@@ -1,7 +1,7 @@
 import Foundation
 
 /// Oh My Pi's keys for a card action. OMP binds no digits to its panels, so
-/// no plan sends one.
+/// no plan sends one; a list row is reached by arrow keys, each checked.
 struct OMPDialogPlanner {
     let dialog: BlockedDialog
     /// The matched `ask` call, whose result confirms an answer.
@@ -20,9 +20,13 @@ struct OMPDialogPlanner {
         }
     }
 
-    /// ctrl+q approves; plain Enter does nothing, and ctrl+enter reads as
+    /// ctrl+q approves once, whichever row has focus; ctrl+enter reads as
     /// Enter without kitty keys. Esc denies, and OMP goes on with the turn,
-    /// so the Composer keeps its focus. Leaving Blocked confirms either.
+    /// so the Composer keeps its focus. Oh My Pi 18.12's session approval
+    /// has no key of its own: one arrow key per row to it, each checked,
+    /// then Enter. While the prompt holds a draft, arrow keys and Enter go
+    /// to the draft, so only Approve and Deny go. Leaving Blocked confirms
+    /// any of them.
     private func approval(_ action: DialogAction) throws(DialogPlanError) -> DialogActionPlan {
         switch action {
         case .choose(let ordinal):
@@ -30,6 +34,11 @@ struct OMPDialogPlanner {
             switch option.role {
             case .approve:
                 return DialogActionPlan(steps: [.keys(["ctrl+q"])], confirmation: .fingerprintChangeOrUnblocked)
+            case .approvePersistent:
+                guard !dialog.focus.composerDraftGuard else { throw Self.sessionUnderDraft }
+                var builder = StepBuilder(dialog: dialog)
+                try builder.press(option)
+                return DialogActionPlan(steps: builder.steps, confirmation: .fingerprintChangeOrUnblocked)
             case .decline:
                 return Self.deny
             default:
@@ -45,6 +54,10 @@ struct OMPDialogPlanner {
     }
 
     private static let deny = DialogActionPlan(steps: [.keys(["esc"])], confirmation: .fingerprintChangeOrUnblocked)
+
+    private static let sessionUnderDraft = DialogPlanError.unsupported(
+        "Oh My Pi's input box holds a draft, which would take the arrow keys. Clear it in the terminal "
+            + "to approve for the session.")
 
     private var confirmation: ConfirmationRule {
         toolUseID.map { .toolResult(id: $0) } ?? .fingerprintChangeOrUnblocked

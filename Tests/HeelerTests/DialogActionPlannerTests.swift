@@ -370,7 +370,57 @@ struct DialogActionPlannerTests {
         }
     }
 
-    @Test("No OMP plan sends a digit, Enter or ctrl+enter")
+    @Test("OMP's session approval moves to its row one arrow at a time, checked, then presses Enter")
+    func ompSessionApprovalMovesByArrowsWithAFocusCheck() throws {
+        let confirmation = ConfirmationRule.fingerprintChangeOrUnblocked
+        #expect(
+            try plan(.choose(ordinal: 2), "omp-36-approval-edit-18-12")
+                == DialogActionPlan(
+                    steps: [.keys(["down"]), .expect(.focus(ordinal: 2)), .keys(["enter"])],
+                    confirmation: confirmation))
+        // Already on the row: Enter alone.
+        #expect(
+            try plan(.choose(ordinal: 2), "omp-37-approval-session-a-after-down")
+                == DialogActionPlan(steps: [.keys(["enter"])], confirmation: confirmation))
+        // The panel's other answers keep their keys.
+        for stem in ["omp-36-approval-edit-18-12", "omp-37-approval-session-a-after-down"] {
+            #expect(try plan(.choose(ordinal: 1), stem).keys == ["ctrl+q"], "\(stem)")
+            #expect(try plan(.choose(ordinal: 3), stem).keys == ["esc"], "\(stem)")
+            #expect(try plan(.dismiss, stem).keys == ["esc"], "\(stem)")
+        }
+    }
+
+    @Test("A draft under OMP's approval refuses only the session approval")
+    func ompSessionApprovalRefusedUnderADraft() throws {
+        let stem = "omp-37-approval-session-b-draft"
+        let message =
+            "Oh My Pi's input box holds a draft, which would take the arrow keys. Clear it in the terminal "
+            + "to approve for the session."
+        #expect(throws: DialogPlanError.unsupported(message)) {
+            try plan(.choose(ordinal: 2), stem)
+        }
+        #expect(try plan(.choose(ordinal: 1), stem).keys == ["ctrl+q"])
+        #expect(try plan(.choose(ordinal: 3), stem).keys == ["esc"])
+    }
+
+    @Test("No OMP approval plan sends a digit or ctrl+enter, and only the session row Enter")
+    func ompApprovalPlansSendNoDigits() throws {
+        let stems = [
+            "omp-23-approval-a-ctrlq-early", "omp-24-approval-a-dialog", "omp-24-approval-d-typed-abc",
+            "omp-36-approval-edit-18-12", "omp-37-approval-session-a-after-down", "omp-37-approval-session-b-draft",
+        ]
+        for stem in stems {
+            let dialog = try dialog(stem)
+            for ordinal in 0...10 {
+                guard let plan = try? DialogActionPlanner.plan(.choose(ordinal: ordinal), for: dialog) else { continue }
+                #expect(!plan.keys.contains { $0.contains(where: \.isNumber) || $0 == "ctrl+enter" }, "\(stem)")
+                let isSession = dialog.option(ordinal)?.role == .approvePersistent
+                #expect(plan.keys.contains("enter") == isSession, "\(stem) \(ordinal)")
+            }
+        }
+    }
+
+    @Test("No OMP plan before 18.12 sends a digit, Enter or ctrl+enter")
     func ompPlansNeverContainDigits() throws {
         for stem in ["omp-23-approval-a-ctrlq-early", "omp-24-approval-a-dialog", "omp-24-approval-d-typed-abc"] {
             let dialog = try dialog(stem)

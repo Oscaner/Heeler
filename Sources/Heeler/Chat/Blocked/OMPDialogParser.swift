@@ -31,9 +31,11 @@ enum OMPDialogParser {
     private static let approvalPrefix = "Allow tool:"
 
     /// `Allow tool: <name>`, its details (`Command:`, `Reason:`, `Origin:`
-    /// and per-tool rows), then `ctrl+q approve · esc deny · …`. Plain Enter
-    /// does nothing; typing goes to the prompt below, which turns the footer's
-    /// tail into `deny and send`, so the footer stays out of the fingerprint.
+    /// and per-tool rows), then `ctrl+q approve · esc deny · …`. Typing goes
+    /// to the prompt below, which turns the footer's tail into `deny and
+    /// send`, so the footer stays out of the fingerprint. Before 18.12 plain
+    /// Enter does nothing; 18.12 lists the choices under the details, which
+    /// arrow keys and Enter answer (see `approvalChoices`).
     private static func approval(_ panel: OMPPanel, title: String, on screen: ANSIScreen) -> DialogParseResult {
         guard panel.sections.count > 1, let footer = panel.sections.last else {
             return unrecognized(panel, on: screen, "The approval's keys are not on screen.")
@@ -43,7 +45,8 @@ enum OMPDialogParser {
             return unrecognized(panel, on: screen, "The approval's keys are not on screen.")
         }
         let details = panel.sections.dropLast().flatMap { $0 }
-        let body = (keys.contains(" choose") ? withoutChoiceList(details) : details).map(\.text)
+        let choices = approvalChoices(details)
+        let body = details.dropLast(choices?.rows ?? 0).map(\.text)
         var subject = DialogSubject()
         subject.toolName = String(title.dropFirst(approvalPrefix.count)).trimmingCharacters(in: .whitespaces)
         subject.command = value(of: "Command:", in: body).map { command in
@@ -51,12 +54,25 @@ enum OMPDialogParser {
             command.hasSuffix("…") ? String(command.dropLast()).trimmingCharacters(in: .whitespaces) : command
         }
         subject.reason = value(of: "Reason:", in: body)
-        // OMP ignores ctrl+q for 500 ms after drawing the panel; the store
-        // waits that out. ctrl+enter reads as Enter without kitty keys.
-        let options = [
-            DialogOption(ordinal: 1, number: nil, label: "Approve", shortcut: "ctrl+q", role: .approve),
-            DialogOption(ordinal: 2, number: nil, label: "Deny", shortcut: "esc", role: .decline),
+        // OMP ignores ctrl+q and Enter for 500 ms after drawing the panel;
+        // the store waits that out. ctrl+enter reads as Enter without kitty
+        // keys. The options follow the list's order, so an ordinal is its
+        // row; a draft hides the list's focus behind its Deny row.
+        let isGuarded = keys.contains("deny and send")
+        let focused = isGuarded ? nil : choices?.focused
+        var options = [
+            DialogOption(
+                ordinal: 1, number: nil, label: "Approve", shortcut: "ctrl+q", role: .approve, isFocused: focused == 1)
         ]
+        if let session = choices?.sessionLabel {
+            options.append(
+                DialogOption(
+                    ordinal: 2, number: nil, label: session, role: .approvePersistent, isFocused: focused == 2))
+        }
+        options.append(
+            DialogOption(
+                ordinal: options.count + 1, number: nil, label: "Deny", shortcut: "esc", role: .decline,
+                isFocused: focused == options.count + 1))
         return .dialog(
             BlockedDialog(
                 kind: .ompApproval, title: title, sourceSuffix: nil, positionLabel: nil, body: body, progress: nil,
@@ -64,21 +80,42 @@ enum OMPDialogParser {
                 fingerprint: DialogFingerprint(
                     program: .omp, kind: .ompApproval, title: title, sourceSuffix: nil, body: body, progress: nil,
                     options: options),
-                focus: DialogFocusState(), subject: subject))
+                focus: DialogFocusState(focusedOrdinal: focused, composerDraftGuard: isGuarded), subject: subject))
     }
 
-    /// Oh My Pi 18.12 lists the approval's choices below the details: the
-    /// focused one led by the pointer, the others indented to its label.
-    /// The keys approve and deny as before, so the list is left out.
-    private static func withoutChoiceList(_ lines: [OMPPanel.Line]) -> [OMPPanel.Line] {
-        guard let focused = lines.firstIndex(where: { pointed($0.text)?.isFocused == true }) else { return lines }
-        let sibling = lines[focused].indent + 2
-        var start = focused
-        while start > lines.startIndex, lines[start - 1].indent == sibling { start -= 1 }
-        var end = focused + 1
-        while end < lines.endIndex, lines[end].indent == sibling { end += 1 }
-        return Array(lines[..<start] + lines[end...])
+    /// Oh My Pi 18.12's choices, the details' last rows: `Approve`, then
+    /// `Approve <subject> for this session` when the approval policy offers
+    /// it, then `Deny`, which reads `Deny and send message` while the prompt
+    /// holds a draft. The pointer leads the focused row, the others are
+    /// indented to its label, and ↑/↓ wrap around. While a draft is typed
+    /// the pointer stays on Deny and arrow keys edit the draft.
+    private static func approvalChoices(_ lines: [OMPPanel.Line]) -> ApprovalChoices? {
+        for count in [3, 2] where lines.count >= count {
+            let rows = Array(lines.suffix(count))
+            let read = rows.compactMap { pointed($0.text) }
+            guard read.count == count, let focused = read.firstIndex(where: \.isFocused),
+                read.filter(\.isFocused).count == 1,
+                rows.indices.allSatisfy({ $0 == focused || rows[$0].indent == rows[focused].indent + 2 }),
+                read.first?.rest == "Approve", let deny = read.last?.rest, deny == "Deny" || deny == denyAndSend
+            else { continue }
+            guard count == 3 else { return ApprovalChoices(rows: 2, sessionLabel: nil, focused: focused + 1) }
+            let session = read[1].rest
+            guard session.hasPrefix("Approve "), session.hasSuffix(" for this session") else { continue }
+            return ApprovalChoices(rows: 3, sessionLabel: session, focused: focused + 1)
+        }
+        return nil
     }
+
+    private struct ApprovalChoices {
+        /// How many of the details' last rows the list takes.
+        let rows: Int
+        /// The session row's label as printed.
+        let sessionLabel: String?
+        /// The pointer's row, 1-based.
+        let focused: Int
+    }
+
+    private static let denyAndSend = "Deny and send message"
 
     /// `Ask`, one page per question. Several questions add a tab row above
     /// the question (`fruit    size    Submit`, the active tab bold on a

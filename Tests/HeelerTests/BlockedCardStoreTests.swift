@@ -510,6 +510,55 @@ struct BlockedCardStoreTests {
         }
     }
 
+    /// Oh My Pi 18.12's session approval: ↓ to its row once the arm has
+    /// passed, the pointer checked there, then Enter.
+    @Test func anOMPSessionApprovalMovesToItsRowThenPressesEnter() async throws {
+        let pane = FakePane(try ScreenFixture.screen("omp-36-approval-edit-18-12"))
+        await pane.react(to: ["down"], with: try ScreenFixture.screen("omp-37-approval-session-a-after-down"))
+        await pane.react(to: ["enter"], with: try ScreenFixture.screen("omp-09-tool-working-3s"))
+        let clock = ManualClock()
+        let store = Self.store(.omp, pane: pane, clock: clock)
+        let request = ChatPendingRequest(
+            entryID: ChatEntryID("call_e|fc_e"), callID: "call_e|fc_e", kind: .fileEdit, toolName: "edit",
+            summary: "notes.txt")
+        store.update(transcript: Self.transcript(pending: [request]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.option(2)?.label == "Approve edit for this session")
+        #expect(card.request?.callID == "call_e|fc_e")
+
+        await store.perform(.choose(ordinal: 2))
+
+        #expect(await pane.keys == [["down"], ["enter"]])
+        #expect(clock.sleeps.first == .milliseconds(650))
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        #expect(store.history.calls["call_e|fc_e"] == .allowed)
+    }
+
+    /// A ↓ that does not move the pointer stops the answer before Enter.
+    @Test func anOMPSessionApprovalStopsWhenThePointerDoesNotMove() async throws {
+        let pane = FakePane(try ScreenFixture.screen("omp-36-approval-edit-18-12"))
+        let store = Self.store(.omp, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+
+        await store.perform(.choose(ordinal: 2))
+
+        #expect(await pane.keys == [["down"]])
+        #expect(
+            store.notice
+                == "The dialog didn't respond the way Heeler expected, so it stopped. Finish here or in the terminal.")
+        guard case .generic = store.content else {
+            Issue.record("Expected the generic card, got \(store.content)")
+            return
+        }
+    }
+
     @Test func anOMPPanelHeelerDoesNotKnowGetsTheGenericCardWithoutDigits() async throws {
         let pane = FakePane(try ScreenFixture.screen("omp-31-plan-review"))
         let store = Self.store(.omp, pane: pane)

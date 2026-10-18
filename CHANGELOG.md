@@ -43,6 +43,11 @@ Entries reference the pull request that made the change.
   the review, and the card says so when a draft in Oh My Pi's prompt would
   take the keys. Multi-select questions and typed answers stay in the
   terminal. (#464)
+- Approve an Oh My Pi 18.12 tool for the rest of the session from its
+  Blocked card when the approval offers it ("Approve edit for this session").
+  The card moves to that row one arrow key at a time, checking the selection
+  after each, and stops without answering if it doesn't move; a draft in Oh
+  My Pi's prompt leaves this choice to the terminal. (#425)
 - Chat for Claude Code and Codex Agents: the Agent's conversation as native
   rows in the terminal's place, read from the transcript its program writes on
   the Host, with nothing installed there. Chat folds finished turns, groups

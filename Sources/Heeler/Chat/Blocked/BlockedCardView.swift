@@ -458,9 +458,17 @@ extension DialogOption {
     /// What a persistent approval keeps, for its caution line. Claude Code
     /// 2.1.301's `always allow access to <dir> from this project` adds the
     /// folder for the session and saves no rule; its `don't ask again`
-    /// options and Codex 0.162.1's `(a)`/`(p)` ones save one. Recheck when
-    /// either program's version changes.
+    /// options and Codex 0.162.1's `(a)`/`(p)` ones save one. Oh My Pi
+    /// 18.12's `Approve <tool> for this session` saves none and stops asking
+    /// until the session ends. Recheck when a program's version changes.
     func persistenceNote(program: ChatProgram) -> String {
+        if program == .omp {
+            let prefix = "Approve ", suffix = " for this session"
+            let subject =
+                label.hasPrefix(prefix) && label.hasSuffix(suffix) && label.count > prefix.count + suffix.count
+                ? String(label.dropFirst(prefix.count).dropLast(suffix.count)) : "this tool"
+            return "Oh My Pi won't ask again for \(subject) in this session."
+        }
         let folded = DialogRowScanner.comparable(label.lowercased())
         if program == .claude, folded.contains(DialogRowScanner.comparable("always allow access to")) {
             return "Lets Claude work in this folder for the session."

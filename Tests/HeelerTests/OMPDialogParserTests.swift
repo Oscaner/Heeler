@@ -38,17 +38,47 @@ struct OMPDialogParserTests {
     }
 
     /// Oh My Pi 18.12.1 lists the approval's choices under the details,
-    /// the pointer on the focused one. The keys still approve and deny, so
-    /// the card keeps its two options and leaves the list out of the body.
-    @Test func approvalChoiceListIsLeftOutOfTheBody() throws {
+    /// the pointer on the focused one. The list becomes the card's options,
+    /// its session row included, and stays out of the body.
+    @Test func approvalChoiceListBecomesTheOptions() throws {
         let dialog = try dialog("omp-36-approval-edit-18-12")
         #expect(dialog.kind == .ompApproval)
         #expect(dialog.title == "Allow tool: edit")
         #expect(dialog.subject.toolName == "edit")
         #expect(dialog.body == ["File: notes.txt"])
         #expect(dialog.rows == 30..<38)
-        #expect(dialog.options.map(\.label) == ["Approve", "Deny"])
-        #expect(dialog.options.map(\.shortcut) == ["ctrl+q", "esc"])
+        #expect(dialog.options.map(\.label) == ["Approve", "Approve edit for this session", "Deny"])
+        #expect(dialog.options.map(\.shortcut) == ["ctrl+q", nil, "esc"])
+        #expect(dialog.options.map(\.role) == [.approve, .approvePersistent, .decline])
+        #expect(dialog.options.map(\.ordinal) == [1, 2, 3])
+        #expect(dialog.options.allSatisfy { $0.number == nil })
+        #expect(dialog.focus.focusedOrdinal == 1)
+        #expect(!dialog.focus.composerDraftGuard)
+        #expect(
+            dialog.option(2)?.persistenceNote(program: .omp) == "Oh My Pi won't ask again for edit in this session.")
+    }
+
+    /// ↓ moves the pointer to the session row; the dialog keeps its
+    /// fingerprint, as a focus check needs.
+    @Test func approvalFocusFollowsThePointer() throws {
+        let moved = try dialog("omp-37-approval-session-a-after-down")
+        #expect(moved.focus.focusedOrdinal == 2)
+        #expect(moved.options.map(\.label) == ["Approve", "Approve edit for this session", "Deny"])
+        #expect(moved.body == ["File: notes.txt"])
+        #expect(moved.fingerprint == (try dialog("omp-36-approval-edit-18-12")).fingerprint)
+    }
+
+    /// With a draft in the prompt below, Oh My Pi draws the pointer on
+    /// `Deny and send message` whatever the list's focus, the footer drops
+    /// `choose`, and arrow keys edit the draft. The list still stays out of
+    /// the body, Deny keeps its label, and no focus is read.
+    @Test func approvalUnderADraftReadsNoFocus() throws {
+        let dialog = try dialog("omp-37-approval-session-b-draft")
+        #expect(dialog.body == ["File: notes.txt"])
+        #expect(dialog.options.map(\.label) == ["Approve", "Approve edit for this session", "Deny"])
+        #expect(dialog.focus.focusedOrdinal == nil)
+        #expect(dialog.focus.composerDraftGuard)
+        #expect(dialog.fingerprint == (try self.dialog("omp-37-approval-session-a-after-down")).fingerprint)
     }
 
     /// Typing during an approval goes to the prompt below and turns the
