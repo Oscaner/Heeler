@@ -81,7 +81,9 @@ the event stream, and interactive terminals run `herdr agent attach
 --takeover` on an SSH PTY. The only prerequisites are SSH access and a
 running herdr — no server changes, no extra packages. The SSH server must
 allow stream-local forwarding (the OpenSSH default); onboarding calls it out
-when it's disabled.
+when it's disabled. On Fedora, RHEL, and their derivatives, SELinux can deny the
+socket open even when forwarding is allowed — see [SELinux on a Fedora or RHEL
+Host](docs/guides/selinux.md).
 
 Native Windows Hosts (herdr >= 0.9.3) connect over SSH and are added manually.
 

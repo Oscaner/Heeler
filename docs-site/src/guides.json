@@ -27,7 +27,7 @@
         "en": "Hosts",
         "zh": "Host"
       },
-      "guides": ["host-routes", "windows-setup"]
+      "guides": ["host-routes", "windows-setup", "selinux"]
     }
   ],
   "sidebarTitles": {
@@ -41,7 +41,8 @@
       "vps-jump-host-setup": "Set up a Jump Host",
       "vps-jump-host": "Jump Host in depth",
       "host-routes": "Multiple routes",
-      "windows-setup": "Windows setup"
+      "windows-setup": "Windows setup",
+      "selinux": "Fedora/RHEL SELinux"
     },
     "zh": {
       "index": "简介",
@@ -53,7 +54,8 @@
       "vps-jump-host-setup": "配置 Jump Host",
       "vps-jump-host": "Jump Host 详解",
       "host-routes": "多条路由",
-      "windows-setup": "Windows 配置"
+      "windows-setup": "Windows 配置",
+      "selinux": "SELinux（Fedora/RHEL）"
     }
   },
   "icons": {
@@ -66,6 +68,7 @@
     "vps-jump-host-setup": "ListChecks",
     "vps-jump-host": "ShieldCheck",
     "host-routes": "Route",
-    "windows-setup": "MonitorCog"
+    "windows-setup": "MonitorCog",
+    "selinux": "ShieldAlert"
   }
 }
