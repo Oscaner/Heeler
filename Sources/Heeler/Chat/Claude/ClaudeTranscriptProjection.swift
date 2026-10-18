@@ -271,9 +271,24 @@ enum ClaudeTranscriptProjection {
             let rest = first.dropFirst(heading.count).trimmingCharacters(in: .whitespaces)
             lines = (rest.isEmpty ? [] : [rest]) + lines.dropFirst()
             dropLeading(\.isEmpty)
+            lines = outdentingFirstSection(lines)
         }
         let remainder = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         return remainder.isEmpty ? summary : remainder
+    }
+
+    /// The first section's body moved out by its common indentation, up to
+    /// the next unindented line. Without its heading, the body's list items
+    /// are top-level; outdenting only the first line would make its siblings
+    /// read as nested under it.
+    private static func outdentingFirstSection(_ lines: [String]) -> [String] {
+        func indentation(_ line: String) -> Int { line.prefix { $0 == " " || $0 == "\t" }.count }
+        let end = lines.firstIndex { !$0.trimmingCharacters(in: .whitespaces).isEmpty && indentation($0) == 0 }
+            ?? lines.endIndex
+        let body = lines[..<end]
+        let shift = body.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.map(indentation).min() ?? 0
+        guard shift > 0 else { return lines }
+        return body.map { String($0.dropFirst(min(shift, indentation($0)))) } + lines[end...]
     }
 
     static func modelChangeTitle(from: String?, to: String?) -> String {

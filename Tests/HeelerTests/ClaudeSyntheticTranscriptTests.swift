@@ -799,6 +799,36 @@ struct ClaudeSyntheticTranscriptTests {
         #expect(ClaudeTranscriptProjection.compactionPreview(bare) == bare)
     }
 
+    @Test("A compaction's preview keeps the first section's items at one level")
+    func compactionPreviewFirstSectionLevel() {
+        // Claude Code 2.1.302 (verify2 D-V1-02): several items under the
+        // dropped heading previewed as "• first" then "◦ second".
+        let summary = ClaudeTranscriptProjection.compactionPreamble + """
+
+
+            Summary:
+            1. Primary Request and Intent:
+               - Reply with the word "ok".
+               - Create `v4.txt`, then edit it.
+                  - nested detail
+
+            2. Key Technical Concepts:
+               - SwiftUI sheets
+            """
+        let preview = ClaudeTranscriptProjection.compactionPreview(summary)
+        #expect(preview == """
+            - Reply with the word "ok".
+            - Create `v4.txt`, then edit it.
+               - nested detail
+
+            2. Key Technical Concepts:
+               - SwiftUI sheets
+            """)
+        #expect(
+            ChatDivider.compaction(summary: preview).accessibilityPreview
+                == "• Reply with the word \"ok\".\n• Create v4.txt, then edit it.\n◦ nested detail")
+    }
+
     @Test("A compaction's divider previews Claude Code's Markdown summary as plain lines")
     func compactionDividerPlainText() throws {
         // Claude Code 2.1.302 (V1 CL-22): the summary is Markdown lists.
