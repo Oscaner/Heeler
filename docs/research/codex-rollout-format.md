@@ -293,7 +293,13 @@ The app server projects a paginated rollout like this
   is ignored, including `thread_rolled_back`.
 - Late items stay in their turn: `probe2-rollout.jsonl:36` arrives after the
   abort at `:35`, and `probe1-rollout.jsonl:21` after the output of the cell
-  that ran it.
+  that ran it. Codex 0.163.0 (observed live 2026-10-18, `-a never`) can end
+  a turn while a command it started keeps running as a "background
+  terminal" (the TUI says "1 background terminal running · /ps to view"):
+  the `CommandExecution` `item_completed` lands 10 s after `task_complete`,
+  under the ended turn's id. Chat moves such a call, in a completed turn,
+  above the final answer, so the turn still folds; a stopped turn keeps it
+  where it was recorded.
 - Turns sort by their first ordinal.
 - A review forwards its reviewer's events into the parent rollout
   (`codex-rs/core/src/tasks/review.rs`, `process_review_events`): Codex

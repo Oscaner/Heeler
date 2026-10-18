@@ -346,7 +346,9 @@ questions, messages sent while working, compaction separators, task notification
 interruptions, stops, errors, calls waiting on the user, and Subagent
 launches. A turn with nothing before its answer, with no answer, or that was
 interrupted or failed does not fold, and neither does the newest one while
-Background Work runs. Opening a fold opens none of the rows or groups inside
+Background Work runs. A Codex call recorded after its turn completed, a
+command left running as a background terminal, folds with the steps above
+the answer rather than unfolding the turn. Opening a fold opens none of the rows or groups inside
 it; the model's text there reads in the secondary color. Fold Finished
 Turns in Settings turns folding off.
 

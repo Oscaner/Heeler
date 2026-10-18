@@ -26,7 +26,12 @@ struct CodexOrdinalDiagnostics: Equatable, Sendable {
 /// thread store: a turn sorts by the first line that names it and keeps the
 /// first terminal status its segment records; an item keeps the position
 /// of its first snapshot and the content of its latest, in the turn its
-/// line names, however late it arrives.
+/// line names, however late it arrives. A tool call first recorded after
+/// its turn completed (a command Codex 0.163.0 leaves running as a
+/// background terminal) joins the turn's steps above its final answer, so
+/// the answer stays the last thing the finished turn shows and the turn
+/// still folds. A stopped or failed turn does not fold, and keeps such a
+/// call where it was recorded, below the commentary before it.
 ///
 /// A turn started under the root of a turn already in the file is that
 /// turn's forwarded work: a review's reviewer turn writes its prompt,
@@ -61,6 +66,8 @@ struct CodexPaginatedBuilder {
         var question: CodexQuestionBuild?
         /// Set for a row derived from an aborted code-mode patch.
         var isCodeModePatch = false
+        /// A tool call first recorded after its turn completed.
+        var isLate = false
     }
 
     /// A code-mode patch call waiting for its output.
@@ -200,9 +207,12 @@ struct CodexPaginatedBuilder {
                 existing.entry.content = .item(item.content)
                 turn.items[item.id] = existing
             } else {
+                var isTool = false
+                if case .tool = item.content { isTool = true }
                 turn.items[item.id] = Item(
                     position: position,
-                    entry: entry(item.id, itemID: item.id, in: turnID, content: .item(item.content), line, segment))
+                    entry: entry(item.id, itemID: item.id, in: turnID, content: .item(item.content), line, segment),
+                    isLate: isTool && turn.status == .completed)
             }
             turns[turnID] = turn
         case .questionCall(let call):
@@ -315,6 +325,20 @@ struct CodexPaginatedBuilder {
             itemID: itemID, rolloutID: segment.rolloutID, path: segment.path, content: content)
     }
 
+    /// `items` in file order, with each late tool call moved above the
+    /// final answer: the turn's trailing run of agent messages.
+    private static func placingLateItems(_ items: [(key: String, value: Item)]) -> [(key: String, value: Item)] {
+        let late = items.filter(\.value.isLate)
+        guard !late.isEmpty else { return items }
+        var placed = items.filter { !$0.value.isLate }
+        var answerStart = placed.endIndex
+        while answerStart > placed.startIndex, case .item(.agent) = placed[answerStart - 1].value.entry.content {
+            answerStart -= 1
+        }
+        placed.insert(contentsOf: late, at: answerStart)
+        return placed
+    }
+
     /// The files a patch row names, as a set, so one whose patch lists them
     /// in another order still matches.
     private static func patchFiles(of item: Item) -> Set<String>? {
@@ -337,10 +361,11 @@ struct CodexPaginatedBuilder {
         return CodexTimeline(
             turns: ordered.map { turn in
                 let recorded = Self.recordedPatchFiles(in: turn)
-                let items = turn.items.filter { _, item in
-                    !item.isCodeModePatch || Self.patchFiles(of: item).map { !recorded.contains($0) } ?? true
-                }
-                .sorted { $0.value.position < $1.value.position }
+                let items = Self.placingLateItems(
+                    turn.items.filter { _, item in
+                        !item.isCodeModePatch || Self.patchFiles(of: item).map { !recorded.contains($0) } ?? true
+                    }
+                    .sorted { $0.value.position < $1.value.position })
                 return CodexTimelineTurn(
                     id: turn.id, status: turn.status,
                     entries: items.map { key, item in

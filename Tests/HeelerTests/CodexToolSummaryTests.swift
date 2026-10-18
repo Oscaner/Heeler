@@ -205,6 +205,30 @@ struct CodexToolSummaryTests {
             ])
     }
 
+    /// Codex 0.163.0 (V2 CX-22): a turn can end while a command it started
+    /// keeps running as a background terminal, whose item Codex records
+    /// under the ended turn when it finishes.
+    @Test("A command recorded after its turn completed joins the turn's steps, above the answer")
+    func lateCommandJoinsTheSteps() {
+        var builder = CodexRolloutBuilder()
+        builder.turnStarted("t1")
+        builder.userMessage("t1", id: "u1", text: "Run sleep 20 then reply done.")
+        builder.command("t1", id: "c1", argv: ["echo", "first"])
+        builder.agentMessage("t1", id: "a1", text: "third")
+        builder.turnComplete("t1")
+        builder.command("t1", id: "c2", argv: ["sleep", "20"])
+        builder.turnStarted("t2")
+        builder.userMessage("t2", id: "u2", text: "Next")
+        builder.agentMessage("t2", id: "a2", text: "ok")
+        builder.turnComplete("t2")
+
+        let transcript = builder.reducer().transcript(ChatProjectionContext(activity: .idle))
+        #expect(
+            transcript.entries.map { $0.tool?.title ?? $0.assistant?.text ?? "prompt" }
+                == ["prompt", "echo first", "sleep 20", "third", "prompt", "ok"])
+        #expect(transcript.turns.map(\.ending) == [.completed, .completed])
+    }
+
     @Test("A patch aborted before it applied is interrupted, not failed")
     func abortedPatch() {
         var builder = CodexRolloutBuilder()

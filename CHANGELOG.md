@@ -154,6 +154,9 @@ Entries reference the pull request that made the change.
 - The Console stops looking for a hidden Agent's missing conversation after a
   few tries, until the Agent's status or session changes, instead of searching
   the Host every half minute. (#425)
+- A command Codex leaves running after a turn ends no longer unfolds that
+  turn when it finishes, below the answer; it joins the turn's folded steps.
+  (#425)
 - Chat stops reading an Agent's conversation once you leave it on iPhone,
   instead of reading it every few seconds in the background until the app
   relaunches. (#425)
