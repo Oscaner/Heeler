@@ -180,6 +180,12 @@ source reading:
   the Plan Review fills the screen with no composer. A multi-select `ask`
   toggles with Space (`space toggle · enter submit`); its generic card's key
   pad has no Space, so toggling stays in the terminal.
+- OMP 18.12.1's tool approval lists its choices under the details: `Approve`,
+  `Approve <tool> for this session` when the approval policy offers it, and
+  `Deny`, which reads `Deny and send message` while the prompt holds a draft.
+  The pointer marks the focused row and the footer adds `↑/↓ choose · 󰌑
+  select`; under a draft the pointer stays on Deny and the footer drops
+  `choose` (fixtures `omp-36`, `omp-37`).
 - `/compact ` with a trailing space is completed to `/compact soft ` with grey
   ghost text and not submitted; only an ANSI read tells the ghost text apart.
 - Pi's footer is a working-directory row (`/private/tmp/...` outside the home
@@ -194,8 +200,9 @@ source reading:
 
 ADR 0023 records what Chat makes of these: it sends only after positively
 reading an empty stock editor or an idle OMP band, holds while an OMP turn
-runs, answers OMP's tool approval and single-select `ask` from Blocked cards
-with keys rather than digits, and leaves drafts, completion popups, custom
+runs, answers OMP's tool approval (18.12's session row included) and
+single-select `ask` from Blocked cards with keys rather than digits, and
+leaves drafts, completion popups, custom
 editors, other panels and unrecognized composer styles to the terminal. Stop
 and explicit tools keys retain the existing RPCs.
 
