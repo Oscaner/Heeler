@@ -480,6 +480,7 @@
 		D6789E8127CB274D0858800A /* RouteRace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B0D04E89E51B1738665078 /* RouteRace.swift */; };
 		D6B61CDF8C3B0EFE3E269415 /* GhosttyTheme in Frameworks */ = {isa = PBXBuildFile; productRef = E086C559FC229264CF662993 /* GhosttyTheme */; };
 		D6FBEC56A26E35A32CF2417A /* TerminalKeyModifiersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B99CB61015DC220A2D9306A /* TerminalKeyModifiersTests.swift */; };
+		D71106FE96A93D80371CB475 /* PollBudgetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2740D53BB16876FB5DEE5934 /* PollBudgetTests.swift */; };
 		D72DB8602458FB38733BFBB7 /* FileDiffLayoutViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AED1F486D6B44C92C51C34A6 /* FileDiffLayoutViewTests.swift */; };
 		D73584678535141CBBB2FCB7 /* ChangesStore+FileDiff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153C35138F25F70F35B2E1A0 /* ChangesStore+FileDiff.swift */; };
 		D7DD62B232DBA9CE8C89AFDD /* NotificationKeyMirrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D55C5296892657D59171DFE /* NotificationKeyMirrorTests.swift */; };
@@ -546,6 +547,7 @@
 		F1942670E29F7B340860DC8D /* HostStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AEC3D31861DABF40C05EE8D /* HostStore.swift */; };
 		F271226A2892164D44593BD9 /* plugin-version-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = CD3F97D0C9A6A0BC8FBEE6CD /* plugin-version-v1.json */; };
 		F2EDACBD031E425D1B629920 /* AppAppearanceSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12CB6AC68294D97226EBF857 /* AppAppearanceSettingsTests.swift */; };
+		F2F508BF4FB5C96D066FFA67 /* PollBudget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1209F79DFBDD6D95E0510227 /* PollBudget.swift */; };
 		F33E66589A8B317F039A7A82 /* TerminalConnectionPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58A1E19B4FC5774FEC1AFD71 /* TerminalConnectionPool.swift */; };
 		F35F9D6763B3FC31BB80A39E /* ChangesStore+References.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F865EED191F0D95F26025CD /* ChangesStore+References.swift */; };
 		F3AE0E87B4A0006D8E1327FD /* TerminalThemePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE868FFAE7FC91684AF77452 /* TerminalThemePreview.swift */; };
@@ -668,6 +670,7 @@
 		1142E803F7CA971D3CCDF2EB /* LiveActivityPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityPreferences.swift; sourceTree = "<group>"; };
 		1187933BD5FAA5064BBF856F /* TerminalZoomSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalZoomSettingsTests.swift; sourceTree = "<group>"; };
 		11E0EA7996F618E85BF3B988 /* HeelerPluginInstallation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeelerPluginInstallation.swift; sourceTree = "<group>"; };
+		1209F79DFBDD6D95E0510227 /* PollBudget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PollBudget.swift; sourceTree = "<group>"; };
 		1264F90327344290A094B378 /* HeelerSSHTransportBehaviorE2ETests+FailureStates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HeelerSSHTransportBehaviorE2ETests+FailureStates.swift"; sourceTree = "<group>"; };
 		126DE4AA09228412D12EE4E6 /* LiveInAnotherWindowPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveInAnotherWindowPresentationTests.swift; sourceTree = "<group>"; };
 		12CB6AC68294D97226EBF857 /* AppAppearanceSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAppearanceSettingsTests.swift; sourceTree = "<group>"; };
@@ -710,6 +713,7 @@
 		239FD696B72E804AE3D85D72 /* ComposerStagingStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerStagingStoreTests.swift; sourceTree = "<group>"; };
 		247FF74AD248F26A072EA263 /* TerminalKeyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalKeyboard.swift; sourceTree = "<group>"; };
 		2594CA106FA6BF61036A50CF /* ChangesManualSleeper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChangesManualSleeper.swift; sourceTree = "<group>"; };
+		2740D53BB16876FB5DEE5934 /* PollBudgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PollBudgetTests.swift; sourceTree = "<group>"; };
 		276B4E744F8A3BF386189D8A /* AgentComposerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentComposerStore.swift; sourceTree = "<group>"; };
 		277D66B22B73144FF5ADAED0 /* NotificationSessionVectorFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSessionVectorFile.swift; sourceTree = "<group>"; };
 		2782D0CCB8DD0CC97AF6932C /* AcknowledgementsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcknowledgementsView.swift; sourceTree = "<group>"; };
@@ -1362,6 +1366,7 @@
 				D419158B027AF5F38B73AD8B /* PairingCodeTests.swift */,
 				D026719294E631141C3A59F9 /* PairingScanStoreTests.swift */,
 				768235F2FBD7790800281BC3 /* PinnedAgentsStoreTests.swift */,
+				2740D53BB16876FB5DEE5934 /* PollBudgetTests.swift */,
 				151586845D0A1EE54968B536 /* PreflightReportTests.swift */,
 				BEE35062339F9D6B0A9E684B /* PushRegistrationStoreTests.swift */,
 				3801638051F3E5F394CF3FBD /* ReconnectPolicyTests.swift */,
@@ -1882,6 +1887,7 @@
 				277D66B22B73144FF5ADAED0 /* NotificationSessionVectorFile.swift */,
 				B2DAE3FAB8786392318939A6 /* NotificationVectorFile.swift */,
 				7461B7A0FD2A4CDF34352D45 /* PairingCodeVectorFile.swift */,
+				1209F79DFBDD6D95E0510227 /* PollBudget.swift */,
 				31B3368D352EFC805C2534F9 /* RealSSHFixture.swift */,
 				B64F59C086BFF5B062ADCE8C /* ScriptedTransport.swift */,
 				88DA44F3EA811A40E96E06F2 /* SidebarLayoutVectorFile.swift */,
@@ -2705,6 +2711,8 @@
 				B3C490CC3562CC5B4B2EB993 /* PairingCodeVectorFile.swift in Sources */,
 				F6A1A833DFFB748716D13EA9 /* PairingScanStoreTests.swift in Sources */,
 				DC580B52C0F6509F92BB289C /* PinnedAgentsStoreTests.swift in Sources */,
+				F2F508BF4FB5C96D066FFA67 /* PollBudget.swift in Sources */,
+				D71106FE96A93D80371CB475 /* PollBudgetTests.swift in Sources */,
 				A194C27FBF0EF6641215D33A /* PreflightReportTests.swift in Sources */,
 				630CF9C336B79F04A9477C58 /* PushRegistrationStoreTests.swift in Sources */,
 				7DE1449E409F7F06C64E5089 /* RealSSHFixture.swift in Sources */,

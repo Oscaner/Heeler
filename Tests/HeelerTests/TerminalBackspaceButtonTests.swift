@@ -170,9 +170,10 @@ struct TerminalBackspaceButtonTests {
     private func repeatsReaching(
         _ target: Int, within timeout: Duration = .seconds(5), count: () -> Int
     ) async -> Int {
-        let deadline = ContinuousClock.now.advanced(by: timeout)
-        while count() < target, ContinuousClock.now < deadline {
+        var budget = PollBudget(timeout)
+        while count() < target, budget.hasTimeLeft {
             try? await Task.sleep(for: .milliseconds(10))
+            budget.charge()
         }
         return count()
     }
