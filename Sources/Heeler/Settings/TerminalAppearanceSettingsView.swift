@@ -11,8 +11,8 @@ struct TerminalAppearanceSettingsView: View {
             textSizeSection
 
             Section {
-                ForEach(terminal.fonts.availableOptions) { option in
-                    fontButton(option)
+                ForEach(terminal.fonts.availableOptions) { @Sendable option in
+                    MainActorContent { fontButton(option) }
                 }
             } header: {
                 Text("Terminal Font")

@@ -712,8 +712,8 @@ private struct AgentComposerSkillSuggestions: View {
                     header { EmptyView() }
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
-                            ForEach(matches) { skill in
-                                row(for: skill)
+                            ForEach(matches) { @Sendable skill in
+                                MainActorContent { row(for: skill) }
                             }
                         }
                         .onGeometryChange(for: CGFloat.self) { proxy in
@@ -1183,22 +1183,25 @@ struct ToolsKeyboardTabBar: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(tabs) { tab in
-                Button {
-                    selection = tab
-                } label: {
-                    Image(systemName: tab.systemImageName)
-                        .font(.body)
-                        .foregroundStyle(selection == tab ? Color.accentColor : .secondary)
-                        .frame(maxWidth: .infinity, minHeight: 40)
-                        .background(
-                            selection == tab ? Color(uiColor: .secondarySystemFill) : .clear,
-                            in: .rect(cornerRadius: 8))
-                        .contentShape(.rect)
+            ForEach(tabs) { @Sendable tab in
+                MainActorContent {
+                    let isSelected = selection == tab
+                    Button {
+                        selection = tab
+                    } label: {
+                        Image(systemName: tab.systemImageName)
+                            .font(.body)
+                            .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                            .frame(maxWidth: .infinity, minHeight: 40)
+                            .background(
+                                isSelected ? Color(uiColor: .secondarySystemFill) : .clear,
+                                in: .rect(cornerRadius: 8))
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(tab.accessibilityLabel)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(tab.accessibilityLabel)
-                .accessibilityAddTraits(selection == tab ? .isSelected : [])
             }
         }
         .padding(.horizontal, 10)

@@ -57,10 +57,12 @@ struct AgentDetailHeader: View {
             Spacer(minLength: 0)
             if isExpanded, !actions.isEmpty {
                 HStack(spacing: 0) {
-                    ForEach(actions) { action in
-                        AgentDetailHeaderButton(
-                            action.title, systemImage: action.systemImage,
-                            width: Self.capsuleButtonWidth, action: action.perform)
+                    ForEach(actions) { @Sendable action in
+                        MainActorContent {
+                            AgentDetailHeaderButton(
+                                action.title, systemImage: action.systemImage,
+                                width: Self.capsuleButtonWidth, action: action.perform)
+                        }
                     }
                 }
                 .padding(.horizontal, Self.capsuleInset)
@@ -71,8 +73,8 @@ struct AgentDetailHeader: View {
             }
             if let surfaceSwitch {
                 HStack(spacing: 0) {
-                    ForEach(AgentDetailSurfaceSwitch.order, id: \.self) { surface in
-                        surfaceButton(surface, in: surfaceSwitch)
+                    ForEach(AgentDetailSurfaceSwitch.order, id: \.self) { @Sendable surface in
+                        MainActorContent { surfaceButton(surface, in: surfaceSwitch) }
                     }
                     Rectangle()
                         .fill(palette.foreground.opacity(0.25))
@@ -147,7 +149,9 @@ struct AgentDetailHeader: View {
 }
 
 /// The surfaces an Agent detail can show, and how to swap them, for
-/// `AgentDetailHeader`'s segmented pair.
+/// `AgentDetailHeader`'s segmented pair. Main-actor isolated, and so
+/// Sendable, for the same reason as `AgentDetailHeaderAction`.
+@MainActor
 struct AgentDetailSurfaceSwitch {
     static let order: [AgentDetailSurface] = [.chat, .terminal]
 
@@ -155,13 +159,16 @@ struct AgentDetailSurfaceSwitch {
     let select: (AgentDetailSurface) -> Void
 }
 
-/// One of `AgentDetailHeader`'s trailing buttons.
+/// One of `AgentDetailHeader`'s trailing buttons. Isolated to the main
+/// actor, which makes it Sendable: the header's `ForEach` content is
+/// `@Sendable` and hands each action to `MainActorContent` (#471).
+@MainActor
 struct AgentDetailHeaderAction: Identifiable {
     let title: LocalizedStringKey
     let systemImage: String
     let perform: () -> Void
 
-    var id: String { systemImage }
+    nonisolated var id: String { systemImage }
 }
 
 /// An icon button inside `AgentDetailHeader`. It has no surface of its own:

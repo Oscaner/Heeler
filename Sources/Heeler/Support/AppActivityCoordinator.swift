@@ -65,10 +65,10 @@ final class UIKitBackgroundExecutionGranter: BackgroundExecutionGranting {
         let identifier = UIApplication.shared.beginBackgroundTask(
             withName: "dev.bybee.heeler.background-grace"
         ) {
-            // UIKit calls this on the main thread but the API is not
-            // annotated for it, so hop deliberately instead of asserting an
-            // isolation the compiler cannot check.
-            Task { @MainActor in onExpiration() }
+            // UIKit calls this synchronously on the main thread and kills the
+            // app unless the task has ended by the time it returns, so end
+            // it here rather than after a hop to the main actor (#472).
+            MainActor.assumeIsolated { onExpiration() }
         }
         guard identifier != .invalid else { return nil }
         return BackgroundExecutionToken(rawValue: identifier.rawValue)

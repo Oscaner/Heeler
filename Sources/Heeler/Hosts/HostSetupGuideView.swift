@@ -50,7 +50,7 @@ struct HostSetupGuideView: View {
         Form {
             Section {
                 Picker("Platform", selection: $platform) {
-                    ForEach(HostSetupPlatform.allCases) { platform in
+                    ForEach(HostSetupPlatform.allCases) { @Sendable platform in
                         Text(platform.title).tag(platform)
                     }
                 }

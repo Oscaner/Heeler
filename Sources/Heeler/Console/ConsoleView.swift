@@ -722,9 +722,11 @@ struct ConsoleView: View {
     private func sidebarLists(showing tab: ConsoleTab) -> some View {
         if usesSidebarNavigation {
             ZStack {
-                ForEach([ConsoleTab.agents, .terminals], id: \.self) { list in
-                    sidebar(for: list)
-                        .modifier(SidebarListShown(isShown: tab == list))
+                ForEach([ConsoleTab.agents, .terminals], id: \.self) { @Sendable list in
+                    MainActorContent {
+                        sidebar(for: list)
+                            .modifier(SidebarListShown(isShown: tab == list))
+                    }
                 }
             }
             // One field for both lists, searching the one on show.
@@ -810,7 +812,7 @@ struct ConsoleView: View {
     private var hostFilterPicker: some View {
         Picker("Host", selection: $hostFilter) {
             Text("All Hosts").tag(Host.ID?.none)
-            ForEach(hosts.hosts) { host in
+            ForEach(hosts.hosts) { @Sendable host in
                 Text(host.displayName).tag(Host.ID?.some(host.id))
             }
         }
@@ -839,7 +841,7 @@ struct ConsoleView: View {
         if tab == .terminals {
             Menu {
                 Picker("Terminal presentation", selection: terminalPresentationBinding) {
-                    ForEach(TerminalListPresentationMode.allCases) { mode in
+                    ForEach(TerminalListPresentationMode.allCases) { @Sendable mode in
                         Label(mode.title, systemImage: mode.systemImage).tag(mode)
                     }
                 }
@@ -852,7 +854,7 @@ struct ConsoleView: View {
         } else {
             Menu {
                 Picker("Presentation", selection: presentationModeBinding) {
-                    ForEach(ConsoleListPresentationMode.allCases) { mode in
+                    ForEach(ConsoleListPresentationMode.allCases) { @Sendable mode in
                         Label(mode.title, systemImage: mode.systemImage).tag(mode)
                     }
                 }
@@ -1421,14 +1423,16 @@ struct ConsoleView: View {
     private var flatAgentListRows: some View {
         agentHostIssueRows
         let qualifiers = agentTitleQualifiers
-        ForEach(filteredAgents) { agent in
-            agentRow(agent, qualifier: qualifiers[agent.id])
-                // Right under an iPad sidebar's bar, a rule over the
-                // first row would crowd it.
-                .listRowSeparator(
-                    usesSidebarNavigation && visibleHostIssues.isEmpty
-                        && agent.id == filteredAgents.first?.id ? .hidden : .automatic,
-                    edges: .top)
+        ForEach(filteredAgents) { @Sendable agent in
+            MainActorContent {
+                agentRow(agent, qualifier: qualifiers[agent.id])
+                    // Right under an iPad sidebar's bar, a rule over the
+                    // first row would crowd it.
+                    .listRowSeparator(
+                        usesSidebarNavigation && visibleHostIssues.isEmpty
+                            && agent.id == filteredAgents.first?.id ? .hidden : .automatic,
+                        edges: .top)
+            }
         }
     }
 
@@ -1436,20 +1440,24 @@ struct ConsoleView: View {
     private var workspaceAgentListRows: some View {
         agentHostIssueRows
         let qualifiers = agentTitleQualifiers
-        ForEach(workspaceSections) { section in
-            Section {
-                if !section.isCollapsed {
-                    ForEach(section.agents) { agent in
-                        agentRow(agent, qualifier: qualifiers[agent.id])
+        ForEach(workspaceSections) { @Sendable section in
+            MainActorContent {
+                Section {
+                    if !section.isCollapsed {
+                        ForEach(section.agents) { @Sendable agent in
+                            MainActorContent { agentRow(agent, qualifier: qualifiers[agent.id]) }
+                        }
                     }
-                }
-            } header: {
-                ConsoleWorkspaceSectionHeader(section: section) {
-                    guard agentSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                        return
-                    }
-                    withAnimation(reduceMotion ? nil : .snappy) {
-                        listPresentation.toggleWorkspace(section.id)
+                } header: {
+                    ConsoleWorkspaceSectionHeader(section: section) {
+                        guard
+                            agentSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        else {
+                            return
+                        }
+                        withAnimation(reduceMotion ? nil : .snappy) {
+                            listPresentation.toggleWorkspace(section.id)
+                        }
                     }
                 }
             }
@@ -1459,31 +1467,33 @@ struct ConsoleView: View {
     @ViewBuilder
     private var groupedAgentListRows: some View {
         let qualifiers = agentTitleQualifiers
-        ForEach(hostSections) { section in
-            let opensDetail = connectionDetail(for: section.hostID) != nil
-            Section {
-                if !section.isCollapsed && !opensDetail {
-                    // As in the Terminals tab: an expanded Host with a
-                    // condition says what it is before any Agents it lists.
-                    if let issue = section.statusPresentation {
-                        ConsoleHostIssueRow(issue: issue) { openHostIssue($0) }
+        ForEach(hostSections) { @Sendable section in
+            MainActorContent {
+                let opensDetail = connectionDetail(for: section.hostID) != nil
+                Section {
+                    if !section.isCollapsed && !opensDetail {
+                        // As in the Terminals tab: an expanded Host with a
+                        // condition says what it is before any Agents it lists.
+                        if let issue = section.statusPresentation {
+                            ConsoleHostIssueRow(issue: issue) { openHostIssue($0) }
+                        }
+                        ForEach(section.agents) { @Sendable agent in
+                            MainActorContent { agentRow(agent, qualifier: qualifiers[agent.id]) }
+                        }
                     }
-                    ForEach(section.agents) { agent in
-                        agentRow(agent, qualifier: qualifiers[agent.id])
+                } header: {
+                    ConsoleHostSectionHeaderView(
+                        presentation: ConsoleHostSectionHeaderPresentation(
+                            section: section, opensConnectionDetail: opensDetail)
+                    ) {
+                        if opensDetail {
+                            openHostIssue(section.hostID)
+                        } else {
+                            toggleHostSection(section.hostID)
+                        }
                     }
+                    .textCase(nil)
                 }
-            } header: {
-                ConsoleHostSectionHeaderView(
-                    presentation: ConsoleHostSectionHeaderPresentation(
-                        section: section, opensConnectionDetail: opensDetail)
-                ) {
-                    if opensDetail {
-                        openHostIssue(section.hostID)
-                    } else {
-                        toggleHostSection(section.hostID)
-                    }
-                }
-                .textCase(nil)
             }
         }
     }
@@ -1952,7 +1962,7 @@ private struct SidebarListMenu: View {
         // would be clipped. The width is held outside the button, whose own
         // frame, which its pointer highlight follows, fits the title on show.
         ZStack(alignment: .leading) {
-            ForEach(lists) { SidebarListTitle(title: $0.title).hidden() }
+            ForEach(lists) { @Sendable list in SidebarListTitle(title: list.title).hidden() }
             Button { isPresented = true } label: { SidebarListTitle(title: shown.title) }
                 // A style of its own keeps the label SwiftUI's: bridged to a
                 // bar button, it would show only its image.
@@ -1979,29 +1989,31 @@ private struct SidebarListChoices: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(lists) { list in
-                Button {
-                    isPresented = false
-                    select(list)
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "checkmark")
-                            .font(.body.weight(.semibold))
-                            .opacity(list == shown ? 1 : 0)
-                            .accessibilityHidden(true)
-                        Image(systemName: Self.symbol(for: list))
-                            .frame(width: 24)
-                            .accessibilityHidden(true)
-                        Text(list.title)
-                        Spacer(minLength: 0)
+            ForEach(lists) { @Sendable list in
+                MainActorContent {
+                    Button {
+                        isPresented = false
+                        select(list)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "checkmark")
+                                .font(.body.weight(.semibold))
+                                .opacity(list == shown ? 1 : 0)
+                                .accessibilityHidden(true)
+                            Image(systemName: Self.symbol(for: list))
+                                .frame(width: 24)
+                                .accessibilityHidden(true)
+                            Text(list.title)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 44)
+                        .contentShape(.rect)
                     }
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: 44)
-                    .contentShape(.rect)
+                    .buttonStyle(.plain)
+                    .hoverEffect(.highlight)
+                    .accessibilityAddTraits(list == shown ? .isSelected : [])
                 }
-                .buttonStyle(.plain)
-                .hoverEffect(.highlight)
-                .accessibilityAddTraits(list == shown ? .isSelected : [])
             }
         }
         .padding(.vertical, 6)
@@ -2394,7 +2406,7 @@ private struct ConsoleHostStatusCountPills: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            ForEach(items) { item in
+            ForEach(items) { @Sendable item in
                 Text("\(item.count) \(item.status.rawValue)")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Color(item.status.inkUIColor))

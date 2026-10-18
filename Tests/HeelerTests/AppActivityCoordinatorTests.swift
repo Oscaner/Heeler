@@ -164,7 +164,7 @@ struct AppActivityCoordinatorTests {
         #expect(coordinator.lastAbsenceMayHaveSuspended)
     }
 
-    @Test func systemReclaimingItsTimeSuspendsAndReturnsTheAssertion() async throws {
+    @Test func systemReclaimingItsTimeSuspendsAndReturnsTheAssertion() {
         let granter = FakeBackgroundExecutionGranter()
         let coordinator = AppActivityCoordinator(
             gracePeriod: .seconds(60), granter: granter)
@@ -172,12 +172,11 @@ struct AppActivityCoordinatorTests {
         coordinator.didEnterBackground()
         granter.expireAll()
 
-        try await waitUntil("expiration should force a suspension") {
-            coordinator.phase == .suspended
-        }
-        // Holding an expired assertion is how an app gets killed, so it is
-        // returned before the teardown rather than after it.
+        // Holding an expired assertion is how an app gets killed: UIKit
+        // wants it back before the expiration handler returns, so it is
+        // returned within the handler, before the teardown.
         #expect(granter.liveTokenCount == 0)
+        #expect(coordinator.phase == .suspended)
 
         coordinator.didBecomeActive()
         #expect(coordinator.lastAbsenceMayHaveSuspended)

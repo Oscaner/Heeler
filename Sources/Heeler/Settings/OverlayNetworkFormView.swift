@@ -465,8 +465,8 @@ private struct OverlayKindPicker: View {
             ? AnyLayout(VStackLayout(spacing: 10))
             : AnyLayout(HStackLayout(alignment: .top, spacing: 10))
         layout {
-            ForEach(OverlayKind.allCases, id: \.self) { kind in
-                card(kind)
+            ForEach(OverlayKind.allCases, id: \.self) { @Sendable kind in
+                MainActorContent { card(kind) }
             }
         }
         .accessibilityElement(children: .contain)
@@ -549,13 +549,16 @@ private struct ZeroTierAdvancedForm: View {
     var body: some View {
         Form {
             Section {
-                ForEach($draft.moons) { $moon in
-                    VStack(alignment: .leading) {
-                        OverlayFormField(
-                            title: "World ID", prompt: "10–16 hex digits", text: $moon.worldID,
-                            isMonospaced: true)
-                        OverlayFormField(
-                            title: "Seed", prompt: "Root node ID", text: $moon.seed, isMonospaced: true)
+                ForEach($draft.moons) { @Sendable $moon in
+                    MainActorContent {
+                        VStack(alignment: .leading) {
+                            OverlayFormField(
+                                title: "World ID", prompt: "10–16 hex digits", text: $moon.worldID,
+                                isMonospaced: true)
+                            OverlayFormField(
+                                title: "Seed", prompt: "Root node ID", text: $moon.seed,
+                                isMonospaced: true)
+                        }
                     }
                 }
                 .onDelete { draft.moons.remove(atOffsets: $0) }

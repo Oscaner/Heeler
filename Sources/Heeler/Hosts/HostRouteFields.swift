@@ -138,7 +138,7 @@ struct HostRouteFields: View {
         return Section {
             Picker("Network", selection: $route.overlayNetworkID) {
                 Text("Direct").tag(UUID?.none)
-                ForEach(networks) { network in
+                ForEach(networks) { @Sendable network in
                     Text("\(network.displayName) (\(network.kind.displayName))")
                         .tag(UUID?.some(network.id))
                 }

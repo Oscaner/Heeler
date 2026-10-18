@@ -32,8 +32,8 @@ struct AgentListFieldsSettingsView: View {
     private var hostList: some View {
         List {
             sessionSection
-            ForEach(hosts) { host in
-                hostRow(host)
+            ForEach(hosts) { @Sendable host in
+                MainActorContent { hostRow(host) }
             }
             AgentLayoutErrorView(editor: editor)
         }
@@ -186,17 +186,20 @@ struct AgentListFieldsHostDetailView: View {
     @ViewBuilder
     private var hostRows: some View {
         let slotRows = AgentRowSlot.slotRows(layout.rows)
-        ForEach(Array(slotRows.enumerated()), id: \.offset) { index, row in
-            AgentListFieldsRowEditor(
-                index: index, row: row, isEnabled: !isSyncing && !editor.isCatalogUnreadable,
-                onAdd: {
-                    addingField = AgentListFieldsEditorDestination(hostID: host.id, rowIndex: index)
-                },
-                onToggleStyle: { fieldIndex in toggleStyle(fieldIndex, rowIndex: index) },
-                onShift: { fieldIndex, delta in shift(fieldIndex, by: delta, rowIndex: index) },
-                onRemove: { fieldIndex in remove(fieldIndex, rowIndex: index) })
-                .listRowInsets(AgentListFieldsChrome.rowInsets)
-                .agentListHostSurface(isFirst: false, isLast: false)
+        ForEach(Array(slotRows.enumerated()), id: \.offset) { @Sendable index, row in
+            MainActorContent {
+                AgentListFieldsRowEditor(
+                    index: index, row: row, isEnabled: !isSyncing && !editor.isCatalogUnreadable,
+                    onAdd: {
+                        addingField = AgentListFieldsEditorDestination(
+                            hostID: host.id, rowIndex: index)
+                    },
+                    onToggleStyle: { fieldIndex in toggleStyle(fieldIndex, rowIndex: index) },
+                    onShift: { fieldIndex, delta in shift(fieldIndex, by: delta, rowIndex: index) },
+                    onRemove: { fieldIndex in remove(fieldIndex, rowIndex: index) })
+                    .listRowInsets(AgentListFieldsChrome.rowInsets)
+                    .agentListHostSurface(isFirst: false, isLast: false)
+            }
         }
     }
 
@@ -324,8 +327,8 @@ private struct AgentListFieldsRowEditor: View {
                 .font(.callout)
                 .foregroundStyle(.primary)
             ChipWrap(spacing: 5) {
-                ForEach(Array(row.enumerated()), id: \.offset) { offset, token in
-                    fieldChip(token, at: offset)
+                ForEach(Array(row.enumerated()), id: \.offset) { @Sendable offset, token in
+                    MainActorContent { fieldChip(token, at: offset) }
                 }
                 addChip
             }

@@ -12,8 +12,8 @@ struct ComposerStagingStatusBar: View {
                 title: presentation.title,
                 accessibilityLabel: presentation.accessibilityLabel
             ) {
-                ForEach(presentation.commands, id: \.self) { command in
-                    commandButton(command)
+                ForEach(presentation.commands, id: \.self) { @Sendable command in
+                    MainActorContent { commandButton(command) }
                 }
             }
         }

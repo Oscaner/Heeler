@@ -91,7 +91,7 @@ struct OverlayPeerPickerView: View {
             if OverlayPeerList.offersMachineNames(network.kind) {
                 Section {
                     Picker("Fill In", selection: $style) {
-                        ForEach(OverlayPeerCandidate.AddressStyle.allCases) { style in
+                        ForEach(OverlayPeerCandidate.AddressStyle.allCases) { @Sendable style in
                             Text(style.title).tag(style)
                         }
                     }
@@ -108,18 +108,20 @@ struct OverlayPeerPickerView: View {
                 } else {
                     let chosen = OverlayPeerList.chosen(
                         among: model.candidates(matching: ""), address: chosenAddress)
-                    ForEach(candidates) { candidate in
-                        Button {
-                            onPick(candidate, style)
-                            dismiss()
-                        } label: {
-                            OverlayPeerChoiceRow(
-                                candidate: candidate, style: style,
-                                isHost: OverlayPeerList.host(
-                                    for: candidate, networkID: network.id, among: hosts) != nil,
-                                isChosen: candidate.id == chosen?.id)
+                    ForEach(candidates) { @Sendable candidate in
+                        MainActorContent {
+                            Button {
+                                onPick(candidate, style)
+                                dismiss()
+                            } label: {
+                                OverlayPeerChoiceRow(
+                                    candidate: candidate, style: style,
+                                    isHost: OverlayPeerList.host(
+                                        for: candidate, networkID: network.id, among: hosts) != nil,
+                                    isChosen: candidate.id == chosen?.id)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             } header: {
