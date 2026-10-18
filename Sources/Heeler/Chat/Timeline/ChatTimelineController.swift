@@ -85,6 +85,9 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
     /// edge, and how much of it the bottom inset keeps clear right now.
     private var collapseControlClearance: CGFloat = 0
     private var collapseControlReserve: CGFloat = 0
+    /// Set when the list may rest with its end under Collapse Steps; the
+    /// next layout pass, which knows the end, moves it clear.
+    private var wantsEndClearOfCollapseControl = false
     private var isJumpAnimating = false
     private var hasReportedFirstLayout = false
     /// The older-history state the last automatic request was made in, so
@@ -178,6 +181,7 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        liftEndClearOfCollapseControl()
         noteCollapseAvailability()
     }
 
@@ -374,7 +378,27 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         {
             collectionView.contentOffset.y = collectionView.maxOffsetY
         }
+        if reserve > 0 { wantsEndClearOfCollapseControl = true }
+        // A short list's blank space above its rows follows the room.
+        layout.invalidateLayout()
         collectionView.setNeedsLayout()
+    }
+
+    /// A list resting with its end under Collapse Steps, or past the bottom
+    /// edge by no more than the button's room (a short last turn just
+    /// opened, say), moves to its end so its newest rows sit above the
+    /// button and take taps. Further from the end the reader is scrolling
+    /// through a long turn, and the room lets its last row scroll clear.
+    private func liftEndClearOfCollapseControl() {
+        guard wantsEndClearOfCollapseControl else { return }
+        wantsEndClearOfCollapseControl = false
+        let view = collectionView
+        let reserve = collapseControlReserve
+        guard reserve > 0, !view.isTracking, !view.isDecelerating, !latch.isFollowing else { return }
+        let end = view.maxOffsetY
+        let offset = view.contentOffset.y
+        guard offset < end - 0.5, offset >= end - 2 * reserve else { return }
+        view.contentOffset.y = end
     }
 
     private func uniqueIDs(_ rows: [ChatRow]) -> [ChatRowID] {
@@ -659,6 +683,10 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         }
         noteFollowing()
         noteCollapseAvailability()
+        if expanding {
+            wantsEndClearOfCollapseControl = true
+            collectionView.setNeedsLayout()
+        }
     }
 
     private func retryOutput(_ id: ChatRowID) {

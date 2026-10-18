@@ -84,6 +84,9 @@ Entries reference the pull request that made the change.
   session ID, including while the local directory is still loading. (#425)
 - Chat keeps disclosure headers in place while expanding downward, including
   short conversations, and aligns tool icons with the first title line. (#425)
+- Opening a short last turn no longer leaves its newest rows under the
+  floating Collapse Steps button, where a tap meant for a row collapsed the
+  turn; the list moves up just enough to show them above it. (#425)
 - Chat preloads conversations after connecting, restores saved conversations
   before contacting the Host, and keeps them available from the Agent list
   after an offline relaunch while reconnecting. (#425)

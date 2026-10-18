@@ -388,6 +388,13 @@ near the end, the offset clamps to the natural content boundary so no artificial
 blank space follows the last row. Jump to Latest resumes following. This action changes
 only presentation; it never stops the Agent.
 
+While the control shows, the list reserves its height as bottom inset. A list
+that rests with its end under the control, or past the bottom edge by no more
+than that reserve (a short last turn just opened), moves to its end so the
+newest rows sit above the control and take taps. Further from the end the
+reader is scrolling a long turn, and the reserve lets its last row scroll
+clear.
+
 Markdown tables retain their original source for selection and use Foundation's
 parsed row and column coordinates for display, including empty cells and column
 alignment. Inline formatting and the existing link policy apply inside cells.

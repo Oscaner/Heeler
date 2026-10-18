@@ -930,6 +930,36 @@ struct ChatTimelineControllerTests {
         }
     }
 
+    /// Opening a short last turn at rest grows the list past its bottom
+    /// edge by less than Collapse Steps' room: the list settles at its end,
+    /// with the opened header still in view and every row clear of the
+    /// button, rather than leaving the newest rows under it.
+    @Test func openingAShortLastTurnRestsItsRowsClearOfFloatingCollapse() async throws {
+        let controller = ChatTimelineController(actions: ChatTimelineActions())
+        let (rows, turns) = await Self.turns(0..<1, steps: 0, answerLength: 0)
+        let header = ChatRowID.turn(ChatEntryID("n0"))
+        let clearance: CGFloat = 120
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.setCollapseControlClearance(clearance)
+            controller.apply(Self.foldState(rows, turns: turns))
+            await Self.settle(controller)
+            try #require(!controller.canCollapseTrajectory)
+            let view = controller.timeline
+            let restingHeight = view.contentSize.height
+            controller.toggle(header)
+            await Self.settle(controller)
+            try #require(controller.canCollapseTrajectory)
+            // Opening grew the rows past the bottom edge, by less than the room.
+            let grown = view.contentSize.height - restingHeight
+            try #require(grown > 1 && grown <= clearance)
+
+            let end = view.contentSize.height - view.contentOffset.y
+            #expect(end <= view.bounds.height - 12 - clearance + 1)
+            let top = try #require(controller.cellFrame(of: header)).minY - view.contentOffset.y
+            #expect(top >= view.adjustedContentInset.top - 1)
+        }
+    }
+
     @Test func makingRoomForFloatingCollapseNeverTakesTheButtonAway() async throws {
         var availability: [Bool] = []
         let controller = ChatTimelineController(actions: ChatTimelineActions(
