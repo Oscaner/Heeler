@@ -8,8 +8,9 @@ import Foundation
 /// and a stalled shutdown is only diagnosable against the device log's
 /// timeline (#474), so the descriptor is the write end of a pipe and a
 /// dedicated thread stamps and appends what arrives. The Go side owns the
-/// write end from then on and closes it when the server is gone, which ends
-/// the thread.
+/// write end from then on. libtailscale never closes it explicitly; Go's
+/// finalizer does once the closed server is garbage collected, which ends
+/// the thread, so a node's thread can outlive it until the next collection.
 enum TailscaleLogFile {
     /// A file past this size is moved aside to `<name>.1` (replacing any
     /// older one) before the next node starts writing.
