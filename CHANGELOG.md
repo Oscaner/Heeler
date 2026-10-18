@@ -108,6 +108,9 @@ Entries reference the pull request that made the change.
 
 ### Fixed
 
+- Chat for an Agent whose Host is offline, with nothing of its conversation
+  saved on the device, says it waits for the Host instead of looking for the
+  conversation forever. (#425)
 - Chat renders Markdown tables as aligned columns with wrapping cells, inline
   formatting and header styling; wide tables scroll within the message. (#464)
 - Chat restores a saved conversation when a live Agent temporarily omits its

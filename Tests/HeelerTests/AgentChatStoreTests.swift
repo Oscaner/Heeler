@@ -319,6 +319,58 @@ struct AgentChatStoreTests {
         }
     }
 
+    private static func makeUnreachable(_ fixture: Fixture) async {
+        let unreachable = TransportError.sshUnreachable(detail: "offline")
+        await fixture.server.fail(with: unreachable)
+        for operation in [VirtualHostFiles.Operation.status, .list, .read, .home] {
+            await fixture.files.failNext(operation, with: unreachable, count: 20)
+        }
+    }
+
+    /// An offline Host's Agent this device never read: nothing searches for
+    /// the transcript, so Chat says it waits for the Host rather than
+    /// showing a search that never ends.
+    @Test func anUnreachableHostWithNothingSavedWaitsForTheHost() async throws {
+        let fixture = Fixture(session: Self.first)
+        await Self.makeUnreachable(fixture)
+
+        await fixture.store.step()
+        await fixture.store.step()
+
+        let conversation = fixture.store.conversation
+        #expect(conversation.phase == .locating)
+        #expect(conversation.transcript.entries.isEmpty)
+        #expect(
+            ChatSurfacePresentation(conversation: conversation, hasPendingEchoes: false, isHostConnected: false)
+                == .awaitingHost)
+        #expect(
+            ChatSurfacePresentation(conversation: conversation, hasPendingEchoes: false, isHostConnected: true)
+                == .locating)
+    }
+
+    @Test func anUnreachableHostShowsWhatTheDeviceSaved() async throws {
+        let fixture = Fixture(session: Self.first)
+        try await Self.seedCache(fixture, session: Self.first, numbers: 0..<3)
+        await Self.makeUnreachable(fixture)
+
+        await fixture.store.step()
+
+        #expect(Self.ids(fixture.store) == NumberedChatReducer.ids(0..<3))
+        #expect(
+            ChatSurfacePresentation(
+                conversation: fixture.store.conversation, hasPendingEchoes: false, isHostConnected: false)
+                == .timeline)
+    }
+
+    @Test func messagesSentFromHereShowWhileTheHostIsAway() {
+        #expect(
+            ChatSurfacePresentation(conversation: nil, hasPendingEchoes: false, isHostConnected: false)
+                == .disconnected)
+        #expect(
+            ChatSurfacePresentation(conversation: Self.snapshot(.locating), hasPendingEchoes: true, isHostConnected: false)
+                == .timeline)
+    }
+
     /// With nothing to show, the unavailable view explains instead.
     @Test func noUnavailableBannerWithoutATimeline() {
         let lines = ChatBannerLine.lines(

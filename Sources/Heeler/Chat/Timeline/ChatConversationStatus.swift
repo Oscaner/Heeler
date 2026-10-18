@@ -97,6 +97,37 @@ extension ChatUnavailableReason {
     }
 }
 
+/// What takes the conversation's place, if anything, under the banners.
+enum ChatSurfacePresentation: Equatable {
+    case timeline
+    /// Searching the Host for the transcript, with nothing saved to show.
+    case locating
+    /// Nothing saved to show, and the Host to search isn't connected:
+    /// nothing is being looked for until it is.
+    case awaitingHost
+    case empty
+    case unavailable(ChatUnavailableReason)
+    /// The Host is not in the catalog, so there is no Chat to read.
+    case disconnected
+
+    /// `conversation` is nil while there is no Chat to read.
+    init(conversation: ChatConversationSnapshot?, hasPendingEchoes: Bool, isHostConnected: Bool) {
+        guard let conversation else {
+            self = .disconnected
+            return
+        }
+        if conversation.showsTimeline(hasPendingEchoes: hasPendingEchoes) {
+            self = .timeline
+            return
+        }
+        switch conversation.phase {
+        case .locating: self = isHostConnected ? .locating : .awaitingHost
+        case .following: self = .empty
+        case .unavailable(let reason): self = .unavailable(reason)
+        }
+    }
+}
+
 /// One line over Chat's conversation, before the view adds its action.
 enum ChatBannerLine: Equatable, Identifiable {
     case connecting(showingSavedMessages: Bool)

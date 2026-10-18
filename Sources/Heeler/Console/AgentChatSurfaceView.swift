@@ -509,6 +509,13 @@ struct AgentChatSurfaceView: View {
             EmptyView()
         case .locating:
             ChatLocatingView()
+        case .awaitingHost:
+            // The banner above says how the connection is going.
+            ContentUnavailableView(
+                "Nothing Saved Yet", systemImage: "tray",
+                description: Text(
+                    "Chat shows this conversation once its Host connects. This device hasn't saved any of it."))
+            .accessibilityIdentifier("chat.awaitingHost")
         case .empty:
             ChatEmptyConversationView()
         case .unavailable(let reason) where reason.isAwaitingFirstMessage:
@@ -582,24 +589,10 @@ struct AgentChatSurfaceView: View {
 
     // MARK: Conversation
 
-    private enum Presentation: Equatable {
-        case timeline
-        case locating
-        case empty
-        case unavailable(ChatUnavailableReason)
-        /// The Host is not in the catalog, so there is no Chat to read.
-        case disconnected
-    }
-
-    private var presentation: Presentation {
-        guard let chat else { return .disconnected }
-        let conversation = chat.conversation
-        if conversation.showsTimeline(hasPendingEchoes: !pendingEchoes.isEmpty) { return .timeline }
-        switch conversation.phase {
-        case .locating: return .locating
-        case .following: return .empty
-        case .unavailable(let reason): return .unavailable(reason)
-        }
+    private var presentation: ChatSurfacePresentation {
+        ChatSurfacePresentation(
+            conversation: chat?.conversation, hasPendingEchoes: !pendingEchoes.isEmpty,
+            isHostConnected: isHostConnected)
     }
 
     /// What the timeline is rebuilt from; anything else it shows comes
