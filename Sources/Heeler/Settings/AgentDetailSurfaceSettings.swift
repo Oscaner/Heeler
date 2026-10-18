@@ -7,7 +7,8 @@ enum AgentDetailSurface: String, CaseIterable, Sendable {
     case terminal
     case chat
 
-    /// The switcher-row glyph that brings this surface up.
+    /// The glyph for this surface, in the detail header's segmented pair
+    /// and the More menu.
     var showSystemImage: String {
         switch self {
         case .terminal: "terminal"
@@ -15,11 +16,19 @@ enum AgentDetailSurface: String, CaseIterable, Sendable {
         }
     }
 
-    /// The More-menu title and switcher-row label that bring this surface up.
+    /// The More-menu title that brings this surface up.
     var showTitle: String {
         switch self {
         case .terminal: "Show Agent Terminal"
         case .chat: "Show Chat"
+        }
+    }
+
+    /// The detail header's name for this surface's segment.
+    var segmentTitle: String {
+        switch self {
+        case .terminal: "Agent Terminal"
+        case .chat: "Chat"
         }
     }
 

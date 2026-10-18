@@ -390,7 +390,8 @@ struct AgentChatSurfaceView: View {
                 palette: .system,
                 isExpanded: $isBackHeaderExpanded,
                 onBack: showsBackButton ? { dismiss() } : nil,
-                actions: backHeaderActions)
+                actions: backHeaderActions,
+                surfaceSwitch: AgentDetailSurfaceSwitch(current: .chat) { _ in showAgentTerminal() })
             .padding(.horizontal, 12)
             .padding(.top, backHeaderTop)
             .onChange(of: isBackHeaderExpanded) { _, expanded in
@@ -699,11 +700,6 @@ struct AgentChatSurfaceView: View {
             skills: nil,
             keyboardPresentation: $composerKeyboardPresentation,
             prepareKeyboardPresentation: prepareComposerKeyboardPresentation,
-            surfaceControl: .button(
-                systemImage: AgentDetailSurface.terminal.showSystemImage,
-                accessibilityLabel: AgentDetailSurface.terminal.showTitle,
-                accessibilityHint: AgentDetailSurface.terminal.showAccessibilityHint,
-                action: { showAgentTerminal() }),
             sendPolicy: sendPolicy,
             commandMenu: commands,
             openAgentTerminal: { showAgentTerminal() },

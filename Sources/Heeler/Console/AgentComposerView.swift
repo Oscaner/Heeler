@@ -172,8 +172,6 @@ struct AgentComposerView: View {
     let prepareKeyboardPresentation: (AgentComposerKeyboardPresentation) -> Void
     /// Optional Hide Composer control on the switcher trail.
     var modeControl: TerminalAgentSwitcherModeControl? = nil
-    /// Optional Show Chat / Show Agent Terminal control, before `modeControl`.
-    var surfaceControl: TerminalAgentSwitcherModeControl? = nil
     var keyboardHandoffID: UUID?
     var isKeyboardHandoffCurrent: (UUID) -> Bool = { _ in false }
     var onFirstResponderRequest: (UUID, Bool) -> Void = { _, _ in }
@@ -232,8 +230,7 @@ struct AgentComposerView: View {
                         toggleKeyboard: dismissOrPresentKeyboard,
                         isToolsKeyboardPresented: isToolsKeyboardPresented,
                         switchKeyboard: keyboardSwitchAction,
-                        modeControl: modeControl,
-                        surfaceControl: surfaceControl)
+                        modeControl: modeControl)
                 }
                 .background(
                     .regularMaterial,

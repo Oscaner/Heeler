@@ -1105,7 +1105,8 @@ struct AgentTerminalView: View {
                 palette: themePalette,
                 isExpanded: $isBackHeaderExpanded,
                 onBack: showsBackButton ? { dismiss() } : nil,
-                actions: backHeaderActions)
+                actions: backHeaderActions,
+                surfaceSwitch: chatSurfaceSwitch)
             .environment(
                 \.colorScheme,
                 terminal.themes.selection(for: colorScheme).chromeColorScheme(for: colorScheme))
@@ -1273,7 +1274,6 @@ struct AgentTerminalView: View {
             keyboardPresentation: $composerKeyboardPresentation,
             prepareKeyboardPresentation: prepareComposerKeyboardPresentation,
             modeControl: composerModeControl,
-            surfaceControl: chatSurfaceControl,
             keyboardHandoffID: directToComposerHandoffID,
             isKeyboardHandoffCurrent: { id in
                 isOnStage()
@@ -1297,13 +1297,11 @@ struct AgentTerminalView: View {
             copy: { link in UIPasteboard.general.string = link.target })
     }
 
-    private var chatSurfaceControl: TerminalAgentSwitcherModeControl? {
+    /// Chat and this terminal, for an Agent that has Chat. Chat always uses
+    /// the Composer, so leaving Direct Input this way keeps the saved mode.
+    private var chatSurfaceSwitch: AgentDetailSurfaceSwitch? {
         composerActions(anchorsClose: false).showChat.map { showChat in
-            .button(
-                systemImage: AgentDetailSurface.chat.showSystemImage,
-                accessibilityLabel: AgentDetailSurface.chat.showTitle,
-                accessibilityHint: AgentDetailSurface.chat.showAccessibilityHint,
-                action: showChat)
+            AgentDetailSurfaceSwitch(current: .terminal) { _ in showChat() }
         }
     }
 

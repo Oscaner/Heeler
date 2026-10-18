@@ -54,7 +54,8 @@ Entries reference the pull request that made the change.
   tool calls, shows file changes as diffs, answers Blocked dialogs with native
   cards, lists background agents and Workflows, and stays readable offline
   from its cache. Sending checks the Agent's input box before and after and
-  never resends. (#425)
+  never resends. Chat and the terminal swap from a pair of buttons beside
+  Show Header. (#425)
 - Pair a Host whose herdr runs outside your own config, such as one bundled
   in a desktop app, from a version 2 Pairing Code. The Host keeps that
   herdr's socket and launcher, shows them in Host detail, and runs every
