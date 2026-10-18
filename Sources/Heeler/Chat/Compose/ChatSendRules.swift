@@ -20,7 +20,7 @@ struct ChatCommand: Identifiable, Equatable, Sendable {
     var id: String { name }
 }
 
-/// Chat's `/` menu for every program (ADR 0023): the Host's skills plus
+/// Chat's `/` menu for every program (ADR 0024): the Host's skills plus
 /// `/compact`. Commands that open pickers or end sessions are left out;
 /// the terminal still runs them.
 enum ChatCommandMenu {
@@ -100,7 +100,7 @@ extension AgentSkill {
     var chatInsertionText: String { "/\(name) " }
 }
 
-/// What a Chat draft sends to the Agent's input box (ADR 0023).
+/// What a Chat draft sends to the Agent's input box (ADR 0024).
 ///
 /// The text arrives as one bracketed paste and Enter, exactly as if typed,
 /// so anything the program's input box would treat as more than a message

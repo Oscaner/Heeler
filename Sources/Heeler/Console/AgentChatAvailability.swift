@@ -1,6 +1,6 @@
 import Foundation
 
-/// Whether an Agent's detail offers Chat (ADR 0023). Chat reads the
+/// Whether an Agent's detail offers Chat (ADR 0024). Chat reads the
 /// transcript the Agent program writes, so it needs a program with an
 /// adapter (Claude Code, Codex, Pi or Oh My Pi) and a Host known to be POSIX: transcripts
 /// are found through POSIX home paths, and native Windows Hosts are out of

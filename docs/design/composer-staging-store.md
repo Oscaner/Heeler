@@ -1,6 +1,6 @@
 # Composer Staging Store
 
-Status: Implemented. [ADR 0023](../adr/0023-native-chat-from-agent-transcripts.md)
+Status: Implemented. [ADR 0024](../adr/0024-native-chat-from-agent-transcripts.md)
 later moved the module's owner; the sections after Current ownership record
 the original decision.
 

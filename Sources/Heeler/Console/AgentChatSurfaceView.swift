@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Agent detail's Chat surface (ADR 0023): the Agent's conversation, read
+/// Agent detail's Chat surface (ADR 0024): the Agent's conversation, read
 /// from the transcript its own program writes, in place of the terminal.
 /// It never types into the Agent's PTY; the terminal stays retained per
 /// ADR 0017 while Chat shows. The geometry, top chrome and Composer copy the

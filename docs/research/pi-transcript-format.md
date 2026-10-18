@@ -198,7 +198,7 @@ source reading:
   column 0; a provider-retry countdown keeps a plain rule. Pi's screen uses no
   private-use glyphs.
 
-ADR 0023 records what Chat makes of these: it sends only after positively
+ADR 0024 records what Chat makes of these: it sends only after positively
 reading an empty stock editor or an idle OMP band, holds while an OMP turn
 runs, answers OMP's tool approval (18.12's session row included) and
 single-select `ask` from Blocked cards with keys rather than digits, and

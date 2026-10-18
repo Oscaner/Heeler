@@ -21,7 +21,7 @@ struct AgentChatSource: Sendable {
     var screen: BlockedScreenIO = .unavailable
 }
 
-/// One Agent's Chat (ADR 0023): the conversation herdr says the Agent is
+/// One Agent's Chat (ADR 0024): the conversation herdr says the Agent is
 /// in, followed while Chat shows.
 ///
 /// A single loop makes every engine call in turn. The view's requests, an
@@ -121,7 +121,7 @@ final class AgentChatStore {
     @ObservationIgnored private var agent: Agent
     /// Whether this conversation has had a live read. Until then the
     /// Background Work list stays empty: saved work alone could have ended
-    /// long ago (ADR 0023).
+    /// long ago (ADR 0024).
     @ObservationIgnored private var hasReadLive = false
     /// What herdr last said the Agent's session is.
     @ObservationIgnored private var resolution: ConversationReference.Resolution

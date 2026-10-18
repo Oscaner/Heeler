@@ -599,7 +599,7 @@ final class ConsoleStore {
         composerSession(for: agent).composer
     }
 
-    /// The Agent's Chat (ADR 0023), made on first use and kept while the
+    /// The Agent's Chat (ADR 0024), made on first use and kept while the
     /// Agent and its Host entry last. Nil when the Host is not in the
     /// catalog or the program has no transcript adapter.
     func chatStore(for agent: ConsoleAgent, program: ChatProgram) -> AgentChatStore? {

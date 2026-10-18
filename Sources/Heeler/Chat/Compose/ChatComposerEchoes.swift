@@ -1,6 +1,6 @@
 import Foundation
 
-/// Chat's reading of the Composer's messages (ADR 0023): what the Chat
+/// Chat's reading of the Composer's messages (ADR 0024): what the Chat
 /// store matches against the transcript, and the echoes still to show
 /// below it. Messages the terminal sent are not Chat's and never echo.
 enum ChatComposerEchoes {

@@ -27,7 +27,7 @@ struct ChatWorkflowProgress: Equatable, Sendable {
     var started: Int { agents.count }
 }
 
-/// The Background Work Chat lists above its Composer (ADR 0023): the
+/// The Background Work Chat lists above its Composer (ADR 0024): the
 /// transcript's Subagents and Workflows, each Workflow with its journal's
 /// progress, running work first. Built afresh after every read and never
 /// saved, so nothing read from the device can claim to be running.

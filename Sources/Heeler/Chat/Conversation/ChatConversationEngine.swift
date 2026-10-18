@@ -295,7 +295,7 @@ actor ChatConversationEngine {
     /// Looks for the transcript again, then reads it: a Codex undo
     /// continues the thread in a new `_<rollout>` file and leaves the one
     /// followed unchanged, so a poll alone would never show the turns
-    /// written since (ADR 0023). Follows the new file when the live one
+    /// written since (ADR 0024). Follows the new file when the live one
     /// moved, else polls. A search that fails is a read failure, so the
     /// owner can look again. Other programs only poll.
     func relocate(context: ChatProjectionContext) async -> ChatConversationSnapshot {
