@@ -303,7 +303,9 @@ struct ClaudeToolSummaryTests {
         let name: String
         var input = ClaudeToolInput()
         let expected: ClaudeToolSummary
-        var testDescription: String { name }
+        /// Several cases share a tool name, and result bundles group cases
+        /// by this text, so it carries the expected title too.
+        var testDescription: String { "\(name): \(expected.title)" }
     }
 
     static let cases: [Case] = [
