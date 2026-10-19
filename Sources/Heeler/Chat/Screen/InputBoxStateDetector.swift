@@ -22,6 +22,11 @@ enum InputBoxState: Equatable, Sendable {
     /// A dialog took the box's place: its title when Chat names it in the
     /// hold.
     case dialog(title: String?)
+    /// No input box for this conversation is on screen: a home screen, a
+    /// dashboard or a picker stands in its place, where a message would
+    /// start a new conversation, reach another one, or pick an entry. The
+    /// program's reason, shown as the hold as is.
+    case noComposer(String)
     /// The screen does not show a box Heeler recognizes; why.
     case unknown(String)
 

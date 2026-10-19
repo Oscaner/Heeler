@@ -95,6 +95,15 @@ struct ChatDeliveryPolicyTests {
                 == "The Agent's input box already has text. Send or clear it in the terminal first.")
     }
 
+    /// A home screen, dashboard or picker in place of the conversation's
+    /// input box holds with the sentence the program's detector gave.
+    @Test(arguments: ChatProgram.allCases)
+    func aScreenWithNoComposerHoldsWithItsOwnReason(program: ChatProgram) {
+        let reason = "Open this conversation in the terminal first."
+
+        #expect(InputBoxState.noComposer(reason).holdReason(for: program) == reason)
+    }
+
     @Test func anUnreadableScreenHoldsTheMessage() async throws {
         let preflight = try #require(Self.policy { throw TransportError.timedOut }.preflight)
 
@@ -146,7 +155,10 @@ struct ChatDeliveryPolicyTests {
         #expect(try ending(await blocked("hello")) == [.idle, .working, .done, .unknown])
         #expect(try ending(busy.validate("/compact")) == [.idle, .done])
         #expect(try ending(await unreadable("hello")) == statuses)
-        for state in [InputBoxState.text("draft"), .disabled("Working."), .overlay("/compact"), .dialog(title: nil), .unknown("")] {
+        for state in [
+            InputBoxState.text("draft"), .disabled("Working."), .overlay("/compact"), .dialog(title: nil),
+            .noComposer(""), .unknown(""),
+        ] {
             #expect(try ending(.inputNotReady(state.holdReason(for: program))) == statuses)
         }
         for refusal in [busy.validate("!ls"), busy.validate("/nope")] {

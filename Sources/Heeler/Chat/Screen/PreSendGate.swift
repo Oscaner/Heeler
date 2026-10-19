@@ -7,8 +7,8 @@ enum PreSendDecision: Equatable, Sendable {
     /// herdr reports the Agent Blocked. A prompt waits for an answer, and
     /// Codex refuses messages until it gets one.
     case holdBlocked
-    /// The box is not empty, or Heeler cannot tell; the state says what to
-    /// show beside Open in Terminal.
+    /// The box is not empty, no box for this conversation shows, or Heeler
+    /// cannot tell; the state says what to show beside Open in Terminal.
     case hold(InputBoxState)
 }
 
@@ -35,7 +35,8 @@ enum DeliveryVerdict: Equatable, Sendable {
     /// Text still sits in the box, so Enter did not submit it. Chat never
     /// resends; the user finishes it in the terminal.
     case notDelivered(String)
-    /// The screen does not say; the message stays marked as sent.
+    /// The screen does not say, for example when it shows no box for this
+    /// conversation; the message stays marked as sent.
     case unconfirmed
 }
 
@@ -53,7 +54,7 @@ enum DeliveryCheck {
             return .notDelivered(text)
         case .shellMode(let command) where !command.isEmpty:
             return .notDelivered(command)
-        case .shellMode, .disabled, .overlay, .unknown:
+        case .shellMode, .disabled, .overlay, .noComposer, .unknown:
             return .unconfirmed
         }
     }

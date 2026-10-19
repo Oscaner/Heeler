@@ -84,6 +84,8 @@ extension InputBoxState {
             } else {
                 "The Agent is showing a dialog. Answer it in the terminal first."
             }
+        case .noComposer(let reason):
+            reason
         case .unknown:
             "Heeler can't find the Agent's input box on screen."
         }

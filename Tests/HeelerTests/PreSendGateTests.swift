@@ -18,6 +18,7 @@ struct PreSendGateTests {
         arguments: [
             InputBoxState.text("draft"), .shellMode("ls"), .shellMode(""), .disabled("Input disabled."),
             .overlay("/compact"), .dialog(title: nil), .unknown("Claude's input box is not on screen."),
+            .noComposer("Open this conversation in the terminal first."),
         ])
     func holds(state: InputBoxState) {
         #expect(PreSendGate.check(state, activity: .idle) == .hold(state))
@@ -60,6 +61,7 @@ struct DeliveryCheckTests {
         arguments: [
             InputBoxState.shellMode(""), .disabled("Input disabled."), .overlay("/compact"),
             .unknown("Codex's composer is not on screen."),
+            .noComposer("Open this conversation in the terminal first."),
         ])
     func unconfirmed(state: InputBoxState) {
         #expect(DeliveryCheck.verdict(state, activity: .idle) == .unconfirmed)
