@@ -138,6 +138,7 @@
 		324171566A8731278E37F3B9 /* ChatBackgroundWorkStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026E21425C5C32E24C53FCFE /* ChatBackgroundWorkStrip.swift */; };
 		3286D6FBB12157F2A19A82CE /* AgentNotificationRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB37CBDC9DE0CE539FC476A0 /* AgentNotificationRenderer.swift */; };
 		32B5BBA51EDB7334DCB2EB1A /* HerdrCommandLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8812FD48BD249696F36EAAFB /* HerdrCommandLine.swift */; };
+		32C7CB70CF950B0C19F6B9AB /* BoundedHostScriptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0825D7BB5E854C78C08833F /* BoundedHostScriptTests.swift */; };
 		32E639E1436C832A5DD25B01 /* ChatSendRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D75D42118459DEA416288A33 /* ChatSendRulesTests.swift */; };
 		32FD10D6802D96EF929E544E /* ChatFixtures in Resources */ = {isa = PBXBuildFile; fileRef = 82758F9BDAA54EE7A79E8780 /* ChatFixtures */; };
 		33046B4CC05A07D26F088082 /* AgentLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6A9489C21BDCFA7616782BF /* AgentLiveActivityWidget.swift */; };
@@ -1263,6 +1264,7 @@
 		9F979754410821940D0C4DEC /* SolvingOrbRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolvingOrbRendererTests.swift; sourceTree = "<group>"; };
 		A03953ADE9FBC5162FBFF29F /* NotificationRegistrationCeremony.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationRegistrationCeremony.swift; sourceTree = "<group>"; };
 		A058322630CB1827F69DBF53 /* SharedAsyncOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedAsyncOperation.swift; sourceTree = "<group>"; };
+		A0825D7BB5E854C78C08833F /* BoundedHostScriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedHostScriptTests.swift; sourceTree = "<group>"; };
 		A0A4C115B72A618407CA68A2 /* PiInputBoxDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiInputBoxDetector.swift; sourceTree = "<group>"; };
 		A13286E84EE3A80BB299503D /* ChatToolOutputs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatToolOutputs.swift; sourceTree = "<group>"; };
 		A14FB8560976CE777FB5A105 /* ConsoleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleStore.swift; sourceTree = "<group>"; };
@@ -1640,6 +1642,7 @@
 				AE9AF5C6F7066900959E7E10 /* AttachUserMessageIndexTests.swift */,
 				5F53ECA125F1F72654BA7E53 /* BlockedCardStoreTests.swift */,
 				2B4D400D62E214597C08166D /* BlockedHistoryTests.swift */,
+				A0825D7BB5E854C78C08833F /* BoundedHostScriptTests.swift */,
 				84CC93E620D5254CA5F78142 /* ChangesAutoRefreshTests.swift */,
 				637FE4ECC32F7832D736B4B4 /* ChangesBadgeTests.swift */,
 				9D52F3F413A577A7598C79CE /* ChangesFailureViewTests.swift */,
@@ -3322,6 +3325,7 @@
 				5150B659FACE9AFD9ECF9F6D /* AuthorizedKeysTestLock.swift in Sources */,
 				E342AA28F1D4A22E526BECAD /* BlockedCardStoreTests.swift in Sources */,
 				84F0519C83C047C8CD9CF79A /* BlockedHistoryTests.swift in Sources */,
+				32C7CB70CF950B0C19F6B9AB /* BoundedHostScriptTests.swift in Sources */,
 				C3D2936548DD57036A1FB254 /* CancellablePhaseGate.swift in Sources */,
 				DDA2F01C983BF9AC770290A2 /* ChangesAutoRefreshTests.swift in Sources */,
 				1FCAAF88305066E80B10402D /* ChangesBadgeTests.swift in Sources */,
