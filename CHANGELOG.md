@@ -30,6 +30,8 @@ Entries reference the pull request that made the change.
 
 - Center the subagent glyph on its Chat row's title instead of riding
   above it.
+- Stop Chat freezing, then closing, when the keyboard comes up under a
+  tall Composer and Background Work strip.
 
 ## [0.1.15] - 2026-10-19
 

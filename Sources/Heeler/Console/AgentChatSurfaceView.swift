@@ -480,10 +480,17 @@ struct AgentChatSurfaceView: View {
                 }
                 .padding(.top, headerObstruction + bannerHeight)
             }
-            ChatScrollEdgeEffect(
-                edge: .bottom, height: bottomChromeHeight,
-                solid: bottomChromeHeight - Self.bottomEdgeFadeLength)
-                .frame(maxHeight: .infinity, alignment: .bottom)
+            // Hung on a clear fill, so the effect never sizes the
+            // conversation: framed itself, it could outgrow the room left
+            // above a raised keyboard, push the chrome down and the measured
+            // inset with it, and the two heights then traded places on
+            // every layout pass until the watchdog ended the app.
+            Color.clear
+                .overlay(alignment: .bottom) {
+                    ChatScrollEdgeEffect(
+                        edge: .bottom, height: bottomChromeHeight,
+                        solid: bottomChromeHeight - Self.bottomEdgeFadeLength)
+                }
                 .ignoresSafeArea(.container, edges: .bottom)
             ChatScrollEdgeEffect(edge: .top, height: topInset + headerObstruction, solid: topInset)
                 .padding(.top, -topInset)
