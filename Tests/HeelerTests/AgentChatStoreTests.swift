@@ -802,6 +802,21 @@ struct AgentChatStoreTests {
         #expect(Self.ids(fixture.store) == NumberedChatReducer.ids(5..<6))
     }
 
+    /// A link is checked like the session herdr reports: a value that is not
+    /// the program's session id never becomes a path to follow.
+    @Test func aContinuedInLinkThatIsNotASessionIDIsIgnored() async throws {
+        let fixture = Fixture(session: Self.first)
+        await fixture.files.write(
+            NumberedChatReducer.lines(0..<2) + #"{"continued":"my-thread-name"}"# + "\n",
+            at: Self.path(Self.first))
+
+        await fixture.store.step()
+        await fixture.store.step()
+
+        #expect(fixture.store.conversation.phase == .following(path: Self.path(Self.first)))
+        #expect(Self.ids(fixture.store) == NumberedChatReducer.ids(0..<2))
+    }
+
     @Test func olderPagesLoadOnRequest() async throws {
         let fixture = Fixture(
             session: Self.first,

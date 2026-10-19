@@ -62,4 +62,34 @@ struct ConversationReferenceTests {
                 Self.session(source: "herdr:claude", agent: "claude", value: value))
                 == .unidentified)
     }
+
+    /// No pair is shared, and each one is claimed: a value that is not an id
+    /// is the program's own unidentified session, not another program's.
+    @Test func everyProgramClaimsItsOwnSessionPair() {
+        let pairs = ChatProgram.allCases.map { [$0.sessionNaming.source, $0.sessionNaming.agent] }
+        #expect(Set(pairs).count == pairs.count)
+        for program in ChatProgram.allCases {
+            let naming = program.sessionNaming
+            #expect(
+                ConversationReference.resolve(
+                    Self.session(source: naming.source, agent: naming.agent, value: "not an id"))
+                    == .unidentified,
+                "\(program)")
+        }
+    }
+
+    @Test func transcriptPathsBindOnlyForProgramsThatReportThem() {
+        let path = "/home/dev/sessions/s.jsonl"
+        for program in ChatProgram.allCases {
+            let naming = program.sessionNaming
+            let expected: ConversationReference.Resolution =
+                naming.acceptsTranscriptPath
+                ? .bound(ConversationReference(program: program, sessionID: path)) : .unsupported
+            #expect(
+                ConversationReference.resolve(
+                    Self.session(source: naming.source, agent: naming.agent, kind: .path, value: path))
+                    == expected,
+                "\(program)")
+        }
+    }
 }

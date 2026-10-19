@@ -807,7 +807,7 @@ final class AgentChatStore {
             }
         }
         if let linked = snapshot.transcript.links.continuedInSessionID
-            .flatMap(ConversationReference.canonicalUUID),
+            .flatMap(program.sessionNaming.sessionID),
             linked != followed?.sessionID
         {
             continuedSession = ConversationReference(program: program, sessionID: linked)
