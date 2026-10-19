@@ -85,8 +85,7 @@ struct AgentDetailHeader: View {
 
     /// Hugs a short title and gives way to the trailing capsule, truncating
     /// the title at its end and the directory at its start, so the folder
-    /// the Agent works in stays readable. Text needs more cover than the
-    /// buttons' bold glyphs, so the glass sits on a wash of the background.
+    /// the Agent works in stays readable.
     private func titlePill(_ title: AgentDetailHeaderTitle) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title.title)
@@ -108,7 +107,6 @@ struct AgentDetailHeader: View {
         }
         .padding(.horizontal, 16)
         .frame(height: Self.controlSize)
-        .background(palette.background.opacity(0.9), in: .capsule)
         .headerGlass(in: .capsule)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
