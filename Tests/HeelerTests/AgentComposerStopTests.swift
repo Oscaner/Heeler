@@ -212,6 +212,20 @@ struct AgentComposerStopStoreTests {
         #expect(store.notice == "Keys went, but the Agent still shows Working.")
     }
 
+    /// The terminal's Stop: Esc's 3 s window and notice with no gap, Esc's
+    /// hint, and the surface's own press.
+    @Test func anEscapeInterruptCarriesEscsWaitAndHint() async {
+        let interrupt = AgentComposerInterrupt.escape { .failed("The surface's own press.") }
+
+        #expect(
+            interrupt.wait
+                == AgentStopWait(
+                    window: .seconds(3), unconfirmedNotice: "Esc went, but the Agent still shows Working.",
+                    minimumGap: .zero))
+        #expect(interrupt.accessibilityHint == "Presses Esc to interrupt the Agent")
+        #expect(await interrupt.perform() == .failed("The surface's own press."))
+    }
+
     @Test func aStopIgnoresTapsInsideItsMinimumGapAcrossStatusChanges() async {
         let window = ScriptedTransportCallGate()
         let clock = StopClock()
@@ -641,8 +655,9 @@ private final class EscRecorder {
     }
 }
 
-/// How long each of Stop's waits asked to sleep.
-private actor SleepRecorder {
+/// How long each of Stop's waits asked to sleep; the terminal's Stop in
+/// `AgentDirectInputTests` records its wait too.
+actor SleepRecorder {
     private(set) var durations: [Duration] = []
 
     func record(_ duration: Duration) {

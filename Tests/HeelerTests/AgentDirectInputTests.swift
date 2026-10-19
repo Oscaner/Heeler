@@ -603,9 +603,13 @@ struct AgentDirectInputTests {
         let inset = TerminalKeyboardInset(notificationCenter: center) { _ in 336 }
         let transport = ScriptedTransport()
         let stopWindow = ScriptedTransportCallGate()
+        let stopWaits = SleepRecorder()
         let composer = AgentComposerStore(
             target: "w1:p1", initialStatus: .working,
-            stop: AgentComposerStopStore(sleep: { _ in await stopWindow.waitUntilOpen() })
+            stop: AgentComposerStopStore(sleep: { duration in
+                await stopWaits.record(duration)
+                await stopWindow.waitUntilOpen()
+            })
         ) { params in
             try await transport.promptAgent(params)
         }
@@ -655,6 +659,8 @@ struct AgentDirectInputTests {
             await transport.attachInputs.contains(.keystrokes(Data([0x1B])))
         })
         #expect(composer.stop.isStopping)
+        await stopWindow.waitForEntry()
+        #expect(await stopWaits.durations == [.seconds(3)], "the terminal's Stop waits as Esc does")
         _ = try await Self.activateControl(
             labeled: "Stop", in: controller.view, probe: { interactions.stopAgent() })
         for _ in 0..<20 { await Task.yield() }
@@ -671,6 +677,9 @@ struct AgentDirectInputTests {
         }
         #expect(await transport.agentPromptParams.isEmpty)
         await stopWindow.open()
+        try #require(await Self.eventually { composer.stop.phase == .unconfirmed })
+        #expect(composer.stop.notice == "Esc went, but the Agent still shows Working.")
+        #expect(await stopWaits.durations == [.seconds(3)])
         await owner.leave().value
     }
 
