@@ -695,7 +695,7 @@ struct ChatTimelineControllerTests {
             let view = controller.timeline
             let newest = try #require(rows.last?.id)
 
-            controller.setBottomObstruction(120)
+            controller.setBottomEdge(Self.frame.maxY - 120)
             await Self.settle(controller)
             #expect(controller.isFollowing)
             // The list still runs under the chrome; only its rows stop short.
@@ -704,13 +704,21 @@ struct ChatTimelineControllerTests {
             #expect(resting <= Self.frame.height - 120)
             #expect(resting >= Self.frame.height - 120 - 24)
 
-            controller.setBottomObstruction(200)
+            controller.setBottomEdge(Self.frame.maxY - 200)
             await Self.settle(controller)
             let lifted = try #require(Self.screenMaxY(of: newest, in: controller))
             #expect(abs(lifted - resting + 80) <= 0.5)
 
+            // Chrome that begins below the list's own bottom edge, as
+            // under a list SwiftUI stops short of the screen's, covers
+            // none of it.
+            controller.setBottomEdge(Self.frame.maxY + 40)
+            await Self.settle(controller)
+            let unobstructed = try #require(Self.screenMaxY(of: newest, in: controller))
+            #expect(abs(unobstructed - resting - 120) <= 0.5)
+
             // Room given back leaves no blank space past the end.
-            controller.setBottomObstruction(0)
+            controller.setBottomEdge(nil)
             await Self.settle(controller)
             #expect(abs(view.contentOffset.y - view.maxOffsetY) <= 0.5)
             let lowered = try #require(Self.screenMaxY(of: newest, in: controller))

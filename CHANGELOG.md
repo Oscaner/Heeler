@@ -32,6 +32,8 @@ Entries reference the pull request that made the change.
   above it.
 - Stop Chat freezing, then closing, when the keyboard comes up under a
   tall Composer and Background Work strip.
+- Rest Chat's newest rows just above the Composer, instead of out of
+  sight while the keyboard is up or partly under it once it goes down.
 
 ## [0.1.15] - 2026-10-19
 

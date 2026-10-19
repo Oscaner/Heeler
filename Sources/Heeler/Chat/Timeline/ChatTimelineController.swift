@@ -85,8 +85,9 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
     /// edge, and how much of it the bottom inset keeps clear right now.
     private var collapseControlClearance: CGFloat = 0
     private var collapseControlReserve: CGFloat = 0
-    /// The chrome floating over the list's bottom edge: the Composer and
-    /// what sits on it, down to the screen's edge.
+    /// Where the chrome floating over the list's bottom edge begins, in
+    /// window coordinates, and how much of the list it covers.
+    private var bottomEdge: CGFloat?
     private var bottomObstruction: CGFloat = 0
     /// Set when the list may rest with its end under Collapse Steps; the
     /// next layout pass, which knows the end, moves it clear.
@@ -204,6 +205,7 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        updateBottomObstruction()
         liftEndClearOfCollapseControl()
         noteCollapseAvailability()
     }
@@ -381,10 +383,25 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         collectionView.setNeedsLayout()
     }
 
-    /// Keeps `height` at the bottom clear of rows at rest, for chrome that
-    /// floats over the list's bottom edge; rows still scroll beneath it.
-    func setBottomObstruction(_ height: CGFloat) {
+    /// Keeps the list below window y `edge` clear of rows at rest, for
+    /// chrome that floats over the list's bottom edge; rows still scroll
+    /// beneath it. Measured against the list's own frame, which can stop
+    /// short of the screen's bottom (a raised keyboard, the home indicator)
+    /// by a different amount than the chrome's safe area says.
+    func setBottomEdge(_ edge: CGFloat?) {
         loadViewIfNeeded()
+        guard bottomEdge != edge else { return }
+        bottomEdge = edge
+        updateBottomObstruction()
+    }
+
+    private func updateBottomObstruction() {
+        var height: CGFloat = 0
+        if let bottomEdge, collectionView.window != nil {
+            let bottom = collectionView.convert(collectionView.bounds, to: nil).maxY
+            let scale = traitCollection.displayScale > 0 ? traitCollection.displayScale : 2
+            height = (max(0, bottom - bottomEdge) * scale).rounded() / scale
+        }
         guard bottomObstruction != height else { return }
         bottomObstruction = height
         applyBottomInset()
