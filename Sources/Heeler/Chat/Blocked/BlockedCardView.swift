@@ -472,7 +472,8 @@ extension DialogOption {
     /// folder for the session and saves no rule; its `don't ask again`
     /// options and Codex 0.162.1's `(a)`/`(p)` ones save one. Oh My Pi
     /// 18.12's `Approve <tool> for this session` saves none and stops asking
-    /// until the session ends. Recheck when a program's version changes.
+    /// until the session ends. OpenCode 2.0.32's `Always allow` keeps the
+    /// approval for the project. Recheck when a program's version changes.
     func persistenceNote(program: ChatProgram) -> String {
         let folded = DialogRowScanner.comparable(label.lowercased())
         switch program {
@@ -486,6 +487,8 @@ extension DialogOption {
             return "Lets Claude work in this folder for the session."
         case .claude, .codex, .pi:
             return "Saves a rule, so this isn't asked again."
+        case .opencode:
+            return "Always allows this for the project in OpenCode, so it isn't asked again."
         }
     }
 }

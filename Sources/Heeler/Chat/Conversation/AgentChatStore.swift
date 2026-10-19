@@ -766,7 +766,7 @@ final class AgentChatStore {
         let reason: ChatUnavailableReason =
             switch resolution {
             case .noSession: .noSession(program)
-            case .unidentified: .unidentifiedSession
+            case .unidentified: .unidentifiedSession(program)
             case .unsupported, .bound: .unsupportedSession
             }
         var next = ChatConversationSnapshot()
@@ -1252,15 +1252,19 @@ extension ChatProgram {
         switch self {
         case .pi, .omp: true
         case .claude, .codex: false
+        // OpenCode 2.0.32's Esc interrupt resumes: a steer still waiting
+        // runs after the stop rather than coming back to the box.
+        case .opencode: false
         }
     }
 
     /// Whether an accepted `/compact` is always recorded before the next
     /// prompt, so one a later prompt overtook with no compaction never ran
-    /// (Pi 0.85.1, Oh My Pi 18.11).
+    /// (Pi 0.85.1, Oh My Pi 18.11, OpenCode 2.0.32, which records its
+    /// compaction rows and then the turn's end).
     var recordsCompactionBeforeNextPrompt: Bool {
         switch self {
-        case .pi, .omp: true
+        case .pi, .omp, .opencode: true
         case .claude, .codex: false
         }
     }
@@ -1268,11 +1272,12 @@ extension ChatProgram {
     /// Whether a declined `/compact` shows only on screen, so an overdue
     /// one is looked for there while the Agent idles (Pi 0.85.1,
     /// Oh My Pi 18.11). Opting in also needs the program's rows in
-    /// `showsRunningCompaction` and `latestCompactionFailure`.
+    /// `showsRunningCompaction` and `latestCompactionFailure`. No OpenCode
+    /// refusal has been seen on screen.
     var declinesCompactOnScreen: Bool {
         switch self {
         case .pi, .omp: true
-        case .claude, .codex: false
+        case .claude, .codex, .opencode: false
         }
     }
 }

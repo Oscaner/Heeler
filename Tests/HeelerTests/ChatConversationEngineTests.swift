@@ -807,6 +807,22 @@ struct ChatConversationEngineTests {
         #expect(await fixture.hostFiles.count == 0)
     }
 
+    /// An id the adapter makes no source for is no session to read, in the
+    /// program's own terms; nothing is asked of the store or the files.
+    @Test func anIDWithoutASourceIsUnidentifiedForItsProgram() async throws {
+        let fixture = RecordFixture(program: .opencode)
+        let engine = ChatConversationEngine(
+            reference: ConversationReference(program: .opencode, sessionID: "s2"),
+            cacheKey: fixture.key, files: fixture.hostFiles.files, cache: fixture.cache,
+            adapter: InMemoryRecordSource.adapter(fixture.store, sessionID: Self.recordSession), now: { Self.start })
+
+        let opened = await fixture.open(engine)
+
+        #expect(opened.phase == .unavailable(.unidentifiedSession(.opencode)))
+        #expect(await fixture.store.calls.isEmpty)
+        #expect(await fixture.hostFiles.count == 0)
+    }
+
     @Test func aRecordSourcePollAppendsResetsAndReopensWhenMissing() async throws {
         let fixture = RecordFixture()
         await fixture.store.write(Self.lines(0..<3))

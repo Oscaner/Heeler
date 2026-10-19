@@ -12,10 +12,10 @@ struct ChatSendRulesTests {
     ]
 
     /// How each program invokes a skill: Pi and Oh My Pi skills are
-    /// `/skill:name`.
+    /// `/skill:name`. OpenCode's menu offers none, whatever the prefix.
     private static func skillPrefix(_ program: ChatProgram) -> String {
         switch program {
-        case .claude: "/"
+        case .claude, .opencode: "/"
         case .codex: "$"
         case .pi, .omp: "/skill:"
         }
@@ -376,7 +376,8 @@ struct ChatSendRulesTests {
     }
 
     /// Claude Code answers "Unknown command" for a `user-invocable: false`
-    /// skill; the other programs have no such key and take every skill.
+    /// skill; Codex, Pi and Oh My Pi have no such key and take every skill.
+    /// OpenCode is offered none.
     @Test(arguments: ChatProgram.allCases)
     func onlyClaudeHidesASkillNotUserInvocable(program: ChatProgram) {
         let prefix = Self.skillPrefix(program)
@@ -391,11 +392,14 @@ struct ChatSendRulesTests {
             commands: ChatCommandMenu.commands(skills: catalog, agentIsIdle: true, program: program))
         let names = rules.commands.map(\.name)
 
-        if program == .claude {
+        switch program {
+        case .claude:
             #expect(names == ["compact", "review"])
             #expect(rules.validate("/e2e-hidden") == .unknownCommand("e2e-hidden"))
-        } else {
+        case .codex, .pi, .omp:
             #expect(names == ["compact", "review", "e2e-hidden"])
+        case .opencode:
+            #expect(names == ["compact"])
         }
     }
 
@@ -415,5 +419,74 @@ struct ChatSendRulesTests {
         #expect(ChatCommandMenu.suggestions(for: " /re", in: commands) == nil)
         #expect(ChatCommandMenu.suggestions(for: "/usr/", in: commands) == nil)
         #expect(ChatCommandMenu.suggestions(for: "hello", in: commands) == nil)
+    }
+
+    // MARK: OpenCode
+
+    @Test(arguments: ["exit", "quit", ":q", "  QUIT \n", ":wq!"])
+    func openCodeExitWordsAreNeverSent(draft: String) {
+        #expect(
+            Self.rules(.opencode).validate(draft)
+                == .unsafeText("Sending this would exit OpenCode. Open the terminal to exit."))
+    }
+
+    /// OpenCode runs `/compact` from its popup when Enter follows the name;
+    /// after a space, the popup closes and the text goes to the model.
+    @Test func openCodeSendsCompactBareAndRefusesInstructions() {
+        let rules = Self.rules(.opencode)
+
+        #expect(rules.validate("/compact") == nil)
+        #expect(rules.outgoingText("/compact") == "/compact")
+        #expect(rules.outgoingText("  /compact \n") == "/compact")
+        #expect(
+            rules.validate("/compact keep the API notes")
+                == .commandUnavailable("OpenCode's /compact takes no instructions. Send /compact alone."))
+    }
+
+    /// The menu holds only `/compact`: OpenCode's skills have no form a
+    /// message invokes, and its other commands stay in the terminal.
+    @Test func openCodeOffersNoSkillsOrCommands() {
+        let rules = Self.rules(.opencode)
+
+        #expect(rules.commands.map(\.name) == ["compact"])
+        #expect(rules.validate("/review the diff") == .unknownCommand("review"))
+        for name in ["new", "sessions", "undo", "btw", "cd", "rename"] {
+            #expect(rules.validate("/\(name)") == .unknownCommand(name))
+        }
+    }
+
+    /// OpenCode attaches the files a paste of paths alone names, rather
+    /// than sending the text: a quoted or escaped path with spaces, a
+    /// `file://` URL, several paths, or one with spaces left unquoted.
+    @Test(arguments: [
+        "/home/dev/shot.png", "'/home/dev/My Shots/a.JPG'", "file:///home/dev/doc.pdf", "a.png b.webp", "shot.svg",
+        "~/notes.txt", "./build.log", "../README.md", "/home/dev/notes.txt", "/home/dev/My\\ Shots/a.png",
+        "/home/dev/My Great Shots/a.png",
+    ])
+    func openCodeRefusesADraftOfOnlyPaths(draft: String) {
+        #expect(
+            Self.rules(.opencode).validate(draft)
+                == .unsafeText(
+                    "OpenCode can take a message that is only a file path as an attachment instead of text. "
+                        + "Add a few words, such as what to do with the file, and OpenCode's agent can read it "
+                        + "from its path."))
+    }
+
+    @Test(arguments: ["look at /home/dev/shot.png", "a.png is broken", "https://example.invalid/a.png", "notes.txt"])
+    func openCodeSendsPathsInsideText(draft: String) {
+        let rules = Self.rules(.opencode)
+
+        #expect(rules.validate(draft) == nil)
+        #expect(rules.outgoingText(draft) == draft + " ")
+    }
+
+    /// A typed space closes OpenCode's `@` popup, so a message that ends in
+    /// a mention is submitted rather than completed.
+    @Test(arguments: ["add @MainActor", "cc @alice", "mail a@b.c"])
+    func openCodeSendsEndWithOneSpace(draft: String) {
+        let rules = Self.rules(.opencode)
+
+        #expect(rules.validate(draft) == nil)
+        #expect(rules.outgoingText(draft) == draft + " ")
     }
 }

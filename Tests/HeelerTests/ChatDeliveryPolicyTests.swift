@@ -95,6 +95,15 @@ struct ChatDeliveryPolicyTests {
                 == "The Agent's input box already has text. Send or clear it in the terminal first.")
     }
 
+    /// OpenCode's `/undo` puts the undone prompt back in the box, and Up
+    /// recalls an earlier one; the hold names both beside a draft.
+    @Test func openCodeDraftHoldNamesUndoAndHistory() {
+        #expect(
+            InputBoxState.text("draft").holdReason(for: .opencode)
+                == "The Agent's input box already has text, such as a draft, a prompt /undo put back, or one recalled with Up. Send or clear it in the terminal first."
+        )
+    }
+
     /// A home screen, dashboard or picker in place of the conversation's
     /// input box holds with the sentence the program's detector gave.
     @Test(arguments: ChatProgram.allCases)

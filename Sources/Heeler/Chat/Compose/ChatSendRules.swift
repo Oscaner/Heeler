@@ -33,12 +33,15 @@ enum ChatCommandMenu {
     /// Code answers "Unknown command" for a skill marked
     /// `user-invocable: false`; Codex and Pi have no such key (their
     /// `allow_implicit_invocation` and `disable-model-invocation` limit only
-    /// the model).
+    /// the model). OpenCode gets none, so its menu holds only `/compact`:
+    /// its skills have no form a message can invoke, and its server
+    /// commands are not offered.
     static func offers(_ skill: AgentSkill, for program: ChatProgram) -> Bool {
         switch program {
         case .pi, .omp: skill.commandPrefix == skillCommandPrefix
         case .claude: skill.isUserInvocable
         case .codex: true
+        case .opencode: false
         }
     }
 
@@ -145,6 +148,13 @@ struct ChatSendProfile: Sendable {
                 exitWords: ["exit", "quit", "q"],
                 refusal: { ChatSendRules.ompRefusal($0, trimmed: $1) },
                 submission: { $0.kind == .compact ? ompCompactSubmission : .trailingSpace })
+        case .opencode:
+            // OpenCode exits for `exit`, `quit` and `:q` as typed; Claude
+            // Code's words, compared in any case, cover them.
+            ChatSendProfile(
+                exitWords: ["exit", "quit", ":q", ":q!", ":wq", ":wq!"],
+                refusal: { OpenCodeSendRules.refusal($0, $1) },
+                submission: { $0.kind == .compact ? openCodeCompactSubmission : .trailingSpace })
         }
     }
 
@@ -154,6 +164,11 @@ struct ChatSendProfile: Sendable {
     /// typed.
     private static let ompCompactSubmission = ChatCommandSubmission.bare(
         argumentsRefusal: "Add compaction focus in the Agent terminal.")
+
+    /// OpenCode runs a bare `/compact` from its popup. With a space after
+    /// it, the popup closes and the text goes to the model as a message.
+    private static let openCodeCompactSubmission = ChatCommandSubmission.bare(
+        argumentsRefusal: "OpenCode's /compact takes no instructions. Send /compact alone.")
 }
 
 /// What a Chat draft sends to the Agent's input box (ADR 0024).
@@ -162,8 +177,9 @@ struct ChatSendProfile: Sendable {
 /// so anything the program's input box would treat as more than a message
 /// is refused rather than sent: a `!` shell escape, control bytes, `/`
 /// commands the menu does not offer, and what the program's
-/// `ChatSendProfile` adds, such as Claude Code's and Oh My Pi's bare exit
-/// words and Oh My Pi's other input shorthands.
+/// `ChatSendProfile` adds, such as Claude Code's, Oh My Pi's and OpenCode's
+/// bare exit words, Oh My Pi's other input shorthands and OpenCode's drafts
+/// of paths alone.
 struct ChatSendRules: Sendable {
     let program: ChatProgram
     let commands: [ChatCommand]

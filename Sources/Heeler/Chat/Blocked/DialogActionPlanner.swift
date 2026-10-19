@@ -20,7 +20,7 @@ enum DialogActionPlanner {
         case .claude: try ClaudeDialogPlanner(dialog: dialog, toolUseID: toolUseID).plan(action)
         case .codex: try CodexDialogPlanner(dialog: dialog).plan(action)
         case .omp: try OMPDialogPlanner(dialog: dialog, toolUseID: toolUseID).plan(action)
-        case .pi: throw .unsupported("Answer this dialog in the Agent terminal.")
+        case .pi, .opencode: throw .unsupported("Answer this dialog in the Agent terminal.")
         }
     }
 

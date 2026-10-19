@@ -71,6 +71,10 @@ extension InputBoxState {
                 // Their Esc returns steers the turn has not taken to the
                 // box, but the text may as well be a draft typed there.
                 "The Agent's input box already has text, such as a draft or a steer that Stop returned. Send or clear it in the terminal first."
+            case .opencode:
+                // OpenCode's `/undo` puts the undone prompt back in the box,
+                // and Up recalls an earlier one.
+                "The Agent's input box already has text, such as a draft, a prompt /undo put back, or one recalled with Up. Send or clear it in the terminal first."
             }
         case .shellMode:
             "The Agent's input box is in shell mode. Leave it in the terminal first."

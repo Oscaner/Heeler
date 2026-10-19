@@ -95,6 +95,9 @@ actor FakeQuestionTUI {
         case .pi:
             Issue.record("FakeQuestionTUI does not model Pi")
             return ScreenFixture.synthetic(doneRows)
+        case .opencode:
+            Issue.record("FakeQuestionTUI does not model OpenCode")
+            return ScreenFixture.synthetic(doneRows)
         }
     }
 
@@ -106,6 +109,7 @@ actor FakeQuestionTUI {
             case .codex: codexPress(key)
             case .omp: ompPress(key)
             case .pi: Issue.record("FakeQuestionTUI does not model Pi")
+            case .opencode: Issue.record("FakeQuestionTUI does not model OpenCode")
             }
         }
     }
@@ -126,6 +130,8 @@ actor FakeQuestionTUI {
             draft = (draft ?? "") + text
         case .pi:
             Issue.record("FakeQuestionTUI does not model Pi")
+        case .opencode:
+            Issue.record("FakeQuestionTUI does not model OpenCode")
         }
     }
 

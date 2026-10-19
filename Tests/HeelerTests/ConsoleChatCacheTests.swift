@@ -259,6 +259,29 @@ struct ConsoleChatCacheTests {
         #expect(directory.agents(on: host).isEmpty)
     }
 
+    /// OpenCode's program lands before its adapter. Its Agent reports a
+    /// session Chat could bind, but Chat does not offer it, so the directory
+    /// neither lists nor saves it.
+    @Test func anOpenCodeAgentIsNotCachedBeforeChatOffersIt() async {
+        let host = Host(address: "host", username: "reader")
+        let cache = VolatileChatTranscriptCache()
+        let directory = ConsoleChatCache(cache: cache)
+        directory.setHosts([host])
+        await directory.settled()
+        let codex = Self.agent(host: host, session: Self.sessionA)
+        let openCode = Self.agent(
+            host: host, session: "ses_0a1b2c3d4e5fK2mN8pQ4rT6vX9", terminalID: "t2", kind: "opencode",
+            paneID: "w1:p2")
+        #expect(ChatCachedAgent(openCode).isValid(for: host))
+
+        directory.observe([codex, openCode], on: host)
+        directory.confirm(openCode.agent, for: openCode, on: host)
+        await directory.settled()
+
+        #expect(directory.agents(on: host).map(\.id) == [codex.id])
+        #expect(await cache.loadAgentDirectory(for: host).map(\.paneID) == [codex.agent.paneID])
+    }
+
     @Test func reusedPaneDoesNotInheritThePreviousTerminalSession() async {
         let host = Host(address: "host", username: "reader")
         let cache = VolatileChatTranscriptCache()

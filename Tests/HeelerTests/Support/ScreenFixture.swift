@@ -61,6 +61,8 @@ enum ScreenFixture {
         "omp-37-approval-session-a-after-down", "omp-37-approval-session-b-draft",
     ]
 
+    static let opencode: [String] = []
+
     /// The Claude and Codex captures that the dialog and input-box suites walk.
     /// Pi and Oh My Pi captures stay out so those suites keep their expectations.
     static let all = claude + codex
@@ -82,6 +84,7 @@ enum ScreenFixture {
         if stem.hasPrefix("codex-") { return .codex }
         if stem.hasPrefix("pi-") { return .pi }
         if stem.hasPrefix("omp-") { return .omp }
+        if stem.hasPrefix("opencode-") { return .opencode }
         return .claude
     }
 

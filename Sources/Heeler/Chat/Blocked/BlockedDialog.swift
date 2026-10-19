@@ -303,7 +303,7 @@ enum BlockedDialogParser {
         case .claude: ClaudeDialogParser.parse(screen)
         case .codex: CodexDialogParser.parse(screen)
         case .omp: OMPDialogParser.parse(screen)
-        case .pi: .none
+        case .pi, .opencode: .none
         }
     }
 }

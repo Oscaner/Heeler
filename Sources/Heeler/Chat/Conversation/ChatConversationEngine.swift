@@ -6,9 +6,10 @@ enum ChatUnavailableReason: Equatable, Sendable {
     /// herdr has reported no session ID for the Agent. This does not establish
     /// whether the program's integration is installed.
     case noSession(ChatProgram)
-    /// The session record names something other than a session id, such as
-    /// a Codex thread name after `resume <name>`.
-    case unidentifiedSession
+    /// The session record names something other than a session id the
+    /// program's naming accepts, such as a Codex thread name after
+    /// `resume <name>`. The program words the explanation.
+    case unidentifiedSession(ChatProgram)
     /// The session record is not one Chat reads.
     case unsupportedSession
     /// No transcript was found. `searchedAll` is false when the search was
@@ -268,7 +269,7 @@ actor ChatConversationEngine {
                 if let source = makeRecordSource(reference.sessionID) {
                     try await follow(source)
                 } else {
-                    stop(.unidentifiedSession)
+                    stop(.unidentifiedSession(reference.program))
                 }
             } else {
                 switch try await locate() {
@@ -629,6 +630,9 @@ actor ChatConversationEngine {
                 let name = reference.program == .omp ? "Oh My Pi" : "Pi"
                 return .unavailable(.unsupportedFormat("\(name) session version \(version)"))
             }
+        case .opencode:
+            // Its store is read by query, so `open` never looks for a file.
+            return .unavailable(.unsupportedSession)
         }
     }
 

@@ -35,6 +35,12 @@ struct ChatStopPlan: Sendable {
     static func standard(for program: ChatProgram) -> ChatStopPlan {
         switch program {
         case .claude, .codex, .pi, .omp: .escape
+        case .opencode:
+            // Its keys, with a guard that presses nothing until Chat reads
+            // OpenCode's screen.
+            ChatStopPlan(
+                keys: ["esc", "esc"], screenGuard: { _ in .refuse("Stop isn't available for OpenCode yet.") },
+                wait: .escape, accessibilityHint: "Presses Esc twice to interrupt OpenCode")
         }
     }
 

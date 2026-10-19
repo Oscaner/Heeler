@@ -65,6 +65,8 @@ struct AgentChatAvailabilityTests {
         #expect(AgentChatAvailability.mayOfferChat(for: agent(kind: kind)))
     }
 
+    /// Kinds Chat has no program for, and OpenCode, whose program has no
+    /// adapter yet.
     @Test(arguments: ["gemini", "cursor", "droid", "opencode", "Claude", ""])
     func otherProgramsNeverOfferChat(kind: String) {
         #expect(AgentChatAvailability.program(for: agent(kind: kind), platform: .posix) == nil)
