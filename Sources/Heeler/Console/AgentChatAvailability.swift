@@ -2,12 +2,12 @@ import Foundation
 
 /// Whether an Agent's detail offers Chat (ADR 0024). Chat reads the
 /// transcript the Agent program writes, so it needs a program with a
-/// transcript adapter (`ChatTranscriptAdapter.standard(for:)`: Claude Code,
-/// Codex, Pi and Oh My Pi) and a Host known to be POSIX: transcripts are found
-/// through POSIX home paths, and native Windows Hosts are out of scope. A
-/// platform not learned yet hides the entry rather than offering a Chat whose
-/// first read would fail. A program with no adapter yet is neither offered nor
-/// prefetched, so its `ChatProgram` case can land before its adapter.
+/// transcript adapter (`ChatTranscriptAdapter.standard(for:)`) and a Host
+/// known to be POSIX: transcripts are found through POSIX home paths, and
+/// native Windows Hosts are out of scope. A platform not learned yet hides the
+/// entry rather than offering a Chat whose first read would fail. A program
+/// with no adapter yet is neither offered nor prefetched, so its `ChatProgram`
+/// case can land before its adapter.
 enum AgentChatAvailability {
     /// Whether Chat can read the program's transcript: the lookup both checks
     /// use unless the caller passes its own, as `ConsoleStore` does with the

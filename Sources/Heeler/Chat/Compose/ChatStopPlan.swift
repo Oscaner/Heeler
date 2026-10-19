@@ -1,9 +1,8 @@
 import Foundation
 
 /// What a Stop guard reads, built inside the keys queue. A branch adds a
-/// field with a default (Grok: `var transcriptTurnIsOpen: Bool? = nil`) and
-/// fills it only in the surface's `stopContext`, so other guards and their
-/// tests keep compiling.
+/// field with a default and fills it only in the surface's `stopContext`, so
+/// other guards and their tests keep compiling.
 struct ChatStopContext: Sendable {
     var screen: ANSIScreen
     var activity: ChatAgentActivity
