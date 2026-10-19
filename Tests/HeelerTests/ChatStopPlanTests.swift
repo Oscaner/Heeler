@@ -51,7 +51,9 @@ struct ChatStopPlanTests {
             seen.contexts.append(context)
             return .refuse("Not now.")
         }
-        let interrupt = plan.composerInterrupt(context: Self.context(recorder), agentKeys: Self.agentKeys(recorder))
+        let screen = ScreenFixture.synthetic(["a dialog row"])
+        let interrupt = plan.composerInterrupt(
+            context: Self.context(recorder, screen: screen, activity: .blocked), agentKeys: Self.agentKeys(recorder))
 
         let outcome = await interrupt.perform()
 
@@ -60,8 +62,8 @@ struct ChatStopPlanTests {
         #expect(recorder.sent.isEmpty, "a refused Stop presses nothing")
         let context = try #require(seen.contexts.first)
         #expect(seen.contexts.count == 1)
-        #expect(context.activity == .working)
-        #expect(context.screen.rows == ScreenFixture.synthetic(["probe row"]).rows)
+        #expect(context.activity == .blocked)
+        #expect(context.screen.rows == screen.rows)
     }
 
     @Test func aGuardThatAllowsSendsTheKeys() async {
@@ -163,16 +165,17 @@ struct ChatStopPlanTests {
         }
     }
 
-    /// A Stop context that counts its reads: a probe row with the Agent
-    /// Working, or a failed read.
+    /// A Stop context that counts its reads: `screen` with the Agent's
+    /// `activity` (by default a probe row while it works), or a failed read.
     private static func context(
-        _ recorder: StopRecorder, readFails: Bool = false
+        _ recorder: StopRecorder, screen: ANSIScreen = ScreenFixture.synthetic(["probe row"]),
+        activity: ChatAgentActivity = .working, readFails: Bool = false
     ) -> @MainActor () async throws -> ChatStopContext {
         {
             recorder.contextCalls += 1
             recorder.events.append("read")
             if readFails { throw TransportError.timedOut }
-            return ChatStopContext(screen: ScreenFixture.synthetic(["probe row"]), activity: .working)
+            return ChatStopContext(screen: screen, activity: activity)
         }
     }
 
