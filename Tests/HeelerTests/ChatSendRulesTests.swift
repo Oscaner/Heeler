@@ -257,10 +257,15 @@ struct ChatSendRulesTests {
         }
     }
 
-    @Test func piCompactKeepsTrailingSpaceAndArguments() {
-        let rules = Self.rules(.pi)
+    /// Claude Code, Codex and Pi take `/compact` like any message: with a
+    /// focus, and with the trailing space.
+    @Test(arguments: [ChatProgram.claude, .codex, .pi])
+    func compactKeepsTrailingSpaceAndArguments(program: ChatProgram) {
+        let rules = Self.rules(program)
 
+        #expect(rules.validate("/compact") == nil)
         #expect(rules.outgoingText("/compact") == "/compact ")
+        #expect(rules.validate("/compact keep the API notes") == nil)
         #expect(rules.outgoingText("/compact keep the API notes") == "/compact keep the API notes ")
     }
 
