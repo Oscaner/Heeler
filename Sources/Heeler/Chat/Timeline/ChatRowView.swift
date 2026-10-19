@@ -379,9 +379,7 @@ private struct ChatToolGroupRow: View {
     var body: some View {
         Button(action: toggle) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                ChatToolRow.icon(for: group.kind)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 18)
+                ChatToolKindIcon(kind: group.kind)
                 Text(verbatim: group.summary)
                     .font(.subheadline)
                     // At accessibility sizes two lines hold a word or two.
@@ -601,9 +599,7 @@ private struct ChatToolRow: View {
             Button(action: toggle) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Self.icon(for: tool.kind)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 18)
+                        ChatToolKindIcon(kind: tool.kind)
                         Text(verbatim: tool.title)
                             .font(.subheadline)
                             .modifier(ChatFontDesign(isCode: titleIsCode))
@@ -800,6 +796,28 @@ private struct ChatToolRow: View {
         case .mcp: Image(systemName: "puzzlepiece.extension")
         case .image: Image(systemName: "photo")
         case .other: Image(systemName: "wrench.and.screwdriver")
+        }
+    }
+}
+
+/// A tool kind's glyph beside a row title set on its first baseline. A
+/// symbol carries its own baseline; the bot is an asset with none, which
+/// would rest its bottom edge on the baseline and ride above the text, so
+/// it centres on the title's capitals instead.
+private struct ChatToolKindIcon: View {
+    @ScaledMetric(relativeTo: .subheadline) private var titleCapHeight = UIFont.systemFont(ofSize: 15).capHeight
+    let kind: ChatToolActivity.Kind
+
+    var body: some View {
+        let icon = ChatToolRow.icon(for: kind)
+            .foregroundStyle(.secondary)
+            .frame(width: 18)
+        if case .agent = kind {
+            icon.alignmentGuide(.firstTextBaseline) { [titleCapHeight] dimensions in
+                dimensions[VerticalAlignment.center] + titleCapHeight / 2
+            }
+        } else {
+            icon
         }
     }
 }

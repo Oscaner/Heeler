@@ -26,6 +26,11 @@ Entries reference the pull request that made the change.
 - Chat's Collapse Steps and Jump to Latest buttons are glass icons like the
   detail header's, and Collapse Steps uses a clearer collapse glyph.
 
+### Fixed
+
+- Center the subagent glyph on its Chat row's title instead of riding
+  above it.
+
 ## [0.1.15] - 2026-10-19
 
 ### Added
