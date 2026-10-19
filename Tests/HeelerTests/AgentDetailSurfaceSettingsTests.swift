@@ -71,6 +71,19 @@ struct AgentChatAvailabilityTests {
         #expect(!AgentChatAvailability.mayOfferChat(for: agent(kind: kind)))
     }
 
+    /// A program whose case lands before its adapter is not offered yet.
+    @Test func aProgramWithoutAnAdapterNeverOffersChat() {
+        let hasAdapter: (ChatProgram) -> Bool = { $0 != .codex }
+
+        #expect(
+            AgentChatAvailability.program(for: agent(kind: "codex"), platform: .posix, hasAdapter: hasAdapter) == nil)
+        #expect(!AgentChatAvailability.mayOfferChat(for: agent(kind: "codex"), hasAdapter: hasAdapter))
+        #expect(
+            AgentChatAvailability.program(for: agent(kind: "claude"), platform: .posix, hasAdapter: hasAdapter)
+                == .claude)
+        #expect(AgentChatAvailability.mayOfferChat(for: agent(kind: "claude"), hasAdapter: hasAdapter))
+    }
+
     /// Unknown is not POSIX: the entry stays hidden until the Host says.
     @Test(arguments: [HostPlatform?.none, .some(.nativeWindows)])
     func chatNeedsAHostKnownToBePOSIX(platform: HostPlatform?) {
