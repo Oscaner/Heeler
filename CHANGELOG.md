@@ -14,29 +14,29 @@ Entries reference the pull request that made the change.
   log, and the small policy module that allows it, in English or Simplified
   Chinese. (#477)
 - See the Agent's task title in the detail header, with its harness and
-  working directory on a second line.
+  working directory on a second line. (#480)
 
 ### Changed
 
 - The Agent detail header shows one button for the surface not on screen,
-  Chat or the Agent terminal, instead of a two-segment switch.
+  Chat or the Agent terminal, instead of a two-segment switch. (#480)
 - The detail header's Workspace Terminals, Changes and Hide Header buttons
   move into a More menu at its trailing end, as Terminals, Changes and
-  Collapse, so the header covers less output.
+  Collapse, so the header covers less output. (#480)
 - Chat's Collapse Steps and Jump to Latest buttons are glass icons like the
-  detail header's, and Collapse Steps uses a clearer collapse glyph.
+  detail header's, and Collapse Steps uses a clearer collapse glyph. (#480)
 
 ### Fixed
 
 - Center the subagent glyph on its Chat row's title instead of riding
-  above it.
+  above it. (#480)
 - Stop Chat freezing, then closing, when the keyboard comes up under a
-  tall Composer and Background Work strip.
+  tall Composer and Background Work strip. (#480)
 - Rest Chat's newest rows just above the Composer, instead of out of
-  sight while the keyboard is up or partly under it once it goes down.
+  sight while the keyboard is up or partly under it once it goes down. (#480)
 - Show five whole lines of a long Composer draft, with the line being
   typed clear of the edge, instead of the last line cut off; the draft
-  fades out at the edge it scrolls past.
+  fades out at the edge it scrolls past. (#480)
 
 ## [0.1.15] - 2026-10-19
 
