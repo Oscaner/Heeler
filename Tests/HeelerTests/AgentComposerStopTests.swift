@@ -110,7 +110,7 @@ struct AgentComposerStopStoreTests {
 
         await store.stop(using: { await esc.press() })?.value
         #expect(store.phase == .unconfirmed)
-        #expect(store.notice == AgentComposerStopStore.unconfirmedMessage)
+        #expect(store.notice == "Esc went, but the Agent still shows Working.")
         #expect(!store.isStopping)
 
         await store.stop(using: { await esc.press() })?.value
@@ -170,6 +170,136 @@ struct AgentComposerStopStoreTests {
         #expect(store.phase == .ready)
         #expect(store.notice == nil)
     }
+
+    /// Esc keeps no gap: once a status change readies Stop, the next tap
+    /// presses at once, even while the last Esc is still on its way.
+    @Test func anEscTapAfterAStatusChangePressesWhileTheLastEscIsOnItsWay() async {
+        let send = ScriptedTransportCallGate()
+        let store = AgentComposerStopStore(sleep: { _ in })
+        let esc = EscRecorder()
+
+        let first = store.stop(using: {
+            let outcome = await esc.press()
+            await send.waitUntilOpen()
+            return outcome
+        })
+        await send.waitForEntry()
+        store.agentStatusChanged(to: .done)
+        #expect(store.phase == .ready)
+
+        let second = store.stop(using: { await esc.press() })
+        #expect(second != nil)
+        await second?.value
+        #expect(esc.count == 2, "the second Esc went while the first was still on its way")
+
+        await send.open()
+        await first?.value
+        #expect(esc.count == 2)
+    }
+
+    @Test func aStopWaitsItsOwnWindowAndSaysItsOwnNotice() async {
+        let sleeps = SleepRecorder()
+        let store = AgentComposerStopStore(sleep: { await sleeps.record($0) })
+
+        await store.stop(using: { .sent })?.value
+        #expect(await sleeps.durations == [.seconds(3)])
+        #expect(store.notice == "Esc went, but the Agent still shows Working.")
+
+        let keys = AgentStopWait(
+            window: .seconds(5), unconfirmedNotice: "Keys went, but the Agent still shows Working.")
+        await store.stop(waiting: keys, using: { .sent })?.value
+        #expect(await sleeps.durations == [.seconds(3), .seconds(5)])
+        #expect(store.notice == "Keys went, but the Agent still shows Working.")
+    }
+
+    @Test func aStopIgnoresTapsInsideItsMinimumGapAcrossStatusChanges() async {
+        let window = ScriptedTransportCallGate()
+        let clock = StopClock()
+        let start = clock.now
+        let store = AgentComposerStopStore(
+            sleep: { _ in await window.waitUntilOpen() }, now: { clock.now })
+        let presses = EscRecorder()
+
+        let first = store.stop(waiting: Self.gapped, using: { await presses.press() })
+        await window.waitForEntry()
+        store.agentStatusChanged(to: .done)
+
+        clock.now = start + .milliseconds(500)
+        #expect(store.stop(waiting: Self.gapped, using: { await presses.press() }) == nil)
+        #expect(presses.count == 1)
+        #expect(store.phase == .ready, "an ignored tap leaves Stop as it was")
+
+        clock.now = start + .milliseconds(1600)
+        let second = store.stop(waiting: Self.gapped, using: { await presses.press() })
+        #expect(second != nil)
+        await window.waitForEntry(count: 2)
+        #expect(presses.count == 2)
+
+        await window.open()
+        await first?.value
+        await second?.value
+    }
+
+    @Test func aGappedStopIgnoresTapsWhileAnAttemptIsOnItsWay() async {
+        let send = ScriptedTransportCallGate()
+        let clock = StopClock()
+        let start = clock.now
+        let store = AgentComposerStopStore(sleep: { _ in }, now: { clock.now })
+        let presses = EscRecorder()
+
+        let first = store.stop(waiting: Self.gapped, using: {
+            let outcome = await presses.press()
+            await send.waitUntilOpen()
+            return outcome
+        })
+        await send.waitForEntry()
+        store.agentStatusChanged(to: .done)
+        #expect(store.phase == .ready)
+
+        clock.now = start + .seconds(2)
+        #expect(store.stop(waiting: Self.gapped, using: { await presses.press() }) == nil)
+
+        // The attempt ends once its keys have gone, here at +2 s.
+        await send.open()
+        await first?.value
+        clock.now = start + .milliseconds(2500)
+        #expect(store.stop(waiting: Self.gapped, using: { await presses.press() }) == nil)
+        #expect(presses.count == 1)
+
+        clock.now = start + .milliseconds(3600)
+        await store.stop(waiting: Self.gapped, using: { await presses.press() })?.value
+        #expect(presses.count == 2)
+    }
+
+    @Test func anIgnoredTapKeepsTheRunningStopsWaitAndNotice() async {
+        let window = ScriptedTransportCallGate()
+        let sleeps = SleepRecorder()
+        let store = AgentComposerStopStore(sleep: { duration in
+            await sleeps.record(duration)
+            await window.waitUntilOpen()
+        })
+        let running = AgentStopWait(
+            window: .seconds(5), unconfirmedNotice: "The running stop's notice.")
+        let ignored = AgentStopWait(
+            window: .seconds(7), unconfirmedNotice: "The ignored tap's notice.")
+        let ignoredPresses = EscRecorder()
+
+        let wait = store.stop(waiting: running, using: { .sent })
+        await window.waitForEntry()
+        #expect(store.stop(waiting: ignored, using: { await ignoredPresses.press() }) == nil)
+
+        await window.open()
+        await wait?.value
+        #expect(ignoredPresses.count == 0)
+        #expect(store.phase == .unconfirmed)
+        #expect(store.notice == "The running stop's notice.")
+        #expect(await sleeps.durations == [.seconds(5)])
+    }
+
+    /// A wait with a gap, as a program whose second press could quit it.
+    private static let gapped = AgentStopWait(
+        window: .seconds(3), unconfirmedNotice: "Keys went, but the Agent still shows Working.",
+        minimumGap: .milliseconds(1500))
 }
 
 /// Stop belongs to the Agent's Composer store, not to a view: its status
@@ -511,6 +641,20 @@ private final class EscRecorder {
     }
 }
 
+/// How long each of Stop's waits asked to sleep.
+private actor SleepRecorder {
+    private(set) var durations: [Duration] = []
+
+    func record(_ duration: Duration) {
+        durations.append(duration)
+    }
+}
+
+/// Stop's clock, moved by hand.
+private final class StopClock: @unchecked Sendable {
+    var now = ContinuousClock.now
+}
+
 /// Hands each sleep the next gate, so overlapping waits end one by one.
 @MainActor
 private final class GateQueue {
@@ -603,7 +747,7 @@ private struct ComposerHost: View {
             keyboardPresentation: $harness.keyboardPresentation,
             prepareKeyboardPresentation: { _ in },
             collapsesWithoutKeyboard: collapses,
-            interruptAgent: { [harness] in
+            interrupt: .escape { [harness] in
                 harness.escapes += 1
                 return .sent
             })

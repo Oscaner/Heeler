@@ -735,13 +735,18 @@ struct AgentChatSurfaceView: View {
             inputReplacement: blockedCard,
             focusRequest: chat?.blocked.composerFocusRequest ?? 0,
             collapsesWithoutKeyboard: true,
-            // In line with the Agent page's keys, as typed keys would arrive.
-            interruptAgent: { [agentKeys] in
-                await agentKeys.deliver(.escape)
-                    ? .sent : .failed("Couldn't reach the Agent, so it may still be working.")
-            })
+            interrupt: stopInterrupt)
         .frame(maxWidth: ChatTimelineMetrics.maximumContentWidth)
         .frame(maxWidth: .infinity)
+    }
+
+    /// Chat's Stop: Esc in line with the Agent page's keys, as typed keys
+    /// would arrive.
+    private var stopInterrupt: AgentComposerInterrupt {
+        .escape { [agentKeys] in
+            await agentKeys.deliver(.escape)
+                ? .sent : .failed("Couldn't reach the Agent, so it may still be working.")
+        }
     }
 
     /// A Blocked Agent's dialog, answered in the Composer's place.

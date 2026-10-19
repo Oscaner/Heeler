@@ -194,8 +194,9 @@ struct AgentComposerView: View {
     /// `AgentComposerCollapse`. The terminal keeps its height, since every
     /// fold would resize the PTY, so each surface says which it wants.
     let collapsesWithoutKeyboard: Bool
-    /// Presses Esc in the Agent's program for Stop; nil keeps Send.
-    var interruptAgent: (@MainActor () async -> AgentInterruptOutcome)? = nil
+    /// What Stop presses in the Agent's program, its wait and its hint; nil
+    /// keeps Send.
+    var interrupt: AgentComposerInterrupt? = nil
     @State private var isInputFocused = false
     /// An explicit dismissal hides suggestions for the current trigger token;
     /// removing the token arms them again.
@@ -517,17 +518,24 @@ struct AgentComposerView: View {
                 Task { await deliverDraft { await store.send(policy: sendPolicy) } }
             }
         case .stop:
-            AgentComposerStopButton(isStopping: store.stop.isStopping) {
-                guard let interruptAgent else { return }
-                store.stop.stop(using: interruptAgent)
+            AgentComposerStopButton(
+                isStopping: store.stop.isStopping,
+                accessibilityHint: stopHint
+            ) {
+                guard let interrupt else { return }
+                store.stop.stop(waiting: interrupt.wait, using: interrupt.perform)
             }
         }
+    }
+
+    private var stopHint: String {
+        interrupt?.accessibilityHint ?? AgentComposerInterrupt.escapeHint
     }
 
     private var primaryControl: AgentComposerPrimaryControl {
         AgentComposerPrimaryControl(
             status: status, draft: store.draft,
-            canStop: interruptAgent != nil && !store.stop.isHeldAfterSend)
+            canStop: interrupt != nil && !store.stop.isHeldAfterSend)
     }
 
     private var inputAreaInsets: EdgeInsets {
@@ -818,11 +826,12 @@ private struct AgentComposerSendButtonStyle: ButtonStyle {
     }
 }
 
-/// Send's place while the Agent works on a blank draft: one Esc per tap,
-/// then a spinner until Agent Status leaves Working or the store's window
-/// passes.
+/// Send's place while the Agent works on a blank draft: one press of the
+/// surface's Stop keys per tap, then a spinner until Agent Status leaves
+/// Working or the store's window passes.
 struct AgentComposerStopButton: View {
     let isStopping: Bool
+    var accessibilityHint = AgentComposerInterrupt.escapeHint
     let action: () -> Void
 
     var body: some View {
@@ -843,7 +852,7 @@ struct AgentComposerStopButton: View {
         .disabled(isStopping)
         .accessibilityLabel("Stop")
         .accessibilityValue(isStopping ? "Stopping" : "")
-        .accessibilityHint("Presses Esc to interrupt the Agent")
+        .accessibilityHint(accessibilityHint)
     }
 }
 

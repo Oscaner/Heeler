@@ -1286,7 +1286,12 @@ struct AgentTerminalView: View {
             onFirstResponderRequest: composerFirstResponderRequest,
             onKeyboardHandoffSettled: composerKeyboardHandoffSettled,
             collapsesWithoutKeyboard: false,
-            interruptAgent: { interruptAgent() })
+            interrupt: stopInterrupt)
+    }
+
+    /// The Composer's Stop: one Esc over the Attach PTY, whatever the kind.
+    private var stopInterrupt: AgentComposerInterrupt {
+        .escape { interruptAgent() }
     }
 
     /// Attached to the control itself: a popover on the whole detail anchors
