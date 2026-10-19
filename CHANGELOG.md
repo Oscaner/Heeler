@@ -34,6 +34,9 @@ Entries reference the pull request that made the change.
   tall Composer and Background Work strip.
 - Rest Chat's newest rows just above the Composer, instead of out of
   sight while the keyboard is up or partly under it once it goes down.
+- Show five whole lines of a long Composer draft, with the line being
+  typed clear of the edge, instead of the last line cut off; the draft
+  fades out at the edge it scrolls past.
 
 ## [0.1.15] - 2026-10-19
 
