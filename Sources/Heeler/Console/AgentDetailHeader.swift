@@ -1,27 +1,28 @@
 import SwiftUI
 
 /// Floating controls over an Agent or terminal. Separate glass pieces float
-/// over the terminal: Back at the leading end, any trailing actions in one
-/// capsule, and at the far end a fold button that stays put. The room
-/// between them is left to the terminal, and folding leaves only that
-/// button, so the header can cover almost no output.
+/// over the terminal: Back at the leading end, the Agent's title beside it,
+/// and at the far end a More menu that stays put. The room between them is
+/// left to the terminal, and folding leaves only the menu, so the header can
+/// cover almost no output.
 ///
 /// Back is the way out of a detail pushed over the list, on an iPhone or in
 /// a compact iPad window, which the edge swipe alone never showed (#396).
 /// Beside an iPad's sidebar there is nothing to go back to, so the header
-/// keeps only its actions and fold button.
+/// keeps only its menu.
 ///
-/// Trailing actions are plain values rather than views, so a screen can
-/// leave out the ones it cannot offer and the capsule goes with the last.
+/// The menu holds the screen's actions and the item that folds or unfolds
+/// the header, each titled in one word. Actions are plain values rather than
+/// views, so a screen can leave out the ones it cannot offer.
 ///
-/// An Agent that has Chat also shows its Chat and terminal surfaces as a
-/// segmented pair, sharing the fold button's capsule in both states, so the
-/// surface stays one tap away while the header is folded.
+/// An Agent that has Chat also shows a button for the surface it is not
+/// showing, Chat or its terminal, sharing the menu's capsule in both states,
+/// so the other surface stays one tap away while the header is folded.
 struct AgentDetailHeader: View {
     static let controlSize: CGFloat = 44
     /// How much of the glass shows, the rest letting output through.
-    fileprivate static let glassOpacity: Double = 0.75
-    /// Buttons sharing the actions capsule sit closer than standalone ones.
+    static let glassOpacity: Double = 0.8
+    /// Buttons sharing a capsule sit closer than standalone ones.
     private static let capsuleButtonWidth: CGFloat = 36
     private static let capsuleInset: CGFloat = (controlSize - capsuleButtonWidth) / 2
 
@@ -43,6 +44,8 @@ struct AgentDetailHeader: View {
     var actions: [AgentDetailHeaderAction] = []
     /// Nil for a screen with one surface, such as a shell terminal.
     var surfaceSwitch: AgentDetailSurfaceSwitch?
+    /// Nil for a screen that names nothing, such as a shell terminal.
+    var title: AgentDetailHeaderTitle?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.displayScale) private var displayScale
@@ -54,113 +57,159 @@ struct AgentDetailHeader: View {
                     .headerGlass(in: .circle)
                     .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
-            Spacer(minLength: 0)
-            if isExpanded, !actions.isEmpty {
-                HStack(spacing: 0) {
-                    ForEach(actions) { @Sendable action in
-                        MainActorContent {
-                            AgentDetailHeaderButton(
-                                action.title, systemImage: action.systemImage,
-                                width: Self.capsuleButtonWidth, action: action.perform)
-                        }
-                    }
-                }
-                .padding(.horizontal, Self.capsuleInset)
-                .fixedSize()
-                .headerGlass(in: .capsule)
-                .transition(
-                    .scale(scale: 0.6, anchor: .trailing).combined(with: .opacity))
+            if isExpanded, let title {
+                titlePill(title)
+                    .transition(
+                        .scale(scale: 0.6, anchor: .leading).combined(with: .opacity))
+            } else {
+                Spacer(minLength: 0)
             }
             if let surfaceSwitch {
                 HStack(spacing: 0) {
-                    ForEach(AgentDetailSurfaceSwitch.order, id: \.self) { @Sendable surface in
-                        MainActorContent { surfaceButton(surface, in: surfaceSwitch) }
-                    }
+                    surfaceButton(surfaceSwitch)
                     Rectangle()
                         .fill(palette.foreground.opacity(0.25))
                         .frame(width: 1 / max(displayScale, 1), height: 20)
                         .padding(.horizontal, 2)
-                    foldButton(width: Self.capsuleButtonWidth)
+                    moreMenu(width: Self.capsuleButtonWidth)
                 }
                 .padding(.horizontal, Self.capsuleInset)
                 .fixedSize()
                 .headerGlass(in: .capsule)
             } else {
-                foldButton(width: Self.controlSize)
+                moreMenu(width: Self.controlSize)
                     .headerGlass(in: .circle)
             }
         }
         .foregroundStyle(palette.foreground)
     }
 
-    /// The current surface reads as selected: filled, its glyph knocked out.
-    private func surfaceButton(_ surface: AgentDetailSurface, in control: AgentDetailSurfaceSwitch) -> some View {
-        let isSelected = surface == control.current
-        return Button {
-            guard !isSelected else { return }
-            control.select(surface)
-        } label: {
-            Image(systemName: surface.showSystemImage)
-                .font(.system(size: Self.segmentPointSize(surface), weight: .semibold))
-                .foregroundStyle(isSelected ? palette.background : palette.foreground)
-                .frame(width: Self.capsuleButtonWidth + 4, height: Self.selectedSegmentHeight)
-                .background {
-                    if isSelected {
-                        Capsule().fill(palette.foreground)
-                    }
+    /// Fills the room up to the trailing capsule, so the gaps on either side
+    /// match, truncating the title at its end and the directory at its
+    /// start, so the folder the Agent works in stays readable.
+    private func titlePill(_ title: AgentDetailHeaderTitle) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title.title)
+                .font(.system(size: 15, weight: .semibold))
+                .lineLimit(1)
+            HStack(spacing: 4) {
+                Text(title.harness)
+                    .layoutPriority(1)
+                if let directory = title.directory {
+                    Text(verbatim: "·")
+                        .layoutPriority(1)
+                    Text(directory)
+                        .truncationMode(.head)
                 }
-                .frame(height: Self.controlSize)
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(palette.foreground.opacity(0.6))
+            .lineLimit(1)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: Self.controlSize, maxHeight: Self.controlSize, alignment: .leading)
+        .headerGlass(in: .capsule)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    /// Swaps to the surface not showing, drawn with that surface's glyph.
+    private func surfaceButton(_ control: AgentDetailSurfaceSwitch) -> some View {
+        let target = control.other
+        return Button {
+            control.select(target)
+        } label: {
+            Image(systemName: target.showSystemImage)
+                .font(.system(size: Self.surfacePointSize(target), weight: .semibold))
+                .frame(width: Self.capsuleButtonWidth, height: Self.controlSize)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(surface.segmentTitle)
-        .accessibilityHint(isSelected ? "" : surface.showAccessibilityHint)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityLabel(target.showTitle)
+        .accessibilityHint(target.showAccessibilityHint)
     }
 
-    /// Concentric with the capsule, which insets its buttons by the same
-    /// amount on every side.
-    private static let selectedSegmentHeight: CGFloat = controlSize - 2 * capsuleInset
-
     /// The two-bubble glyph draws wider than the terminal's at one size, so
-    /// each gets its own to read as a pair beside the fold button.
-    private static func segmentPointSize(_ surface: AgentDetailSurface) -> CGFloat {
+    /// it gets a smaller one to sit evenly beside the More menu.
+    private static func surfacePointSize(_ surface: AgentDetailSurface) -> CGFloat {
         switch surface {
         case .chat: 15
         case .terminal: 17
         }
     }
 
-    /// Stays at the far end in both states.
-    private func foldButton(width: CGFloat) -> some View {
-        AgentDetailHeaderButton(
-            isExpanded ? "Hide Header" : "Show Header",
-            // A window's top bar, which is what this shows and hides: put
-            // away while it is out, filled in while it is folded.
-            systemImage: isExpanded
-                ? "menubar.arrow.up.rectangle" : "inset.filled.topthird.rectangle",
-            width: width
-        ) {
-            withAnimation(reduceMotion ? nil : .snappy) {
-                isExpanded.toggle()
+    /// Stays at the far end in both states: the screen's actions, then the
+    /// item that folds or unfolds the header.
+    private func moreMenu(width: CGFloat) -> some View {
+        Menu {
+            ForEach(actions) { @Sendable action in
+                MainActorContent {
+                    Button(action.title, systemImage: action.systemImage, action: action.perform)
+                }
             }
+            Button(
+                isExpanded ? "Collapse" : "Expand",
+                // A window's top bar, which is what this shows and hides: put
+                // away while it is out, filled in while it is folded.
+                systemImage: isExpanded
+                    ? "menubar.arrow.up.rectangle" : "inset.filled.topthird.rectangle"
+            ) {
+                withAnimation(reduceMotion ? nil : .snappy) {
+                    isExpanded.toggle()
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(palette.foreground)
+                .frame(width: width, height: Self.controlSize)
+                .contentShape(.rect)
+        }
+        .menuIndicator(.hidden)
+        .accessibilityLabel("More")
+    }
+}
+
+/// What `AgentDetailHeader` names: the Agent's task on the first line, and
+/// its harness and directory on the second.
+struct AgentDetailHeaderTitle: Equatable {
+    let title: String
+    let harness: String
+    let directory: String?
+}
+
+extension AgentDetailHeaderTitle {
+    /// The task title as the Console list shows it, the harness by its
+    /// product name rather than a custom Agent name, and the launch
+    /// directory with the Host account's home shortened to `~`.
+    init(_ agent: ConsoleAgent) {
+        self.init(
+            title: AgentTerminalView.displayTitle(for: agent),
+            harness: SupportedAgentKind(rawValue: agent.agent.kind)?.displayName
+                ?? agent.agent.kind,
+            directory: agent.displayCwd.isEmpty ? nil : agent.displayCwd)
+    }
+}
+
+/// The surface an Agent detail shows, and how to swap it, for
+/// `AgentDetailHeader`'s surface button. Main-actor isolated, and so
+/// Sendable, for the same reason as `AgentDetailHeaderAction`.
+@MainActor
+struct AgentDetailSurfaceSwitch {
+    let current: AgentDetailSurface
+    let select: (AgentDetailSurface) -> Void
+
+    /// The surface the header's button brings up.
+    var other: AgentDetailSurface {
+        switch current {
+        case .chat: .terminal
+        case .terminal: .chat
         }
     }
 }
 
-/// The surfaces an Agent detail can show, and how to swap them, for
-/// `AgentDetailHeader`'s segmented pair. Main-actor isolated, and so
-/// Sendable, for the same reason as `AgentDetailHeaderAction`.
-@MainActor
-struct AgentDetailSurfaceSwitch {
-    static let order: [AgentDetailSurface] = [.chat, .terminal]
-
-    let current: AgentDetailSurface
-    let select: (AgentDetailSurface) -> Void
-}
-
-/// One of `AgentDetailHeader`'s trailing buttons. Isolated to the main
-/// actor, which makes it Sendable: the header's `ForEach` content is
+/// One of the actions in `AgentDetailHeader`'s More menu. Isolated to the
+/// main actor, which makes it Sendable: the menu's `ForEach` content is
 /// `@Sendable` and hands each action to `MainActorContent` (#471).
 @MainActor
 struct AgentDetailHeaderAction: Identifiable {
@@ -172,21 +221,15 @@ struct AgentDetailHeaderAction: Identifiable {
 }
 
 /// An icon button inside `AgentDetailHeader`. It has no surface of its own:
-/// the header puts Back and the fold button on glass circles, and its
-/// trailing actions together on one glass capsule.
+/// the header puts it on a glass circle.
 struct AgentDetailHeaderButton: View {
     let title: LocalizedStringKey
     let systemImage: String
-    let width: CGFloat
     let action: () -> Void
 
-    init(
-        _ title: LocalizedStringKey, systemImage: String,
-        width: CGFloat = AgentDetailHeader.controlSize, action: @escaping () -> Void
-    ) {
+    init(_ title: LocalizedStringKey, systemImage: String, action: @escaping () -> Void) {
         self.title = title
         self.systemImage = systemImage
-        self.width = width
         self.action = action
     }
 
@@ -194,7 +237,7 @@ struct AgentDetailHeaderButton: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 17, weight: .semibold))
-                .frame(width: width, height: AgentDetailHeader.controlSize)
+                .frame(width: AgentDetailHeader.controlSize, height: AgentDetailHeader.controlSize)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -205,8 +248,11 @@ struct AgentDetailHeaderButton: View {
 extension View {
     /// Liquid Glass where the system has it, a blur before that. The glass
     /// sits behind the icons at part strength, so the output under the
-    /// buttons still shows through while the icons stay solid.
-    fileprivate func headerGlass(in shape: some Shape) -> some View {
+    /// buttons still shows through while the icons stay solid. Chat's
+    /// floating buttons share it at their own strength.
+    func headerGlass(
+        in shape: some Shape, opacity: Double = AgentDetailHeader.glassOpacity
+    ) -> some View {
         background {
             Group {
                 if #available(iOS 26, *) {
@@ -215,7 +261,7 @@ extension View {
                     shape.fill(.ultraThinMaterial)
                 }
             }
-            .opacity(AgentDetailHeader.glassOpacity)
+            .opacity(opacity)
         }
         .contentShape(shape)
     }

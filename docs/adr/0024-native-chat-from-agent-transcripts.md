@@ -70,18 +70,18 @@ existing adapters.
 
 ## Entry and the terminal
 
-A segmented pair sharing the detail header's fold-button capsule, shown
-whether the header is folded or not, and Show Chat and Show Agent Terminal in
-the More menu, swap the two surfaces in place. The pair keeps the switch out
-of the Agent switcher row, whose chips and keyboard buttons fill a phone's
-width. The surfaces are never mounted together. Terminal is the default, and
-a choice is remembered app-wide. Each detail copies it when it opens, so a
-choice in one window does not swap another window's screen. Chat holds no
-Attach. Switching to it releases the Agent's terminal to ADR 0017's
-retention, where the PTY keeps feeding the retained surface and nothing
-resizes it; switching back shows that terminal, or attaches again if it was
-evicted. Direct Input stays on the terminal, and ⌘E is disabled while Chat
-shows.
+A button for the surface not showing, sharing the detail header's More-menu
+capsule whether the header is folded or not, and Show Chat and Show Agent
+Terminal in the Composer's More menu, swap the two surfaces in place. The
+button keeps the switch out of the Agent switcher row, whose chips and
+keyboard buttons fill a phone's width. The surfaces are never mounted
+together. Terminal is the default, and a choice is remembered app-wide. Each
+detail copies it when it opens, so a choice in one window does not swap
+another window's screen. Chat holds no Attach. Switching to it releases the
+Agent's terminal to ADR 0017's retention, where the PTY keeps feeding the
+retained surface and nothing resizes it; switching back shows that terminal,
+or attaches again if it was evicted. Direct Input stays on the terminal, and
+⌘E is disabled while Chat shows.
 
 When Chat cannot show a conversation it says why and keeps the terminal one tap away: herdr reports no session ID, the transcript is not found or holds another session, or it is in a form Chat does not read. A missing session ID does not establish whether the integration is installed, so Chat waits for the identity and offers Check Again without an installation command. A failed Agent query appears as a read failure, preserves any messages already shown, and retries; a successful query clears only its own failure, leaving transcript read failures visible.
 

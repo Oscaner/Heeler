@@ -1107,8 +1107,10 @@ struct AgentDirectInputTests {
                 Self.firstAccessibleFrame(labeled: "Dismiss keyboard", in: controller.view))
             let enterFrame = try #require(
                 Self.firstAccessibleFrame(labeled: "Enter", in: controller.view))
+            // The detail header has a More menu too; take the row's.
             let moreFrame = try #require(
-                Self.firstAccessibleFrame(labeled: "More", in: controller.view))
+                Self.accessibleFrames(labeled: "More", in: controller.view)
+                    .first { abs($0.midY - enterFrame.midY) < enterFrame.height / 2 })
             #expect(escapeFrame.maxY <= dismissFrame.minY + 1)
             #expect(moreFrame.minX >= enterFrame.maxX)
             #expect(Self.accessibleCount(labeled: "Dismiss keyboard", in: controller.view) == 1)
@@ -2078,22 +2080,26 @@ struct AgentDirectInputTests {
     }
 
     private static func firstAccessibleFrame(labeled label: String, in root: UIView) -> CGRect? {
+        accessibleFrames(labeled: label, in: root).first
+    }
+
+    private static func accessibleFrames(labeled label: String, in root: UIView) -> [CGRect] {
         // Reuse visitAccessible so frame probes share the same container walk as
         // label lookups. Skip zero-size matches and keep searching — same rule
         // TerminalAttachTests uses for hosted SwiftUI chrome.
-        var match: CGRect?
+        var matches: [CGRect] = []
         visitAccessible(in: root) { node in
-            guard match == nil, node.accessibilityLabel == label else { return }
+            guard node.accessibilityLabel == label else { return }
             if let view = node as? UIView {
                 guard view.bounds.width > 0, view.bounds.height > 0 else { return }
-                match = view.convert(view.bounds, to: root)
+                matches.append(view.convert(view.bounds, to: root))
             } else {
                 let frame = node.accessibilityFrame
                 guard frame.width > 0, frame.height > 0 else { return }
-                match = root.convert(frame, from: nil)
+                matches.append(root.convert(frame, from: nil))
             }
         }
-        return match
+        return matches
     }
 
     private static func accessibleCount(labeled label: String, in root: UIView) -> Int {

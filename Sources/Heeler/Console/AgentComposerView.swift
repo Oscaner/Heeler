@@ -958,8 +958,7 @@ private struct AgentComposerTextEditor: UIViewRepresentable {
         guard let width = proposal.width else { return nil }
         let measured = uiView.sizeThatFits(
             CGSize(width: width, height: .greatestFiniteMagnitude))
-        let lineHeight = uiView.font?.lineHeight ?? 20
-        let maximumHeight = lineHeight * CGFloat(lineLimit)
+        let maximumHeight = uiView.draftLineHeight * CGFloat(lineLimit)
             + uiView.textContainerInset.top
             + uiView.textContainerInset.bottom
         let height = min(max(36, measured.height), maximumHeight)
@@ -1136,11 +1135,70 @@ final class AgentComposerUITextView: UITextView {
     /// back into view as the open Composer grows the view.
     override func layoutSubviews() {
         super.layoutSubviews()
+        updateEdgeFade()
         defer { laidOutHeight = bounds.height }
         guard laidOutHeight > 0, bounds.height > laidOutHeight, isFirstResponder,
               textContainer.maximumNumberOfLines == 0
         else { return }
         scrollRangeToVisible(selectedRange)
+    }
+
+    /// The height one line of the draft takes as laid out, in whichever
+    /// script it is written: Chinese falls back to a taller face than the
+    /// body font, so a limit counted in body lines cut its lines short.
+    var draftLineHeight: CGFloat {
+        guard let font else { return 20 }
+        func pitch(_ sample: String) -> CGFloat {
+            func height(_ text: String) -> CGFloat {
+                NSAttributedString(string: text, attributes: [.font: font]).boundingRect(
+                    with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil
+                ).height
+            }
+            return height(sample + "\n" + sample) - height(sample)
+        }
+        let scale = traitCollection.displayScale > 0 ? traitCollection.displayScale : 2
+        return (max(font.lineHeight, pitch("Ag"), pitch("中")) * scale).rounded(.up) / scale
+    }
+
+    /// The caret keeps the inset's padding around it, so the line it is on
+    /// never ends in the faded band at the editor's edge.
+    override func scrollRectToVisible(_ rect: CGRect, animated: Bool) {
+        let padding = UIEdgeInsets(
+            top: -textContainerInset.top, left: 0, bottom: -textContainerInset.bottom, right: 0)
+        super.scrollRectToVisible(rect.inset(by: padding), animated: animated)
+    }
+
+    private lazy var edgeFade = CAGradientLayer()
+
+    /// A draft taller than the editor fades out across the inset at the
+    /// edge it continues past, rather than a line cut off against the
+    /// Composer's border.
+    private func updateEdgeFade() {
+        let overflow = contentSize.height - bounds.height
+        let fadesTop = isScrollEnabled && overflow > 0.5 && contentOffset.y > 0.5
+        let fadesBottom = isScrollEnabled && overflow > 0.5 && contentOffset.y < overflow - 0.5
+        guard fadesTop || fadesBottom, bounds.height > 0 else {
+            if layer.mask != nil { layer.mask = nil }
+            return
+        }
+        // Clear through most of the inset, where only the next line's edge
+        // shows, and opaque just past it, where a whole line starts.
+        func stop(_ y: CGFloat) -> NSNumber { NSNumber(value: Double(min(1, max(0, y / bounds.height)))) }
+        let top = textContainerInset.top
+        let bottom = bounds.height - textContainerInset.bottom
+        let clear = UIColor.clear.cgColor
+        let opaque = UIColor.black.cgColor
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        edgeFade.frame = bounds
+        edgeFade.colors = [
+            fadesTop ? clear : opaque, fadesTop ? clear : opaque, opaque,
+            opaque, fadesBottom ? clear : opaque, fadesBottom ? clear : opaque,
+        ]
+        edgeFade.locations = [0, stop(top - 3), stop(top + 2), stop(bottom - 2), stop(bottom + 3), 1]
+        layer.mask = edgeFade
+        CATransaction.commit()
     }
 
     /// One line truncates the draft after its first line, shown from the

@@ -44,8 +44,9 @@ struct AgentChatSurfaceView: View {
     @State private var isFollowing = true
     /// The banners' height over the timeline's top edge.
     @State private var bannerHeight: CGFloat = 0
-    /// The Composer and what sits on it, over the timeline's bottom edge,
-    /// down to the screen's.
+    /// Where the Composer and what sits on it begin, in the global space,
+    /// and how far it is from there to the screen's bottom.
+    @State private var conversationBottom: CGFloat?
     @State private var bottomChromeHeight: CGFloat = 0
     @State private var surfaceHeight: CGFloat = 0
     @State private var jumpRequest = 0
@@ -66,7 +67,7 @@ struct AgentChatSurfaceView: View {
     @State private var isRenamingAgent = false
     @State private var isRenamingWorkspace = false
     @State private var closeErrorMessage: String?
-    /// The Workspace drawer's panel, while the back header's button owns it.
+    /// The Workspace drawer's panel, while the back header's menu owns it.
     @State private var isHeaderDrawerOpen = false
     /// The Background Work strip's height over the staging bar; zero while
     /// it lists nothing.
@@ -342,7 +343,7 @@ struct AgentChatSurfaceView: View {
         .overlay {
             if let workspaceDrawer {
                 let drawer = keyboardCarryingDrawer(workspaceDrawer).palette(.system)
-                // The back header's button stands in for the edge handle
+                // The back header's menu stands in for the edge handle
                 // while the header is out; folded, the handle comes back.
                 if isBackHeaderExpanded {
                     drawer.openedFromHeader(
@@ -397,7 +398,8 @@ struct AgentChatSurfaceView: View {
                 isExpanded: $isBackHeaderExpanded,
                 onBack: showsBackButton ? { dismiss() } : nil,
                 actions: backHeaderActions,
-                surfaceSwitch: AgentDetailSurfaceSwitch(current: .chat) { _ in showAgentTerminal() })
+                surfaceSwitch: AgentDetailSurfaceSwitch(current: .chat) { _ in showAgentTerminal() },
+                title: AgentDetailHeaderTitle(agent))
             .padding(.horizontal, 12)
             .padding(.top, backHeaderTop)
             .onChange(of: isBackHeaderExpanded) { _, expanded in
@@ -461,7 +463,7 @@ struct AgentChatSurfaceView: View {
                 state: timeline.state, jumpRequest: jumpRequest, followRequest: followRequest,
                 collapseRequest: collapseRequest,
                 topObstruction: topInset + headerObstruction + bannerHeight,
-                bottomObstruction: bottomChromeHeight,
+                bottomEdge: conversationBottom,
                 collapseControlClearance: collapseControlHeight + Self.floatingControlsBottomPadding,
                 textSize: ChatTextSettings.size(system: dynamicTypeSize, offset: textSizeOffset),
                 font: chatFont,
@@ -479,11 +481,6 @@ struct AgentChatSurfaceView: View {
                 }
                 .padding(.top, headerObstruction + bannerHeight)
             }
-            ChatScrollEdgeEffect(
-                edge: .bottom, height: bottomChromeHeight,
-                solid: bottomChromeHeight - Self.bottomEdgeFadeLength)
-                .frame(maxHeight: .infinity, alignment: .bottom)
-                .ignoresSafeArea(.container, edges: .bottom)
             ChatScrollEdgeEffect(edge: .top, height: topInset + headerObstruction, solid: topInset)
                 .padding(.top, -topInset)
             banners
@@ -491,6 +488,18 @@ struct AgentChatSurfaceView: View {
                 .padding(.top, headerObstruction)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Hung from the conversation's bottom edge down to the screen's, so
+        // it never sizes the conversation: as a sibling it could outgrow the
+        // room left above a raised keyboard, push the chrome down and the
+        // measured inset with it, and the two then traded places on every
+        // layout pass until the watchdog ended the app.
+        .overlay(alignment: .bottom) {
+            ChatScrollEdgeEffect(
+                edge: .bottom, height: bottomChromeHeight,
+                solid: bottomChromeHeight - Self.bottomEdgeFadeLength)
+                .alignmentGuide(.bottom) { $0[.top] }
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { conversationBottom = $0 }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { bottomChromeHeight = $0 }
     }
 
@@ -918,9 +927,11 @@ struct AgentChatSurfaceView: View {
         var actions: [AgentDetailHeaderAction] = []
         if workspaceDrawer != nil {
             actions.append(AgentDetailHeaderAction(
-                title: "Workspace Terminals", systemImage: "apple.terminal.on.rectangle"
+                title: "Terminals", systemImage: "apple.terminal.on.rectangle"
             ) {
                 withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
+                    // Folded, the menu unfolds the header the panel drops from.
+                    isBackHeaderExpanded = true
                     isHeaderDrawerOpen.toggle()
                 }
             })
