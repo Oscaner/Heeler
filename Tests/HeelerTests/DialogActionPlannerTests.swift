@@ -347,6 +347,18 @@ struct DialogActionPlannerTests {
         }
     }
 
+    @Test("Codex plans the same with the matched call's id as without it")
+    func codexPlansIgnoreAToolUseID() throws {
+        let planned: [(DialogAction, String)] = [
+            (.choose(ordinal: 1), "codex-01-x1-exec"), (.choose(ordinal: 3), "codex-01-x1-exec"),
+            (.dismiss, "codex-01-x1-exec"), (.choose(ordinal: 2), "codex-04-x3-q1"),
+            (.respond(ordinal: 3, text: "Teal"), "codex-04-x3-q1"),
+        ]
+        for (action, stem) in planned {
+            #expect(try plan(action, stem, toolUseID: "call_1") == plan(action, stem), "\(action) on \(stem)")
+        }
+    }
+
     // MARK: Oh My Pi
 
     @Test("OMP's Approve is ctrl+q alone, confirmed by leaving the panel or Blocked")

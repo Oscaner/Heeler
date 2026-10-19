@@ -220,16 +220,15 @@ final class BlockedCardStore {
     /// resend.
     func perform(_ action: DialogAction) async {
         guard progress == .ready || (action == .dismiss && canStop), case .card(let shown) = content else { return }
-        let program = program
         let requests = pendingRequests
         var answered: BlockedCard?
         let isConfirmed = await act(on: shown.dialog.fingerprint) { observation throws(DialogPlanError) in
             guard let dialog = observation.result.dialog else { throw .unsupported(Self.changedMessage) }
             let request = BlockedRequestMatch.request(for: dialog, in: requests)
             answered = BlockedCard(dialog: dialog, request: request)
-            // Claude cards and Oh My Pi questions confirm by the call's result.
-            return try DialogActionPlanner.plan(
-                action, for: dialog, toolUseID: program == .claude || program == .omp ? request?.callID : nil)
+            // Each program's planner decides whether the call's result
+            // confirms the answer.
+            return try DialogActionPlanner.plan(action, for: dialog, toolUseID: request?.callID)
         }
         if isConfirmed, let answered { record(action, on: answered) }
     }
@@ -291,7 +290,7 @@ final class BlockedCardStore {
             finish(notice: Self.changedMessage)
             return
         }
-        let toolUseID = program == .claude ? shown.request?.callID : nil
+        let toolUseID = shown.request?.callID
         await waitOutGrace(for: page)
         for index in form.questions.indices {
             let stopped =

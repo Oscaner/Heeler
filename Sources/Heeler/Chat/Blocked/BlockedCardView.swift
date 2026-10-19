@@ -474,18 +474,19 @@ extension DialogOption {
     /// 18.12's `Approve <tool> for this session` saves none and stops asking
     /// until the session ends. Recheck when a program's version changes.
     func persistenceNote(program: ChatProgram) -> String {
-        if program == .omp {
+        let folded = DialogRowScanner.comparable(label.lowercased())
+        switch program {
+        case .omp:
             let prefix = "Approve ", suffix = " for this session"
             let subject =
                 label.hasPrefix(prefix) && label.hasSuffix(suffix) && label.count > prefix.count + suffix.count
                 ? String(label.dropFirst(prefix.count).dropLast(suffix.count)) : "this tool"
             return "Oh My Pi won't ask again for \(subject) in this session."
-        }
-        let folded = DialogRowScanner.comparable(label.lowercased())
-        if program == .claude, folded.contains(DialogRowScanner.comparable("always allow access to")) {
+        case .claude where folded.contains(DialogRowScanner.comparable("always allow access to")):
             return "Lets Claude work in this folder for the session."
+        case .claude, .codex, .pi:
+            return "Saves a rule, so this isn't asked again."
         }
-        return "Saves a rule, so this isn't asked again."
     }
 }
 

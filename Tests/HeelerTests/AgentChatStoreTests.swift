@@ -113,6 +113,26 @@ struct AgentChatStoreTests {
         store.conversation.transcript.entries.map(\.id.rawValue)
     }
 
+    /// A Claude Code or Codex store following lines 0..<2 of its transcript
+    /// while herdr reports the Agent idle, with the session and the path.
+    private static func followed(
+        _ program: ChatProgram, screen: BlockedScreenIO
+    ) async -> (fixture: Fixture, session: String, path: String) {
+        var session = first
+        var transcript = Self.path(first)
+        var header = ""
+        if program == .codex {
+            session = "01a10f87-e025-7fb1-8974-8dd09937767a"
+            transcript = "/home/dev/.codex/sessions/2026/10/06/rollout-2026-10-06T12-45-25-\(session).jsonl"
+            header = #"{"type":"session_meta","payload":{"id":"\#(session)"}}"# + "\n"
+        }
+        let fixture = Fixture(session: session, program: program, screen: screen)
+        await fixture.files.write(header + NumberedChatReducer.lines(0..<2), at: transcript)
+        await fixture.store.step()
+        #expect(fixture.store.conversation.phase == .following(path: transcript))
+        return (fixture, session, transcript)
+    }
+
     // MARK: Background work
 
     private static let journal =
@@ -1714,6 +1734,31 @@ struct AgentChatStoreTests {
         #expect(store.sendStatuses[id] == .overdue)
     }
 
+    /// Only Pi's and Oh My Pi's Esc is known to hand steers back: a send
+    /// Claude Code or Codex left overdue when its turn ended is never looked
+    /// for on the screen, where the same steps read Pi's once
+    /// (`aSteerStopPutBackInTheEditorIsReturnedUntilRecorded()`).
+    @Test(arguments: [ChatProgram.claude, .codex])
+    func aSendLeftOverdueAfterStopIsNotLookedForOnTheScreen(program: ChatProgram) async throws {
+        let pane = Pane(try ScreenFixture.screen("pi-36-steer-back-in-editor"))
+        let (fixture, session, _) = await Self.followed(program, screen: pane.io)
+        fixture.store.agentDidChange(Self.agent(session: session, status: .working, program: program))
+        let id = UUID()
+        fixture.store.updateSends([Self.sent(id, "hello ", delivered: false)])
+        fixture.store.updateSends([Self.sent(id, "hello ")])
+        fixture.advance(10)
+        await fixture.store.step()
+        #expect(fixture.store.sendStatuses[id] == .overdue)
+
+        fixture.store.agentDidChange(Self.agent(session: session, status: .idle, program: program))
+        fixture.advance(1)
+        await fixture.store.step()
+        await fixture.store.step()
+
+        #expect(await pane.reads == 0)
+        #expect(fixture.store.sendStatuses[id] == .overdue)
+    }
+
     // MARK: Refused compactions
 
     /// A Pi or Oh My Pi store holding one recorded prompt, with `/compact`
@@ -1917,13 +1962,12 @@ struct AgentChatStoreTests {
         #expect(store.sendStatuses[first] == .abandoned)
     }
 
-    /// Only Pi and Oh My Pi are known to refuse on screen: Claude's
-    /// overdue `/compact` stays overdue without a read.
-    @Test func aClaudeCompactIsNotLookedForOnTheScreen() async throws {
+    /// Only Pi and Oh My Pi are known to refuse on screen: Claude Code's
+    /// and Codex's overdue `/compact` stays overdue without a read.
+    @Test(arguments: [ChatProgram.claude, .codex])
+    func anOverdueCompactIsNotLookedForOnTheScreen(program: ChatProgram) async throws {
         let pane = Pane(try ScreenFixture.screen("pi-41-compact-nothing"))
-        let fixture = Fixture(session: Self.first, screen: pane.io)
-        await fixture.files.write(NumberedChatReducer.lines(0..<2), at: Self.path(Self.first))
-        await fixture.store.step()
+        let (fixture, _, _) = await Self.followed(program, screen: pane.io)
         let id = UUID()
         fixture.store.updateSends([Self.sent(id, "/compact", delivered: false)])
         fixture.store.updateSends([Self.sent(id, "/compact")])
@@ -1933,6 +1977,26 @@ struct AgentChatStoreTests {
         await fixture.store.step()
 
         #expect(await pane.reads == 0)
+        #expect(fixture.store.sendStatuses[id] == .overdue)
+    }
+
+    /// Only Pi and Oh My Pi are known to record a compaction before the
+    /// next prompt: a Claude Code or Codex `/compact` that a later prompt
+    /// overtook with no compaction stays overdue, where Pi's is abandoned
+    /// (`anOverdueCompactIsLookedForOnce()`).
+    @Test(arguments: [ChatProgram.claude, .codex])
+    func anOvertakenCompactWithoutACompactionStaysOverdue(program: ChatProgram) async throws {
+        let (fixture, _, path) = await Self.followed(program, screen: .unavailable)
+        let id = UUID()
+        fixture.store.updateSends([Self.sent(id, "/compact", delivered: false)])
+        fixture.store.updateSends([Self.sent(id, "/compact")])
+        fixture.advance(10)
+        await fixture.store.step()
+        #expect(fixture.store.sendStatuses[id] == .overdue)
+
+        await fixture.files.append(NumberedChatReducer.prompt("say PLUM"), to: path)
+        await fixture.store.step()
+
         #expect(fixture.store.sendStatuses[id] == .overdue)
     }
 

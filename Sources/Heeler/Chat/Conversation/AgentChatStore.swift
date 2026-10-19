@@ -998,8 +998,8 @@ final class AgentChatStore {
             } else if let refusal = refusedSends[send.id] {
                 statuses[send.id] =
                     send.generation == conversationGeneration && !isOvertaken ? .refused(refusal) : .abandoned
-            } else if send.key == "/compact", program == .pi || program == .omp, isOvertaken {
-                // Pi and Oh My Pi record a compaction before the next prompt,
+            } else if send.key == "/compact", program.recordsCompactionBeforeNextPrompt, isOvertaken {
+                // The program records a compaction before the next prompt,
                 // and a refused one nowhere: with a prompt after it and no
                 // compaction, it never ran, whatever the screen read found.
                 statuses[send.id] = .abandoned
@@ -1031,10 +1031,10 @@ final class AgentChatStore {
     /// not (a Stop right after a steer ends the turn inside the echo
     /// timeout, and the user may add to the box before it runs out), and
     /// for the sends already found there, which the user may have sent or
-    /// cleared in the terminal since. Only Pi's and Oh My Pi's Esc is known
-    /// to hand steers back.
+    /// cleared in the terminal since. Only programs whose Stop is known to
+    /// hand steers back opt in (`ChatProgram.stopReturnsUntakenSends`).
     private func checkReturnedSends() async {
-        guard program == .pi || program == .omp, let idleSince,
+        guard program.stopReturnsUntakenSends, let idleSince,
             now().timeIntervalSince(idleSince) >= timing.returnCheckDelay
         else { return }
         let candidates = sends.filter { send in
@@ -1063,11 +1063,12 @@ final class AgentChatStore {
         observeInputBox(InputBoxStateDetector.detect(screen, program: program), for: ids)
     }
 
-    /// Whether a Pi or Oh My Pi `/compact` past its echo timeout still
-    /// waits: until the screen has been read for it while the Agent is
-    /// idle, or while the compaction last seen running there is recent.
+    /// Whether a `/compact` past its echo timeout still waits, in a program
+    /// that declines one only on screen: until the screen has been read for
+    /// it while the Agent is idle, or while the compaction last seen running
+    /// there is recent.
     private func awaitsCompaction(_ send: TrackedSend, at date: Date) -> Bool {
-        guard program == .pi || program == .omp, send.key == "/compact" else { return false }
+        guard program.declinesCompactOnScreen, send.key == "/compact" else { return false }
         if let seen = compactingSeen[send.id] { return date.timeIntervalSince(seen) < timing.echoTimeout }
         return !compactChecked.contains(send.id) && ChatAgentActivity(agent.status) == .idle
     }
@@ -1084,7 +1085,7 @@ final class AgentChatStore {
     /// and once it is gone the echo waits the echo timeout from the last
     /// read that saw it, for the compaction's record.
     private func checkRefusedCompactions() async {
-        guard program == .pi || program == .omp, ChatAgentActivity(agent.status) == .idle else { return }
+        guard program.declinesCompactOnScreen, ChatAgentActivity(agent.status) == .idle else { return }
         let date = now()
         let candidates = sends.filter { send in
             guard send.key == "/compact", !compactChecked.contains(send.id), let deliveredAt = send.deliveredAt,
@@ -1151,7 +1152,7 @@ final class AgentChatStore {
     /// check before a send: a returned send it no longer finds in the input
     /// box is discarded. It never finds new ones.
     func inputBoxWasRead(_ screen: ANSIScreen) {
-        guard program == .pi || program == .omp, !returnedSends.isEmpty else { return }
+        guard program.stopReturnsUntakenSends, !returnedSends.isEmpty else { return }
         observeInputBox(InputBoxStateDetector.detect(screen, program: program), for: returnedSends)
     }
 
@@ -1238,6 +1239,40 @@ extension ChatAgentActivity {
         case .working: self = .working
         case .blocked: self = .blocked
         default: self = .unknown
+        }
+    }
+}
+
+extension ChatProgram {
+    /// Whether Stop puts the steers its turn had not taken back into the
+    /// input box, unrecorded (Pi's and Oh My Pi's Esc). Opting in reads
+    /// the screen once the Agent idles, for the sends delivered while that
+    /// turn ran, never the turn's opener.
+    var stopReturnsUntakenSends: Bool {
+        switch self {
+        case .pi, .omp: true
+        case .claude, .codex: false
+        }
+    }
+
+    /// Whether an accepted `/compact` is always recorded before the next
+    /// prompt, so one a later prompt overtook with no compaction never ran
+    /// (Pi 0.85.1, Oh My Pi 18.11).
+    var recordsCompactionBeforeNextPrompt: Bool {
+        switch self {
+        case .pi, .omp: true
+        case .claude, .codex: false
+        }
+    }
+
+    /// Whether a declined `/compact` shows only on screen, so an overdue
+    /// one is looked for there while the Agent idles (Pi 0.85.1,
+    /// Oh My Pi 18.11). Opting in also needs the program's rows in
+    /// `showsRunningCompaction` and `latestCompactionFailure`.
+    var declinesCompactOnScreen: Bool {
+        switch self {
+        case .pi, .omp: true
+        case .claude, .codex: false
         }
     }
 }

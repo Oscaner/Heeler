@@ -9,9 +9,10 @@ import Foundation
 /// in the terminal stops every plan that would send keys past it, since
 /// Heeler never clears it.
 enum DialogActionPlanner {
-    /// - Parameter toolUseID: The matched request's `tool_use` id, which
-    ///   lets a Claude card or an Oh My Pi question confirm by the request's
-    ///   result.
+    /// - Parameter toolUseID: The matched request's `tool_use` id. Each
+    ///   program's planner decides what it is for: a Claude card or an
+    ///   Oh My Pi question confirms by the request's result, and Codex
+    ///   ignores it.
     static func plan(
         _ action: DialogAction, for dialog: BlockedDialog, toolUseID: String? = nil
     ) throws(DialogPlanError) -> DialogActionPlan {
