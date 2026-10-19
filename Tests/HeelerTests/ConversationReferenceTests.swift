@@ -78,12 +78,15 @@ struct ConversationReferenceTests {
         }
     }
 
+    /// Only Pi and Oh My Pi report transcript paths. A path from any other
+    /// program, Claude Code and Codex included, is a kind Chat cannot read.
     @Test func transcriptPathsBindOnlyForProgramsThatReportThem() {
         let path = "/home/dev/sessions/s.jsonl"
+        let reportingPaths: Set<ChatProgram> = [.pi, .omp]
         for program in ChatProgram.allCases {
             let naming = program.sessionNaming
             let expected: ConversationReference.Resolution =
-                naming.acceptsTranscriptPath
+                reportingPaths.contains(program)
                 ? .bound(ConversationReference(program: program, sessionID: path)) : .unsupported
             #expect(
                 ConversationReference.resolve(
