@@ -305,4 +305,52 @@ struct TranscriptFollowerTests {
 
         #expect(try await follower.loadOlder(files.hostFiles()) == .rewritten)
     }
+
+    @Test func aFollowerReadsAnOutputLineByOffsetAndLength() async throws {
+        let (follower, files, opened) = try await Self.makeFollower(Self.lines(0..<4))
+        let line = try #require(opened.dropFirst().first)
+        let reference = ChatOutputReference(offset: line.offset, length: line.length)
+
+        #expect(try await follower.line(at: reference, files: files.hostFiles()) == line)
+        // The file ends before the length.
+        #expect(try await follower.line(at: ChatOutputReference(offset: 24, length: 16), files: files.hostFiles()) == nil)
+
+        // A reference may name another file.
+        let other = "/home/dev/.claude/projects/-k/other.jsonl"
+        await files.write(Self.lines(7..<8), at: other)
+        #expect(
+            try await follower.line(at: ChatOutputReference(path: other, offset: 0, length: 7), files: files.hostFiles())
+                == ChatLine(offset: 0, data: Data(#"{"n":7}"#.utf8)))
+
+        await files.remove(Self.path)
+        #expect(try await follower.line(at: reference, files: files.hostFiles()) == nil)
+    }
+
+    @Test func aFollowerSearchIsSpentAfterItsLimit() async throws {
+        var limits = Self.limits
+        limits.olderSearch = 48
+        let files = VirtualHostFiles()
+        await files.write(Self.lines(0..<40), at: Self.path)
+        var follower = TranscriptFollower(path: Self.path, limits: limits)
+        _ = try await follower.open(files.hostFiles())
+        #expect(follower.olderPageLengths.first == limits.olderPage)
+        #expect(follower.olderPageLengths.maximum == limits.olderSearchPage)
+        // No request has begun.
+        #expect(!follower.olderSearchExhausted)
+
+        follower.beginOlderSearch()
+        let start = try #require(follower.windowStart)
+        var pages = 0
+        while !follower.olderSearchExhausted, follower.hasOlder {
+            _ = try await follower.loadOlder(files.hostFiles(), length: 16)
+            pages += 1
+        }
+
+        #expect(pages > 1)
+        #expect(start - (follower.windowStart ?? 0) >= 48)
+
+        // The next request measures from where the window is now.
+        follower.beginOlderSearch()
+        #expect(!follower.olderSearchExhausted)
+    }
 }
