@@ -744,7 +744,7 @@ struct AgentChatSurfaceView: View {
     /// would arrive.
     private var stopInterrupt: AgentComposerInterrupt {
         .escape { [agentKeys] in
-            await agentKeys.deliver(.escape)
+            await agentKeys.deliver(["esc"]) == .sent
                 ? .sent : .failed("Couldn't reach the Agent, so it may still be working.")
         }
     }
