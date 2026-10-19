@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// Floating controls over an Agent or terminal. Separate glass pieces float
-/// over the terminal: Back at the leading end and, at the far end, a More
-/// menu that stays put. The room between them is left to the terminal, and
-/// folding leaves only the menu, so the header can cover almost no output.
+/// over the terminal: Back at the leading end, the Agent's title beside it,
+/// and at the far end a More menu that stays put. The room between them is
+/// left to the terminal, and folding leaves only the menu, so the header can
+/// cover almost no output.
 ///
 /// Back is the way out of a detail pushed over the list, on an iPhone or in
 /// a compact iPad window, which the edge swipe alone never showed (#396).
@@ -43,6 +44,8 @@ struct AgentDetailHeader: View {
     var actions: [AgentDetailHeaderAction] = []
     /// Nil for a screen with one surface, such as a shell terminal.
     var surfaceSwitch: AgentDetailSurfaceSwitch?
+    /// Nil for a screen that names nothing, such as a shell terminal.
+    var title: AgentDetailHeaderTitle?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.displayScale) private var displayScale
@@ -53,6 +56,11 @@ struct AgentDetailHeader: View {
                 AgentDetailHeaderButton("Back", systemImage: "chevron.left", action: onBack)
                     .headerGlass(in: .circle)
                     .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
+            if isExpanded, let title {
+                titlePill(title)
+                    .transition(
+                        .scale(scale: 0.6, anchor: .leading).combined(with: .opacity))
             }
             Spacer(minLength: 0)
             if let surfaceSwitch {
@@ -73,6 +81,37 @@ struct AgentDetailHeader: View {
             }
         }
         .foregroundStyle(palette.foreground)
+    }
+
+    /// Hugs a short title and gives way to the trailing capsule, truncating
+    /// the title at its end and the directory at its start, so the folder
+    /// the Agent works in stays readable. Text needs more cover than the
+    /// buttons' bold glyphs, so the glass sits on a wash of the background.
+    private func titlePill(_ title: AgentDetailHeaderTitle) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title.title)
+                .font(.system(size: 15, weight: .semibold))
+                .lineLimit(1)
+            HStack(spacing: 4) {
+                Text(title.harness)
+                    .layoutPriority(1)
+                if let directory = title.directory {
+                    Text(verbatim: "·")
+                        .layoutPriority(1)
+                    Text(directory)
+                        .truncationMode(.head)
+                }
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(palette.foreground.opacity(0.6))
+            .lineLimit(1)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: Self.controlSize)
+        .background(palette.background.opacity(0.9), in: .capsule)
+        .headerGlass(in: .capsule)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 
     /// Swaps to the surface not showing, drawn with that surface's glyph.
@@ -129,6 +168,27 @@ struct AgentDetailHeader: View {
         }
         .menuIndicator(.hidden)
         .accessibilityLabel("More")
+    }
+}
+
+/// What `AgentDetailHeader` names: the Agent's task on the first line, and
+/// its harness and directory on the second.
+struct AgentDetailHeaderTitle: Equatable {
+    let title: String
+    let harness: String
+    let directory: String?
+}
+
+extension AgentDetailHeaderTitle {
+    /// The task title as the Console list shows it, the harness by its
+    /// product name rather than a custom Agent name, and the launch
+    /// directory with the Host account's home shortened to `~`.
+    init(_ agent: ConsoleAgent) {
+        self.init(
+            title: AgentTerminalView.displayTitle(for: agent),
+            harness: SupportedAgentKind(rawValue: agent.agent.kind)?.displayName
+                ?? agent.agent.kind,
+            directory: agent.displayCwd.isEmpty ? nil : agent.displayCwd)
     }
 }
 

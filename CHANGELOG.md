@@ -13,6 +13,8 @@ Entries reference the pull request that made the change.
   CentOS Stream, AlmaLinux and Rocky Linux, how to confirm it from the audit
   log, and the small policy module that allows it, in English or Simplified
   Chinese. (#477)
+- See the Agent's task title in the detail header, with its harness and
+  working directory on a second line.
 
 ### Changed
 

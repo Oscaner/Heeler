@@ -1106,7 +1106,8 @@ struct AgentTerminalView: View {
                 isExpanded: $isBackHeaderExpanded,
                 onBack: showsBackButton ? { dismiss() } : nil,
                 actions: backHeaderActions,
-                surfaceSwitch: chatSurfaceSwitch)
+                surfaceSwitch: chatSurfaceSwitch,
+                title: AgentDetailHeaderTitle(agent))
             .environment(
                 \.colorScheme,
                 terminal.themes.selection(for: colorScheme).chromeColorScheme(for: colorScheme))

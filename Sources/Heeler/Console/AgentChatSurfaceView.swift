@@ -397,7 +397,8 @@ struct AgentChatSurfaceView: View {
                 isExpanded: $isBackHeaderExpanded,
                 onBack: showsBackButton ? { dismiss() } : nil,
                 actions: backHeaderActions,
-                surfaceSwitch: AgentDetailSurfaceSwitch(current: .chat) { _ in showAgentTerminal() })
+                surfaceSwitch: AgentDetailSurfaceSwitch(current: .chat) { _ in showAgentTerminal() },
+                title: AgentDetailHeaderTitle(agent))
             .padding(.horizontal, 12)
             .padding(.top, backHeaderTop)
             .onChange(of: isBackHeaderExpanded) { _, expanded in
