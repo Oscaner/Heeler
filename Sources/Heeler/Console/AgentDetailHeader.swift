@@ -21,7 +21,7 @@ import SwiftUI
 struct AgentDetailHeader: View {
     static let controlSize: CGFloat = 44
     /// How much of the glass shows, the rest letting output through.
-    fileprivate static let glassOpacity: Double = 0.8
+    static let glassOpacity: Double = 0.8
     /// Buttons sharing a capsule sit closer than standalone ones.
     private static let capsuleButtonWidth: CGFloat = 36
     private static let capsuleInset: CGFloat = (controlSize - capsuleButtonWidth) / 2
@@ -248,8 +248,11 @@ struct AgentDetailHeaderButton: View {
 extension View {
     /// Liquid Glass where the system has it, a blur before that. The glass
     /// sits behind the icons at part strength, so the output under the
-    /// buttons still shows through while the icons stay solid.
-    fileprivate func headerGlass(in shape: some Shape) -> some View {
+    /// buttons still shows through while the icons stay solid. Chat's
+    /// floating buttons share it at their own strength.
+    func headerGlass(
+        in shape: some Shape, opacity: Double = AgentDetailHeader.glassOpacity
+    ) -> some View {
         background {
             Group {
                 if #available(iOS 26, *) {
@@ -258,7 +261,7 @@ extension View {
                     shape.fill(.ultraThinMaterial)
                 }
             }
-            .opacity(AgentDetailHeader.glassOpacity)
+            .opacity(opacity)
         }
         .contentShape(shape)
     }

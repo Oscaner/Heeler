@@ -23,6 +23,8 @@ Entries reference the pull request that made the change.
 - The detail header's Workspace Terminals, Changes and Hide Header buttons
   move into a More menu at its trailing end, as Terminals, Changes and
   Collapse, so the header covers less output.
+- Chat's Collapse Steps and Jump to Latest buttons are glass icons like the
+  detail header's, and Collapse Steps uses a clearer collapse glyph.
 
 ## [0.1.15] - 2026-10-19
 
