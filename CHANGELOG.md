@@ -19,8 +19,8 @@ Entries reference the pull request that made the change.
 - The Agent detail header shows one button for the surface not on screen,
   Chat or the Agent terminal, instead of a two-segment switch.
 - The detail header's Workspace Terminals, Changes and Hide Header buttons
-  move into a More menu at its trailing end, so the header covers less
-  output.
+  move into a More menu at its trailing end, as Terminals, Changes and
+  Collapse, so the header covers less output.
 
 ## [0.1.15] - 2026-10-19
 

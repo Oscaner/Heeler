@@ -1166,7 +1166,7 @@ struct AgentTerminalView: View {
         var actions: [AgentDetailHeaderAction] = []
         if workspaceDrawer != nil {
             actions.append(AgentDetailHeaderAction(
-                title: "Workspace Terminals", systemImage: "apple.terminal.on.rectangle"
+                title: "Terminals", systemImage: "apple.terminal.on.rectangle"
             ) {
                 withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
                     // Folded, the menu unfolds the header the panel drops from.

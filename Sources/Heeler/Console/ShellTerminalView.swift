@@ -388,7 +388,7 @@ struct ShellTerminalView: View {
 
     private var backHeaderActions: [AgentDetailHeaderAction] {
         guard workspaceDrawer != nil else { return [] }
-        return [AgentDetailHeaderAction(title: "Workspace Terminals", systemImage: "apple.terminal.on.rectangle") {
+        return [AgentDetailHeaderAction(title: "Terminals", systemImage: "apple.terminal.on.rectangle") {
             withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
                 // Folded, the menu unfolds the header the panel drops from.
                 isBackHeaderExpanded = true

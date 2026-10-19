@@ -11,8 +11,8 @@ import SwiftUI
 /// keeps only its menu.
 ///
 /// The menu holds the screen's actions and the item that folds or unfolds
-/// the header. Actions are plain values rather than views, so a screen can
-/// leave out the ones it cannot offer.
+/// the header, each titled in one word. Actions are plain values rather than
+/// views, so a screen can leave out the ones it cannot offer.
 ///
 /// An Agent that has Chat also shows a button for the surface it is not
 /// showing, Chat or its terminal, sharing the menu's capsule in both states,
@@ -109,11 +109,8 @@ struct AgentDetailHeader: View {
                     Button(action.title, systemImage: action.systemImage, action: action.perform)
                 }
             }
-            if !actions.isEmpty {
-                Divider()
-            }
             Button(
-                isExpanded ? "Hide Header" : "Show Header",
+                isExpanded ? "Collapse" : "Expand",
                 // A window's top bar, which is what this shows and hides: put
                 // away while it is out, filled in while it is folded.
                 systemImage: isExpanded
