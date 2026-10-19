@@ -10,7 +10,8 @@ import Foundation
 /// prefetched, so its `ChatProgram` case can land before its adapter.
 enum AgentChatAvailability {
     /// Whether Chat can read the program's transcript: the lookup both checks
-    /// use unless a test passes its own.
+    /// use unless the caller passes its own, as `ConsoleStore` does with the
+    /// adapters it was given.
     static func hasStandardAdapter(_ program: ChatProgram) -> Bool {
         ChatTranscriptAdapter.standard(for: program) != nil
     }
