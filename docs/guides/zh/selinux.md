@@ -29,7 +29,7 @@ ss -xl | grep herdr.sock
 journalctl --since "10 min ago" | grep -i 'avc.*herdr.sock'
 ```
 
-匹配的记录类似下面这样：
+在 Fedora 44 上，匹配的记录类似下面这样：
 
 ```text
 avc: denied { write } for comm="sshd-session" name="herdr.sock"
@@ -38,17 +38,31 @@ avc: denied { write } for comm="sshd-session" name="herdr.sock"
 sshd-session: error: connect to /home/<user>/.config/herdr/herdr.sock port -2 failed: Permission denied
 ```
 
+在所有发行版上，目标类型都是 `config_home_t`，类别都是 `sock_file`；但 `scontext` 中的源域并不相同：Fedora 和 RHEL 10 报告 `sshd_session_t`，而 RHEL 9 及其衍生版本使用的是更早的策略，并未定义该类型。请不要照搬本指南里的域，而应以你日志中实际出现的拒绝为准，参见[放行](#放行)。
+
 ## 原因
 
 Heeler 不会通过执行 shell 命令来访问 herdr，而是请求 SSH 建立 **direct-streamlocal** 通道，因此由 `sshd` 自身对 herdr 的 socket 调用 `connect()`：默认会话使用 `~/.config/herdr/herdr.sock`，命名会话使用 `~/.config/herdr/sessions/<name>/herdr.sock`。
 
-该 sshd 工作进程运行在 `sshd_session_t` 域中。Fedora 的 targeted 策略允许它连接标记为 `user_tmp_t`（例如 `/run/user/<uid>`）和 `ssh_home_t` 的 socket，但 `~/.config` 下的文件标记为 `config_home_t`，而没有规则允许 `sshd_session_t` 写入该 socket。连接 Unix socket 需要对 socket 文件具有 `write` 权限，因此内核拒绝了该操作。
+该 sshd 工作进程只能连接其 SELinux 域被允许写入的 socket。`~/.config` 下的文件标记为 `config_home_t`，而 targeted 策略没有授予 SSH 会话对这类 socket 的写入权限。连接 Unix socket 需要对 socket 文件具有 `write` 权限，因此内核拒绝了该操作。
 
 这不是文件权限问题。socket 的所有者与 SSH 会话登录的账户相同，因此登录和其他所有 SSH 请求都能成功，只有打开 socket 这一步失败。
 
 ## 放行
 
-安装一个小的本地策略模块，允许 `sshd_session_t` 写入标记为 `config_home_t` 的 socket。它不会禁用 SELinux，也不会授予 shell 访问权限：SSH 会话仍然需要相同的账户和文件权限。
+最可靠的做法是让 `audit2allow` 根据你自己审计日志中的拒绝记录生成策略模块。它会从 AVC 中读取源域，因此同一组命令在 Fedora、RHEL 9、RHEL 10 及其衍生版本上都能使用。
+
+```bash
+sudo dnf install policycoreutils-python-utils
+sudo ausearch -m AVC -ts recent | sudo audit2allow -M herdr_sshd_streamlocal
+sudo semodule -i herdr_sshd_streamlocal.pp
+```
+
+执行完成后，在 Heeler 中重新运行连接检查。
+
+### 仅适用于 Fedora 和 RHEL 10：手动编写模块
+
+如果你不想安装 `policycoreutils-python-utils`，也可以显式编写模块。下面这个版本使用了 `sshd_session_t`，该类型存在于 Fedora 和 RHEL 10，但在 RHEL 9 及其衍生版本中不存在，安装时会报错 `type sshd_session_t is not defined`。在这些系统上请改用上面的 `audit2allow` 方式。
 
 ```bash
 sudo dnf install checkpolicy policycoreutils
@@ -71,15 +85,7 @@ semodule_package -o herdr-sshd-selinux.pp -m herdr-sshd-selinux.mod
 sudo semodule -i herdr-sshd-selinux.pp
 ```
 
-如果系统里有 `audit2allow`，也可以直接从拒绝记录生成同一条规则：
-
-```bash
-sudo dnf install policycoreutils-python-utils
-sudo ausearch -m AVC -ts recent | sudo audit2allow -M herdr_sshd_streamlocal
-sudo semodule -i herdr_sshd_streamlocal.pp
-```
-
-执行上述任一方案后，在 Heeler 中重新运行连接检查。
+这两种模块都不会禁用 SELinux，也不会授予 shell 访问权限：SSH 会话仍然需要相同的账户和文件权限。
 
 ## 验证
 

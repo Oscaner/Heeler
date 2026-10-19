@@ -33,7 +33,7 @@ a recent denial:
 journalctl --since "10 min ago" | grep -i 'avc.*herdr.sock'
 ```
 
-A matching entry looks like this:
+On Fedora 44 a matching entry looks like this:
 
 ```text
 avc: denied { write } for comm="sshd-session" name="herdr.sock"
@@ -42,6 +42,12 @@ avc: denied { write } for comm="sshd-session" name="herdr.sock"
 sshd-session: error: connect to /home/<user>/.config/herdr/herdr.sock port -2 failed: Permission denied
 ```
 
+The target is `config_home_t` and the class is `sock_file` on every distribution.
+The source domain in `scontext` is not: Fedora and RHEL 10 report
+`sshd_session_t`, while RHEL 9 and its rebuilds ship an older policy that does
+not define that type. Do not copy a domain out of this guide; let the denial in
+your own log name it, and see [Allow it](#allow-it).
+
 ## Why this happens
 
 Heeler does not run a shell command to reach herdr. It asks SSH for a
@@ -49,11 +55,10 @@ Heeler does not run a shell command to reach herdr. It asks SSH for a
 socket: `~/.config/herdr/herdr.sock` for the default session, or
 `~/.config/herdr/sessions/<name>/herdr.sock` for a named one.
 
-That sshd worker runs in the `sshd_session_t` domain. Fedora's targeted policy
-lets it connect to sockets labelled `user_tmp_t` (such as `/run/user/<uid>`) and
-`ssh_home_t`, but files under `~/.config` are labelled `config_home_t`, and no
-rule allows `sshd_session_t` to write that socket. Connecting to a Unix socket
-requires `write` on the socket file, so the kernel denies it.
+That sshd worker can only connect to sockets its SELinux domain is allowed to
+write. Files under `~/.config` are labelled `config_home_t`, and the targeted
+policy grants the SSH session no write access to those sockets. Connecting to a
+Unix socket needs `write` on the socket file, so the kernel denies it.
 
 This is not a file-permission problem. The socket is owned by the same account
 the SSH session signs in as, which is why the login and every other SSH request
@@ -61,9 +66,24 @@ succeed and only the socket open fails.
 
 ## Allow it
 
-Install a small local policy module that allows `sshd_session_t` to write
-sockets labelled `config_home_t`. It does not disable SELinux or grant shell
-access: the SSH session still needs the same account and file permissions.
+The reliable fix is to let `audit2allow` turn the denial in your own audit log
+into a policy module. It reads the source domain out of the AVC, so the same
+commands work on Fedora, RHEL 9, RHEL 10, and their rebuilds.
+
+```bash
+sudo dnf install policycoreutils-python-utils
+sudo ausearch -m AVC -ts recent | sudo audit2allow -M herdr_sshd_streamlocal
+sudo semodule -i herdr_sshd_streamlocal.pp
+```
+
+Run the connection checks in Heeler again afterwards.
+
+### Fedora and RHEL 10 only: write the module by hand
+
+If you would rather not install `policycoreutils-python-utils`, write the module
+explicitly. This version names `sshd_session_t`, which exists in Fedora and RHEL
+10 but not in RHEL 9 or its rebuilds, where it fails to install with
+`type sshd_session_t is not defined`. Use the `audit2allow` path there instead.
 
 ```bash
 sudo dnf install checkpolicy policycoreutils
@@ -86,16 +106,8 @@ semodule_package -o herdr-sshd-selinux.pp -m herdr-sshd-selinux.mod
 sudo semodule -i herdr-sshd-selinux.pp
 ```
 
-If `audit2allow` is available, it can generate the same rule from the denial
-instead:
-
-```bash
-sudo dnf install policycoreutils-python-utils
-sudo ausearch -m AVC -ts recent | sudo audit2allow -M herdr_sshd_streamlocal
-sudo semodule -i herdr_sshd_streamlocal.pp
-```
-
-Run the connection checks in Heeler again after either command.
+Neither module disables SELinux or grants shell access: the SSH session still
+needs the same account and file permissions.
 
 ## Verify
 
