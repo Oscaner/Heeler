@@ -14,9 +14,9 @@ import SwiftUI
 /// Trailing actions are plain values rather than views, so a screen can
 /// leave out the ones it cannot offer and the capsule goes with the last.
 ///
-/// An Agent that has Chat also shows its Chat and terminal surfaces as a
-/// segmented pair, sharing the fold button's capsule in both states, so the
-/// surface stays one tap away while the header is folded.
+/// An Agent that has Chat also shows a button for the surface it is not
+/// showing, Chat or its terminal, sharing the fold button's capsule in both
+/// states, so the other surface stays one tap away while the header is folded.
 struct AgentDetailHeader: View {
     static let controlSize: CGFloat = 44
     /// How much of the glass shows, the rest letting output through.
@@ -73,9 +73,7 @@ struct AgentDetailHeader: View {
             }
             if let surfaceSwitch {
                 HStack(spacing: 0) {
-                    ForEach(AgentDetailSurfaceSwitch.order, id: \.self) { @Sendable surface in
-                        MainActorContent { surfaceButton(surface, in: surfaceSwitch) }
-                    }
+                    surfaceButton(surfaceSwitch)
                     Rectangle()
                         .fill(palette.foreground.opacity(0.25))
                         .frame(width: 1 / max(displayScale, 1), height: 20)
@@ -93,38 +91,25 @@ struct AgentDetailHeader: View {
         .foregroundStyle(palette.foreground)
     }
 
-    /// The current surface reads as selected: filled, its glyph knocked out.
-    private func surfaceButton(_ surface: AgentDetailSurface, in control: AgentDetailSurfaceSwitch) -> some View {
-        let isSelected = surface == control.current
+    /// Swaps to the surface not showing, drawn with that surface's glyph.
+    private func surfaceButton(_ control: AgentDetailSurfaceSwitch) -> some View {
+        let target = control.other
         return Button {
-            guard !isSelected else { return }
-            control.select(surface)
+            control.select(target)
         } label: {
-            Image(systemName: surface.showSystemImage)
-                .font(.system(size: Self.segmentPointSize(surface), weight: .semibold))
-                .foregroundStyle(isSelected ? palette.background : palette.foreground)
-                .frame(width: Self.capsuleButtonWidth + 4, height: Self.selectedSegmentHeight)
-                .background {
-                    if isSelected {
-                        Capsule().fill(palette.foreground)
-                    }
-                }
-                .frame(height: Self.controlSize)
+            Image(systemName: target.showSystemImage)
+                .font(.system(size: Self.surfacePointSize(target), weight: .semibold))
+                .frame(width: Self.capsuleButtonWidth, height: Self.controlSize)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(surface.segmentTitle)
-        .accessibilityHint(isSelected ? "" : surface.showAccessibilityHint)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityLabel(target.showTitle)
+        .accessibilityHint(target.showAccessibilityHint)
     }
 
-    /// Concentric with the capsule, which insets its buttons by the same
-    /// amount on every side.
-    private static let selectedSegmentHeight: CGFloat = controlSize - 2 * capsuleInset
-
     /// The two-bubble glyph draws wider than the terminal's at one size, so
-    /// each gets its own to read as a pair beside the fold button.
-    private static func segmentPointSize(_ surface: AgentDetailSurface) -> CGFloat {
+    /// it gets a smaller one to sit evenly beside the fold button.
+    private static func surfacePointSize(_ surface: AgentDetailSurface) -> CGFloat {
         switch surface {
         case .chat: 15
         case .terminal: 17
@@ -148,15 +133,21 @@ struct AgentDetailHeader: View {
     }
 }
 
-/// The surfaces an Agent detail can show, and how to swap them, for
-/// `AgentDetailHeader`'s segmented pair. Main-actor isolated, and so
+/// The surface an Agent detail shows, and how to swap it, for
+/// `AgentDetailHeader`'s surface button. Main-actor isolated, and so
 /// Sendable, for the same reason as `AgentDetailHeaderAction`.
 @MainActor
 struct AgentDetailSurfaceSwitch {
-    static let order: [AgentDetailSurface] = [.chat, .terminal]
-
     let current: AgentDetailSurface
     let select: (AgentDetailSurface) -> Void
+
+    /// The surface the header's button brings up.
+    var other: AgentDetailSurface {
+        switch current {
+        case .chat: .terminal
+        case .terminal: .chat
+        }
+    }
 }
 
 /// One of `AgentDetailHeader`'s trailing buttons. Isolated to the main

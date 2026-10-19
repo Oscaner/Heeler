@@ -14,6 +14,11 @@ Entries reference the pull request that made the change.
   log, and the small policy module that allows it, in English or Simplified
   Chinese. (#477)
 
+### Changed
+
+- The Agent detail header shows one button for the surface not on screen,
+  Chat or the Agent terminal, instead of a two-segment switch.
+
 ## [0.1.15] - 2026-10-19
 
 ### Added
