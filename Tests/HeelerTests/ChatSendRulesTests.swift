@@ -34,6 +34,11 @@ struct ChatSendRulesTests {
             commands: ChatCommandMenu.commands(skills: skills, agentIsIdle: idle, program: program))
     }
 
+    /// `program`'s rules and menu with a synthetic profile in place of its own.
+    private static func rules(_ program: ChatProgram, profile: ChatSendProfile) -> ChatSendRules {
+        ChatSendRules(program: program, commands: rules(program).commands, profile: profile)
+    }
+
     // MARK: Not sent
 
     @Test(arguments: ChatProgram.allCases, ["!ls", "  !rm -rf build", "!"])
@@ -133,6 +138,68 @@ struct ChatSendRulesTests {
             Issue.record("an escape sequence was not refused")
             return
         }
+    }
+
+    /// One draft for each refusal, with the sentence Chat shows for it.
+    private static let wordedRefusals: [(ChatProgram, String, ComposerRefusal)] = [
+        (.claude, ":wq", .unsafeText("Sending this would exit Claude Code. Open the terminal to exit.")),
+        (.omp, " QUIT \n", .unsafeText("Sending this would exit Oh My Pi. Open the terminal to exit.")),
+        (.omp, "$ ls", .unsafeText("A message starting with $ runs Python in Oh My Pi. Open the terminal to run it.")),
+        (.omp, "c", .unsafeText("Oh My Pi reads this as Continue. Open the terminal to continue.")),
+        (
+            .omp, "-> x",
+            .unsafeText("Oh My Pi queues a message starting with -> or => for later. Open the terminal to queue one.")
+        ),
+        (
+            .omp, (1...100).map { "line \($0)" }.joined(separator: "\n"),
+            .unsafeText(
+                "Oh My Pi opens a menu for pastes of 100 lines or more. Shorten the message or paste it in the terminal."
+            )
+        ),
+        (.omp, "/compact keep the API notes", .commandUnavailable("Add compaction focus in the Agent terminal.")),
+        (.codex, "!ls", .unsafeText("A message starting with ! runs a shell command. Open the terminal to run one.")),
+        (.pi, "a\u{1B}[201~b", .unsafeText("The message contains terminal control characters.")),
+    ]
+
+    @Test(arguments: wordedRefusals)
+    func refusalsKeepTheirWording(program: ChatProgram, draft: String, refusal: ComposerRefusal) {
+        #expect(Self.rules(program).validate(draft) == refusal)
+    }
+
+    // MARK: Profiles
+
+    @Test func aProfilesExitWordsRefuseInTheProgramsName() {
+        let rules = Self.rules(.codex, profile: ChatSendProfile(exitWords: ["bye"]))
+
+        #expect(
+            rules.validate("  BYE \n") == .unsafeText("Sending this would exit Codex. Open the terminal to exit."))
+        #expect(rules.validate("bye now") == nil)
+    }
+
+    @Test func aProfileRefusalComesAfterTheSharedRules() {
+        let profile = ChatSendProfile(
+            exitWords: [],
+            refusal: { clean, _ in
+                clean.contains("/btw") ? .unsafeText("Side questions stay in the terminal.") : nil
+            })
+        let rules = Self.rules(.codex, profile: profile)
+
+        #expect(rules.validate("ask /btw why") == .unsafeText("Side questions stay in the terminal."))
+        #expect(
+            rules.validate("!ls /btw")
+                == .unsafeText("A message starting with ! runs a shell command. Open the terminal to run one."))
+        #expect(rules.validate("plain") == nil)
+    }
+
+    @Test func aBareCommandGoesAloneAndRefusesArguments() {
+        let profile = ChatSendProfile(
+            exitWords: [],
+            submission: { $0.kind == .compact ? .bare(argumentsRefusal: "No focus here.") : .trailingSpace })
+        let rules = Self.rules(.codex, profile: profile)
+
+        #expect(rules.outgoingText("  /compact \n") == "/compact")
+        #expect(rules.validate("/compact keep notes") == .commandUnavailable("No focus here."))
+        #expect(rules.outgoingText("/review the diff") == "$review the diff ")
     }
 
     // MARK: Commands

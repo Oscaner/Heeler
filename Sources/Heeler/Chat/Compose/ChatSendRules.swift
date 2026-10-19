@@ -100,27 +100,88 @@ extension AgentSkill {
     var chatInsertionText: String { "/\(name) " }
 }
 
+/// How Chat sends one menu command to a program's input box.
+enum ChatCommandSubmission: Equatable, Sendable {
+    /// `/name arguments ` with one trailing space, like any message.
+    case trailingSpace
+    /// `/name` alone; a draft with arguments is refused with the reason.
+    case bare(argumentsRefusal: String)
+}
+
+/// What one program's input box reads as more than a message, beyond the
+/// shared rules (control bytes, a leading `!`, `/` commands outside the
+/// menu), and how it takes each menu command.
+struct ChatSendProfile: Sendable {
+    /// Whole inputs that exit the program, compared trimmed and lowercased.
+    var exitWords: Set<String>
+    /// The program's own refusal of the draft without its invisible
+    /// characters (`clean`) and of that text trimmed, checked after the
+    /// shared rules and the exit words.
+    var refusal: @Sendable (_ clean: String, _ trimmed: String) -> ComposerRefusal?
+    /// How the input box takes each menu command.
+    var submission: @Sendable (ChatCommand) -> ChatCommandSubmission
+
+    init(
+        exitWords: Set<String>,
+        refusal: @escaping @Sendable (_ clean: String, _ trimmed: String) -> ComposerRefusal? = { _, _ in nil },
+        submission: @escaping @Sendable (ChatCommand) -> ChatCommandSubmission = { _ in .trailingSpace }
+    ) {
+        self.exitWords = exitWords
+        self.refusal = refusal
+        self.submission = submission
+    }
+
+    static func standard(for program: ChatProgram) -> ChatSendProfile {
+        switch program {
+        case .claude:
+            // Claude Code runs `/exit` for these whole inputs.
+            ChatSendProfile(exitWords: ["exit", "quit", ":q", ":q!", ":wq", ":wq!"])
+        case .codex, .pi:
+            ChatSendProfile(exitWords: [])
+        case .omp:
+            // Oh My Pi quits for these whole inputs, in any case, before the
+            // conversation's first message; Chat cannot tell whether it has one.
+            ChatSendProfile(
+                exitWords: ["exit", "quit", "q"],
+                refusal: { ChatSendRules.ompRefusal($0, trimmed: $1) },
+                submission: { $0.kind == .compact ? ompCompactSubmission : .trailingSpace })
+        }
+    }
+
+    /// Oh My Pi completes `/compact ` to `/compact soft ` rather than running
+    /// it; without the space, Enter runs it at once. Its modes come up as
+    /// completions once a space follows, so a focus would not reach it as
+    /// typed.
+    private static let ompCompactSubmission = ChatCommandSubmission.bare(
+        argumentsRefusal: "Add compaction focus in the Agent terminal.")
+}
+
 /// What a Chat draft sends to the Agent's input box (ADR 0024).
 ///
 /// The text arrives as one bracketed paste and Enter, exactly as if typed,
 /// so anything the program's input box would treat as more than a message
-/// is refused rather than sent: a `!` shell escape, Claude Code's and Oh My
-/// Pi's bare exit words, Oh My Pi's other input shorthands, control bytes,
-/// and `/` commands the menu does not offer.
+/// is refused rather than sent: a `!` shell escape, control bytes, `/`
+/// commands the menu does not offer, and what the program's
+/// `ChatSendProfile` adds, such as Claude Code's and Oh My Pi's bare exit
+/// words and Oh My Pi's other input shorthands.
 struct ChatSendRules: Sendable {
     let program: ChatProgram
     let commands: [ChatCommand]
-
-    /// Claude Code runs `/exit` for these whole inputs.
-    private static let claudeExitWords: Set<String> = ["exit", "quit", ":q", ":q!", ":wq", ":wq!"]
-
-    /// Oh My Pi quits for these whole inputs, in any case, before the
-    /// conversation's first message; Chat cannot tell whether it has one.
-    private static let ompExitWords: Set<String> = ["exit", "quit", "q"]
+    let profile: ChatSendProfile
 
     /// Oh My Pi offers a paste of this many lines as an attachment menu,
     /// whose Enter picks an entry instead of submitting.
-    private static let ompLargePasteLines = 100
+    fileprivate static let ompLargePasteLines = 100
+
+    init(program: ChatProgram, commands: [ChatCommand]) {
+        self.init(program: program, commands: commands, profile: .standard(for: program))
+    }
+
+    init(program: ChatProgram, commands: [ChatCommand], profile: ChatSendProfile) {
+        self.program = program
+        self.commands = commands
+        self.profile = profile
+    }
 
     enum Reading: Equatable {
         case text
@@ -136,21 +197,20 @@ struct ChatSendRules: Sendable {
     /// The text to send for a draft `validate` accepted: invisible
     /// characters removed, a menu command in the program's own form, and
     /// exactly one trailing space, which keeps a final `/name` or `@path`
-    /// from leaving a completion popup open when Enter arrives.
+    /// from leaving a completion popup open when Enter arrives. A command
+    /// the profile submits bare goes alone, without the space.
     func outgoingText(_ draft: String) -> String {
         let clean = TerminalTextSafety.normalizingNewlines(Self.removingInvisibles(draft))
         let body: String
         switch read(draft) {
-        case .command(let command, _) where program == .omp && command.kind == .compact:
-            // Oh My Pi completes `/compact ` to `/compact soft ` rather than
-            // running it; without the space, Enter runs it at once.
-            return "/compact"
         case .command(let command, let arguments):
             let prefix =
                 switch command.kind {
                 case .compact: "/"
                 case .skill(let prefix): prefix
                 }
+            // `read` refuses a bare command with arguments.
+            if case .bare = profile.submission(command) { return prefix + command.name }
             body = arguments.isEmpty ? prefix + command.name : "\(prefix)\(command.name) \(arguments)"
         case .text, .refused:
             body = clean
@@ -168,16 +228,10 @@ struct ChatSendRules: Sendable {
             return .refused(
                 .unsafeText("A message starting with ! runs a shell command. Open the terminal to run one."))
         }
-        switch program {
-        case .claude:
-            if Self.claudeExitWords.contains(trimmed.lowercased()) {
-                return .refused(.unsafeText("Sending this would exit Claude Code. Open the terminal to exit."))
-            }
-        case .omp:
-            if let refusal = Self.ompRefusal(clean, trimmed: trimmed) { return .refused(refusal) }
-        case .codex, .pi:
-            break
+        if profile.exitWords.contains(trimmed.lowercased()) {
+            return .refused(.unsafeText("Sending this would exit \(program.chatName). Open the terminal to exit."))
         }
+        if let refusal = profile.refusal(clean, trimmed) { return .refused(refusal) }
         guard trimmed.hasPrefix("/") else { return .text }
         let afterSlash = trimmed.dropFirst()
         let name = String(afterSlash.prefix { !$0.isWhitespace })
@@ -190,20 +244,16 @@ struct ChatSendRules: Sendable {
             return .refused(.commandAwaitsIdle(name))
         }
         let arguments = afterSlash.dropFirst(name.count).trimmingCharacters(in: .whitespacesAndNewlines)
-        if program == .omp, command.kind == .compact, !arguments.isEmpty {
-            // Oh My Pi's `/compact` offers its modes as completions once a
-            // space follows, so a focus would not reach it as typed.
-            return .refused(.commandUnavailable("Add compaction focus in the Agent terminal."))
+        if case .bare(let argumentsRefusal) = profile.submission(command), !arguments.isEmpty {
+            return .refused(.commandUnavailable(argumentsRefusal))
         }
         return .command(command, arguments: arguments)
     }
 
-    /// What Oh My Pi's input box reads as more than a message.
-    private static func ompRefusal(_ clean: String, trimmed: String) -> ComposerRefusal? {
+    /// What Oh My Pi's input box reads as more than a message, besides its
+    /// exit words.
+    fileprivate static func ompRefusal(_ clean: String, trimmed: String) -> ComposerRefusal? {
         let lowered = trimmed.lowercased()
-        if ompExitWords.contains(lowered) {
-            return .unsafeText("Sending this would exit Oh My Pi. Open the terminal to exit.")
-        }
         if runsPython(trimmed) {
             return .unsafeText("A message starting with $ runs Python in Oh My Pi. Open the terminal to run it.")
         }
@@ -226,7 +276,7 @@ struct ChatSendRules: Sendable {
 
     /// Oh My Pi runs `$ code` and `$$ code` as Python, without asking;
     /// `$HOME` and `$5` stay text.
-    private static func runsPython(_ trimmed: String) -> Bool {
+    fileprivate static func runsPython(_ trimmed: String) -> Bool {
         guard trimmed.first == "$" else { return false }
         var rest = trimmed.dropFirst()
         if rest.first == "$" { rest = rest.dropFirst() }
@@ -254,7 +304,7 @@ struct ChatSendRules: Sendable {
         }
     }
 
-    private static func trimmingTrailingWhitespace(_ text: String) -> String {
+    fileprivate static func trimmingTrailingWhitespace(_ text: String) -> String {
         var text = text
         while let last = text.last, last.isWhitespace { text.removeLast() }
         return text
