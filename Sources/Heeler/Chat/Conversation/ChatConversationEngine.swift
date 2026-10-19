@@ -599,7 +599,14 @@ actor ChatConversationEngine {
                 return .unavailable(.unsupportedFormat("\(name) session version \(version)"))
             }
         case .grok:
-            return .unavailable(.unsupportedSession)
+            switch try await GrokTranscriptLocator(files: files).locate(
+                sessionID: reference.sessionID, directories: directories)
+            {
+            case .success(let path): return .found(path)
+            case .failure(.notFound(let searchedAll)):
+                return .unavailable(.notFound(searchedAll: searchedAll))
+            case .failure(.mismatched): return .unavailable(.mismatched)
+            }
         }
     }
 

@@ -22,6 +22,7 @@ None came from a personal session.
 | `pi/auth-error-skill.jsonl` | Pi 0.85.1 session from the same probes: a provider authentication error and a `/skill:probe-hello world args` invocation recorded as its `<skill>` block |
 | `pi/provider-retry.jsonl` | Pi 0.85.1 session from a later 2026-10-15 probe against herdr 0.9.5: a `Connection error.` Pi retried on its own, the retry recorded as the error's reply |
 | `pi/summaries.jsonl` | Pi 0.85.1's `branch_summary` and `compaction` records from the 2026-10-17 E2E run (isolated root), summaries verbatim: Markdown headings, task checkboxes and a `<read-files>` block. The messages around them are written for the test |
+| `grok/fork-head.jsonl` | Grok Build 1.0.62 on herdr 0.9.5 (2026-10-19): the start of a scratch session made with `/fork` without a worktree, lines 1, 3–6 and 10 of the capture. The first five are the parent's records as the fork copied them, with the fork in `sessionId` and the parent's id still prefixing `eventId`; the last is the fork's own. The dropped lines are the developer's hook records, a copied `background_tasks` record and two more herdr `session_start` records |
 
 ## Scrubbing
 
@@ -43,6 +44,14 @@ The 2026-10-15 sessions were re-serialized as compact JSON without
 replaced as above; `pi/provider-retry.jsonl` also drops the encrypted
 `thinkingSignature`. Each keeps every line of its session, so tests address
 records by line number.
+
+Grok Build captures keep their chosen lines byte for byte, apart from ids:
+every session and prompt id becomes a synthetic UUIDv7-shaped id
+(`01900000-0000-7000-8000-00000000000N`), the same one wherever the real id
+appeared, including the `eventId` prefix a fork keeps from its parent. The
+developer's own hook records (`global/settings:` runs) are dropped; herdr's
+`session_start` record stays. Searching `grok/` for a UUID outside that range
+finds nothing.
 
 After adding a capture, check that searching this directory for `/Users/`
 (other than `/Users/developer`), `ghp_`, `Bearer` and e-mail addresses finds
