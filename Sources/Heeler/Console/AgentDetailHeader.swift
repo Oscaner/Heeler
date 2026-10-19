@@ -61,8 +61,9 @@ struct AgentDetailHeader: View {
                 titlePill(title)
                     .transition(
                         .scale(scale: 0.6, anchor: .leading).combined(with: .opacity))
+            } else {
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
             if let surfaceSwitch {
                 HStack(spacing: 0) {
                     surfaceButton(surfaceSwitch)
@@ -83,9 +84,9 @@ struct AgentDetailHeader: View {
         .foregroundStyle(palette.foreground)
     }
 
-    /// Hugs a short title and gives way to the trailing capsule, truncating
-    /// the title at its end and the directory at its start, so the folder
-    /// the Agent works in stays readable.
+    /// Fills the room up to the trailing capsule, so the gaps on either side
+    /// match, truncating the title at its end and the directory at its
+    /// start, so the folder the Agent works in stays readable.
     private func titlePill(_ title: AgentDetailHeaderTitle) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title.title)
@@ -106,7 +107,7 @@ struct AgentDetailHeader: View {
             .lineLimit(1)
         }
         .padding(.horizontal, 16)
-        .frame(height: Self.controlSize)
+        .frame(maxWidth: .infinity, minHeight: Self.controlSize, maxHeight: Self.controlSize, alignment: .leading)
         .headerGlass(in: .capsule)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
