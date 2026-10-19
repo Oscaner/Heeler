@@ -1251,16 +1251,16 @@ extension ChatProgram {
     var stopReturnsUntakenSends: Bool {
         switch self {
         case .pi, .omp: true
-        case .claude, .codex: false
+        case .claude, .codex, .grok: false
         }
     }
 
     /// Whether an accepted `/compact` is always recorded before the next
     /// prompt, so one a later prompt overtook with no compaction never ran
-    /// (Pi 0.85.1, Oh My Pi 18.11).
+    /// (Pi 0.85.1, Oh My Pi 18.11, Grok Build 1.0.62).
     var recordsCompactionBeforeNextPrompt: Bool {
         switch self {
-        case .pi, .omp: true
+        case .pi, .omp, .grok: true
         case .claude, .codex: false
         }
     }
@@ -1272,7 +1272,7 @@ extension ChatProgram {
     var declinesCompactOnScreen: Bool {
         switch self {
         case .pi, .omp: true
-        case .claude, .codex: false
+        case .claude, .codex, .grok: false
         }
     }
 }

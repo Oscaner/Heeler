@@ -484,7 +484,7 @@ extension DialogOption {
             return "Oh My Pi won't ask again for \(subject) in this session."
         case .claude where folded.contains(DialogRowScanner.comparable("always allow access to")):
             return "Lets Claude work in this folder for the session."
-        case .claude, .codex, .pi:
+        case .claude, .codex, .pi, .grok:
             return "Saves a rule, so this isn't asked again."
         }
     }

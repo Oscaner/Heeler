@@ -33,12 +33,14 @@ enum ChatCommandMenu {
     /// Code answers "Unknown command" for a skill marked
     /// `user-invocable: false`; Codex and Pi have no such key (their
     /// `allow_implicit_invocation` and `disable-model-invocation` limit only
-    /// the model).
+    /// the model). Grok Build gets none yet: its built-in commands win over
+    /// a skill of the same name.
     static func offers(_ skill: AgentSkill, for program: ChatProgram) -> Bool {
         switch program {
         case .pi, .omp: skill.commandPrefix == skillCommandPrefix
         case .claude: skill.isUserInvocable
         case .codex: true
+        case .grok: false
         }
     }
 
@@ -135,6 +137,9 @@ struct ChatSendProfile: Sendable {
         switch program {
         case .claude:
             // Claude Code runs `/exit` for these whole inputs.
+            ChatSendProfile(exitWords: ["exit", "quit", ":q", ":q!", ":wq", ":wq!"])
+        case .grok:
+            // Grok Build quits at once for these whole inputs.
             ChatSendProfile(exitWords: ["exit", "quit", ":q", ":q!", ":wq", ":wq!"])
         case .codex, .pi:
             ChatSendProfile(exitWords: [])

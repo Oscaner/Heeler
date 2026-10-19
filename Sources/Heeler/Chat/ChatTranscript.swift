@@ -8,6 +8,7 @@ enum ChatProgram: String, Codable, Sendable, CaseIterable {
     case codex
     case pi
     case omp
+    case grok
 }
 
 /// What herdr last reported the Agent doing. Adapters need it only to tell a

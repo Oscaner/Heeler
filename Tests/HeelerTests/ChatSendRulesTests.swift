@@ -18,6 +18,7 @@ struct ChatSendRulesTests {
         case .claude: "/"
         case .codex: "$"
         case .pi, .omp: "/skill:"
+        case .grok: "/"
         }
     }
 
@@ -394,6 +395,10 @@ struct ChatSendRulesTests {
         if program == .claude {
             #expect(names == ["compact", "review"])
             #expect(rules.validate("/e2e-hidden") == .unknownCommand("e2e-hidden"))
+        } else if program == .grok {
+            // Chat offers Grok Build no skills until it knows Grok's
+            // built-in names, which win over a skill's.
+            #expect(names == ["compact"])
         } else {
             #expect(names == ["compact", "review", "e2e-hidden"])
         }

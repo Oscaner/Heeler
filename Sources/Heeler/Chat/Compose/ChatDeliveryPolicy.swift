@@ -71,6 +71,10 @@ extension InputBoxState {
                 // Their Esc returns steers the turn has not taken to the
                 // box, but the text may as well be a draft typed there.
                 "The Agent's input box already has text, such as a draft or a steer that Stop returned. Send or clear it in the terminal first."
+            case .grok:
+                // Ctrl+C before the first output puts the turn's prompt back
+                // in the box.
+                "Grok Build's input box already has text, such as a draft or a message Stop put back. Send or clear it in the terminal first."
             }
         case .shellMode:
             "The Agent's input box is in shell mode. Leave it in the terminal first."

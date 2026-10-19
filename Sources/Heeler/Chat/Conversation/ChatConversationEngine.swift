@@ -598,6 +598,8 @@ actor ChatConversationEngine {
                 let name = reference.program == .omp ? "Oh My Pi" : "Pi"
                 return .unavailable(.unsupportedFormat("\(name) session version \(version)"))
             }
+        case .grok:
+            return .unavailable(.unsupportedSession)
         }
     }
 

@@ -40,6 +40,8 @@ extension ChatTranscriptAdapter {
                 },
                 identity: { PiTranscriptLocator.sessionID(inHead: $0) },
                 echoesByEntry: true)
+        case .grok:
+            nil
         }
     }
 }

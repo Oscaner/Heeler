@@ -65,7 +65,7 @@ struct AgentChatAvailabilityTests {
         #expect(AgentChatAvailability.mayOfferChat(for: agent(kind: kind)))
     }
 
-    @Test(arguments: ["gemini", "cursor", "droid", "opencode", "Claude", ""])
+    @Test(arguments: ["gemini", "cursor", "droid", "opencode", "grok", "Claude", ""])
     func otherProgramsNeverOfferChat(kind: String) {
         #expect(AgentChatAvailability.program(for: agent(kind: kind), platform: .posix) == nil)
         #expect(!AgentChatAvailability.mayOfferChat(for: agent(kind: kind)))

@@ -35,6 +35,18 @@ struct ChatStopPlan: Sendable {
     static func standard(for program: ChatProgram) -> ChatStopPlan {
         switch program {
         case .claude, .codex, .pi, .omp: .escape
+        case .grok:
+            // Ctrl+C cancels Grok Build's turn; Esc only shows a toast. Until
+            // Chat reads Grok's screen, the guard refuses every press.
+            ChatStopPlan(
+                keys: ["ctrl+c"],
+                screenGuard: { _ in .refuse("Stop Grok Build in the terminal with Ctrl+C.") },
+                wait: AgentStopWait(
+                    window: .seconds(3),
+                    unconfirmedNotice:
+                        "Ctrl+C went, but the Agent still shows Working. A queued message may have started.",
+                    minimumGap: .milliseconds(1500)),
+                accessibilityHint: "Presses Ctrl+C to cancel the turn")
         }
     }
 
