@@ -410,6 +410,7 @@
 		8F91EAC7F32AA058E7F23394 /* TerminalKeyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 247FF74AD248F26A072EA263 /* TerminalKeyboard.swift */; };
 		8F9D8B11EB35747E767118CB /* TerminalTitleGlyphs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 651D511E8A282C4CB0214098 /* TerminalTitleGlyphs.swift */; };
 		8FC7B3F9BAC1C86576520AEF /* ClaudeTranscriptLocatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67915AA97A2D8B0113F65CE4 /* ClaudeTranscriptLocatorTests.swift */; };
+		91386D52E541ABB78FA4F39C /* ChatStopPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3C566D947C5E39608EEC199 /* ChatStopPlan.swift */; };
 		91BF879F537B1B0DD0B5E78B /* HostConsoleProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88E1434C9C39A6419A3A0D79 /* HostConsoleProjection.swift */; };
 		921875AD80D687FB0C2AD771 /* NumberedChatReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C24E3F2728F8EED318E0F73F /* NumberedChatReducer.swift */; };
 		9271ADB70DD9860389821A92 /* AgentDetailStatusChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1AA33CB009DE705AC691967 /* AgentDetailStatusChrome.swift */; };
@@ -687,6 +688,7 @@
 		E84E7C27D20353E62A7B4495 /* AgentChatAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE2692F332DFC55D9205782E /* AgentChatAvailability.swift */; };
 		E8532BE907332821A0931E36 /* DetailCrossfadeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D2A24209EC3661CE162743E /* DetailCrossfadeTests.swift */; };
 		E89FDBBF01AA72A922ED0F03 /* Host.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32AE04F29C794799B45E5C68 /* Host.swift */; };
+		E9092EBAD88200F03DBF52F0 /* ChatStopPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 492F0346506BE7CB862D819D /* ChatStopPlanTests.swift */; };
 		E9D5DD0D136597844A8FE54B /* HerdrEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 764EB7D298185F64BA26C8B2 /* HerdrEvents.swift */; };
 		EA6340CA36917C35588E0755 /* AgentRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = E48CA996470393ED037D0364 /* AgentRoute.swift */; };
 		EA83373CB743395BF9FF0689 /* ImagePreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAF5D79337402EF6FA70F9CA /* ImagePreparer.swift */; };
@@ -1010,6 +1012,7 @@
 		48B853441AF972F5F05ADA67 /* AgentStatusPaletteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatusPaletteTests.swift; sourceTree = "<group>"; };
 		48EF1E70193168E3794D6266 /* SkeletonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonTests.swift; sourceTree = "<group>"; };
 		48F025CF6E2C3068BF911290 /* IBMPlexMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Regular.ttf"; sourceTree = "<group>"; };
+		492F0346506BE7CB862D819D /* ChatStopPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStopPlanTests.swift; sourceTree = "<group>"; };
 		4997A79DA8D98F7BA97E60F6 /* TerminalMouseReporting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalMouseReporting.swift; sourceTree = "<group>"; };
 		4A1CFC40038FAF47FAE74CC2 /* RemoteHostEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteHostEnvironment.swift; sourceTree = "<group>"; };
 		4A4E53E3D3855055D7DF04AA /* GitProbe+Changes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GitProbe+Changes.swift"; sourceTree = "<group>"; };
@@ -1361,6 +1364,7 @@
 		C25E1DC34365B2E2FA6C5AA8 /* AsyncDeadline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsyncDeadline.swift; sourceTree = "<group>"; };
 		C2EF92E96C6A4905CD809C5C /* SkillsKeyboardPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillsKeyboardPane.swift; sourceTree = "<group>"; };
 		C34D3B8FB6A7196FC48562D4 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		C3C566D947C5E39608EEC199 /* ChatStopPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStopPlan.swift; sourceTree = "<group>"; };
 		C3F7EF0C27AC50CA3A4C746F /* ChatTimelineProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTimelineProjection.swift; sourceTree = "<group>"; };
 		C4889F56EFEFCC5004A55B4C /* ImagePreparerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreparerTests.swift; sourceTree = "<group>"; };
 		C4A0995C19A8B83E8145D95D /* ChangesFreshness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChangesFreshness.swift; sourceTree = "<group>"; };
@@ -1661,6 +1665,7 @@
 				B7F661B5D2153414B59FF899 /* ChatMarkdownTests.swift */,
 				D75D42118459DEA416288A33 /* ChatSendRulesTests.swift */,
 				FB053AB4EBB371EC7A9E9DFA /* ChatStandardAdapterTests.swift */,
+				492F0346506BE7CB862D819D /* ChatStopPlanTests.swift */,
 				0F96022102B873697A508C05 /* ChatSubagentPresentationTests.swift */,
 				866CBB6E58F431BF10EA101C /* ChatTextSettingsTests.swift */,
 				1F9035C3382AC68FFA311C2D /* ChatTimelineControllerTests.swift */,
@@ -1869,6 +1874,7 @@
 				9EB941A8CD753FAEDEA1741A /* ChatComposerEchoes.swift */,
 				A4718DCBF1F1C5E8C6E9AAD4 /* ChatDeliveryPolicy.swift */,
 				610E09C50B3599AF347D1E5D /* ChatSendRules.swift */,
+				C3C566D947C5E39608EEC199 /* ChatStopPlan.swift */,
 			);
 			path = Compose;
 			sourceTree = "<group>";
@@ -2957,6 +2963,7 @@
 				589933927DB998C0BC5BF18D /* ChatRowBuilder.swift in Sources */,
 				F68B599F159AD5082B919176 /* ChatRowView.swift in Sources */,
 				BE514EA5DE00BF97731E245E /* ChatSendRules.swift in Sources */,
+				91386D52E541ABB78FA4F39C /* ChatStopPlan.swift in Sources */,
 				78BF7E48D0A205E24E1CBB29 /* ChatTextSettings.swift in Sources */,
 				0D5004AF03F46533BF3B27FA /* ChatTimelineController.swift in Sources */,
 				815BA6026CCD7AD9B4DA496C /* ChatTimelineGeometry.swift in Sources */,
@@ -3339,6 +3346,7 @@
 				4B9F81B5CFE0B356BBC2B200 /* ChatMarkdownTests.swift in Sources */,
 				32E639E1436C832A5DD25B01 /* ChatSendRulesTests.swift in Sources */,
 				FCF04AE197F3313D2C526646 /* ChatStandardAdapterTests.swift in Sources */,
+				E9092EBAD88200F03DBF52F0 /* ChatStopPlanTests.swift in Sources */,
 				BDE2E8E33E9D7B06ACE56246 /* ChatSubagentPresentationTests.swift in Sources */,
 				C895B6AEC9BC2E9F8626B04C /* ChatTextSettingsTests.swift in Sources */,
 				D40345774BCF8AA5A5BDD1FB /* ChatTimelineControllerTests.swift in Sources */,

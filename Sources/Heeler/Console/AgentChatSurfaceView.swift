@@ -692,21 +692,29 @@ struct AgentChatSurfaceView: View {
     }
 
     private var sendPolicy: ComposerDeliveryPolicy {
+        .chat(rules: sendRules, activity: agentActivity, readScreen: readAgentScreen)
+    }
+
+    /// What herdr reports the Agent doing when asked, not when this view
+    /// last rendered.
+    private var agentActivity: @MainActor () -> ChatAgentActivity {
+        let agentID = agent.id
+        return { [console] in
+            ChatAgentActivity(console.agents.first { $0.id == agentID }?.agent.status)
+        }
+    }
+
+    /// The Agent's screen through `agent.read`, for a send and for Stop.
+    private var readAgentScreen: @MainActor () async throws -> ANSIScreen {
         let paneID = agent.agent.paneID
         let hostID = agent.hostID
-        let agentID = agent.id
         let chat = chat
-        return .chat(
-            rules: sendRules,
-            activity: { [console] in
-                ChatAgentActivity(console.agents.first { $0.id == agentID }?.agent.status)
-            },
-            readScreen: { [console] in
-                let screen = try await console.readAgentScreen(paneID, on: hostID)
-                // A steer shown as returned may since have left the box.
-                chat?.inputBoxWasRead(screen)
-                return screen
-            })
+        return { [console] in
+            let screen = try await console.readAgentScreen(paneID, on: hostID)
+            // A steer shown as returned may since have left the box.
+            chat?.inputBoxWasRead(screen)
+            return screen
+        }
     }
 
     private var composerChrome: some View {
@@ -740,12 +748,19 @@ struct AgentChatSurfaceView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// Chat's Stop: Esc in line with the Agent page's keys, as typed keys
-    /// would arrive.
+    /// Chat's Stop: the program's Stop plan, in line with the Agent page's
+    /// keys, as typed keys would arrive.
     private var stopInterrupt: AgentComposerInterrupt {
-        .escape { [agentKeys] in
-            await agentKeys.deliver(["esc"]) == .sent
-                ? .sent : .failed("Couldn't reach the Agent, so it may still be working.")
+        ChatStopPlan.standard(for: program).composerInterrupt(context: stopContext, agentKeys: agentKeys)
+    }
+
+    /// What a Stop guard reads: the screen, then herdr's status.
+    private var stopContext: @MainActor () async throws -> ChatStopContext {
+        let readScreen = readAgentScreen
+        let activity = agentActivity
+        return {
+            let screen = try await readScreen()
+            return ChatStopContext(screen: screen, activity: activity())
         }
     }
 
