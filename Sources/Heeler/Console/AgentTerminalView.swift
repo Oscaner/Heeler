@@ -752,7 +752,7 @@ struct AgentTerminalView: View {
             interactionProbe?.value?.connect(
                 selectInputMode: { mode in selectInputMode(mode) },
                 switchAgent: { id in switchToAgent(id) },
-                stopAgent: { composer.stop.stop(using: { interruptAgent() }) })
+                stopAgent: { stopFromProbe() })
             interactionProbe?.value?.connectMessageJump(
                 jumpOlder: { jumpToOlderMessage() },
                 jumpNewer: { jumpToNewerMessageOrLive() },
@@ -1290,8 +1290,16 @@ struct AgentTerminalView: View {
     }
 
     /// The Composer's Stop: one Esc over the Attach PTY, whatever the kind.
-    private var stopInterrupt: AgentComposerInterrupt {
+    /// nil would keep Send.
+    private var stopInterrupt: AgentComposerInterrupt? {
         .escape { interruptAgent() }
+    }
+
+    /// The interaction probe's Stop, as the Composer's button runs it: the
+    /// same interrupt and wait, and nothing when there is no interrupt.
+    private func stopFromProbe() {
+        guard let interrupt = stopInterrupt else { return }
+        composer.stop.stop(waiting: interrupt.wait, using: interrupt.perform)
     }
 
     /// Attached to the control itself: a popover on the whole detail anchors
