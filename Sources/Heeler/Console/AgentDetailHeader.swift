@@ -1,27 +1,27 @@
 import SwiftUI
 
 /// Floating controls over an Agent or terminal. Separate glass pieces float
-/// over the terminal: Back at the leading end, any trailing actions in one
-/// capsule, and at the far end a fold button that stays put. The room
-/// between them is left to the terminal, and folding leaves only that
-/// button, so the header can cover almost no output.
+/// over the terminal: Back at the leading end and, at the far end, a More
+/// menu that stays put. The room between them is left to the terminal, and
+/// folding leaves only the menu, so the header can cover almost no output.
 ///
 /// Back is the way out of a detail pushed over the list, on an iPhone or in
 /// a compact iPad window, which the edge swipe alone never showed (#396).
 /// Beside an iPad's sidebar there is nothing to go back to, so the header
-/// keeps only its actions and fold button.
+/// keeps only its menu.
 ///
-/// Trailing actions are plain values rather than views, so a screen can
-/// leave out the ones it cannot offer and the capsule goes with the last.
+/// The menu holds the screen's actions and the item that folds or unfolds
+/// the header. Actions are plain values rather than views, so a screen can
+/// leave out the ones it cannot offer.
 ///
 /// An Agent that has Chat also shows a button for the surface it is not
-/// showing, Chat or its terminal, sharing the fold button's capsule in both
-/// states, so the other surface stays one tap away while the header is folded.
+/// showing, Chat or its terminal, sharing the menu's capsule in both states,
+/// so the other surface stays one tap away while the header is folded.
 struct AgentDetailHeader: View {
     static let controlSize: CGFloat = 44
     /// How much of the glass shows, the rest letting output through.
     fileprivate static let glassOpacity: Double = 0.75
-    /// Buttons sharing the actions capsule sit closer than standalone ones.
+    /// Buttons sharing a capsule sit closer than standalone ones.
     private static let capsuleButtonWidth: CGFloat = 36
     private static let capsuleInset: CGFloat = (controlSize - capsuleButtonWidth) / 2
 
@@ -55,22 +55,6 @@ struct AgentDetailHeader: View {
                     .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
             Spacer(minLength: 0)
-            if isExpanded, !actions.isEmpty {
-                HStack(spacing: 0) {
-                    ForEach(actions) { @Sendable action in
-                        MainActorContent {
-                            AgentDetailHeaderButton(
-                                action.title, systemImage: action.systemImage,
-                                width: Self.capsuleButtonWidth, action: action.perform)
-                        }
-                    }
-                }
-                .padding(.horizontal, Self.capsuleInset)
-                .fixedSize()
-                .headerGlass(in: .capsule)
-                .transition(
-                    .scale(scale: 0.6, anchor: .trailing).combined(with: .opacity))
-            }
             if let surfaceSwitch {
                 HStack(spacing: 0) {
                     surfaceButton(surfaceSwitch)
@@ -78,13 +62,13 @@ struct AgentDetailHeader: View {
                         .fill(palette.foreground.opacity(0.25))
                         .frame(width: 1 / max(displayScale, 1), height: 20)
                         .padding(.horizontal, 2)
-                    foldButton(width: Self.capsuleButtonWidth)
+                    moreMenu(width: Self.capsuleButtonWidth)
                 }
                 .padding(.horizontal, Self.capsuleInset)
                 .fixedSize()
                 .headerGlass(in: .capsule)
             } else {
-                foldButton(width: Self.controlSize)
+                moreMenu(width: Self.controlSize)
                     .headerGlass(in: .circle)
             }
         }
@@ -108,7 +92,7 @@ struct AgentDetailHeader: View {
     }
 
     /// The two-bubble glyph draws wider than the terminal's at one size, so
-    /// it gets a smaller one to sit evenly beside the fold button.
+    /// it gets a smaller one to sit evenly beside the More menu.
     private static func surfacePointSize(_ surface: AgentDetailSurface) -> CGFloat {
         switch surface {
         case .chat: 15
@@ -116,20 +100,38 @@ struct AgentDetailHeader: View {
         }
     }
 
-    /// Stays at the far end in both states.
-    private func foldButton(width: CGFloat) -> some View {
-        AgentDetailHeaderButton(
-            isExpanded ? "Hide Header" : "Show Header",
-            // A window's top bar, which is what this shows and hides: put
-            // away while it is out, filled in while it is folded.
-            systemImage: isExpanded
-                ? "menubar.arrow.up.rectangle" : "inset.filled.topthird.rectangle",
-            width: width
-        ) {
-            withAnimation(reduceMotion ? nil : .snappy) {
-                isExpanded.toggle()
+    /// Stays at the far end in both states: the screen's actions, then the
+    /// item that folds or unfolds the header.
+    private func moreMenu(width: CGFloat) -> some View {
+        Menu {
+            ForEach(actions) { @Sendable action in
+                MainActorContent {
+                    Button(action.title, systemImage: action.systemImage, action: action.perform)
+                }
             }
+            if !actions.isEmpty {
+                Divider()
+            }
+            Button(
+                isExpanded ? "Hide Header" : "Show Header",
+                // A window's top bar, which is what this shows and hides: put
+                // away while it is out, filled in while it is folded.
+                systemImage: isExpanded
+                    ? "menubar.arrow.up.rectangle" : "inset.filled.topthird.rectangle"
+            ) {
+                withAnimation(reduceMotion ? nil : .snappy) {
+                    isExpanded.toggle()
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(palette.foreground)
+                .frame(width: width, height: Self.controlSize)
+                .contentShape(.rect)
         }
+        .menuIndicator(.hidden)
+        .accessibilityLabel("More")
     }
 }
 
@@ -150,8 +152,8 @@ struct AgentDetailSurfaceSwitch {
     }
 }
 
-/// One of `AgentDetailHeader`'s trailing buttons. Isolated to the main
-/// actor, which makes it Sendable: the header's `ForEach` content is
+/// One of the actions in `AgentDetailHeader`'s More menu. Isolated to the
+/// main actor, which makes it Sendable: the menu's `ForEach` content is
 /// `@Sendable` and hands each action to `MainActorContent` (#471).
 @MainActor
 struct AgentDetailHeaderAction: Identifiable {
@@ -163,21 +165,15 @@ struct AgentDetailHeaderAction: Identifiable {
 }
 
 /// An icon button inside `AgentDetailHeader`. It has no surface of its own:
-/// the header puts Back and the fold button on glass circles, and its
-/// trailing actions together on one glass capsule.
+/// the header puts it on a glass circle.
 struct AgentDetailHeaderButton: View {
     let title: LocalizedStringKey
     let systemImage: String
-    let width: CGFloat
     let action: () -> Void
 
-    init(
-        _ title: LocalizedStringKey, systemImage: String,
-        width: CGFloat = AgentDetailHeader.controlSize, action: @escaping () -> Void
-    ) {
+    init(_ title: LocalizedStringKey, systemImage: String, action: @escaping () -> Void) {
         self.title = title
         self.systemImage = systemImage
-        self.width = width
         self.action = action
     }
 
@@ -185,7 +181,7 @@ struct AgentDetailHeaderButton: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 17, weight: .semibold))
-                .frame(width: width, height: AgentDetailHeader.controlSize)
+                .frame(width: AgentDetailHeader.controlSize, height: AgentDetailHeader.controlSize)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)

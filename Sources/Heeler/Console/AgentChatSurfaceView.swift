@@ -66,7 +66,7 @@ struct AgentChatSurfaceView: View {
     @State private var isRenamingAgent = false
     @State private var isRenamingWorkspace = false
     @State private var closeErrorMessage: String?
-    /// The Workspace drawer's panel, while the back header's button owns it.
+    /// The Workspace drawer's panel, while the back header's menu owns it.
     @State private var isHeaderDrawerOpen = false
     /// The Background Work strip's height over the staging bar; zero while
     /// it lists nothing.
@@ -342,7 +342,7 @@ struct AgentChatSurfaceView: View {
         .overlay {
             if let workspaceDrawer {
                 let drawer = keyboardCarryingDrawer(workspaceDrawer).palette(.system)
-                // The back header's button stands in for the edge handle
+                // The back header's menu stands in for the edge handle
                 // while the header is out; folded, the handle comes back.
                 if isBackHeaderExpanded {
                     drawer.openedFromHeader(
@@ -921,6 +921,8 @@ struct AgentChatSurfaceView: View {
                 title: "Workspace Terminals", systemImage: "apple.terminal.on.rectangle"
             ) {
                 withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
+                    // Folded, the menu unfolds the header the panel drops from.
+                    isBackHeaderExpanded = true
                     isHeaderDrawerOpen.toggle()
                 }
             })

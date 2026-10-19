@@ -71,8 +71,9 @@ existing adapters.
 ## Entry and the terminal
 
 A button for the surface not showing, sharing the detail header's
-fold-button capsule whether the header is folded or not, and Show Chat and
-Show Agent Terminal in the More menu, swap the two surfaces in place. The
+More-menu capsule whether the header is folded or not, and Show Chat and
+Show Agent Terminal in the Composer's More menu, swap the two surfaces in
+place. The
 button keeps the switch out of the Agent switcher row, whose chips and
 keyboard buttons fill a phone's width. The surfaces are never mounted together. Terminal is the default, and
 a choice is remembered app-wide. Each detail copies it when it opens, so a

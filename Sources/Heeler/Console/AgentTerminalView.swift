@@ -287,7 +287,7 @@ struct AgentTerminalView: View {
     /// Folded until the user shows it, so it covers no output by default,
     /// then remembered across Agents as a reading preference.
     @AppStorage("agent.back-header-expanded") private var isBackHeaderExpanded = false
-    /// The Workspace drawer's panel, while the back header's button owns it.
+    /// The Workspace drawer's panel, while the back header's menu owns it.
     @State private var isHeaderDrawerOpen = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// This view's own window, for hosts without a scene root.
@@ -1031,7 +1031,7 @@ struct AgentTerminalView: View {
         .overlay {
             if let workspaceDrawer {
                 let drawer = keyboardCarryingDrawer(workspaceDrawer).palette(themePalette)
-                // The back header's button stands in for the edge handle
+                // The back header's menu stands in for the edge handle
                 // while the header is out; folded, the handle comes back.
                 if isBackHeaderExpanded {
                     drawer.openedFromHeader(
@@ -1169,6 +1169,8 @@ struct AgentTerminalView: View {
                 title: "Workspace Terminals", systemImage: "apple.terminal.on.rectangle"
             ) {
                 withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
+                    // Folded, the menu unfolds the header the panel drops from.
+                    isBackHeaderExpanded = true
                     isHeaderDrawerOpen.toggle()
                 }
             })
