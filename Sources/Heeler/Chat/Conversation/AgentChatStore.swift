@@ -1325,4 +1325,17 @@ extension ChatProgram {
         case .claude, .codex, .opencode: false
         }
     }
+
+    /// Whether the Blocked card offers its key pad when herdr reports
+    /// Blocked and the screen shows no dialog. OpenCode 2.0.32's prompt
+    /// would act on those keys: Up recalls the last prompt for Enter to
+    /// send again, Tab switches the agent, Down opens the subagent panel,
+    /// and Enter on an empty box sends a queued prompt. Its card says why
+    /// it is Blocked instead (`BlockedCardStore.unreadableNote`).
+    var offersKeysWhenBlockedWithoutDialog: Bool {
+        switch self {
+        case .claude, .codex, .pi, .omp: true
+        case .opencode: false
+        }
+    }
 }

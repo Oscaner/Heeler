@@ -337,6 +337,29 @@ struct BlockedCardStoreTests {
         #expect(store.content == .none)
     }
 
+    /// Blocked with no dialog on screen, these programs' cards keep their
+    /// sentence and key pad, even after a failed turn.
+    @Test(arguments: [ChatProgram.claude, .codex, .pi, .omp])
+    func otherProgramsKeepTheKeyPad(program: ChatProgram) async throws {
+        let idle: [ChatProgram: String] = [
+            .claude: "claude-01-ready", .codex: "codex-00-ready", .pi: "pi-06-empty-editor-119",
+            .omp: "omp-08-empty-120-after-first",
+        ]
+        let pane = FakePane(try ScreenFixture.screen(try #require(idle[program])))
+        let clock = ManualClock()
+        let store = Self.store(program, pane: pane, clock: clock)
+        store.update(transcript: Self.failedTurn("Provider error: connection refused"))
+        store.update(activity: .blocked)
+        clock.advance(.seconds(2))
+
+        await store.refresh()
+
+        #expect(program.offersKeysWhenBlockedWithoutDialog)
+        #expect(store.content == .unreadable)
+        #expect(store.unreadableNote == nil)
+        #expect(await pane.keys.isEmpty)
+    }
+
     @Test func anAnsweredDialogLeavesNothingBehindWhileBlockedLingers() async throws {
         let pane = FakePane(try ScreenFixture.screen("claude-02-c1-bash-blocked"))
         await pane.react(to: ["1"], with: try ScreenFixture.screen("claude-29-c3-after-immediate"))
@@ -750,7 +773,135 @@ struct BlockedCardStoreTests {
         #expect(store.notice == nil)
     }
 
+    /// OpenCode's prompt would act on the key pad's keys, so a block with
+    /// no dialog on screen gets a note in their place, once the quiet time
+    /// has passed.
+    @Test func anOpenCodeBlockWithoutADialogOffersNoKeys() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-02-session-empty-180"))
+        let clock = ManualClock()
+        let store = Self.store(.opencode, pane: pane, clock: clock)
+        store.update(activity: .blocked)
+
+        await store.refresh()
+        #expect(store.content == .none)
+        #expect(store.unreadableNote == nil)
+        clock.advance(.seconds(2))
+        await store.refresh()
+
+        #expect(!ChatProgram.opencode.offersKeysWhenBlockedWithoutDialog)
+        #expect(store.content == .unreadable)
+        #expect(store.unreadableNote == Self.openCodeBlockedNote)
+        #expect(await pane.keys.isEmpty)
+
+        // A screen read that fails says the same.
+        let unread = BlockedCardStore(program: .opencode, io: .unavailable, clock: clock.clock)
+        unread.update(activity: .blocked)
+        clock.advance(.seconds(2))
+        await unread.refresh()
+        #expect(unread.content == .unreadable)
+        #expect(unread.unreadableNote == Self.openCodeBlockedNote)
+
+        store.update(activity: .working)
+        #expect(store.content == .none)
+        #expect(store.unreadableNote == nil)
+    }
+
+    /// The panel draws in place of the prompt, and of a request waiting
+    /// there, at any width. It comes first, even after a failed turn.
+    @Test func aPanelOverTheRequestSaysToCloseIt() async throws {
+        for stem in ["opencode-15-subagent-panel-180", "opencode-41-subagent-panel-62"] {
+            let pane = FakePane(try ScreenFixture.screen(stem))
+            let clock = ManualClock()
+            let store = Self.store(.opencode, pane: pane, clock: clock)
+            store.update(transcript: Self.failedTurn("Provider error: connection refused"))
+            store.update(activity: .blocked)
+            clock.advance(.seconds(2))
+
+            await store.refresh()
+
+            #expect(store.content == .unreadable, "\(stem)")
+            #expect(
+                store.unreadableNote
+                    == "OpenCode's subagent panel covers its request. Close the panel in the terminal to answer it.",
+                "\(stem)")
+            #expect(await pane.keys.isEmpty, "\(stem)")
+        }
+    }
+
+    /// herdr reports OpenCode Blocked when a model request fails. The note
+    /// quotes the failure: the newest turn's ending, or an error it shows
+    /// before the turn ends. A failure in an earlier turn says nothing.
+    @Test func aFailedTurnExplainsTheBlock() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-02-session-empty-180"))
+        let clock = ManualClock()
+        let store = Self.store(.opencode, pane: pane, clock: clock)
+        store.update(transcript: Self.failedTurn("Provider error: connection refused"))
+        store.update(activity: .blocked)
+        clock.advance(.seconds(2))
+
+        await store.refresh()
+
+        #expect(store.content == .unreadable)
+        #expect(
+            store.unreadableNote
+                == "OpenCode stopped with an error: Provider error: connection refused. herdr holds Chat's messages "
+                + "while it reports Blocked, so continue in the terminal.")
+
+        // A step's error, before the row that ends the turn.
+        var open = Self.failedTurn("Rate limit reached.\n  Retry later.")
+        open.turns[0].ending = nil
+        store.update(transcript: open)
+        await store.refresh()
+        #expect(
+            store.unreadableNote
+                == "OpenCode stopped with an error: Rate limit reached. Retry later. herdr holds Chat's messages "
+                + "while it reports Blocked, so continue in the terminal.")
+
+        // A long error is cut.
+        store.update(transcript: Self.failedTurn(String(repeating: "x", count: 300)))
+        await store.refresh()
+        #expect(
+            store.unreadableNote
+                == "OpenCode stopped with an error: \(String(repeating: "x", count: 200))…. herdr holds Chat's "
+                + "messages while it reports Blocked, so continue in the terminal.")
+
+        // The next turn opened, and has shown no error.
+        var next = Self.failedTurn("Provider error: connection refused")
+        let prompt = ChatEntryID("oc:msg_next")
+        next.entries.append(
+            ChatEntry(id: prompt, sourceOffset: 3, content: .user(ChatUserMessage(text: "Reply with the word kiwi"))))
+        next.turns.append(ChatTurn(firstEntryID: prompt))
+        store.update(transcript: next)
+        await store.refresh()
+        #expect(store.unreadableNote == Self.openCodeBlockedNote)
+    }
+
+    /// The reject-feedback stage is a dialog Heeler doesn't answer: its
+    /// excerpt shows what the keys would answer, so the pad stays.
+    @Test func anUnrecognizedOpenCodeDialogKeepsTheKeyPad() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-25-reject-feedback-180"))
+        let clock = ManualClock()
+        let store = Self.store(.opencode, pane: pane, clock: clock)
+        store.update(transcript: Self.failedTurn("Provider error: connection refused"))
+        store.update(activity: .blocked)
+        clock.advance(.seconds(2))
+
+        await store.refresh()
+
+        guard case .generic = store.content else {
+            Issue.record("Expected the generic card, got \(store.content)")
+            return
+        }
+        #expect(store.unreadableNote == nil)
+        await store.sendKeys(["esc"])
+        #expect(await pane.keys == [["esc"]])
+    }
+
     // MARK: Helpers
+
+    private static let openCodeBlockedNote =
+        "OpenCode reports Blocked, but its screen shows no question. This usually means the model request failed. "
+        + "Check the terminal."
 
     private static let fruit = FakeQuestionTUI.Question(
         header: "fruit", text: "Pick a fruit", options: ["apple", "pear", "plum"])
@@ -800,6 +951,22 @@ struct BlockedCardStoreTests {
     private static func bash(_ id: String, _ command: String) -> ChatPendingRequest {
         ChatPendingRequest(
             entryID: ChatEntryID(id), callID: id, kind: .command, toolName: "Bash", summary: command)
+    }
+
+    /// A conversation whose newest turn failed, as OpenCode's `idle` row
+    /// records a provider error.
+    private static func failedTurn(_ message: String) -> ChatTranscript {
+        let prompt = ChatEntryID("oc:msg_prompt")
+        return ChatTranscript(
+            entries: [
+                ChatEntry(
+                    id: prompt, sourceOffset: 1,
+                    content: .user(ChatUserMessage(text: "Reply with exactly the word pong."))),
+                ChatEntry(
+                    id: ChatEntryID("oc:msg_idle"), sourceOffset: 2,
+                    content: .notice(ChatNotice(kind: .error, title: message))),
+            ],
+            turns: [ChatTurn(firstEntryID: prompt, ending: .failed)])
     }
 
     private static func transcript(

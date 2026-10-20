@@ -89,6 +89,10 @@ final class BlockedCardStore {
 
     let program: ChatProgram
     private(set) var content: Content = .none
+    /// What the `.unreadable` card says in place of its sentence and key
+    /// pad, for a program whose prompt would act on the pad's keys (see
+    /// `ChatProgram.offersKeysWhenBlockedWithoutDialog`). nil keeps both.
+    private(set) var unreadableNote: String?
     private(set) var progress: Progress = .ready
     /// Why the last action sent nothing or stopped part way.
     private(set) var notice: String?
@@ -109,6 +113,9 @@ final class BlockedCardStore {
     @ObservationIgnored private let clock: BlockedCardClock
     @ObservationIgnored private var activity: ChatAgentActivity = .unknown
     @ObservationIgnored private var pendingRequests: [ChatPendingRequest] = []
+    /// Why the newest turn failed, for a program whose card explains a
+    /// block without a dialog.
+    @ObservationIgnored private var latestFailure: String?
     @ObservationIgnored private var resolvedToolUseIDs: Set<String> = []
     @ObservationIgnored private var isVisible = false
     @ObservationIgnored private var isSuspended = false
@@ -178,6 +185,7 @@ final class BlockedCardStore {
     func update(transcript: ChatTranscript) {
         let waiting = Set(pendingRequests.compactMap(\.callID))
         pendingRequests = transcript.pendingRequests
+        if !program.offersKeysWhenBlockedWithoutDialog { latestFailure = Self.latestFailure(in: transcript) }
         var resolved: Set<String> = []
         for entry in transcript.entries {
             switch entry.content {
@@ -407,7 +415,11 @@ final class BlockedCardStore {
         let observation = await observe()
         guard progress != .acting, readsScreen else { return }
         guard let observation else {
-            if activity == .blocked, content == .none, !isQuiet { content = .unreadable }
+            if activity == .blocked, content == .none, !isQuiet {
+                let note = whyBlocked(on: nil)
+                if note != unreadableNote { unreadableNote = note }
+                content = .unreadable
+            }
             return
         }
         releaseIfChanged(observation)
@@ -603,7 +615,27 @@ final class BlockedCardStore {
         case .none:
             next = observation.activity == .blocked && !isQuiet ? .unreadable : .none
         }
+        let note = next == .unreadable ? whyBlocked(on: observation.screen) : nil
+        if note != unreadableNote { unreadableNote = note }
         if next != content { content = next }
+    }
+
+    /// Why the Agent is Blocked, said in place of the key pad, for a
+    /// program whose prompt would act on its keys: only OpenCode. The
+    /// first that applies: a subagent panel on `screen` covering the
+    /// request, the newest turn's failure, or a likely failed model
+    /// request.
+    private func whyBlocked(on screen: ANSIScreen?) -> String? {
+        guard !program.offersKeysWhenBlockedWithoutDialog else { return nil }
+        if let screen, OpenCodeScreenReader.read(screen).route == .subagentPanel {
+            return "OpenCode's subagent panel covers its request. Close the panel in the terminal to answer it."
+        }
+        if let latestFailure {
+            return "OpenCode stopped with an error: \(latestFailure). herdr holds Chat's messages while it reports "
+                + "Blocked, so continue in the terminal."
+        }
+        return "OpenCode reports Blocked, but its screen shows no question. This usually means the model request "
+            + "failed. Check the terminal."
     }
 
     /// Within the moment around a dialog appearing or going, when Blocked
@@ -615,6 +647,7 @@ final class BlockedCardStore {
 
     private func clear() {
         if content != .none { content = .none }
+        if unreadableNote != nil { unreadableNote = nil }
         if progress != .ready { progress = .ready }
         unconfirmedFingerprint = nil
         if notice != nil { notice = nil }
@@ -636,6 +669,33 @@ final class BlockedCardStore {
 
     private static func isOpen(_ status: ChatToolActivity.Status) -> Bool {
         status == .running || status == .awaitingApproval
+    }
+
+    /// The newest turn's error, when that turn ended failed or its newest
+    /// entry is the error: on one line, and cut after 200 characters.
+    private static func latestFailure(in transcript: ChatTranscript) -> String? {
+        // Without a turn of their own, the loaded entries are the turn
+        // opened above them.
+        let start =
+            transcript.turns.last.flatMap { turn in transcript.entries.lastIndex { $0.id == turn.firstEntryID } } ?? 0
+        let ending = transcript.turns.isEmpty ? transcript.precedingTurnEnd?.ending : transcript.turns.last?.ending
+        let newestIsError = transcript.entries.last.flatMap(errorMessage) != nil
+        guard ending == .failed || newestIsError,
+            let message = transcript.entries[start...].reversed().lazy.compactMap(errorMessage).first
+        else { return nil }
+        var line = message.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        if line.count > 200 {
+            line = String(line.prefix(200)) + "…"
+        } else if line.hasSuffix(".") {
+            // The note's own period ends it.
+            line.removeLast()
+        }
+        return line.isEmpty ? nil : line
+    }
+
+    private static func errorMessage(_ entry: ChatEntry) -> String? {
+        guard case .notice(let notice) = entry.content, notice.kind == .error else { return nil }
+        return notice.title
     }
 
     private static let changedMessage = "This prompt changed. Check it before answering."

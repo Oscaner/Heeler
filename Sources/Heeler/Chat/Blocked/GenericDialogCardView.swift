@@ -52,7 +52,9 @@ struct GenericDialogCard: View {
     }
 }
 
-/// herdr says Blocked, and the screen shows nothing Heeler recognizes.
+/// herdr says Blocked, and the screen shows nothing Heeler recognizes. Where
+/// the program's prompt would act on the key pad's keys, the store's note
+/// says why it is Blocked in their place.
 struct UnreadableDialogCard: View {
     let store: BlockedCardStore
     let openTerminal: () -> Void
@@ -62,9 +64,13 @@ struct UnreadableDialogCard: View {
             BlockedCardHeader(
                 title: "Waiting for Input", detail: nil, isActing: store.progress == .acting,
                 collapse: { store.isCollapsed = true })
-            BlockedCardText(
-                "The Agent is waiting on something Heeler can't read. Answer with these keys or in the terminal.")
-            BlockedKeyPad(store: store)
+            if let note = store.unreadableNote {
+                BlockedCardText(note)
+            } else {
+                BlockedCardText(
+                    "The Agent is waiting on something Heeler can't read. Answer with these keys or in the terminal.")
+                BlockedKeyPad(store: store)
+            }
             BlockedCardFooter(notice: store.notice, isReady: store.progress == .ready, openTerminal: openTerminal)
         }
     }
