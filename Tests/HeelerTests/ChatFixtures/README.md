@@ -188,3 +188,55 @@ Scrubbing replaced the account name as above and the shell prompt's
 `user@host` with `developer@probe-host-placeholder-01`, both with
 replacements of the same length. These screens are not part of
 `ScreenFixture.all`, which the dialog and input-box suites walk.
+
+### Grok Build screens
+
+`screens/grok/grok-*.ansi` are visible-screen reads from Grok Build 1.0.62 on
+herdr 0.9.5 (2026-10-19), kept as herdr returned them apart from the
+scrubbing below: CRLF rows, SGR styling only. Two Agents ran in scratch
+projects under the developer's account, `cap-grok-a` and `cap-grok-b`; every
+screen is 47 rows of 181 or 182 columns. Screens whose header shows
+`/U/d/s/cap-grok-a/proj` ran with `HOME` pointed at a scratch directory, where
+Grok asks before running a tool; the developer's own settings put it in
+Auto-review, which draws no permission card. The model answered the scratch
+prompts in Chinese, and its replies stay as captured.
+
+| Fixtures | Captures |
+|---|---|
+| `grok-01-idle-empty`, `grok-02-idle-draft`, `grok-03-working` | `A11a-idle-empty`, `A11b-idle-draft`, `A8b-running` |
+| `grok-04-working-draft`, `grok-05-queued`, `grok-06-esc-toast` | `A9c-working-draft`; `A10-queued`, a follow-up `agent.prompt` queued during a turn; `A8b-after-esc-0.4s`, the toast Esc shows while the turn goes on |
+| `grok-07-slash-popup`, `grok-08-at-popup`, `grok-09-model-picker` | `A11c-slash-popup`, `A11d-at-popup`, `X17-model-picker` |
+| `grok-10-btw`, `grok-11-dashboard` | `X12-after-4s`, a `/btw` aside answering in a box above the composer; `X14-dashboard` |
+| `grok-12-permission-command`, `grok-13-permission-compound`, `grok-14-permission-edit` | `A4j-blocked`, `A5-blocked`, `A6a-blocked` |
+| `grok-15-question`, `grok-16-subagent-panel` | `cap-grok-b`'s `B9-question`; `cap-grok-b`'s `X8-after-ctrlc-subagent`, the question Ctrl+C asks while a subagent runs |
+| `grok-17-session-new`, `grok-18-session-fork`, `grok-19-resumed-other` | `cap-grok-b`'s `B2-after-new` and `X2-after-fork-no`; `X6-after-resume` |
+| `grok-20-welcome`, `grok-21-resume-picker`, `grok-22-rewind-picker` | `A1-after-start`; `cap-grok-b`'s `B5-picker`; `X8-picker` |
+| `grok-23-rewind-confirm`, `grok-24-restored-draft`, `grok-25-fork-question` | `X8-after-enter`; `X1-after-early-ctrlc-2s`, a prompt Ctrl+C stopped before any output, put back in the box; `cap-grok-b`'s `X2-after-fork`, the worktree question `/fork` asks |
+| `grok-26-waiting-subagent`, `grok-27-compacting` | `cap-grok-b`'s `B7-t6s`; `A12-t+1s`, a `/compact` a second in |
+
+Captures not marked `cap-grok-b` come from `cap-grok-a`.
+
+Scrubbing replaced the account name with `developer` and the scratch
+directory the probes ran in with `/Users/developer/scratch/`; the header's
+abbreviated forms follow (`/U/d/s/cap-grok-a/proj`, `~/s/cap-grok-b/proj`).
+These paths are shorter than captured, so the next run of two or more spaces
+after each, or the row's trailing spaces, takes up the difference: borders
+and right-aligned text keep their columns. The `Session <id>` lines carry
+synthetic ids from the range the Grok transcript fixtures use. In `grok-15`,
+the question and options the model wrote in Chinese became the English of
+`grok/subagent-todo-question.jsonl`, in the card and in the rows above it.
+Grok pads option labels by characters, not cells, so the two descriptions
+start two columns apart, as captured, where Grok would line up English
+labels.
+
+The tests also build synthetic screens, labelled synthetic, for states and
+widths no capture shows yet: `Support/GrokScreenBuilder.swift` lays rows out
+the way Grok's source does (the turn status row cut to fit, dock rows, the
+composer box, a footer whose hints stop at the right edge), and
+`ScreenFixture.synthetic` takes raw rows. They cover the 40- and 62-column
+working, queued and subagent-wait screens with cut footers, the other waits
+that a message would cancel, parked turns, footers that show another pane
+has focus, ghost text, Bash and Remember modes, `/multiline`, editing a
+queued message, a pending double press, and minimal mode. Replace each with
+a capture when one is taken. These screens are not part of
+`ScreenFixture.all` either.

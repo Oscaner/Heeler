@@ -61,8 +61,19 @@ enum ScreenFixture {
         "omp-37-approval-session-a-after-down", "omp-37-approval-session-b-draft",
     ]
 
+    static let grok = [
+        "grok-01-idle-empty", "grok-02-idle-draft", "grok-03-working", "grok-04-working-draft",
+        "grok-05-queued", "grok-06-esc-toast", "grok-07-slash-popup", "grok-08-at-popup",
+        "grok-09-model-picker", "grok-10-btw", "grok-11-dashboard", "grok-12-permission-command",
+        "grok-13-permission-compound", "grok-14-permission-edit", "grok-15-question",
+        "grok-16-subagent-panel", "grok-17-session-new", "grok-18-session-fork", "grok-19-resumed-other",
+        "grok-20-welcome", "grok-21-resume-picker", "grok-22-rewind-picker", "grok-23-rewind-confirm",
+        "grok-24-restored-draft", "grok-25-fork-question", "grok-26-waiting-subagent", "grok-27-compacting",
+    ]
+
     /// The Claude and Codex captures that the dialog and input-box suites walk.
-    /// Pi and Oh My Pi captures stay out so those suites keep their expectations.
+    /// Pi, Oh My Pi and Grok Build captures stay out so those suites keep their
+    /// expectations.
     static let all = claude + codex
 
     static func path(_ stem: String) -> String {
@@ -82,6 +93,7 @@ enum ScreenFixture {
         if stem.hasPrefix("codex-") { return .codex }
         if stem.hasPrefix("pi-") { return .pi }
         if stem.hasPrefix("omp-") { return .omp }
+        if stem.hasPrefix("grok-") { return .grok }
         return .claude
     }
 

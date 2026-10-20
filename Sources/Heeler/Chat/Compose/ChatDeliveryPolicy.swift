@@ -33,12 +33,14 @@ extension ComposerDeliveryPolicy {
                 case .hold(let state): return .inputNotReady(state.holdReason(for: program))
                 }
             },
-            verify: { _ in
+            verify: { sent in
                 await pause(DeliveryCheck.delay)
                 // A screen that cannot be read says nothing; the message
                 // stays marked as sent.
                 guard let screen = try? await readScreen() else { return true }
-                if case .notDelivered = DeliveryCheck.verdict(screen, program: program, activity: activity()) {
+                if case .notDelivered = DeliveryCheck.verdict(
+                    screen, program: program, activity: activity(), sent: sent)
+                {
                     return false
                 }
                 return true

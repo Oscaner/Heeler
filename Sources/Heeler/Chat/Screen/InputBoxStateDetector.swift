@@ -50,7 +50,7 @@ enum InputBoxStateDetector {
         case .claude: return claude(screen)
         case .codex: return codex(screen)
         case .pi, .omp: return PiInputBoxDetector.detect(screen, program: program)
-        case .grok: return .unknown("Chat doesn't read Grok Build's input box yet.")
+        case .grok: return GrokInputBoxDetector.detect(screen)
         }
     }
 

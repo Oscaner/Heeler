@@ -10,6 +10,8 @@ import Testing
 struct ChatDeliveryPolicyTests {
     private static let rules = ChatSendRules(
         program: .codex, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: .codex))
+    private static let grokRules = ChatSendRules(
+        program: .grok, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: .grok))
 
     /// Codex's composer holding a draft the user typed in the terminal.
     private static func draft(_ text: String) -> ANSIScreen {
@@ -176,6 +178,43 @@ struct ChatDeliveryPolicyTests {
                 #expect(!refusal.endsWhenStatusBecomes(status), "\(draft)")
             }
         }
+    }
+
+    /// Grok Build's holds name what to resolve in the terminal.
+    @Test(arguments: [
+        "grok-02-idle-draft", "grok-07-slash-popup", "grok-11-dashboard", "grok-21-resume-picker",
+        "grok-26-waiting-subagent",
+    ])
+    func grokNamesWhatHoldsTheSend(stem: String) async throws {
+        let reasons = [
+            "grok-02-idle-draft":
+                "Grok Build's input box already has text, such as a draft or a message Stop put back. Send or clear it in the terminal first.",
+            "grok-07-slash-popup": "A menu is open over the Agent's input box. Close it in the terminal first.",
+            "grok-11-dashboard":
+                "Grok Build is showing its dashboard, where a message starts a new agent. Go back to the conversation in the terminal first.",
+            "grok-21-resume-picker": "A menu is open over the Agent's input box. Close it in the terminal first.",
+            "grok-26-waiting-subagent":
+                "The Agent isn't taking messages: Grok Build is waiting on a subagent or a background task, and a message now would cancel that turn.",
+        ]
+        let reason = try #require(reasons[stem])
+        let screen = try ScreenFixture.screen(stem)
+        let policy = ComposerDeliveryPolicy.chat(rules: Self.grokRules, activity: { .working }, readScreen: { screen })
+        let preflight = try #require(policy.preflight)
+
+        #expect(await preflight("hello") == .inputNotReady(reason))
+    }
+
+    /// The re-read compares what the box holds with the text sent: Grok
+    /// Build puts a stashed draft back after a send.
+    @Test func grokVerifyComparesTheBoxWithTheSentText() async throws {
+        let restored = try ScreenFixture.screen("grok-24-restored-draft")
+        let verify = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: Self.grokRules, activity: { .idle }, readScreen: { restored }, pause: { _ in }
+            ).verify)
+
+        #expect(await verify("Reply with the word kiwi. ") == false)
+        #expect(await verify("Summarize the README ") == true)
     }
 
     @Test func theRulesShapeWhatIsSentAndRefused() {

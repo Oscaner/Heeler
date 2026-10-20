@@ -59,7 +59,44 @@ enum DeliveryCheck {
         }
     }
 
-    static func verdict(_ screen: ANSIScreen, program: ChatProgram, activity: ChatAgentActivity) -> DeliveryVerdict {
-        verdict(InputBoxStateDetector.detect(screen, program: program), activity: activity)
+    /// The verdict for `program`, which may put other text in the box
+    /// after taking the message: then only text the sent message contains
+    /// is the message left behind, and other text says nothing. Without the
+    /// sent text the verdict is the plain one.
+    static func verdict(
+        _ state: InputBoxState, program: ChatProgram, activity: ChatAgentActivity, sent: String?
+    ) -> DeliveryVerdict {
+        let plain = verdict(state, activity: activity)
+        guard program.mayRefillInputBoxAfterSend, let sent, case .notDelivered(let text) = plain else {
+            return plain
+        }
+        let left = squeezed(text)
+        return !left.isEmpty && squeezed(sent).contains(left) ? plain : .unconfirmed
+    }
+
+    static func verdict(
+        _ screen: ANSIScreen, program: ChatProgram, activity: ChatAgentActivity, sent: String? = nil
+    ) -> DeliveryVerdict {
+        let state = InputBoxStateDetector.detect(screen, program: program)
+        return verdict(state, program: program, activity: activity, sent: sent)
+    }
+
+    /// The text without whitespace: the box wraps a long message across
+    /// rows and trims each, and may show only its end.
+    private static func squeezed(_ text: String) -> String {
+        String(text.filter { !$0.isWhitespace })
+    }
+}
+
+extension ChatProgram {
+    /// Whether the program can put other text in its input box right after
+    /// taking a message. Grok Build restores a draft stashed with Ctrl+S
+    /// after the next send (its keyboard shortcuts guide), so a draft there
+    /// is not necessarily the message.
+    var mayRefillInputBoxAfterSend: Bool {
+        switch self {
+        case .claude, .codex, .pi, .omp: false
+        case .grok: true
+        }
     }
 }

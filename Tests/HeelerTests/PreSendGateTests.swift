@@ -39,6 +39,27 @@ struct PreSendGateTests {
         let plan = try ScreenFixture.screen("codex-19-x3-implement-plan")
         #expect(PreSendGate.check(plan, program: .codex, activity: .idle) == .hold(.dialog(title: "Implement this plan?")))
     }
+
+    /// Grok Build takes a message only into an empty composer with prompt
+    /// focus, working or not, or under its Welcome view. herdr reports
+    /// menus, pickers and the dashboard idle, so the screen holds those.
+    @Test("Grok Build sends only into a focused, empty composer", arguments: ScreenFixture.grok)
+    func grokSendsOnlyIntoAFocusedEmptyComposer(stem: String) throws {
+        let sendable: Set = [
+            "grok-01-idle-empty", "grok-03-working", "grok-05-queued", "grok-06-esc-toast", "grok-17-session-new",
+            "grok-18-session-fork", "grok-19-resumed-other", "grok-20-welcome", "grok-27-compacting",
+        ]
+        let screen = try ScreenFixture.screen(stem)
+
+        let decision = PreSendGate.check(screen, program: .grok, activity: .idle)
+
+        if sendable.contains(stem) {
+            #expect(decision == .send)
+        } else {
+            #expect(decision != .send)
+        }
+        #expect(PreSendGate.check(screen, program: .grok, activity: .blocked) == .holdBlocked)
+    }
 }
 
 @Suite("Delivery check")
@@ -83,5 +104,61 @@ struct DeliveryCheckTests {
     @Test("The re-read waits three seconds")
     func delay() {
         #expect(DeliveryCheck.delay == .seconds(3))
+    }
+
+    /// Whitespace doesn't count: the box wraps a long message across rows,
+    /// trims each, and may show only its end.
+    @Test("Grok Build: the sent text left in the box is not delivered")
+    func grokTextLeftFromTheSendIsNotDelivered() throws {
+        let draft = try ScreenFixture.screen("grok-02-idle-draft")
+        let sent = "Reply with the word kiwi."
+
+        #expect(
+            DeliveryCheck.verdict(draft, program: .grok, activity: .idle, sent: "hello draft ")
+                == .notDelivered("hello draft"))
+        #expect(
+            DeliveryCheck.verdict(.text("Reply with the\nword kiwi."), program: .grok, activity: .working, sent: sent)
+                == .notDelivered("Reply with the\nword kiwi."))
+        #expect(
+            DeliveryCheck.verdict(.text("word kiwi."), program: .grok, activity: .idle, sent: sent)
+                == .notDelivered("word kiwi."))
+    }
+
+    /// Grok Build puts a draft stashed with Ctrl+S back after the next send,
+    /// so other text there says nothing about the message.
+    @Test("Grok Build: other text after the send is unconfirmed")
+    func otherTextAfterAGrokSendIsUnconfirmed() throws {
+        let restored = try ScreenFixture.screen("grok-24-restored-draft")
+
+        #expect(
+            DeliveryCheck.verdict(restored, program: .grok, activity: .working, sent: "Summarize the README ")
+                == .unconfirmed)
+        #expect(DeliveryCheck.verdict(.shellMode("ls"), program: .grok, activity: .idle, sent: "hello") == .unconfirmed)
+        // Without the sent text, the plain verdict.
+        #expect(
+            DeliveryCheck.verdict(restored, program: .grok, activity: .idle)
+                == .notDelivered("Reply with the word kiwi."))
+    }
+
+    @Test("Grok Build: a suggestion drawn after the send is delivered")
+    func aGhostSuggestionAfterAGrokSendIsDelivered() {
+        let suggestion = GrokScreenBuilder(
+            ghost: "Now run the tests", hints: ["Tab/→:accept suggestion", "Shift+Tab:mode", "Ctrl+.:shortcuts"]
+        ).screen
+
+        #expect(
+            DeliveryCheck.verdict(suggestion, program: .grok, activity: .idle, sent: "Fix the build ") == .delivered)
+    }
+
+    @Test(
+        "Other programs: any text left in the box is not delivered",
+        arguments: ChatProgram.allCases.filter { !$0.mayRefillInputBoxAfterSend })
+    func otherProgramsKeepTheirVerdictForOtherText(program: ChatProgram) {
+        #expect(
+            DeliveryCheck.verdict(.text("draft"), program: program, activity: .idle, sent: "hello")
+                == .notDelivered("draft"))
+        #expect(
+            DeliveryCheck.verdict(.shellMode("ls"), program: program, activity: .working, sent: "hello")
+                == .notDelivered("ls"))
     }
 }
