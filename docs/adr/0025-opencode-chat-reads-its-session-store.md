@@ -253,8 +253,14 @@ its Done status until the first prompt of the new session.
   shares the connection's four ordinary-session channels with Changes, the
   Skills probe and Agent discovery, and uploads its 14 KiB script each time:
   up to about 26 MB an hour at the 2-second pace and half that at the
-  4-second one. Its cost on a remote Host is not yet measured; if it is
-  high, the polling pace goes down.
+  4-second one. Through a loopback `sshd` on the development Mac, a query
+  took p50 49 to 51 ms on the Host and about 13 ms more CPU in its children
+  than a trivial exec (15 ms counting its own processes); with Chat showing
+  for 425 seconds, the queries used 0.49% of one core, 0.94% counting each
+  exec's own processes
+  ([Costs](../research/opencode-session-store.md#costs)). The round trip
+  Chat sees for a query, over loopback or a slower link, is not yet
+  measured; if it is high, the polling pace goes down.
 - The Host needs `sqlite3` with JSON support from SQLite 3.25 on, or
   `python3` 3.6 or newer whose SQLite is that recent. macOS has
   `/usr/bin/sqlite3`; many Linux server images have `python3` but not the
