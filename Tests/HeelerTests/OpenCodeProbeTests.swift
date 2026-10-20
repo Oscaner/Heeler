@@ -89,12 +89,16 @@ struct OpenCodeProbeTests {
         #expect(cli.contains(" -batch -bail "))
     }
 
+    /// Python fetches text as bytes and writes them as SQLite returns them,
+    /// as the CLI does: decoding them would fail the whole read on text
+    /// that is not UTF-8.
     @Test func thePythonReaderWritesUTF8Bytes() throws {
         let nonce = OpenCodeProbe.makeNonce()
         let python = ScriptParts(OpenCodeProbe.script(Self.tail, nonce: nonce), nonce: nonce)
             .python.joined(separator: "\n")
         #expect(python.contains("out = sys.stdout.buffer"))
-        #expect(python.contains(".encode(\"utf-8\")"))
+        #expect(python.contains("c.text_factory = bytes"))
+        #expect(python.contains("out.write((v if isinstance(v, bytes) else str(v).encode(\"utf-8\")) + b\"\\n\")"))
         #expect(python.contains("except Exception as e:"))
         #expect(!python.contains("print("))
     }
@@ -315,6 +319,43 @@ struct OpenCodeProbeTests {
         #expect(records.eventSeq == 12)
         #expect(records.rows.isEmpty)
         #expect(!records.overflow)
+    }
+
+    /// SQLite writes a lone surrogate escape (`\ud83d`, as OpenCode stores a
+    /// line its read tool cut inside an emoji) as bytes that are not UTF-8.
+    /// The session, row and inbox lines keep the rest of their text.
+    @Test func textThatIsNotUTF8ReadsAsReplacementCharacters() throws {
+        let nonce = OpenCodeProbe.makeNonce()
+        let surrogate = Data([0xED, 0xA0, 0xBD])
+        var stdout = Data("\(OpenCodeProbe.beginMarker(nonce: nonce))\nV 3.54.0\nE 12\n".utf8)
+        stdout += Data(#"S {"k":"session","id":"ses_0a1b2c3d4e5fK2mN8pQ4rT6vX9","title":"cut "#.utf8)
+        stdout += surrogate + Data("\"}\n".utf8)
+        stdout += Data(#"R {"k":"row","id":"msg_a","type":"assistant","seq":7,"tc":1,"tu":3,"f":true,"#.utf8)
+        stdout += Data(#""d":{"content":[{"_i":0,"type":"text","text":"before "#.utf8)
+        stdout += surrogate + Data(#" after","n":14}]}}"#.utf8) + Data("\n".utf8)
+        stdout += Data(#"I {"k":"inbox","items":[{"id":"msg_b","type":"user","seq":9,"text":"queued "#.utf8)
+        stdout += surrogate + Data(#""}],"more":0}"#.utf8) + Data("\n".utf8)
+        stdout += Data("Z 0\nW 1 1\n\n\(OpenCodeProbe.endMarker(nonce: nonce))\n".utf8)
+
+        let response = try OpenCodeProbe.parse(
+            stdout: stdout, stderr: Data(), exitStatus: 0, nonce: nonce, query: Self.tail)
+        guard case .records(let records) = response else {
+            Issue.record("expected records, read \(response)")
+            return
+        }
+        #expect(records.ignoredLines == 0)
+        let replaced = "\u{FFFD}\u{FFFD}\u{FFFD}"
+        guard case .session(let session) = OpenCodeLine(try #require(records.sessionLine)),
+            case .row(let row) = OpenCodeLine(try #require(records.rows.first?.line)),
+            case .assistant(let step) = row.content, case .text(let text) = step.items.first?.kind,
+            case .inbox(let inbox) = OpenCodeLine(try #require(records.inboxLine))
+        else {
+            Issue.record("a line did not decode")
+            return
+        }
+        #expect(session.title == "cut \(replaced)")
+        #expect(text.text == "before \(replaced) after")
+        #expect(inbox.items.first?.text == "queued \(replaced)")
     }
 
     /// `head -c` cut the reader's output, its exit line with it: the poll

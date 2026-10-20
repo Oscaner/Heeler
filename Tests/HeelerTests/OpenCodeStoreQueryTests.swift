@@ -415,6 +415,37 @@ struct OpenCodeStoreQueryTests {
         #expect(try harness.records(Self.tail(session)).rows.map(\.seq) == [4, 7, 12])
     }
 
+    /// SQLite reads a lone surrogate escape, as OpenCode stores a line its
+    /// read tool cut inside an emoji, as bytes that are not UTF-8 and prints
+    /// them raw. The row and the inbox keep the rest of their text.
+    @Test func aLoneSurrogateReadsAsReplacementCharacters() throws {
+        let (harness, session) = try Self.store("pong")
+        try Self.insertRow(harness, session, seq: 20, type: "assistant", data: #"""
+            {"time":{"created":1800000100000,"completed":1800000100500},
+             "content":[{"type":"text","text":"before \ud83d after"}]}
+            """#)
+        try harness.insert(into: "session_inbox", [
+            "id": .text("msg_0a1b2c3d4e41InboxSurrogate1"), "session_id": .text(session.rawValue),
+            "type": .text("user"), "delivery": .text("steer"), "enqueued_seq": .integer(30),
+            "time_created": .integer(1_800_000_100_700),
+            "payload": .text(#"{"text":"queued \ud83d","files":[],"agents":[]}"#),
+        ])
+
+        #expect(harness.output(Self.tail(session)).stdout.range(of: Data([0xED, 0xA0, 0xBD])) != nil)
+        let records = try harness.records(Self.tail(session))
+        #expect(records.ignoredLines == 0)
+        let replaced = "\u{FFFD}\u{FFFD}\u{FFFD}"
+        guard case .row(let row) = OpenCodeLine(try #require(records.rows.first { $0.seq == 20 }).line),
+            case .assistant(let step) = row.content, case .text(let text) = step.items.first?.kind,
+            case .inbox(let inbox) = OpenCodeLine(try #require(records.inboxLine))
+        else {
+            Issue.record("a line did not decode")
+            return
+        }
+        #expect(text.text == "before \(replaced) after")
+        #expect(inbox.items.last?.text == "queued \(replaced)")
+    }
+
     @Test func aRowOverTheLimitArrivesWithoutItsData() throws {
         let (harness, session) = try Self.store("pong")
         let item = #"{"type":"text","text":"\#(String(repeating: "t", count: 65_536))"}"#

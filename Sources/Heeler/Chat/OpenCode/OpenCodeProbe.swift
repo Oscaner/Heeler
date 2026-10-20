@@ -124,7 +124,9 @@ enum OpenCodeProbe {
         return Data((lines.joined(separator: "\n") + "\n").utf8)
     }
 
-    /// Python writes UTF-8 bytes, so an ASCII stdout under `LC_ALL=C`
+    /// Python writes the bytes SQLite returns, as the CLI does: text that is
+    /// not UTF-8 (SQLite's form of a lone surrogate escape) reaches the parse
+    /// instead of failing the read, and an ASCII stdout under `LC_ALL=C`
     /// (Python 3.6) never fails on text. It skips NULL rows, as the CLI's
     /// empty lines are skipped, and reports any failure in the CLI's form.
     private static func pythonReader(_ statements: [String]) -> String {
@@ -137,13 +139,15 @@ enum OpenCodeProbe {
             try:
                 c = sqlite3.connect("file:" + quote(sys.argv[1]) + "?mode=ro", uri=True,
                                     timeout=1.0, isolation_level=None)
+                c.text_factory = bytes
                 c.execute("PRAGMA query_only = 1")
                 for i, s in enumerate(S):
                     if i == 1:
                         c.execute("BEGIN")
                     for row in c.execute(s):
-                        if row[0] is not None:
-                            out.write((str(row[0]) + "\\n").encode("utf-8"))
+                        v = row[0]
+                        if v is not None:
+                            out.write((v if isinstance(v, bytes) else str(v).encode("utf-8")) + b"\\n")
                 c.execute("COMMIT")
                 out.flush()
             except Exception as e:
@@ -252,7 +256,10 @@ enum OpenCodeProbe {
             }
         }
 
-        /// False for a line this parse does not know.
+        /// False for a line this parse does not know. SQLite turns a lone
+        /// surrogate escape in OpenCode's JSON, such as a line OpenCode cut
+        /// inside an emoji, into bytes that are not UTF-8; JSON lines keep
+        /// them as U+FFFD, so the rest of the line still decodes.
         private mutating func read(tag: UInt8, value: Data) -> Bool {
             let text = String(decoding: value, as: UTF8.self)
             switch Character(UnicodeScalar(tag)) {
@@ -266,14 +273,15 @@ enum OpenCodeProbe {
             case "M":
                 guard value.isEmpty else { return false }
                 sessionMissing = true
-            case "S": sessionLine = value
+            case "S": sessionLine = Data(text.utf8)
             case "R":
-                guard let head = try? JSONDecoder().decode(RowHead.self, from: value) else {
+                let line = Data(text.utf8)
+                guard let head = try? JSONDecoder().decode(RowHead.self, from: line) else {
                     return false
                 }
                 rows.append(OpenCodeRowLine(
                     id: head.id, seq: head.seq, timeUpdated: head.tu ?? 0,
-                    isFinal: head.f ?? false, line: value))
+                    isFinal: head.f ?? false, line: line))
             case "X":
                 guard value.isEmpty else { return false }
                 overBudget = true
@@ -283,7 +291,7 @@ enum OpenCodeProbe {
             case "C":
                 guard let count = Int(text) else { return false }
                 windowCount = count
-            case "I": inboxLine = value
+            case "I": inboxLine = Data(text.utf8)
             case "Z":
                 guard let status = Int32(text) else { return false }
                 exitLine = status
