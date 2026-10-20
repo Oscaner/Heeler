@@ -161,6 +161,19 @@ struct GrokStopGuardTests {
         #expect(Self.verdict(own.screen) == .press)
     }
 
+    /// Shell and remember modes draw their own glyph and label in the box,
+    /// where Ctrl+C would clear the text or leave the mode while the turn
+    /// runs on.
+    @Test(arguments: [("!", "Run shell command"), ("#", "Save memory note")])
+    func refusesInShellAndRememberModes(glyph: String, label: String) {
+        let screen = GrokScreenBuilder(
+            status: .init(label: "Thinking…"), glyph: glyph, bottomLabel: label, hints: Self.workingHints
+        ).screen
+
+        #expect(GrokScreen(screen).composer?.mode == (glyph == "!" ? .bash : .remember))
+        #expect(Self.verdict(screen) == .refuse(Self.otherView))
+    }
+
     /// While a cancel is pending, Ctrl+C maps to Quit.
     @Test func refusesWhileCancelling() {
         let screen = GrokScreenBuilder(status: .init(label: "Cancelling…"), hints: Self.workingHints).screen
