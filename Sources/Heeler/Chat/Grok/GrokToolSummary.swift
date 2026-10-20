@@ -322,7 +322,9 @@ struct GrokToolCall: Sendable {
             tool.preview = preview(kind: summary.kind)
         }
         tool.exitCode = taskEnd != nil ? taskEnd?.exitCode : output?.exitCode
-        if notRun == nil {
+        // A question's answers show in its questions, and its result holds
+        // nothing more for an expanded row to read.
+        if notRun == nil, summary.kind != .question {
             tool.output = (subagentEnd?.preview != nil ? subagentEndLine : nil) ?? taskEndLine ?? outputLine
         }
         if outputIsTruncated, tool.output != nil, tool.output == outputLine {

@@ -579,12 +579,14 @@ struct GrokToolActivityTests {
         let transcript = Self.transcript(lines, path: Self.pathB)
 
         let id = "call-01900000-0000-7000-8000-000000000038-2"
+        // The answers show in the questions, and the result holds nothing
+        // more, so an expanded row has no output to read.
         #expect(
             try Self.tool(transcript, id)
                 == ChatToolActivity(
                     kind: .question, name: "ask_user_question", title: "How should we handle the README rename plan?",
                     status: .succeeded, questions: [Self.renameQuestion(answer: "Keep it as a todo (Recommended)")],
-                    callID: id, output: Self.reference(lines, 5)))
+                    callID: id))
 
         // A question nobody answered completes, and the turn goes on.
         let declined = "User declined to answer the questions. Continue with the task using your best judgment."

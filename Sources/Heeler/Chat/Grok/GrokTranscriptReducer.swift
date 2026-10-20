@@ -73,7 +73,7 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
                 let shown = GrokToolCall.shown(changes, kind: tool.kind, directory: tool.fileChanges?.directory)
                 return .preview(nil, fileChanges: shown)
             }
-            return .preview(tool.kind == .question ? nil : output.preview)
+            return .preview(output.preview)
         case .taskCompleted(let end):
             // A background command's or monitor's row points at its task's
             // end.
