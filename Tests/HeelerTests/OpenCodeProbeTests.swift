@@ -321,6 +321,20 @@ struct OpenCodeProbeTests {
         #expect(!records.overflow)
     }
 
+    /// A Python built without SQLite has no `sqlite3` module. The import
+    /// sits inside the reader's `try`, so its failure arrives in the CLI's
+    /// form and reads as no reader, as no Python at all does.
+    @Test func aPythonWithoutItsSQLiteModuleIsNoReader() throws {
+        let nonce = OpenCodeProbe.makeNonce()
+        let python = ScriptParts(OpenCodeProbe.script(Self.tail, nonce: nonce), nonce: nonce).python
+        let opening = try #require(python.firstIndex(of: "try:"))
+        #expect(python.filter { $0.contains("sqlite3") && $0.contains("import") } == ["    import sqlite3"])
+        #expect(python.firstIndex(of: "    import sqlite3") == opening + 1)
+        #expect(
+            try Self.parse(["Z 1", "W 1 1"], stderr: "Error: ModuleNotFoundError: No module named '_sqlite3'\n")
+                == .unavailable(.noReader))
+    }
+
     /// SQLite writes a lone surrogate escape (`\ud83d`, as OpenCode stores a
     /// line its read tool cut inside an emoji) as bytes that are not UTF-8.
     /// The session, row and inbox lines keep the rest of their text.
@@ -424,6 +438,11 @@ struct OpenCodeProbeTests {
         (ReaderFailure("Error: OperationalError: database is locked"), .unreadable("OpenCode's database is busy.")),
         (ReaderFailure("Error: OperationalError: parser stack overflow"), .problem(.readerTooOld("3.54.0"))),
         (ReaderFailure("Parse error near line 12: parser stack overflow"), .problem(.readerTooOld("3.54.0"))),
+        (ReaderFailure("Error: ModuleNotFoundError: No module named '_sqlite3'"), .problem(.noReader)),
+        (
+            ReaderFailure("Error: ImportError: libsqlite3.so.0: cannot open shared object file: No such file or directory"),
+            .problem(.noReader)
+        ),
     ])
     func classifiesReaderErrors(stderr: ReaderFailure, expected: ReaderFailureReading) throws {
         let sideFiles = stderr.sideFiles ? "W 1 1" : "W 0 0"

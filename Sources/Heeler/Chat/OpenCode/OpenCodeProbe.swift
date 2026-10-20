@@ -130,15 +130,17 @@ enum OpenCodeProbe {
     /// not UTF-8 (SQLite's form of a lone surrogate escape) reaches the parse
     /// instead of failing the read, and an ASCII stdout under `LC_ALL=C`
     /// (Python 3.6) never fails on text. It skips NULL rows, as the CLI's
-    /// empty lines are skipped, and reports any failure in the CLI's form.
+    /// empty lines are skipped, and reports any failure in the CLI's form,
+    /// a Python built without its `sqlite3` module included.
     private static func pythonReader(_ statements: [String]) -> String {
         let encoded = (try? JSONEncoder().encode(statements)) ?? Data("[]".utf8)
         return """
-            import sys, json, base64, sqlite3
+            import sys, json, base64
             from urllib.parse import quote
             S = json.loads(base64.b64decode("\(encoded.base64EncodedString())").decode("utf-8"))
             out = sys.stdout.buffer
             try:
+                import sqlite3
                 c = sqlite3.connect("file:" + quote(sys.argv[1]) + "?mode=ro", uri=True,
                                     timeout=1.0, isolation_level=None)
                 c.text_factory = bytes
@@ -369,6 +371,10 @@ enum OpenCodeProbe {
             lines.last {
                 $0.hasPrefix("Error") || $0.hasPrefix("Parse error") || $0.hasPrefix("Runtime error")
             } ?? lines.last { !$0.isEmpty } ?? ""
+        // A Python built without SQLite cannot read the store at all.
+        if line.hasPrefix("Error: ModuleNotFoundError") || line.hasPrefix("Error: ImportError") {
+            return .unavailable(.noReader)
+        }
         if line.contains("database is locked") || line.contains("database is busy") {
             throw TransportError.hostStoreUnreadable(detail: "OpenCode's database is busy.")
         }

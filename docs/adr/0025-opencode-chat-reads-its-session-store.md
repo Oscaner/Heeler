@@ -34,8 +34,9 @@ Cards and the cache work as described there.
   frees its channel.
 - The reader is `sqlite3` (on macOS, `/usr/bin/sqlite3` first), else
   `python3 -I`. macOS's `/usr/bin/python3` is never used: without the Command
-  Line Tools it is only a prompt to install them. With neither reader, Chat
-  says the Host needs one.
+  Line Tools it is only a prompt to install them. With neither reader, or
+  only a `python3` built without its `sqlite3` module, Chat says the Host
+  needs one.
 - The CLI runs with `-init /dev/null -readonly -batch -bail -noheader -list`
   and a one-second busy timeout; `-init /dev/null` keeps a user's
   `~/.sqliterc` from adding output or writing a file. Python opens a `mode=ro`
