@@ -23,6 +23,12 @@ None came from a personal session.
 | `pi/provider-retry.jsonl` | Pi 0.85.1 session from a later 2026-10-15 probe against herdr 0.9.5: a `Connection error.` Pi retried on its own, the retry recorded as the error's reply |
 | `pi/summaries.jsonl` | Pi 0.85.1's `branch_summary` and `compaction` records from the 2026-10-17 E2E run (isolated root), summaries verbatim: Markdown headings, task checkboxes and a `<read-files>` block. The messages around them are written for the test |
 | `grok/fork-head.jsonl` | Grok Build 1.0.62 on herdr 0.9.5 (2026-10-19): the start of a scratch session made with `/fork` without a worktree, lines 1, 3–6 and 10 of the capture. The first five are the parent's records as the fork copied them, with the fork in `sessionId` and the parent's id still prefixing `eventId`; the last is the fork's own. The dropped lines are the developer's hook records, a copied `background_tasks` record and two more herdr `session_start` records |
+| `grok/core-turns.jsonl` | Grok Build 1.0.62 on herdr 0.9.5 (2026-10-19): a scratch session's first four turns, lines 1, 3–5, 7–9, 11–13, 15–17, 19 and 21–24 of the capture: herdr's `session_start` record, a one-line prompt, a three-line prompt, a prompt with the space Chat adds after it, and a turn with a `run_terminal_command` call (its start, input and result), reasoning and a reply in Chinese. The dropped lines are the developer's hook records |
+| `grok/cancel-takeover.jsonl` | The same Grok Build and herdr (2026-10-19), lines 1, 3–7, 9–12 and 14–17 of another scratch session's capture: a prompt stopped with Ctrl+C before any output, the prompt that took over its index, and a turn that spawned a subagent and was cancelled with Ctrl+C, the subagent's end written after the turn's. Line 3 is the developer's `user_prompt_submit` hook between the two prompts, its run renamed `project/probe:user_prompt_submit[0].hooks[0]`; the other hook records are dropped |
+| `grok/rewind.jsonl` | The same (2026-10-19), lines 1, 3, 5–6, 8–11, 13 and 15–16 of a scratch session's capture: two turns, a `rewind_marker` to prompt 1, and the prompt that reused index 1, the restored draft joined to it. The dropped lines are the developer's hook records and two reasoning records |
+| `grok/compaction.jsonl` | Lines 1–6 are lines 139–144 of an earlier capture of `core-turns.jsonl`'s session (2026-10-19): a turn, then a manual `/compact` (`compaction_checkpoint` and `auto_compact_completed`). Lines 7–12 are written for the test in the same session, from event number 606 on: an automatic compaction inside the next turn, recorded as Grok Build's source writes one |
+| `grok/dispatch-order.jsonl` | The same (2026-10-19), lines 1–4 of a session dispatched from Grok's dashboard: its prompt is written before herdr's `session_start` record |
+| `grok/agent-turns-and-errors.jsonl` | Written for the test, not captured: a skill, a prompt of text, image and text chunks with an `image_dropped` notice, an interjection and a thought written after its turn's end, a retry that gave up and an expired sign-in (each ending its turn with an error), a shell-mode command, a hidden prompt Grok wrote for itself after a background command, fork and resume context wrappers, an unknown record kind, and a cancelled and a failed automatic compaction. The records take the captures' shapes, or Grok Build's source where no capture shows one |
 
 ## Scrubbing
 
@@ -45,13 +51,26 @@ replaced as above; `pi/provider-retry.jsonl` also drops the encrypted
 `thinkingSignature`. Each keeps every line of its session, so tests address
 records by line number.
 
-Grok Build captures keep their chosen lines byte for byte, apart from ids:
-every session and prompt id becomes a synthetic UUIDv7-shaped id
-(`01900000-0000-7000-8000-00000000000N`), the same one wherever the real id
-appeared, including the `eventId` prefix a fork keeps from its parent. The
-developer's own hook records (`global/settings:` runs) are dropped; herdr's
-`session_start` record stays. Searching `grok/` for a UUID outside that range
-finds nothing.
+Grok Build captures keep their chosen lines byte for byte, apart from
+these replacements:
+
+- Every id (session, prompt, tool call, compaction checkpoint, subagent)
+  becomes a synthetic UUIDv7-shaped id (`01900000-0000-7000-8000-0000000000NN`),
+  the same one wherever the real id appeared: in a call id's `call-<id>-0`,
+  in the `eventId` prefix a fork keeps from its parent, and, without its
+  dashes, in a subagent attempt's `at1.<id>`.
+- The account name becomes `developer`, also inside the byte arrays Grok
+  writes for a command's output. The name has the same length, so
+  `total_bytes` still holds.
+- The scratch directory the probes ran in becomes `/Users/developer/scratch/`,
+  plain and percent-encoded.
+
+The developer's own hook records (`global/settings:` runs) are dropped, except
+the one `cancel-takeover.jsonl` keeps under a renamed run; herdr's
+`session_start` records stay. The fixtures written for the tests use ids
+from the same range only. Searching `grok/` for a UUID outside that range, a
+`global/settings` run or the account name, in text or in a byte array, finds
+nothing.
 
 After adding a capture, check that searching this directory for `/Users/`
 (other than `/Users/developer`), `ghp_`, `Bearer` and e-mail addresses finds
