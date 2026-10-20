@@ -20,7 +20,7 @@ read path built on it.
 | Live capture A | OpenCode 2.0.32 in a herdr pane at 180 by 47 cells, in a scratch project with scratch prompts; the store, `herdr agent get` and the screen polled every 300 ms | labels `a1` to `a11b`, `e1` to `e4` |
 | Live capture B | the same in a second scratch project; one aggregated `SELECT` and `herdr agent get` sampled every 150 ms | labels `B1` to `B9`, `Bbusy`, `Besc`, `Bpaste1`, `Bpaste2`, `Bat`, `Bcompact` |
 | Phone-width capture | OpenCode 2.0.32 on an isolated herdr 0.9.5 server on 2026-10-20, in a scratch project with scratch prompts. A 180 by 47 client, then a pty-attached `herdr agent attach` at 62 by 41 cells, sized the pane, which kept that size after each detach; `agent.read` read the visible screen | Chat fixture stems `opencode-22`, `opencode-25` (180 by 47) and `opencode-30` to `opencode-43` (62 by 41) |
-| In-app check | OpenCode 2.0.32 on an isolated herdr 0.9.5 server on 2026-10-21, in a scratch project with scratch prompts, its pane focused at 62 by 41 cells under the app on a Simulator; herdr's `pane.agent_status_changed` events and `herdr agent get` sampled every 150 ms beside the store | "2026-10-21" |
+| In-app check | OpenCode 2.0.32 on an isolated herdr 0.9.5 server and `sshd` on 2026-10-21, in a scratch project with scratch prompts, its pane focused at 119 by 40 and then 62 by 41 cells under the app on a Simulator; herdr's `pane.agent_status_changed` events, `herdr agent get` read about every 250 ms, herdr's server log and a wrapper on the `sshd` that timed each exec, beside the store | "2026-10-21" |
 
 The live captures used one OpenAI model (GPT-6 Astra, variant `high`); other
 providers may fill text and reasoning differently. The captures stay outside
@@ -133,8 +133,8 @@ The census counted, among 2.x rows: `assistant` 5,578, `user` 855,
 | `user` | `text`, `files[]` (`{data, mime, name, mention{start, end, text}, source{type}}`), `agents[]`, `skills[]`, `metadata?`, `time.created` |
 | `assistant` | one model step: `agent`, `model{id, providerID, variant}`, `content[]`, `snapshot{start, end, files[]}`, `finish`, `providerState?`, `cost`, `tokens`, `error?{type, message}`, `retry?{attempt, at, error}`, `time{created, streamed?, completed?}` |
 | `idle` | `outcome` (`succeeded`, `failed` or `interrupted`), `error?` |
-| `compaction` | `status` (`running`, `completed` or `failed`), `reason` (`auto` or `manual`), `summary`, `recent`, and the model, cost and tokens once completed |
-| `synthetic` | `text`, `description?`, `metadata{source (subagent or shell), childID?, jobID?, shellID?, state, exit?, truncated?}` |
+| `compaction` | `status` (`running`, `completed` or `failed`), `reason` (`auto` or `manual`), `summary` and `recent` (the one failed row seen had neither), and the model, cost and tokens once completed, or `error{type, message}` once failed |
+| `synthetic` | `text`, `description?`, `metadata?{source (subagent or shell), childID?, jobID?, shellID?, state, exit?, truncated?}` |
 | `system` | `text`, `description` ("Instructions updated: …"), `metadata.notice` |
 | `skill` | `skill`, `name`, `text` |
 | `shell` | a `!` command typed in the TUI: `shellID`, `command`, `status` (`running`, then `exited`), `exit?`, `output?{output, cursor, size, truncated}` once it ends, `metadata{background}`, `time{created, completed?}` |
@@ -142,8 +142,17 @@ The census counted, among 2.x rows: `assistant` 5,578, `user` 855,
 | `model-switched` | `model`, `previous?` |
 | `location-switched` | `location`, `projectID?`, `subpath?`, `previous?` |
 
-`skill`, `agent-switched` and `model-switched` rows were not in the census or
-the captures (F6).
+`skill` rows were not in the census or any capture, nor were
+`model-switched` rows (F6). The in-app check saw `agent-switched`.
+`shift+tab` switched Build to Plan with no row and the counter unchanged;
+the next prompt wrote `agent-switched` `{agent: plan, previous: build}`,
+then a `synthetic` row with only `text`, then its `user` row, and its steps
+carried `agent: plan`. That text is a reminder to the model, a
+471-character `<system-reminder>` ("You are in Plan mode. …"), written once
+per switch: a second Plan prompt wrote neither row, and switching back to
+Build wrote another pair ("You are NO LONGER in Plan mode. …"). The
+terminal showed "Switched agent from Build to Plan" above the prompt and
+never the reminders.
 
 A `shell` row was seen in the in-app check: `running` with no `output` while
 the command ran, then `exited` with `exit` and `output`. That `output` is
@@ -163,7 +172,9 @@ stayed `idle`, and OpenCode queued an inbox `synthetic` note
 - `finish` is `stop`, `tool-calls`, `length`, `error`, `content-filter` or
   `unknown` (`schema/src/llm.ts:5`); the census counted `tool-calls` 5,008,
   `stop` 516, `length` 1 and `error` 1. `error.type` values were `aborted`
-  46, `unknown` 3 and `provider.error` 2. `retry` was not seen (F8).
+  46, `unknown` 3 and `provider.error` 2; a refused connection in the in-app
+  check recorded `provider.transport`. `retry` was not in the census; the
+  in-app check saw it while a provider failed (see [Turns](#turns)).
 - With this OpenAI model, text items carried `state.itemId` and
   `state.phase` (`commentary` or `final_answer`), and reasoning items kept
   `text: ""` with about 1.6 KB of `state.reasoningEncryptedContent`. The TUI
@@ -178,8 +189,8 @@ stayed `idle`, and OpenCode queued an inbox `synthetic` note
   `tool.execution` 194 times and `aborted` once.
 - `aborted` messages: "Tool execution interrupted" after Esc stops a turn,
   "The user declined this tool call" after a rejected permission, and "The
-  user dismissed this question" for a dismissed question **(source,**
-  **`core/src/tool/plugin/question.ts:32-36, 96-97`)**.
+  user dismissed this question" for a dismissed question
+  (`core/src/tool/plugin/question.ts:32-36, 96-97`; seen on 2026-10-21).
 - The built-in tools of 2.0.32 are `edit`, `glob`, `grep`, `mcp-resource`,
   `opencode`, `patch`, `question`, `read`, `shell`, `skill`, `subagent`,
   `webfetch`, `websearch` and `write`, and codemode's `execute`; there is no
@@ -231,14 +242,15 @@ every durable event of the session.
 | Normal turn | `user`, one `assistant` per step, `idle(succeeded)` |
 | Steer while working | `user`, `assistant`, a second `user` (the steer, promoted at the step boundary), `assistant`, one `idle` |
 | Esc twice (stop) | the running tool `error`/`aborted`; the step `finish: error` with `error{aborted, "Step interrupted"}`; `idle(interrupted)`. Partial text stays (189 characters in `Besc`) |
+| Esc twice with a steer waiting | `idle(interrupted)`, then the steer's `user` row 4 to 6 ms later and a new run of steps with its own `idle` (three runs, 2026-10-21) |
 | Reject a permission (Reject or Esc) | the tool `error`/`aborted` "The user declined this tool call"; the step `finish: error`; **no `idle` row**. `idle_outcome` and `time_idle` keep the previous turn's values, and `time_suspended` stays set |
-| Dismiss a question (Esc) | as a reject, with "The user dismissed this question" **(source; F2)** |
+| Dismiss a question (Esc) | as a reject: the question tool `error`/`aborted` "The user dismissed this question", the step `finish: error` with `error{aborted, "Step interrupted"}`, and no `idle` row (2026-10-21; the session's columns were not read) |
 | Reject with feedback (a subagent's request) | the tool fails with the feedback and the turn goes on **(source, `core/src/permission.ts:248-253, 276-283`; F3)** |
 | `/redo` | a bare `idle(succeeded)` with no prompt |
 | `/undo` | no row change; `session_v2.revert` is set |
 | The next prompt after `/undo` | rows from the boundary on are deleted, then the new `user` row is inserted |
-| `/compact` | `compaction(running)`, updated in place to `completed`, then `idle(succeeded)`; no `user` row |
-| Provider failure | `idle(failed, error)` **(source; F5)** |
+| `/compact` | `compaction(running)`, updated in place to `completed`, then `idle(succeeded)`; no `user` row. With nothing new since the last compaction, `compaction(failed)` with `error{compaction.unavailable, "Nothing to compact yet"}`, then `idle(succeeded)` (2026-10-21) |
+| Provider failure (a refused connection, retried) | while OpenCode retries, the step's open `assistant` row carries `retry` and no other row is written; then the step `finish: error` with `error{provider.transport, …}` and no content, and `idle(failed)` with the same error (2026-10-21) |
 | Background service restart during a turn | a `synthetic` row with `description` "Continuing after restart" and `metadata.notice` `restart`, then the turn resumes; after 10 attempts it fails with "Execution was interrupted repeatedly…" **(source, `core/src/session/execution/restart.ts:15-33, 77-99, 193-228`; F1)** |
 
 - A reject ends the step through an interrupt without a reason, which
@@ -261,6 +273,20 @@ every durable event of the session.
   model's context starts at the latest completed compaction, and the rows
   above it stay. Automatic compaction (`reason: auto`) was not observed live
   (F10).
+- The in-app check made a provider fail with a project `opencode.json` that
+  named an OpenAI-compatible provider at a closed local port, with a dummy
+  key, so no stored credential or user setting was touched. OpenCode
+  retried for 83 s. Meanwhile the step's `assistant` row stayed open with
+  no content and `retry{attempt, at, error}`: the attempt it waited for,
+  when that attempt was due, and the last error ("ConnectionRefused: Unable
+  to connect. Is the computer able to access the url?"). In both snapshots
+  the row kept its id and `seq`, and its `time_created` was the latest
+  attempt's start. The counter kept moving (12 at the fifth attempt, 28 at
+  the end) while only the `idle` row was added. Between attempts the screen
+  counted down from 3, 5 and 9 s, then from 9 to 12 s (reads about 1 s
+  apart). When the eleventh attempt failed, the row lost `retry` and ended
+  as in the table, `idle(failed)` followed within 1 ms, and the session was
+  never titled.
 
 ## Change detection
 
@@ -276,16 +302,20 @@ every durable event of the session.
   picker opens a session (`session.viewed`), and when a revert is staged or
   cleared. A pending permission does not move it, because permission events
   are not durable; the only change while Blocked in one capture was the
-  tool's `streamed` stamp. While a subagent runs, only the child's counter
+  tool's `streamed` stamp. Switching the agent with `shift+tab` did not move
+  it either (2026-10-21). While a subagent runs, only the child's counter
   moves; the parent's stood still for about 8 s.
 - Rows change in place only in three cases: the newest assistant row of each
   step, filled as the step runs and finally given `finish`, tokens, cost and
-  `time.completed`; the compaction row, from `running` to `completed`; and
-  shell rows **(source)**. `seq` never changes, and `time_updated` takes the
-  writer's clock at every update (`projector.ts:241-255`, through the column's
-  `$onUpdate` in `core/src/database/schema.sql.ts:7-9`). In 2.0.32 an
-  assistant row with `time.completed` is final until a revert commit deletes
-  it: `MessageContentUpdated` is replay-only
+  `time.completed` (while a failing step retried in the in-app check, its
+  `time_created` and `retry` followed the latest attempt in both snapshots);
+  the compaction row, from `running` to `completed` or `failed`; and shell
+  rows, from `running` to `exited` (seen in the in-app check). `seq` never
+  changes, and `time_updated` takes the writer's clock at every update
+  (`projector.ts:241-255`, through the column's `$onUpdate` in
+  `core/src/database/schema.sql.ts:7-9`). In 2.0.32 an assistant row with
+  `time.completed` is final until a revert commit deletes it:
+  `MessageContentUpdated` is replay-only
   (`schema/src/session-event.ts:142-153`).
 - Text, reasoning and tool-input deltas, tool progress and usage updates are
   ephemeral events and never reach the store
@@ -303,7 +333,8 @@ every durable event of the session.
   rows from the boundary on and shows `1 message reverted` and
   `ctrl+x r or /redo to restore`.
 - `/redo` clears `revert` and appends a bare `idle(succeeded)`. herdr reports
-  `working` for about 200 ms, then `done`.
+  `working` for about 200 ms, then `done`; in the in-app check, with the
+  pane focused, its events read `working` for 105 and 110 ms, then `idle`.
 - The commit runs when the next prompt is admitted, on compaction, or
   explicitly (`core/src/session/session.ts:165, 251`). In one transaction it
   deletes the rows whose `seq` is at or above the boundary message's, the
@@ -314,6 +345,9 @@ every durable event of the session.
   poll can also see the count unchanged (three rows deleted, three added), so
   only comparing the count of the rows a reader already holds catches the
   deletion.
+- After the commit OpenCode no longer offers `/redo`: in the in-app check,
+  typing it made `/reload  Reload configuration` the popup's top match, so
+  Enter would have reloaded OpenCode's configuration.
 - A staged revert carries full file patches
   (`core/src/session/revert.ts:42-49`, `projector.ts:739-743`).
 
@@ -335,6 +369,10 @@ every durable event of the session.
 - The TUI draws a waiting prompt at once, with a grey bar (`#484848`) where a
   delivered one has blue (`#5c9cf5`).
 - The census store held two stale `synthetic` queue rows.
+- In the in-app check each `!` command queued a `synthetic` note as it
+  ended (`delivery` `steer`, `metadata.source` `shell`, its text the command
+  and its output for the model), and the next prompt committed the waiting
+  notes as `synthetic` rows before its `user` row.
 
 ## Identity
 
@@ -352,13 +390,13 @@ and accepts any non-empty id up to 512 bytes (`src/agent_resume.rs:5,
 | Situation | What herdr reports |
 | --- | --- |
 | Start from a shell | `unknown`, then `idle` from herdr's screen manifest; no `agent_session` key and no `screen_detection_skipped` key |
-| First prompt from the home screen | the session and its user row land first; herdr shows `working` with no session, then the id one 150 ms sample later, about 0.6 s after the prompt request. `screen_detection_skipped` is absent at 0.5 s and `true` by 1.5 s |
+| First prompt from the home screen | the session and its user row land first; herdr shows `working` with no session, then the id one 150 ms sample later, about 0.6 s after the prompt request. `screen_detection_skipped` is absent at 0.5 s and `true` by 1.5 s. In the in-app check (2026-10-21), prompts typed in the terminal got their id 0.3 to 0.4 s after Enter. On a freshly started Agent herdr's events read `working`, then `idle` 110 ms later as the id arrived, then `working` 100 ms after that; after `/new` the new id came while the old session still read `idle`, and `working` followed |
 | `/new` or `/clear` | nothing: both go to the home screen, where the plugin reports nothing, so the old id and `done` stay until the first prompt of the new session |
 | A session chosen in the picker | from `done`: its id within one 150 ms sample of OpenCode opening it (200 to 270 ms after Enter), `working` for about 150 ms, then `idle`. From `idle` (2026-10-21): its id 209 to 415 ms after Enter, once about 240 ms after the terminal title, and no status change |
 | A subagent's view | the root id, unchanged; the status follows the root |
-| Restart with `opencode --session <id>` | the id 368 ms after the launch, before any prompt; `idle` |
-| Exit | `idle` with no session, then the Agent is gone; the shell prints `Continue  opencode -s <id>` |
-| `opencode --continue` | not observed (F4) |
+| Restart with `opencode --session <id>` | the id 368 ms after the launch, before any prompt; `idle`. Through `herdr agent start … -- -s <id>` in the in-app check, the id 1.6 s after the start request |
+| Exit | `idle` with no session, then the Agent is gone (herdr's event reads `unknown`); OpenCode prints `Session   <title>` (no title for an untitled session) and `Continue  opencode -s <id>` as it exits (2026-10-21) |
+| `opencode --continue` | in one sample, the root session OpenCode had open at exit, which was also the one viewed and updated last, not the one created last: its id with `idle` about 1.4 s after `herdr agent start … -- --continue`, before any prompt (2026-10-21). OpenCode's TUI asks for one root session of the directory in descending order **(source, `tui/src/app.tsx:655-680`)**; the column it orders by was not tested (F4) |
 
 - OpenCode's terminal title (`tui/src/app.tsx:598-628`) is `OpenCode` on the
   home screen and for a session whose title is missing or a fallback title
@@ -374,7 +412,14 @@ and accepts any non-empty id up to 512 bytes (`src/agent_resume.rs:5,
 - Opening a running subagent (Down from an empty box opens the panel, then
   Enter) shows the child's conversation while herdr keeps the root id; Esc
   returns to the parent. Finished subagents cannot be opened by keys in
-  2.0.32: the panel lists only running ones.
+  2.0.32: the panel lists only running ones. In the in-app check the
+  terminal title became the child's (`OC | ` and its description) within
+  240 ms of Enter (the first `herdr agent get` read that showed it), and the
+  parent's again on Esc.
+- After `/new` in the in-app check, herdr kept the old id and changed only
+  the terminal title, to `OpenCode`, within 150 ms of Enter. Chat's
+  start-screen card first showed 1.0 to 1.5 s, 4.9 to 5.4 s and 6.9 to
+  7.3 s after Enter (three samples).
 
 ## herdr status
 
@@ -384,16 +429,17 @@ and accepts any non-empty id up to 512 bytes (`src/agent_resume.rs:5,
 | Prompt admitted, turn running | `working` |
 | `idle` row written | `done`, with `completion_seq` |
 | Permission or question pending | `blocked`, at most 325 ms after the tool reached `running` |
-| After Allow once or an answer | `working`; the tool completed 26 ms after Enter |
-| Reject, or Esc on a permission | `blocked`, `working`, then `done`, with no `idle` row |
-| Esc stop | `done`, with `idle(interrupted)` |
-| `/redo` | `working`, then `done` within about 200 ms |
+| After Allow once or an answer | `working`; the tool completed 26 ms after Enter. In the in-app check the read tool completed 5 ms after herdr logged the Allow once request and `working` came 115 ms after it; for a subagent's request, `working` came 175 ms after it (2026-10-21) |
+| Reject, or Esc on a permission or a question | `blocked`, `working`, then `done`, with no `idle` row (Reject and Esc on a permission). In the in-app check, with the pane focused, a Reject and two question dismissals went `blocked`, `working` for about 210 ms, then `idle`, and OpenCode wrote no `idle` row (2026-10-21); `done` after a dismissed question was not observed |
+| Esc stop | `done`, with `idle(interrupted)`. With a steer waiting, `idle` (the pane focused) for 105 ms, then `working` as the steer runs (two runs, 2026-10-21) |
+| `/redo` | `working`, then `done` within about 200 ms; with the pane focused, `working` for 105 and 110 ms, then `idle` (2026-10-21) |
 | `/undo` | unchanged |
+| `/compact` | `working` while it compacts; for 110 ms when there was nothing to compact (2026-10-21) |
 | A `!` command | unchanged; it runs in the background (2026-10-21) |
 | A session chosen in the picker | from `done`, `working` for about 150 ms, then `idle`; from `idle`, unchanged, with no event (2026-10-21) |
 | `/new`, before the first prompt | the previous session, still `done` |
 | Restart with `--session` | `idle` with the id, then `done` after a turn |
-| Provider failure | `blocked` with no dialog on screen **(source: the TUI plugin maps `execution.failed` to Blocked, `herdr-tui-session.js:581-583`; F5)** |
+| Provider failure (a refused connection, retried) | `working` through the retries, then `blocked` with no dialog on screen, 203 ms after the `idle(failed)` row (2026-10-21); the TUI plugin maps `execution.failed` to Blocked (`herdr-tui-session.js:581-583`) |
 
 - Once the plugin has reported, it owns the status
   (`src/detect/mod.rs:330-340`). Before that, herdr's detection manifest
@@ -408,6 +454,19 @@ and accepts any non-empty id up to 512 bytes (`src/agent_resume.rs:5,
   rejection, question dismissal and subagent rejection read `idle` with
   `completion_seq` set, never `done`: herdr counts a completion in its
   focused Tab as seen. The `done` rows above come from captures A and B.
+  The in-app check, its pane focused throughout, never read `done` either.
+  Of the twelve records it saved while the Agent was idle, the five whose
+  last status change ended a turn had `completion_seq` equal to
+  `state_change_seq`; the seven read after `herdr agent start` (`--continue`
+  and `-s` included) and before any prompt, or after an idle pick in
+  OpenCode's picker, had no `completion_seq`.
+- herdr's events in the in-app check showed statuses that lasted 100 to
+  110 ms: `working` for 105 and 110 ms on `/redo` and 110 ms on a
+  `/compact` with nothing to compact; `idle` for 105 ms between a stopped
+  step and the waiting steer that resumed (two runs); and, on a freshly
+  started Agent's first prompt, `working` for 110 ms, then `idle` for
+  100 ms as the session id arrived. Reading `herdr agent get` about every
+  250 ms missed five of these seven.
 
 ## Screen
 
@@ -435,8 +494,10 @@ row. A modal's title ends in `esc`, with no box edge under it.
 | Question | `Questions`, the question, numbered options with their descriptions, `N. Type your own answer`, and the footer `↑↓ select  enter submit  esc dismiss` | focused option text `#fab283` |
 | Session picker | `Sessions for <project>`, `esc`, `Today`; the footer `pin/unpin ctrl+f  delete ctrl+d  rename ctrl+r  all projects ctrl+a` | |
 | Subagent panel | `Subagents  Shell  Terminals`, `General: <description>  Running`, and the footer `interrupt ctrl+d  show inactive ctrl+a  tabs ←/→`; no box edge | |
-| Compaction | a `──── ⠋ Compaction ────` divider, its spinner frame changing, and the working footer | |
-| Finished step | `Build · GPT-6 Astra · 13.8s · 0.4 tok/s`, with `· interrupted` after a stop | |
+| Compaction | a `──── ⠋ Compaction ────` divider, its spinner frame changing, and the working footer; once failed, `──── ✗ Compaction ────` with the reason (`Nothing to compact yet`) under it (2026-10-21) | |
+| Finished step | `Build · GPT-6 Astra · 13.8s · 0.4 tok/s`, with `· interrupted` after a stop, a rejection or a dismissed question; a dismissed question leaves `→ Asked 1 question` above it (2026-10-21) | |
+| Retrying step (2026-10-21) | `⚠ Retrying in <n>s · attempt <n> · <error>` above the step's `Build · <model>` line (no duration yet), the seconds counting down, and the working footer | |
+| Failed turn (2026-10-21) | `Error: <error>` above `Build · <model> · <duration>`, the box empty and no dialog; a `Session failed` toast with the error and an `x` covered the top rows in the captures 1 to 5 s after the failure | |
 
 - The permission dialog's text is the same whichever option has focus; only
   the colours show it. Always allow is offered only when the request can be
@@ -451,12 +512,17 @@ row. A modal's title ends in `esc`, with no box edge under it.
   no permissions and only global forms, and shows the subagent panel in place
   of the input box unless a global form is pending
   (`routes/session/index.tsx:202-214, 1469, 1483`), so a request raised while
-  the user watches a subagent shows no dialog there **(source)**.
+  the user watches a subagent shows no dialog there **(source)**. In the
+  in-app check a subagent's read permission was drawn in the root's view as a
+  root request is, below the running subagent's line (`⠦ General Subagent`
+  and its description) and `Press ctrl+b to move running work to the
+  background` (2026-10-21).
 - At 62 columns by 41 rows (the phone-width capture) the same text and
-  layout identify every state. The working footer cuts `esc interrupt` to
-  `esc...rupt` and joins it to the progress bar
+  layout identify every state. In that capture the working footer cut
+  `esc interrupt` to `esc...rupt` and joined it to the progress bar
   (`⬝⬝⬝⬝⬝⬝⬝esc...rupt  ↓ 1 shell · 9.4K (2%)  ctrl+p commands`, stem 35),
-  so only the bar marks a running turn there; the armed footer keeps
+  so only the bar marked a running turn; the in-app check saw that cut only
+  while the token count read under 10K (below). The armed footer keeps
   `esc again to interrupt` whole (stem 36), and the queued-prompt dock
   keeps the cut hint (stem 43). The footer's directory is shortened segment
   by segment on the home screen and a session (`/…/t…/<dir>/project:main`)
@@ -469,19 +535,37 @@ row. A modal's title ends in `esc`, with no box edge under it.
   popup sits directly on the box with no blank row between (stem 39), and
   the subagent panel shows `Subagents  Shell  Terminals` with `esc` at its
   right, a `General: <description>  Running` row and no box edge (stem 41).
+- In the in-app check at the same size (2026-10-21) the footer's right part
+  went with the token count in every capture. Under 10K (`9.5K` to `9.9K`)
+  the footer kept `ctrl+p commands` and made room for it: idle, it
+  shortened the directory
+  (`/…/t…/<dir>/project:main  9.8K (2%)  ctrl+p commands`); working, it cut
+  the hint (`⬝⬝⬝⬝⬝esc...upt  ↓ 1 subagent · 9.8K (2%)  ctrl+p commands`,
+  the one such capture). From `10.0K` up it dropped `ctrl+p commands` and
+  showed `esc interrupt` whole beside the count, `↓ 1 shell` or
+  `↓ 1 subagent`; an idle session's directory was whole beside the count,
+  and shortened only beside `↓ 1 shell · 10.2K (3%)` while a `!` command
+  ran. With no count (after a compaction, in a session whose only step
+  failed, and on the home screen) the footer read
+  `shift+tab agents  ctrl+p commands` beside a shortened directory or the
+  hint, or `esc exit shell mode` in shell mode; two reads just after a Stop
+  that followed an armed Esc showed the directory alone. The bar started
+  every working footer. The armed footer read `esc again to interrupt` with
+  no token count.
 
 ## Keys
 
 | Action | Keys |
 | --- | --- |
-| Interrupt | Esc twice within 5 s; the first only arms (`tui/src/component/prompt/index.tsx:499-530`). Two Esc 337 ms apart, two 3.19 s apart, and one `agent.send_keys` request with `esc esc` all interrupted; after the single request the tool was aborted 22 ms later |
+| Interrupt | Esc twice within 5 s; the first only arms (`tui/src/component/prompt/index.tsx:499-530`). Two Esc 337 ms apart, two 3.19 s apart, and one `agent.send_keys` request with `esc esc` all interrupted; after the single request the tool was aborted 22 ms later. In the in-app check each of the eight Stops Chat sent was one such request, and `idle(interrupted)` came 15 to 21 ms after herdr logged it; the two Stops Chat refused (a `/` popup open, shell mode) sent nothing. When an Esc typed in the terminal had already armed the interrupt, the request's first Esc interrupted and its second changed nothing (two runs, 2026-10-21) |
 | Allow once | Enter; Allow once is preselected |
 | Always allow | Right, then Enter, when offered |
 | Reject a root session's request | Right until Reject has focus (twice when Always allow is offered, else once), then Enter; or Esc |
 | Reject a subagent's request | Esc or Reject opens `△ Reject permission`, "Tell OpenCode what to do differently", with `enter confirm  esc cancel` (Esc observed in the phone-width capture, stems 25 and 42); Enter sends the feedback, Esc goes back **(source, `permission.tsx:248-252, 272-405`; F3)** |
 | Answer a single-select question | the option's digit, which selects and submits |
 | Custom answer, multi-select | the digit of `Type your own answer`, the text and Enter; Space toggles an option **(source, `tui/src/routes/session/form.tsx:570-760`; F11)** |
-| Dismiss a question | Esc **(source; F2)** |
+| Dismiss a question | Esc (2026-10-21; its rows under [Turns](#turns)) |
+| Switch the agent | `shift+tab`, from Build to Plan and back; `tab` changed nothing (2026-10-21) |
 
 - `ctrl+c` clears a non-empty input and exits OpenCode from an empty one
   (`prompt/index.tsx:952-958`); in a dialog it rejects or dismisses.
@@ -492,13 +576,19 @@ row. A modal's title ends in `esc`, with no box edge under it.
 - The interrupt resumes. OpenCode interrupts with `resume: true`, and a
   waiting steer, compaction or move then wakes a new execution; prompts
   queued for the next turn stay queued
-  (`core/src/session/execution.ts:153-168`) **(source)**.
+  (`core/src/session/execution.ts:153-168`) **(source)**. The in-app check
+  saw it with a waiting steer: the steer's `user` row came 4 to 6 ms after
+  `idle(interrupted)` and ran until its own `idle` row (three runs:
+  `succeeded` twice, and `interrupted` once when a second Stop ended the
+  resumed run, 2026-10-21).
 - Up recalls the last prompt into an empty box, and Down opens the subagent
   panel. Enter on an empty box steers the first queued prompt
   (`prompt/index.tsx:1297-1305`, `routes/session/index.tsx:1522-1526`;
   **source**). `ctrl+u` clears a one-line draft. In the phone-width capture,
   Down on an empty box opened the panel while a subagent ran, and Esc closed
-  it without arming the interrupt.
+  it without arming the interrupt. In the in-app check Up left the cursor at
+  the start of the recalled prompt, so `ctrl+u` alone removed nothing;
+  `right` pressed to its end, then `ctrl+u`, emptied the box (2026-10-21).
 
 ## Sending
 
@@ -506,7 +596,9 @@ row. A modal's title ends in `esc`, with no box edge under it.
   request (herdr `src/app/api/agents.rs:168-177`). It then pastes the text and
   writes Enter 300 ms later (`:13`, `:260-266`; `src/pty/actor.rs:117-153`),
   so a dialog that appears in between takes the Enter. The user row landed
-  329 to 367 ms after the request.
+  329 to 367 ms after the request. In the in-app check it landed 319 to
+  341 ms after the request over 13 sends, and herdr's log completed each
+  request about 300 ms after it started (2026-10-21).
 - OpenCode first tries pasted text as a file path: a path to an image, PDF or
   SVG becomes an attachment (`tui/src/component/prompt/local-attachment.ts:29-47`)
   **(source)**. Otherwise text of 3 or more lines or over 150 characters
@@ -517,7 +609,13 @@ row. A modal's title ends in `esc`, with no box edge under it.
   to the model as an ordinary prompt and compacted nothing; `/new ` did the
   same. `/compact` alone opened the popup with `/compact` first, and herdr's
   Enter ran it. Enter in a popup runs its top fuzzy match
-  (`tui/src/component/prompt/autocomplete.tsx:548-571`).
+  (`tui/src/component/prompt/autocomplete.tsx:548-571`). In the in-app
+  check a custom command `compact-notes` in the project's
+  `.opencode/commands/` was listed at once, with no restart, but second:
+  `/compact  Compact session` stayed first, and herdr's Enter ran the
+  built-in both times (a failed compaction with nothing to compact, then a
+  completed one), with no `user` row holding the command's template
+  (2026-10-21).
 - Of the TUI's own commands only `btw`, `cd` and `rename` take arguments.
   Server commands (`init`, `review`, custom commands from the config or from
   `command` and `commands` folders, MCP prompts) need `/name args ` with the
@@ -561,8 +659,35 @@ row. A modal's title ends in `esc`, with no box edge under it.
 - `sqlite3 -json` (3.33 and later) prints each statement's result as one
   JSON array whose text columns are JSON strings, so `data` comes encoded
   twice, and prints nothing at all for an empty result.
-- Not measured: an exec's round trip over SSH, its Host CPU, and its effect
-  on the connection's other channels (F15).
+- **In-app polls** (2026-10-21), through the isolated `sshd` on the
+  development Mac over loopback, with a wrapper timing each exec on the Host
+  side: Chat's store query took p50 51, p95 58 and max 103 ms over 497
+  polls in one batch, and p50 49, p95 54 and max 57 ms over 122 in another,
+  every exit status 0; its script was 14,099 to 14,716 bytes. In the
+  497-poll batch the Changes probe took p50 135 ms and plain execs p50 32 ms
+  on that connection (126 and 30 ms over 2 and 4 execs in the other). Polls
+  started 3.6 to 4.7 s apart while idle and 1.5 to 2.6 s apart while
+  working or lingering (p50 of all gaps 4.2 s); a few came sooner, right
+  after a send, a Stop or a return to Chat.
+- Each query used p50 17.2 ms (max 20.5) of CPU in its shell, `sqlite3`
+  and watchdog, plus p50 15.0 ms in the exec's own login shell and the
+  wrapper. A trivial exec through the same chain took 5 ms, with 3.9 ms of
+  CPU in its children and 13.4 ms in its own process, so the query adds
+  about 13 ms of CPU in its children (15 ms counting its own processes) and
+  44 ms of wall time. Over 425 s with Chat showing, the queries used 0.49%
+  of one core (0.94% with the execs' own processes); the connection's
+  `sshd` process used 0.03% over the 456 s that `ps` sampled it.
+- In the second batch no query overlapped another exec, and none ran while
+  the terminal was shown; Attach's PTY exec started 190 to 430 ms after the
+  tap, and each screenshot of the terminal matched herdr's own read of the
+  pane at that moment. With the connection's `sshd` process stopped for
+  15 s, Chat showed its timeout at the 10 s deadline; the waiting query
+  reached the Host 35 ms after the process resumed, and the next poll, 8.4 s
+  after the deadline (the idle pace doubled once), read normally on the same
+  connection.
+- Not measured: the round trip Chat sees for a query, over loopback or a
+  slower link (the wrapper timed only the Host side), and whether polling
+  delays the Events channel (F15).
 
 ## Host tools
 
@@ -601,21 +726,26 @@ are verified, and an answered item leaves this list.
 
 - **F1.** Whether a rejected turn resumes when OpenCode's background service
   restarts. Testing it restarts the user's service.
-- **F2.** Dismissing a question: rows, herdr status and screen.
-- **F3.** A subagent's permission and its reject-feedback stage.
-- **F4.** Which session herdr reports for `opencode --continue`, and when.
-- **F5.** A provider failure: its rows, herdr's Blocked, and what the screen
-  shows instead of a dialog.
-- **F6.** Rows for switching the agent and the model.
-- **F8.** `retry` on an assistant row, and the screen during the back-off.
+- **F3.** A subagent's reject-feedback stage: its rows, herdr's status once
+  a non-empty message is sent, and whether the root turn then ends with an
+  `idle` row. The phone-width capture confirmed the stage with an empty
+  message (herdr read `working`, then `idle` with `completion_seq` set, and
+  the root turn went on to a reply) but read no rows; the in-app check
+  allowed a subagent's request but never entered the stage.
+- **F4.** Which root session `opencode --continue` picks when the one open
+  at exit, the one viewed last and the one updated last differ.
+- **F5.** A provider error other than a refused connection (the census's
+  `provider.error`): whether OpenCode retries it, its rows, herdr's status
+  and the screen.
+- **F6.** Rows for switching the model.
 - **F9.** A background subagent's completion row, and whether it starts a new
   turn.
 - **F10.** Automatic compaction, and where its turn's `idle` row lands.
 - **F11.** Custom answers and multi-select questions.
-- **F12.** (a) Which command `/compact` runs when a custom command's name
-  starts with `compact`; (b) other themes' colours; (c) the footer with
-  animations off; (d) the box after a paste with `prompt.paste=full`;
-  (e) the queued-prompt indicator.
+- **F12.** (b) Other themes' colours; (c) the footer with animations off;
+  (d) the box after a paste with `prompt.paste=full`; (e) the queued-prompt
+  indicator.
 - **F13.** Server commands sent through `agent.prompt`.
 - **F14.** On Linux: which readers common images carry by default.
-- **F15.** An exec's cost over SSH at Chat's polling pace.
+- **F15.** The round trip Chat sees for a query, over loopback and over a
+  slower link, and whether Chat's polling delays the Events channel.
