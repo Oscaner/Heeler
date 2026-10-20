@@ -137,13 +137,23 @@ The census counted, among 2.x rows: `assistant` 5,578, `user` 855,
 | `synthetic` | `text`, `description?`, `metadata{source (subagent or shell), childID?, jobID?, shellID?, state, exit?, truncated?}` |
 | `system` | `text`, `description` ("Instructions updated: …"), `metadata.notice` |
 | `skill` | `skill`, `name`, `text` |
-| `shell` | a `!` command typed in the TUI: `shellID`, `command`, `status`, `exit?`, `output?`, `time{created, completed?}` |
+| `shell` | a `!` command typed in the TUI: `shellID`, `command`, `status` (`running`, then `exited`), `exit?`, `output?{output, cursor, size, truncated}` once it ends, `metadata{background}`, `time{created, completed?}` |
 | `agent-switched` | `agent`, `previous?` |
 | `model-switched` | `model`, `previous?` |
 | `location-switched` | `location`, `projectID?`, `subpath?`, `previous?` |
 
-`skill`, `shell`, `agent-switched` and `model-switched` rows were not in the
-census or the captures (F6, F7).
+`skill`, `agent-switched` and `model-switched` rows were not in the census or
+the captures (F6).
+
+A `shell` row was seen in the in-app check: `running` with no `output` while
+the command ran, then `exited` with `exit` and `output`. That `output` is
+not the text but an object with OpenCode's `Shell.Output` fields
+(`schema/src/shell.ts:77-84`): the text in `output.output`, and `cursor`,
+`size` and `truncated`, a page of the command's capture that OpenCode reads
+with a 1 MiB limit **(source, `core/src/session/shell.ts:23-24`)**. The
+command ran in the background (`metadata.background` is `true`) while herdr
+stayed `idle`, and OpenCode queued an inbox `synthetic` note
+(`metadata.source` `shell`) that the next prompt commits.
 
 ### Assistant steps
 
@@ -379,6 +389,7 @@ and accepts any non-empty id up to 512 bytes (`src/agent_resume.rs:5,
 | Esc stop | `done`, with `idle(interrupted)` |
 | `/redo` | `working`, then `done` within about 200 ms |
 | `/undo` | unchanged |
+| A `!` command | unchanged; it runs in the background (2026-10-21) |
 | A session chosen in the picker | from `done`, `working` for about 150 ms, then `idle`; from `idle`, unchanged, with no event (2026-10-21) |
 | `/new`, before the first prompt | the previous session, still `done` |
 | Restart with `--session` | `idle` with the id, then `done` after a turn |
@@ -596,7 +607,6 @@ are verified, and an answered item leaves this list.
 - **F5.** A provider failure: its rows, herdr's Blocked, and what the screen
   shows instead of a dialog.
 - **F6.** Rows for switching the agent and the model.
-- **F7.** `shell` rows from `!` commands, and herdr's status while one runs.
 - **F8.** `retry` on an assistant row, and the screen during the back-off.
 - **F9.** A background subagent's completion row, and whether it starts a new
   turn.
