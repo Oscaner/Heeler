@@ -2788,6 +2788,50 @@ struct AgentChatStoreTests {
                 == GrokSessionCheck.welcomeReason)
     }
 
+    /// The newest message on screen counts only once a transcript read
+    /// that started after herdr last reported Grok Build idle has landed:
+    /// a prompt typed in the terminal shows before Chat reads it.
+    @Test func theNewestMessageCountsOnlyAfterAReadSinceIdle() async throws {
+        let server = Server(Self.grokAgent(.working))
+        let (_, store, clock) = try await Self.grokStore(through: 4, status: .working, server: server)
+        let lime = GrokScreenBuilder(scrollback: ["❯ Reply with the word lime.", "", "lime"]).screen
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await server.set(Self.grokAgent(.idle))
+        store.agentDidChange(Self.grokAgent(.idle))
+        #expect(store.sendConcern(for: "Reply with the word kiwi. ", after: lime) == nil)
+
+        await store.step()
+        #expect(
+            store.sendConcern(for: "Reply with the word kiwi. ", after: lime) == GrokSessionCheck.unknownPromptReason)
+    }
+
+    /// Chat's own send shows on screen before the transcript records it.
+    /// Once delivered, it says nothing about the session for the echo
+    /// timeout; recorded, it is this conversation's newest message.
+    @Test func aSendOnItsWayIsNoSignOfAnotherSession() async throws {
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle)
+        let ping = GrokScreenBuilder(scrollback: ["❯ Reply with exactly the word ping.", "", "ping"]).screen
+        let id = UUID()
+        let text = "Reply with exactly the word ping. "
+        let lime = "Reply with the word lime. "
+
+        store.updateSends([Self.sent(id, text, delivered: false)])
+        #expect(store.sendConcern(for: lime, after: ping) == GrokSessionCheck.unknownPromptReason)
+        store.updateSends([Self.sent(id, text)])
+        #expect(store.sendConcern(for: lime, after: ping) == nil)
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        #expect(store.sendStatuses[id] == .overdue)
+        #expect(store.sendConcern(for: lime, after: ping) == GrokSessionCheck.unknownPromptReason)
+
+        await files.append(try Self.grokLines("core-turns.jsonl", 8...9), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .recorded)
+        #expect(store.sendConcern(for: lime, after: ping) == nil)
+    }
+
     /// herdr follows `/new` within its idle recheck: a send held for the
     /// Session line asks herdr at once, and the next one goes.
     @Test func aSessionLineHoldRefreshesTheAgentAndTheNextSendPasses() async throws {
