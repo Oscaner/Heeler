@@ -113,6 +113,38 @@ struct ChatDeliveryPolicyTests {
         #expect(InputBoxState.noComposer(reason).holdReason(for: program) == reason)
     }
 
+    private static let openCodeRules = ChatSendRules(
+        program: .opencode, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: .opencode))
+
+    /// A message on OpenCode's home screen would start a new conversation,
+    /// not continue the one Chat shows.
+    @Test func openCodeHomeHoldsWithItsOwnReason() async throws {
+        let home = try ScreenFixture.screen("opencode-01-home-empty-180")
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(rules: Self.openCodeRules, activity: { .idle }, readScreen: { home }).preflight)
+
+        #expect(
+            await preflight("hello")
+                == .inputNotReady(
+                    "OpenCode is on its home screen, where a message starts a new conversation. Open this conversation in the terminal first."
+                ))
+    }
+
+    /// While OpenCode works, herdr's Enter could answer a prompt that shows
+    /// first, so the message waits for the turn to end.
+    @Test func openCodeWorkingHoldsWithItsOwnReason() async throws {
+        let working = try ScreenFixture.screen("opencode-08-working-180")
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(rules: Self.openCodeRules, activity: { .working }, readScreen: { working })
+                .preflight)
+
+        #expect(
+            await preflight("hello")
+                == .inputNotReady(
+                    "The Agent isn't taking messages: OpenCode is working. Send once it's idle, or steer from the terminal."
+                ))
+    }
+
     @Test func anUnreadableScreenHoldsTheMessage() async throws {
         let preflight = try #require(Self.policy { throw TransportError.timedOut }.preflight)
 

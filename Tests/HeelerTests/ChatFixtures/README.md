@@ -159,22 +159,25 @@ replacements of the same length. These screens are not part of
 2.0.32 on herdr 0.9.5, with scratch prompts. Stems keep their capture
 numbers, so the numbers have gaps.
 
-- `opencode-08` and `opencode-10` to `opencode-15` come from the sessions of
-  the stores below, through 180×47 clients on 2026-10-19; their rows are 182
-  cells wide.
-- `opencode-25` and the `-62` stems come from an isolated herdr server on
-  2026-10-20, in a scratch project under `/tmp`. A client of the named width
-  attached and detached before each read, so the pane kept its size; the
-  `-62` stems are 62×41. `opencode-25` and `opencode-42` show the `Reject
-  permission` stage: a scratch `.opencode/opencode.json` rule asked before a
-  subagent read a scratch file, and Esc in the terminal rejected it.
+- `opencode-01` to `opencode-21`, `opencode-23`, `opencode-24` and
+  `opencode-26` come from the sessions of the stores below, through 180×47
+  clients on 2026-10-19; their rows are 182 cells wide (181 in
+  `opencode-01`).
+- `opencode-22`, `opencode-25` and the `-62` stems come from an isolated
+  herdr server on 2026-10-20, in a scratch project under `/tmp`. A client of
+  the named width attached and detached before each read, so the pane kept
+  its size; `opencode-22` and `opencode-25` are 180×47 and the `-62` stems
+  62×41. `opencode-25` and `opencode-42` show the `Reject permission` stage:
+  a scratch `.opencode/opencode.json` rule asked before a subagent read a
+  scratch file, and Esc in the terminal rejected it.
 
 Scrubbing applied the stores' path, account and placeholder rules to every
 byte. Assistant text in Chinese became English no wider than it, with blanks
-added at the end of its row, so every row keeps its captured width.
-`opencode-32` keeps that scratch project's shortened path. The checks under
-the stores' scrubbing cover `screens/opencode/` as well. Together the files
-are about 172 KB. These screens are not part of `ScreenFixture.all` either.
+added at the end of its row, so every row keeps its captured width. The
+`/tmp` stems keep that scratch project's path, whole or shortened. The checks
+under the stores' scrubbing cover `screens/opencode/` as well. Together the
+files are about 520 KB. These screens are not part of `ScreenFixture.all`
+either.
 
 ## OpenCode stores
 

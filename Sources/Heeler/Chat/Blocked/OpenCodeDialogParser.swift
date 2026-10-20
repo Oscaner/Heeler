@@ -253,8 +253,9 @@ enum OpenCodeDialogParser {
     }
 }
 
-/// The bar block that ends an OpenCode screen.
-private struct OpenCodeBlock {
+/// The bar block that ends an OpenCode screen: a prompt, or the subagent
+/// panel, in place of the input box.
+struct OpenCodeBlock {
     /// The zero-based screen rows from the top padding row through the
     /// bottom one.
     let rows: Range<Int>

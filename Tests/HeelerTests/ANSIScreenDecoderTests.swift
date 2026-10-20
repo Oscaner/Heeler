@@ -141,6 +141,14 @@ struct ANSIScreenDecoderTests {
         try expectContiguousRuns(stem)
     }
 
+    @Test(
+        "Every OpenCode capture decodes into contiguous runs within its columns",
+        arguments: ScreenFixture.opencode
+    )
+    func everyOpenCodeCaptureDecodesWithinItsColumns(stem: String) throws {
+        try expectContiguousRuns(stem)
+    }
+
     private func expectContiguousRuns(_ stem: String) throws {
         let text = try ScreenFixture.text(stem)
         let screen = ANSIScreenDecoder.decode(text)
