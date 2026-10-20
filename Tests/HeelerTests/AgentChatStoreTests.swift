@@ -2404,22 +2404,29 @@ struct AgentChatStoreTests {
         return String(decoding: data, as: UTF8.self) + "\n"
     }
 
-    /// Holds stats of one path until opened, as a slow Host would.
+    /// Holds stats of one path while closed, as a slow Host would.
     private actor HistoryGate {
         private var isOpen = false
         private var waiting: [CheckedContinuation<Void, Never>] = []
         private(set) var held = 0
+        /// Whether each held stat's task was cancelled once it went on.
+        private(set) var cancelledOnRelease: [Bool] = []
 
         func pass() async {
             guard !isOpen else { return }
             held += 1
             await withCheckedContinuation { waiting.append($0) }
+            cancelledOnRelease.append(Task.isCancelled)
         }
 
         func open() {
             isOpen = true
             for waiter in waiting { waiter.resume() }
             waiting = []
+        }
+
+        func close() {
+            isOpen = false
         }
 
         nonisolated func files(_ files: VirtualHostFiles, holding path: String) -> ChatHostFiles {
@@ -2543,6 +2550,36 @@ struct AgentChatStoreTests {
 
         #expect(store.sendStatuses[id] == .overdue)
         #expect(await files.reads.contains { $0.path == Self.grokHistory } == false)
+    }
+
+    /// A cancelled SFTP request can leave its reply for the next request on
+    /// the channel, so the witness never cancels a Host read: a mark or a
+    /// read that outlives its deadline runs on, and its answer is dropped.
+    @Test func theWitnessNeverCancelsAHostRead() async throws {
+        let gate = HistoryGate()
+        var timing = AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5))
+        timing.witnessMarkTimeout = .milliseconds(20)
+        timing.witnessReadTimeout = .milliseconds(20)
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle, gate: gate, timing: timing)
+
+        store.updateSends([Self.sent(UUID(), "Reply with the word kiwi. ", delivered: false)])
+        try await Self.waitUntil { await gate.held == 1 }
+        await store.witnessMarksSettled()
+        await gate.open()
+        try await Self.waitUntil { await gate.cancelledOnRelease.count == 1 }
+
+        let id = await Self.witnessedGrokSend("Reply with the word lime. ", store: store)
+        await files.append(
+            try Self.historyLine("Reply with the word lime.", session: Self.otherGrokSession), to: Self.grokHistory)
+        await gate.close()
+        clock.now = clock.now.addingTimeInterval(2)
+        await store.step()
+        #expect(await gate.held == 2)
+        #expect(store.sendStatuses[id] == .awaiting)
+        await gate.open()
+        try await Self.waitUntil { await gate.cancelledOnRelease.count == 2 }
+
+        #expect(await gate.cancelledOnRelease == [false, false])
     }
 
     /// Grok Build's prompt history names another session for the send:

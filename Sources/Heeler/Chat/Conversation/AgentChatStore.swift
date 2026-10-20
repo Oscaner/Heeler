@@ -1213,14 +1213,26 @@ final class AgentChatStore {
         let files = source.files
         let timeout = timing.witnessMarkTimeout
         witnessMarks[id] = Task { [weak self] in
-            let mark = try? await AsyncDeadline.run(for: timeout) {
+            let mark = await Self.witnessRead(within: timeout) {
                 try await witness.mark(forTranscript: path, files: files)
-            }
+            } ?? nil
             // The check before the send may have dropped it meanwhile.
             guard let self, var state = self.witnesses[id], case .taking = state.mark else { return }
             state.mark = mark.map { .taken($0) } ?? .unavailable
             self.witnesses[id] = state
         }
+    }
+
+    /// Reads the Host for a witness within `timeout`, and never cancels
+    /// the read: a cancelled SFTP request can leave its reply for the next
+    /// request on the channel, so a read that outlives its deadline or its
+    /// step runs on, and its answer is dropped. The transport's own request
+    /// timeout still ends it.
+    private static func witnessRead<Value: Sendable>(
+        within timeout: Duration, _ read: @escaping @Sendable () async throws -> Value
+    ) async -> Value? {
+        let uncancelled = Task { try await read() }
+        return try? await AsyncDeadline.run(for: timeout) { try await uncancelled.value }
     }
 
     /// A send went: a mark the check before it did not keep is dropped.
@@ -1263,9 +1275,9 @@ final class AgentChatStore {
         let generation = conversationGeneration
         let files = source.files
         for (send, mark) in due {
-            let appended = try? await AsyncDeadline.run(for: timing.witnessReadTimeout) {
+            let appended = await Self.witnessRead(within: timing.witnessReadTimeout) {
                 try await witness.appended(since: mark, files: files)
-            }
+            } ?? nil
             guard !Task.isCancelled, generation == conversationGeneration else { return }
             guard let appended else { continue }
             switch witness.verdict(
