@@ -246,6 +246,7 @@
 		5766D55A0DEE0FD1D4DB01DC /* ChatTranscriptCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29DEFD952316075758AE9C93 /* ChatTranscriptCacheTests.swift */; };
 		5789049E3BA965EB057C4577 /* FilePreparerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C833B5BA50276247A54258B /* FilePreparerTests.swift */; };
 		57C3F1ADAA69142649C24356 /* TerminalFullKeyboardLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C07BE449E30F431C247AF01 /* TerminalFullKeyboardLayoutTests.swift */; };
+		58061A3788E0F6774F88D709 /* GrokSlashCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10EF5FB28F2C7835060457C7 /* GrokSlashCommands.swift */; };
 		581CB87C7122F80410C6723D /* TerminalSurfaceOrphanLayerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C3966A26050D88C26229E9 /* TerminalSurfaceOrphanLayerTests.swift */; };
 		5871584C71B9001F276C59BC /* AgentDetailHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CF924A5A56449015AB3AAE /* AgentDetailHeader.swift */; };
 		589933927DB998C0BC5BF18D /* ChatRowBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE31FD98C71EC0A9939EE0AB /* ChatRowBuilder.swift */; };
@@ -869,6 +870,7 @@
 		10A5B1E17E7BBF6E3F89CF89 /* ChatFileDiffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatFileDiffView.swift; sourceTree = "<group>"; };
 		10AE622E38561E17538A561C /* HeelerSSHErrorMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeelerSSHErrorMappingTests.swift; sourceTree = "<group>"; };
 		10CEC3766391E9693E6416E3 /* DialogActionPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DialogActionPlan.swift; sourceTree = "<group>"; };
+		10EF5FB28F2C7835060457C7 /* GrokSlashCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokSlashCommands.swift; sourceTree = "<group>"; };
 		1142E803F7CA971D3CCDF2EB /* LiveActivityPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityPreferences.swift; sourceTree = "<group>"; };
 		1187933BD5FAA5064BBF856F /* TerminalZoomSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalZoomSettingsTests.swift; sourceTree = "<group>"; };
 		11E0EA7996F618E85BF3B988 /* HeelerPluginInstallation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeelerPluginInstallation.swift; sourceTree = "<group>"; };
@@ -2011,6 +2013,7 @@
 			isa = PBXGroup;
 			children = (
 				98CF28C4CFD9E5A1823EA378 /* GrokFileChanges.swift */,
+				10EF5FB28F2C7835060457C7 /* GrokSlashCommands.swift */,
 				96B1ABD77CFF84CDB66BA6EA /* GrokToolSummary.swift */,
 				9D57CB49BF5791E638EE8537 /* GrokTranscriptReducer.swift */,
 				54CA05313C83AD867A520169 /* GrokUpdateRecord.swift */,
@@ -3116,6 +3119,7 @@
 				9DC6AF274D7C3BEDC038A985 /* GrokFileChanges.swift in Sources */,
 				601CFABF027EA7891E7B211F /* GrokInputBoxDetector.swift in Sources */,
 				9D876037CBC6A4878EA8D8C3 /* GrokScreen.swift in Sources */,
+				58061A3788E0F6774F88D709 /* GrokSlashCommands.swift in Sources */,
 				BF22FFBA362B7389807D12D0 /* GrokToolSummary.swift in Sources */,
 				1747A0F8594C0F27B0740AD8 /* GrokTranscriptLocator.swift in Sources */,
 				E43B22E9F1C7115D959F3D20 /* GrokTranscriptReducer.swift in Sources */,

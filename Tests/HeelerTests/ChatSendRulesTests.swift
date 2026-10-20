@@ -377,9 +377,10 @@ struct ChatSendRulesTests {
     }
 
     /// Claude Code answers "Unknown command" for a `user-invocable: false`
-    /// skill; the other programs have no such key and take every skill.
+    /// skill, and Grok Build doesn't offer one as a command; the other
+    /// programs have no such key and take every skill.
     @Test(arguments: ChatProgram.allCases)
-    func onlyClaudeHidesASkillNotUserInvocable(program: ChatProgram) {
+    func onlyClaudeAndGrokHideASkillNotUserInvocable(program: ChatProgram) {
         let prefix = Self.skillPrefix(program)
         let catalog = [
             AgentSkill(scope: .project, name: "review", description: nil, commandPrefix: prefix),
@@ -392,13 +393,9 @@ struct ChatSendRulesTests {
             commands: ChatCommandMenu.commands(skills: catalog, agentIsIdle: true, program: program))
         let names = rules.commands.map(\.name)
 
-        if program == .claude {
+        if program == .claude || program == .grok {
             #expect(names == ["compact", "review"])
             #expect(rules.validate("/e2e-hidden") == .unknownCommand("e2e-hidden"))
-        } else if program == .grok {
-            // Chat offers Grok Build no skills until it knows Grok's
-            // built-in names, which win over a skill's.
-            #expect(names == ["compact"])
         } else {
             #expect(names == ["compact", "review", "e2e-hidden"])
         }
@@ -420,5 +417,103 @@ struct ChatSendRulesTests {
         #expect(ChatCommandMenu.suggestions(for: " /re", in: commands) == nil)
         #expect(ChatCommandMenu.suggestions(for: "/usr/", in: commands) == nil)
         #expect(ChatCommandMenu.suggestions(for: "hello", in: commands) == nil)
+    }
+
+    // MARK: Grok Build
+
+    private static let grokSideQuestion = ComposerRefusal.unsafeText(
+        "Grok Build would treat this as a /btw side question and keep it out of the conversation. "
+            + "Rephrase it, or ask in the terminal.")
+    private static let grokMidTextGoal = ComposerRefusal.unsafeText(
+        "Grok Build runs /goal only at the start of a message and wouldn't send this. Set goals in the terminal.")
+
+    @Test(arguments: ["exit", "quit", ":q", ":q!", ":wq", ":wq!", "  Exit\n", "QUIT"])
+    func grokRefusesItsExitWords(text: String) {
+        #expect(
+            Self.rules(.grok).validate(text)
+                == .unsafeText("Sending this would exit Grok Build. Open the terminal to exit."))
+    }
+
+    /// Grok Build reads a `/` token after whitespace anywhere in a message:
+    /// it asks `/btw` as a side question that stays out of the conversation,
+    /// and refuses `/goal` there, leaving the message in its input box.
+    @Test(arguments: ["what next /btw ok", "a\n/goal b", "fix it /GOAL", "ask\t/BTW why"])
+    func grokRefusesMidTextBtwAndGoal(text: String) throws {
+        let refusals = [
+            "what next /btw ok": Self.grokSideQuestion, "a\n/goal b": Self.grokMidTextGoal,
+            "fix it /GOAL": Self.grokMidTextGoal, "ask\t/BTW why": Self.grokSideQuestion,
+        ]
+        let refusal = try #require(refusals[text])
+
+        #expect(Self.rules(.grok).validate(text) == refusal)
+        #expect(Self.rules(.codex).validate(text) == nil, "only Grok Build reads them mid-text")
+    }
+
+    /// A leading command is the menu's to read, as for any program.
+    @Test func grokLeavesALeadingGoalToTheMenuRule() {
+        let rules = Self.rules(.grok)
+
+        #expect(rules.validate("/goal x") == .unknownCommand("goal"))
+        #expect(rules.validate("  /btw why") == .unknownCommand("btw"))
+    }
+
+    /// A token starts at `/` after whitespace and runs to the next
+    /// whitespace, so these name other commands, or none.
+    @Test(arguments: ["/btw,", "a/btw", "/btwx", "/goals"])
+    func grokSendsLookalikes(text: String) {
+        let draft = "what next \(text) ok"
+        let rules = Self.rules(.grok)
+
+        #expect(rules.validate(draft) == nil)
+        #expect(rules.outgoingText(draft) == draft + " ")
+    }
+
+    @Test func grokOffersSkillsAndCompact() {
+        let commands = Self.rules(.grok).commands
+
+        #expect(commands.map(\.name) == ["compact", "review", "deploy"])
+        #expect(commands.first { $0.name == "compact" }?.kind == .compact)
+        #expect(commands.first { $0.name == "review" }?.kind == .skill(prefix: "/"))
+        #expect(ChatCommandMenu.suggestions(for: "/re", in: commands)?.map(\.name) == ["review"])
+    }
+
+    /// Grok Build keeps a built-in command's bare name, in any case, and
+    /// offers a skill named like one only under a qualified name.
+    @Test(arguments: ["quit", "delete", "new", "undo", "always-approve", "plan", "logout"])
+    func grokLeavesOutSkillsNamedLikeBuiltIns(name: String) {
+        let catalog = [
+            AgentSkill(scope: .project, name: name, description: nil),
+            AgentSkill(scope: .global, name: name.uppercased(), description: nil),
+            AgentSkill(scope: .global, name: "review", description: nil),
+        ]
+        let rules = ChatSendRules(
+            program: .grok, commands: ChatCommandMenu.commands(skills: catalog, agentIsIdle: true, program: .grok))
+
+        #expect(rules.commands.map(\.name) == ["compact", "review"])
+        #expect(rules.validate("/\(name)") == .unknownCommand(name))
+    }
+
+    /// Chat matches only a bare `/compact` with what Grok Build records, so
+    /// a focus is refused before the idle rule.
+    @Test func grokRefusesCompactWithAFocus() {
+        let focus = ComposerRefusal.commandUnavailable("Add compaction focus in the Agent terminal.")
+        let idle = Self.rules(.grok)
+        let busy = Self.rules(.grok, idle: false)
+
+        #expect(idle.validate("/compact keep the API notes") == focus)
+        #expect(busy.validate("/compact keep the API notes") == focus)
+        #expect(idle.validate("  /compact \n") == nil)
+        #expect(busy.validate("/compact") == .commandAwaitsIdle("compact"))
+    }
+
+    /// Grok Build trims the space before it parses a command.
+    @Test func grokSendsEveryCommandWithATrailingSpace() {
+        let rules = Self.rules(.grok)
+
+        #expect(rules.outgoingText("/compact") == "/compact ")
+        #expect(rules.outgoingText("  /compact \n") == "/compact ")
+        #expect(rules.outgoingText("/review the diff") == "/review the diff ")
+        #expect(rules.outgoingText("/deploy") == "/deploy ")
+        #expect(rules.commands.allSatisfy { rules.profile.submission($0) == .trailingSpace })
     }
 }
