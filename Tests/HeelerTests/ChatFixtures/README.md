@@ -168,8 +168,9 @@ numbers, so the numbers have gaps.
   the named width attached and detached before each read, so the pane kept
   its size; `opencode-22` and `opencode-25` are 180×47 and the `-62` stems
   62×41. `opencode-25` and `opencode-42` show the `Reject permission` stage:
-  a scratch `.opencode/opencode.json` rule asked before a subagent read a
-  scratch file, and Esc in the terminal rejected it.
+  OpenCode's default ask rule for `*.env` reads stopped a subagent reading a
+  scratch `.env` file, and Esc in the terminal opened the stage. The scratch
+  project had no `.opencode` config.
 - `opencode-27`, `-28` and `-29` are derived, not captured: OpenCode
   2.0.32's permission for a shell command, which no capture shows, rebuilt
   at 180×47 from stem 10's rows and colors and the permission component in
