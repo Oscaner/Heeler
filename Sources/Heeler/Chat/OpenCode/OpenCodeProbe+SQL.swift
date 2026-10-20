@@ -5,7 +5,9 @@ import Foundation
 /// `session_inbox`, and nothing writes. The statements stay within SQLite
 /// 3.25 with JSON1: window functions and `pragma_table_info` are fine, while
 /// `->`, `iif`, `FILTER`, `NULLS FIRST`, `HAVING` without `GROUP BY` and
-/// `ORDER BY` inside an aggregate are newer.
+/// `ORDER BY` inside an aggregate are newer. They also stay shallow: SQLite
+/// before 3.46 parses on a fixed stack of 100 entries, and the deepest
+/// statement needs about 60 of them.
 ///
 /// JSON values lose their JSON subtype when they leave a subquery, a CTE
 /// column, or a `CASE` or `coalesce`, and would then embed as strings. So a
@@ -66,10 +68,12 @@ extension OpenCodeProbe {
                 firstStatement(session, changed: "1"),
             ]
         case .row(let seq, let outputLimit):
+            let rows = """
+                SELECT s.id, s.type, s.seq, s.time_created, s.time_updated, s.data
+                  FROM session_message s WHERE s.session_id = \(session) AND s.seq = \(seq)
+                """
             statements.append("""
-                WITH r AS (SELECT m.id, m.type, m.seq, m.time_created AS tc, m.time_updated AS tu,
-                                  \(finalFlag) AS f, \(slim(outputLimit: max(0, outputLimit))) AS d
-                             FROM session_message m WHERE m.session_id = \(session) AND m.seq = \(seq))
+                WITH \(slimmed(rows, outputLimit: max(0, outputLimit)))
                 SELECT 'R ' || \(rowObject(dataLimit: nil)) FROM r
                 """)
         }
@@ -152,17 +156,19 @@ extension OpenCodeProbe {
     /// prefilter on the stored length bounds how many rows are slimmed.
     private static func newestRows(_ session: String, below: Int64?, budget: Int) -> String {
         let bound = below.map { " AND seq < \($0)" } ?? ""
+        let rows = """
+            SELECT s.id, s.type, s.seq, s.time_created, s.time_updated, s.data
+              FROM session_message s JOIN raw ON raw.seq = s.seq
+             WHERE s.session_id = \(session) AND raw.racc - raw.rlen < 4 * \(budget)
+            """
         return """
             WITH raw AS (SELECT seq, length(data) AS rlen,
                                 sum(length(data)) OVER (ORDER BY seq DESC ROWS UNBOUNDED PRECEDING) AS racc
                            FROM session_message WHERE session_id = \(session)\(bound)),
-                 r AS (SELECT m.id, m.type, m.seq, m.time_created AS tc, m.time_updated AS tu,
-                              \(finalFlag) AS f, \(slim(outputLimit: toolOutputLimit)) AS d
-                         FROM session_message m JOIN raw ON raw.seq = m.seq
-                        WHERE m.session_id = \(session) AND raw.racc - raw.rlen < 4 * \(budget)),
-                 w AS (SELECT *, length(CAST(d AS BLOB)) AS len,
-                              sum(length(CAST(d AS BLOB))) OVER (ORDER BY seq DESC ROWS UNBOUNDED PRECEDING) AS acc
-                         FROM r)
+            \(slimmed(rows, outputLimit: toolOutputLimit)),
+            w AS (SELECT *, length(CAST(d AS BLOB)) AS len,
+                         sum(length(CAST(d AS BLOB))) OVER (ORDER BY seq DESC ROWS UNBOUNDED PRECEDING) AS acc
+                    FROM r)
             SELECT 'R ' || \(rowObject(dataLimit: rowDataLimit))
               FROM w WHERE acc - len < \(budget) ORDER BY seq
             """
@@ -174,17 +180,43 @@ extension OpenCodeProbe {
         _ session: String, cursor: OpenCodePollCursor, changed: String
     ) -> String {
         let open = cursor.openRows.prefix(openRowLimit).map(String.init).joined(separator: ",")
-        return """
-            WITH r AS (SELECT m.id, m.type, m.seq, m.time_created AS tc, m.time_updated AS tu,
-                              \(finalFlag) AS f, \(slim(outputLimit: toolOutputLimit)) AS d
-                         FROM session_message m
-                        WHERE m.session_id = \(session) AND \(changed)
-                          AND (m.seq > \(cursor.highSeq) OR m.seq IN (\(open.isEmpty ? "NULL" : open))
-                               OR (m.seq >= \(cursor.lowSeq) AND m.time_updated >= \(cursor.updatedSince)))),
-                 w AS (SELECT *, length(CAST(d AS BLOB)) AS len,
-                              sum(length(CAST(d AS BLOB))) OVER (ORDER BY seq ROWS UNBOUNDED PRECEDING) AS acc
-                         FROM r)
+        let rows = """
+            SELECT s.id, s.type, s.seq, s.time_created, s.time_updated, s.data
+              FROM session_message s
+             WHERE s.session_id = \(session) AND \(changed)
+               AND (s.seq > \(cursor.highSeq) OR s.seq IN (\(open.isEmpty ? "NULL" : open))
+                    OR (s.seq >= \(cursor.lowSeq) AND s.time_updated >= \(cursor.updatedSince)))
             """
+        return """
+            WITH \(slimmed(rows, outputLimit: toolOutputLimit)),
+            w AS (SELECT *, length(CAST(d AS BLOB)) AS len,
+                         sum(length(CAST(d AS BLOB))) OVER (ORDER BY seq ROWS UNBOUNDED PRECEDING) AS acc
+                    FROM r)
+            """
+    }
+
+    /// The CTEs that slim the rows `rows` selects from `session_message`:
+    /// `m` holds those rows; `items` each step's content items, with a tool
+    /// call's output text and changed files read out; `slim_items` each item
+    /// as Chat reads it; and `r` each row as Chat reads it, as `f` and `d`.
+    ///
+    /// SQLite before 3.46 parses on a fixed stack of 100 entries and fails
+    /// a statement nested deeper with "parser stack overflow" (Debian 12 and
+    /// Ubuntu 24.04 ship such SQLite). So an item is built at the top of its
+    /// own CTE rather than inside its row's expression, and a step gathers
+    /// its items by `seq`, in `json_each` order.
+    private static func slimmed(_ rows: String, outputLimit: Int) -> String {
+        """
+        m AS (\(rows)),
+        items AS (SELECT m.seq, c.key AS i, CASE WHEN c.type = 'object' THEN c.value END AS v,
+                         \(toolOutput) AS out, \(changedFiles) AS files
+                    FROM m, json_each(CASE WHEN m.type = 'assistant' AND json_valid(m.data) THEN m.data END,
+                                      '$.content') c),
+        slim_items AS (SELECT seq, i, \(item(outputLimit: outputLimit)) AS item FROM items),
+        r AS (SELECT m.id, m.type, m.seq, m.time_created AS tc, m.time_updated AS tu,
+                     \(finalFlag) AS f, \(slim) AS d
+                FROM m)
+        """
     }
 
     /// One `{"k":"row",…}` line from the `w` columns. Over `dataLimit` the
@@ -212,11 +244,10 @@ extension OpenCodeProbe {
         """
 
     /// The row's data, cut to what Chat shows. A row that is not JSON reads
-    /// as `{"k":"invalid"}`.
-    private static func slim(outputLimit: Int) -> String {
-        """
+    /// as `{"k":"invalid"}`. A step keeps its items from `slim_items`.
+    private static let slim = """
         CASE WHEN json_valid(m.data) THEN CASE
-          WHEN m.type = 'assistant' THEN \(assistant(outputLimit: outputLimit))
+          WHEN m.type = 'assistant' THEN \(assistant)
           WHEN m.type = 'user' THEN \(user)
           WHEN m.type = 'compaction' THEN json_object('status', json_extract(m.data, '$.status'),
               'reason', json_extract(m.data, '$.reason'),
@@ -235,80 +266,90 @@ extension OpenCodeProbe {
           ELSE json_object('time', json_extract(m.data, '$.time')) END
         ELSE json_object('k', 'invalid') END
         """
+
+    /// A step without its provider state or snapshot, its content the step's
+    /// items from `slim_items`.
+    private static let assistant = """
+        json_set(json_remove(m.data, '$.providerState', '$.snapshot', '$.content'), '$.content',
+          json((SELECT json_group_array(json(s.item)) FROM slim_items s WHERE s.seq = m.seq)))
+        """
+
+    /// One content item of `items`, keeping its index as `_i`.
+    private static func item(outputLimit: Int) -> String {
+        """
+        CASE WHEN v IS NULL THEN json_object('_i', i) ELSE CASE json_extract(v, '$.type')
+          WHEN 'text' THEN json_object('_i', i, 'type', 'text',
+            'text', substr(json_extract(v, '$.text'), 1, 65536),
+            'n', length(json_extract(v, '$.text')),
+            'phase', coalesce(json_extract(v, '$.state.phase'), json_extract(v, '$.state.openai.phase')))
+          WHEN 'reasoning' THEN json_object('_i', i, 'type', 'reasoning',
+            'text', substr(json_extract(v, '$.text'), 1, 65536),
+            'n', length(json_extract(v, '$.text')),
+            'time', json_extract(v, '$.time'))
+          WHEN 'tool' THEN json_object('_i', i, 'type', 'tool',
+            'id', json_extract(v, '$.id'), 'name', json_extract(v, '$.name'),
+            'status', json_extract(v, '$.state.status'),
+            'input', json(\(toolInput)),
+            'error', json_extract(v, '$.state.error'),
+            'meta', json(\(toolMetadata)),
+            'out', substr(out, 1, \(outputLimit)),
+            'outN', length(out),
+            'time', json_extract(v, '$.time'))
+          ELSE json_object('_i', i, 'type', json_extract(v, '$.type')) END END
+        """
     }
 
-    /// A step without its provider state or snapshot. Each content item
-    /// keeps its index as `_i`.
-    private static func assistant(outputLimit: Int) -> String {
-        let output = """
-            (SELECT group_concat(json_extract(o.value, '$.text'), char(10))
-                       FROM json_each(c.value, '$.state.content') o WHERE o.type = 'object')
-            """
-        return """
-            json_set(json_remove(m.data, '$.providerState', '$.snapshot', '$.content'), '$.content',
-              json(coalesce((SELECT json_group_array(json(CASE WHEN c.type = 'object' THEN
-                  CASE json_extract(c.value, '$.type')
-                  WHEN 'text' THEN json_object('_i', c.key, 'type', 'text',
-                    'text', substr(json_extract(c.value, '$.text'), 1, 65536),
-                    'n', length(json_extract(c.value, '$.text')),
-                    'phase', coalesce(json_extract(c.value, '$.state.phase'),
-                                      json_extract(c.value, '$.state.openai.phase')))
-                  WHEN 'reasoning' THEN json_object('_i', c.key, 'type', 'reasoning',
-                    'text', substr(json_extract(c.value, '$.text'), 1, 65536),
-                    'n', length(json_extract(c.value, '$.text')),
-                    'time', json_extract(c.value, '$.time'))
-                  WHEN 'tool' THEN json_object('_i', c.key, 'type', 'tool',
-                    'id', json_extract(c.value, '$.id'), 'name', json_extract(c.value, '$.name'),
-                    'status', json_extract(c.value, '$.state.status'),
-                    'input', json(\(toolInput)),
-                    'error', json_extract(c.value, '$.state.error'),
-                    'meta', json(\(toolMetadata)),
-                    'out', substr(\(output), 1, \(outputLimit)),
-                    'outN', length(\(output)),
-                    'time', json_extract(c.value, '$.time'))
-                  ELSE json_object('_i', c.key, 'type', json_extract(c.value, '$.type')) END
-                ELSE json_object('_i', c.key) END))
-                FROM json_each(m.data, '$.content') c), '[]')))
-            """
-    }
+    /// A tool call's output texts joined by newlines, from an `items` row.
+    private static let toolOutput = """
+        (SELECT group_concat(json_extract(o.value, '$.text'), char(10))
+           FROM json_each(CASE WHEN c.type = 'object' THEN c.value END, '$.state.content') o
+          WHERE o.type = 'object')
+        """
+
+    /// The files a tool call changed, from an `items` row, each patch cut at
+    /// 64 Ki characters.
+    private static let changedFiles = """
+        (SELECT json_group_array(json_object(
+            'file', coalesce(json_extract(f.value, '$.file'), json_extract(f.value, '$.relativePath'),
+                             json_extract(f.value, '$.filePath')),
+            'status', coalesce(json_extract(f.value, '$.status'), json_extract(f.value, '$.type')),
+            'additions', json_extract(f.value, '$.additions'),
+            'deletions', json_extract(f.value, '$.deletions'),
+            'patch', substr(coalesce(json_extract(f.value, '$.patch'), json_extract(f.value, '$.diff')),
+                            1, 65536)))
+           FROM json_each(CASE WHEN c.type = 'object' THEN c.value END, '$.state.metadata.files') f
+          WHERE f.type = 'object')
+        """
 
     /// An input of 8 KiB or less whole; a larger one keeps the fields a row
     /// names; a text input as a string.
     private static let toolInput = """
-        CASE json_type(c.value, '$.state.input')
+        CASE json_type(v, '$.state.input')
           WHEN 'object' THEN
-            CASE WHEN length(CAST(json_extract(c.value, '$.state.input') AS BLOB)) <= 8192
-              THEN json_extract(c.value, '$.state.input')
-              ELSE json_object('filePath', json_extract(c.value, '$.state.input.filePath'),
-                'path', json_extract(c.value, '$.state.input.path'),
-                'command', substr(json_extract(c.value, '$.state.input.command'), 1, 2048),
-                'pattern', json_extract(c.value, '$.state.input.pattern'),
-                'description', json_extract(c.value, '$.state.input.description'),
-                'url', json_extract(c.value, '$.state.input.url'),
-                'query', json_extract(c.value, '$.state.input.query'),
-                'agent', json_extract(c.value, '$.state.input.agent'),
-                'prompt', substr(json_extract(c.value, '$.state.input.prompt'), 1, 2048),
-                'questions', json_extract(c.value, '$.state.input.questions')) END
-          WHEN 'text' THEN json_quote(substr(json_extract(c.value, '$.state.input'), 1, 2048))
+            CASE WHEN length(CAST(json_extract(v, '$.state.input') AS BLOB)) <= 8192
+              THEN json_extract(v, '$.state.input')
+              ELSE json_object('filePath', json_extract(v, '$.state.input.filePath'),
+                'path', json_extract(v, '$.state.input.path'),
+                'command', substr(json_extract(v, '$.state.input.command'), 1, 2048),
+                'pattern', json_extract(v, '$.state.input.pattern'),
+                'description', json_extract(v, '$.state.input.description'),
+                'url', json_extract(v, '$.state.input.url'),
+                'query', json_extract(v, '$.state.input.query'),
+                'agent', json_extract(v, '$.state.input.agent'),
+                'prompt', substr(json_extract(v, '$.state.input.prompt'), 1, 2048),
+                'questions', json_extract(v, '$.state.input.questions')) END
+          WHEN 'text' THEN json_quote(substr(json_extract(v, '$.state.input'), 1, 2048))
           END
         """
 
     /// Tool metadata without diagnostics, previews, full output or file
-    /// contents; diffs and each file's patch cut at 64 Ki characters.
+    /// contents; the diff cut at 64 Ki characters, and `files` from `items`.
     private static let toolMetadata = """
-        CASE WHEN json_type(c.value, '$.state.metadata') = 'object' THEN json_replace(
-          json_remove(json_extract(c.value, '$.state.metadata'), '$.diagnostics', '$.preview',
+        CASE WHEN json_type(v, '$.state.metadata') = 'object' THEN json_replace(
+          json_remove(json_extract(v, '$.state.metadata'), '$.diagnostics', '$.preview',
             '$.output', '$.loaded', '$.filediff.before', '$.filediff.after'),
-          '$.diff', substr(json_extract(c.value, '$.state.metadata.diff'), 1, 65536),
-          '$.files', json(coalesce((SELECT json_group_array(json_object(
-              'file', coalesce(json_extract(f.value, '$.file'), json_extract(f.value, '$.relativePath'),
-                               json_extract(f.value, '$.filePath')),
-              'status', coalesce(json_extract(f.value, '$.status'), json_extract(f.value, '$.type')),
-              'additions', json_extract(f.value, '$.additions'),
-              'deletions', json_extract(f.value, '$.deletions'),
-              'patch', substr(coalesce(json_extract(f.value, '$.patch'), json_extract(f.value, '$.diff')),
-                              1, 65536)))
-            FROM json_each(c.value, '$.state.metadata.files') f WHERE f.type = 'object'), '[]'))) END
+          '$.diff', substr(json_extract(v, '$.state.metadata.diff'), 1, 65536),
+          '$.files', json(files)) END
         """
 
     private static let user = """

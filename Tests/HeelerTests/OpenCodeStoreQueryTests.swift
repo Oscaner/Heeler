@@ -462,6 +462,29 @@ struct OpenCodeStoreQueryTests {
         }
     }
 
+    // MARK: Older SQLite
+
+    /// SQLite before 3.46, as Debian 12, Ubuntu 24.04 and RHEL 9 ship it,
+    /// parses on a fixed stack of 100 entries and fails a statement nested
+    /// deeper. Every statement parses with 20 entries to spare, about six
+    /// levels of nesting, so a change that deepens one fails here first.
+    @Test(.enabled(if: OpenCodeSQLiteHarness.limitsParserDepth, "this SQLite cannot cap its parser stack"))
+    func everyStatementParsesOnTheParserStackOfOlderSQLite() throws {
+        let (harness, _) = try Self.store("pong")
+        let spared = OpenCodeSQLiteHarness.fixedParserStack - 20
+        // The cap holds below 100 entries: 28 nested calls fit 100, not 80.
+        let nested = "SELECT " + String(repeating: "coalesce(", count: 28) + "1"
+            + String(repeating: ", 2)", count: 28)
+        #expect(harness.prepareFailure(nested, parserStack: OpenCodeSQLiteHarness.fixedParserStack) == nil)
+        #expect(harness.prepareFailure(nested, parserStack: spared) != nil)
+
+        for query in OpenCodeProbeTests.queries {
+            for (index, statement) in OpenCodeProbe.statements(query).enumerated() {
+                #expect(harness.prepareFailure(statement, parserStack: spared) == nil, "\(query.kind) statement \(index)")
+            }
+        }
+    }
+
     // MARK: Helpers
 
     private static func store(_ scenario: String) throws -> (OpenCodeSQLiteHarness, OpenCodeSessionID) {

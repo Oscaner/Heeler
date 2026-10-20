@@ -107,7 +107,27 @@ struct OpenCodeStoreFixture: Decodable, Sendable {
 /// and a failure on stderr in the CLI's words. The output carries the
 /// script's markers and its `Z`, `W` and `O` lines, so `OpenCodeProbe.parse`
 /// reads it as it reads a Host's.
+///
+/// Where the test's SQLite can cap its parser stack, every read parses on
+/// the fixed stack SQLite had before 3.46, as Debian 12's does.
 final class OpenCodeSQLiteHarness {
+    /// `SQLITE_LIMIT_PARSER_DEPTH` (SQLite 3.51 and newer), which the SDKs
+    /// CI builds with do not name.
+    static let parserDepthLimit: Int32 = 12
+    /// The parser stack of SQLite before 3.46, which could not grow: a
+    /// statement nested deeper fails with "parser stack overflow".
+    static let fixedParserStack: Int32 = 100
+
+    /// Whether this SQLite can cap its parser stack, and so read as one
+    /// before 3.46 does. iOS 26's SQLite 3.50 cannot.
+    static let limitsParserDepth: Bool = {
+        var connection: OpaquePointer?
+        defer { sqlite3_close(connection) }
+        guard sqlite3_open_v2(":memory:", &connection, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK
+        else { return false }
+        return sqlite3_limit(connection, parserDepthLimit, -1) >= 0
+    }()
+
     enum Journal {
         /// No side files: the store as a test reads it in process.
         case rollback
@@ -269,6 +289,7 @@ final class OpenCodeSQLiteHarness {
             status = 1
         } else {
             sqlite3_busy_timeout(reader, 1000)
+            sqlite3_limit(reader, Self.parserDepthLimit, Self.fixedParserStack)
             let statements = OpenCodeProbe.statements(query)
             // The CLI reads `.timeout` from line 1 of its input.
             var line = 2
@@ -314,6 +335,20 @@ final class OpenCodeSQLiteHarness {
             throw Failure(description: "expected records, read \(response)")
         }
         return records
+    }
+
+    /// Prepares `sql` against this store on a parser stack of at most
+    /// `parserStack` entries, without running it: nil when it parses, else
+    /// SQLite's message.
+    func prepareFailure(_ sql: String, parserStack: Int32) -> String? {
+        var reader: OpaquePointer?
+        defer { sqlite3_close(reader) }
+        guard sqlite3_open_v2(databaseURL.path(percentEncoded: false), &reader, SQLITE_OPEN_READONLY, nil) == SQLITE_OK
+        else { return "unable to open database file" }
+        sqlite3_limit(reader, Self.parserDepthLimit, parserStack)
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+        return sqlite3_prepare_v2(reader, sql, -1, &statement, nil) == SQLITE_OK ? nil : Self.message(reader)
     }
 
     // MARK: SQLite

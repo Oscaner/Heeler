@@ -366,8 +366,10 @@ enum OpenCodeProbe {
             }
             return .unavailable(.layout(missing: [printable(name, limit: 64)]))
         }
+        // A SQLite whose fixed parser stack is smaller than the one releases
+        // before 3.46 have cannot parse the statements at all.
         if line.contains("no such function: json") || line.contains("syntax error")
-            || line.contains("GROUP BY clause is required")
+            || line.contains("GROUP BY clause is required") || line.contains("parser stack overflow")
         {
             return .unavailable(.readerTooOld(version ?? "unknown"))
         }

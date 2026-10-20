@@ -121,7 +121,7 @@ struct OpenCodeProbeTests {
     /// and the layout check do the latter.
     @Test func everyStatementReadsOnlyTheFourTables() throws {
         let tables: Set<String> = ["session_v2", "session_message", "event_sequence", "session_inbox"]
-        let sources: Set<String> = ["raw", "r", "w", "need", "json_each"]
+        let sources: Set<String> = ["raw", "m", "items", "slim_items", "r", "w", "need", "json_each"]
         let refused: Set<String> = [
             "credential", "account", "control_account", "kv", "event", "message", "part", "session",
             "project",
@@ -353,6 +353,8 @@ struct OpenCodeProbeTests {
             .unreadable("OpenCode's database couldn't be opened.")
         ),
         (ReaderFailure("Error: OperationalError: database is locked"), .unreadable("OpenCode's database is busy.")),
+        (ReaderFailure("Error: OperationalError: parser stack overflow"), .problem(.readerTooOld("3.54.0"))),
+        (ReaderFailure("Parse error near line 12: parser stack overflow"), .problem(.readerTooOld("3.54.0"))),
     ])
     func classifiesReaderErrors(stderr: ReaderFailure, expected: ReaderFailureReading) throws {
         let sideFiles = stderr.sideFiles ? "W 1 1" : "W 0 0"

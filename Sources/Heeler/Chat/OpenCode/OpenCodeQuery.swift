@@ -90,7 +90,8 @@ enum OpenCodeStoreProblem: Equatable, Sendable {
     case noStore(path: String)
     /// The Host has neither `sqlite3` nor a usable `python3`.
     case noReader
-    /// The reader's SQLite is older than 3.25, or lacks JSON1.
+    /// The reader's SQLite is older than 3.25, lacks JSON1, or cannot parse
+    /// the statements on its parser stack.
     case readerTooOld(String)
     /// The database's `-wal` or `-shm` file is missing: OpenCode is not
     /// running, and a read-only open would create them or fail.
