@@ -1,10 +1,11 @@
 # OpenCode session store
 
-Observed on 2026-10-19, and at phone width on 2026-10-20, with OpenCode 2.0.32
-under herdr 0.9.5, on macOS with SQLite 3.54.0. This note records what native
-Chat relies on to follow an OpenCode Agent: where OpenCode keeps a
-conversation, which tables and rows hold it, how they change while OpenCode
-works, what herdr and the terminal screen show, and what reading it costs.
+Observed on 2026-10-19, at phone width on 2026-10-20, and through the app on
+2026-10-21, with OpenCode 2.0.32 under herdr 0.9.5, on macOS with SQLite
+3.54.0. This note records what native Chat relies on to follow an OpenCode
+Agent: where OpenCode keeps a conversation, which tables and rows hold it,
+how they change while OpenCode works, what herdr and the terminal screen
+show, and what reading it costs.
 [ADR 0025](../adr/0025-opencode-chat-reads-its-session-store.md) records the
 read path built on it.
 
@@ -19,6 +20,7 @@ read path built on it.
 | Live capture A | OpenCode 2.0.32 in a herdr pane at 180 by 47 cells, in a scratch project with scratch prompts; the store, `herdr agent get` and the screen polled every 300 ms | labels `a1` to `a11b`, `e1` to `e4` |
 | Live capture B | the same in a second scratch project; one aggregated `SELECT` and `herdr agent get` sampled every 150 ms | labels `B1` to `B9`, `Bbusy`, `Besc`, `Bpaste1`, `Bpaste2`, `Bat`, `Bcompact` |
 | Phone-width capture | OpenCode 2.0.32 on an isolated herdr 0.9.5 server on 2026-10-20, in a scratch project with scratch prompts. A 180 by 47 client, then a pty-attached `herdr agent attach` at 62 by 41 cells, sized the pane, which kept that size after each detach; `agent.read` read the visible screen | Chat fixture stems `opencode-22`, `opencode-25` (180 by 47) and `opencode-30` to `opencode-43` (62 by 41) |
+| In-app check | OpenCode 2.0.32 on an isolated herdr 0.9.5 server on 2026-10-21, in a scratch project with scratch prompts, its pane focused at 62 by 41 cells under the app on a Simulator; herdr's `pane.agent_status_changed` events and `herdr agent get` sampled every 150 ms beside the store | "2026-10-21" |
 
 The live captures used one OpenAI model (GPT-6 Astra, variant `high`); other
 providers may fill text and reasoning differently. The captures stay outside
@@ -27,7 +29,7 @@ from. Only structure was taken from the development machine's own sessions:
 every prompt, text and file name quoted here comes from the scratch sessions.
 
 Statements marked **(source)** were read in source and not observed; the rest
-were observed in the captures, the census or the bench.
+were observed in the captures, the census, the bench or the in-app check.
 [Open items](#open-items) lists what is still unverified.
 
 ## Location and files
@@ -342,7 +344,7 @@ and accepts any non-empty id up to 512 bytes (`src/agent_resume.rs:5,
 | Start from a shell | `unknown`, then `idle` from herdr's screen manifest; no `agent_session` key and no `screen_detection_skipped` key |
 | First prompt from the home screen | the session and its user row land first; herdr shows `working` with no session, then the id one 150 ms sample later, about 0.6 s after the prompt request. `screen_detection_skipped` is absent at 0.5 s and `true` by 1.5 s |
 | `/new` or `/clear` | nothing: both go to the home screen, where the plugin reports nothing, so the old id and `done` stay until the first prompt of the new session |
-| A session chosen in the picker | its id within one 150 ms sample of OpenCode opening it (200 to 270 ms after Enter), `working` for about 150 ms, then `idle` |
+| A session chosen in the picker | from `done`: its id within one 150 ms sample of OpenCode opening it (200 to 270 ms after Enter), `working` for about 150 ms, then `idle`. From `idle` (2026-10-21): its id 209 to 415 ms after Enter, once about 240 ms after the terminal title, and no status change |
 | A subagent's view | the root id, unchanged; the status follows the root |
 | Restart with `opencode --session <id>` | the id 368 ms after the launch, before any prompt; `idle` |
 | Exit | `idle` with no session, then the Agent is gone; the shell prints `Continue  opencode -s <id>` |
@@ -377,7 +379,7 @@ and accepts any non-empty id up to 512 bytes (`src/agent_resume.rs:5,
 | Esc stop | `done`, with `idle(interrupted)` |
 | `/redo` | `working`, then `done` within about 200 ms |
 | `/undo` | unchanged |
-| A session chosen in the picker | `working` for about 150 ms, then `idle` |
+| A session chosen in the picker | from `done`, `working` for about 150 ms, then `idle`; from `idle`, unchanged, with no event (2026-10-21) |
 | `/new`, before the first prompt | the previous session, still `done` |
 | Restart with `--session` | `idle` with the id, then `done` after a turn |
 | Provider failure | `blocked` with no dialog on screen **(source: the TUI plugin maps `execution.failed` to Blocked, `herdr-tui-session.js:581-583`; F5)** |
