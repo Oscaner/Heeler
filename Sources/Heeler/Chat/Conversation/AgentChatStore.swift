@@ -1249,13 +1249,15 @@ final class AgentChatStore {
     /// once its echo clock reaches `Timing.echoTimeout`, by when a queued
     /// send's turn has run. A log that names one other session for the send
     /// makes it misdirected, and holds later sends until the terminal is
-    /// back in this conversation. The lines are compared and dropped.
+    /// back in this conversation. The lines are compared and dropped. A
+    /// read counts once it returns, timed out or not: one a cancelled step
+    /// cut short is the next step's to take.
     private func checkSendWitnesses() async {
         guard let witness = source.adapter.sendWitness, let sessionID = followed?.sessionID else { return }
         let date = now()
-        var due: [(send: TrackedSend, mark: ChatSendWitnessMark)] = []
+        var due: [(send: TrackedSend, mark: ChatSendWitnessMark, isLast: Bool)] = []
         for send in sends where send.generation == conversationGeneration {
-            guard let deliveredAt = send.deliveredAt, var state = witnesses[send.id],
+            guard let deliveredAt = send.deliveredAt, let state = witnesses[send.id],
                 case .sealed(let mark) = state.mark,
                 sendStatuses[send.id] == .awaiting || sendStatuses[send.id] == .overdue
             else { continue }
@@ -1266,19 +1268,18 @@ final class AgentChatStore {
                 !state.lastReadDone
                 && (sendStatuses[send.id] == .overdue || echoClock(for: send, at: date) >= timing.echoTimeout)
             guard isFirst || isLast else { continue }
-            state.firstReadDone = true
-            state.lastReadDone = state.lastReadDone || isLast
-            witnesses[send.id] = state
-            due.append((send, mark))
+            due.append((send, mark, isLast))
         }
         guard !due.isEmpty else { return }
         let generation = conversationGeneration
         let files = source.files
-        for (send, mark) in due {
+        for (send, mark, isLast) in due {
             let appended = await Self.witnessRead(within: timing.witnessReadTimeout) {
                 try await witness.appended(since: mark, files: files)
             } ?? nil
             guard !Task.isCancelled, generation == conversationGeneration else { return }
+            witnesses[send.id]?.firstReadDone = true
+            if isLast { witnesses[send.id]?.lastReadDone = true }
             guard let appended else { continue }
             switch witness.verdict(
                 lines: appended.lines, key: send.key, sessionID: sessionID, isWholeAppend: appended.isWholeAppend,

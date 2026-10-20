@@ -2582,6 +2582,30 @@ struct AgentChatStoreTests {
         #expect(await gate.cancelledOnRelease == [false, false])
     }
 
+    /// Hiding Chat or suspending the app cancels a step mid-read: the read
+    /// it cut short is the next step's to take.
+    @Test func aWitnessReadACancelledStepCutShortIsTakenAgain() async throws {
+        let gate = HistoryGate()
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle, gate: gate)
+        await gate.open()
+        let id = await Self.witnessedGrokSend("Reply with the word kiwi. ", store: store)
+        await files.append(
+            try Self.historyLine("Reply with the word kiwi.", session: Self.otherGrokSession), to: Self.grokHistory)
+        await gate.close()
+        clock.now = clock.now.addingTimeInterval(2)
+
+        let step = Task { await store.step() }
+        try await Self.waitUntil { await gate.held == 1 }
+        step.cancel()
+        await step.value
+        #expect(store.sendStatuses[id] == .awaiting)
+        await gate.open()
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .misdirected)
+        #expect(store.sessionConcern?.raisedBy == id)
+    }
+
     /// Grok Build's prompt history names another session for the send:
     /// its echo says so, and every later send is held, whatever the screen
     /// shows of the session it went to.
