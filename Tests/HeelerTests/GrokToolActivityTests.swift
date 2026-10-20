@@ -105,12 +105,13 @@ struct GrokToolActivityTests {
     }
 
     /// A completed result: `content` and `rawOutput` are the bodies of those
-    /// values.
+    /// values; a nil `content` leaves the key out.
     private static func result(
-        _ id: String = callID, status: String = "completed", content: String = "", rawOutput: String, event: Int
+        _ id: String = callID, status: String = "completed", content: String? = "", rawOutput: String, event: Int
     ) -> String {
-        record(
-            #""sessionUpdate":"tool_call_update","toolCallId":"\#(id)","status":"\#(status)","content":[\#(content)],"rawOutput":{\#(rawOutput)}"#,
+        let content = content.map { #","content":[\#($0)]"# } ?? ""
+        return record(
+            #""sessionUpdate":"tool_call_update","toolCallId":"\#(id)","status":"\#(status)"\#(content),"rawOutput":{\#(rawOutput)}"#,
             event: event)
     }
 
@@ -745,6 +746,89 @@ struct GrokToolActivityTests {
             reducer.output(of: lines[34], for: tool)
         }
         #expect(expanded == .preview(Self.preview("BUILD SUCCEEDED\n")))
+    }
+
+    struct TaskAction: Sendable, CustomTestStringConvertible {
+        let shape: String
+        let name: String
+        /// Grok's kind for the tool.
+        let kind: String
+        let input: String
+        let failed: Bool
+        let rawOutput: String
+        let preview: String
+
+        var testDescription: String { shape }
+    }
+
+    /// The background tasks the calls below name, and one Grok can't find.
+    private static let backgroundTask = "call-01900000-0000-7000-8000-000000000011-5"
+    private static let lintTask = "call-01900000-0000-7000-8000-000000000011-6"
+    private static let missingTask = "call-01900000-0000-7000-8000-000000000011-9"
+
+    /// `rawOutput` bodies of the shapes the census found, which hold no
+    /// content: a read of one task, of several, of a task that isn't there,
+    /// and a kill.
+    private static let taskActions: [TaskAction] = [
+        TaskAction(
+            shape: "TaskOutput.Result", name: "get_command_or_subagent_output", kind: "background_task_action",
+            input: #""task_ids":["\#(backgroundTask)"],"timeout_ms":30000"#, failed: false,
+            rawOutput:
+                #""type":"TaskOutput","Result":{"task_id":"\#(backgroundTask)","command":"make test","status":"completed","exit_code":0,"started":"2026-10-19T11:20:21Z","ended":"2026-10-19T11:21:20Z","duration_secs":59.25,"output":"Running 42 tests\n42 passed\n","output_file":"","truncated":false,"truncation_hint":"","raw_output_bytes":27}"#,
+            preview: "Running 42 tests\n42 passed\n"),
+        TaskAction(
+            shape: "TaskOutput.MultiResult", name: "get_command_or_subagent_output", kind: "background_task_action",
+            input: #""task_ids":["\#(backgroundTask)","\#(lintTask)"],"timeout_ms":30000"#, failed: false,
+            rawOutput:
+                #""type":"TaskOutput","MultiResult":{"mode":"wait_all","results":[{"task_id":"\#(backgroundTask)","command":"make test","status":"completed","exit_code":0,"started":"2026-10-19T11:20:21Z","ended":"2026-10-19T11:21:20Z","duration_secs":59.25,"output":"42 passed\n","output_file":"","truncated":false,"truncation_hint":"","raw_output_bytes":10},{"task_id":"\#(lintTask)","command":"npm run lint","status":"completed","exit_code":0,"started":"2026-10-19T11:20:22Z","ended":"2026-10-19T11:20:30Z","duration_secs":8.0,"output":"No lint errors.\n","output_file":"","truncated":false,"truncation_hint":"","raw_output_bytes":16}],"summary":"2/2 tasks completed (wait_all)"}"#,
+            preview: "42 passed\n\nNo lint errors.\n"),
+        TaskAction(
+            shape: "TaskOutput.MultiResult without output", name: "get_command_or_subagent_output",
+            kind: "background_task_action", input: #""task_ids":["\#(backgroundTask)"]"#, failed: false,
+            rawOutput:
+                #""type":"TaskOutput","MultiResult":{"mode":"poll","results":[{"task_id":"\#(backgroundTask)","command":"make test","status":"running","exit_code":null,"started":"2026-10-19T11:20:21Z","ended":null,"duration_secs":3.5,"output":"","output_file":"","truncated":false,"truncation_hint":"","raw_output_bytes":0}],"summary":"0/1 tasks completed (poll)"}"#,
+            preview: "0/1 tasks completed (poll)"),
+        TaskAction(
+            shape: "TaskOutput.TaskNotFound", name: "get_command_or_subagent_output", kind: "background_task_action",
+            input: #""task_ids":["\#(missingTask)"]"#, failed: true,
+            rawOutput:
+                #""type":"TaskOutput","TaskNotFound":"Task \#(missingTask) not found. Known task IDs: [\#(backgroundTask)]""#,
+            preview: "Task \(missingTask) not found. Known task IDs: [\(backgroundTask)]"),
+        TaskAction(
+            shape: "KillTask.Result", name: "kill_command_or_subagent", kind: "kill_task_action",
+            input: #""task_id":"\#(backgroundTask)""#, failed: false,
+            rawOutput:
+                #""type":"KillTask","Result":{"task_id":"\#(backgroundTask)","outcome":"killed","message":"Task was terminated successfully"}"#,
+            preview: "Task was terminated successfully"),
+        TaskAction(
+            shape: "KillTask.TaskNotFound", name: "kill_command_or_subagent", kind: "kill_task_action",
+            input: #""task_id":"\#(missingTask)""#, failed: true,
+            rawOutput: #""type":"KillTask","TaskNotFound":"Task \#(missingTask) not found""#,
+            preview: "Task \(missingTask) not found"),
+    ]
+
+    @Test(arguments: taskActions)
+    func taskReadsAndKillsPreviewTheirResult(action: TaskAction) throws {
+        let lines = Self.lines([
+            try Self.prompt("Check on the background task.", index: 0, event: 1),
+            Self.call(name: action.name, kind: action.kind, input: action.input, event: 2),
+            Self.result(
+                status: action.failed ? "failed" : "completed", content: nil, rawOutput: action.rawOutput, event: 3),
+        ])
+        let reducer = Self.reducer(lines)
+
+        let tool = try Self.tool(reducer.transcript(ChatProjectionContext(activity: .idle)), Self.callID)
+
+        let status: ChatToolActivity.Status = action.failed ? .failed : .succeeded
+        #expect(tool.kind == .other)
+        #expect(tool.status == status)
+        #expect(tool.preview == Self.preview(action.preview))
+        #expect(tool.output == Self.reference(lines, 3))
+        // Expanded, the row reads its result line again.
+        let expanded = ChatToolPreview.$limits.withValue(ChatToolPreview.expandedLimits) {
+            reducer.output(of: lines[2], for: tool)
+        }
+        #expect(expanded == .preview(Self.preview(action.preview)))
     }
 
     // MARK: Expanded output

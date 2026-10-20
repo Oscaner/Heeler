@@ -499,8 +499,9 @@ extension GrokUpdateRecord {
             }
 
             /// The text a result shows: an error's message, a command's
-            /// output, an MCP tool's, a subagent's report or the todo list,
-            /// else the content's text, else a failure's readable name.
+            /// output, an MCP tool's, a subagent's report, a background
+            /// task's output or the todo list, else the content's text, else
+            /// a failure's readable name.
             private static func shownText(
                 _ raw: JSONValue?, type: String?, tag: (name: String, value: JSONValue)?, content: String?,
                 failed: Bool
@@ -517,6 +518,23 @@ extension GrokUpdateRecord {
                     return output?["OkayOutput"]?.stringValue ?? output?["Error"]?.stringValue ?? content
                 case "SubagentCompleted":
                     return raw?["output"]?.stringValue ?? content
+                // `get_command_or_subagent_output` and
+                // `kill_command_or_subagent`, whose results hold no content:
+                // the output read, Grok's word on the kill, or why it found
+                // no such task.
+                case "TaskOutput":
+                    switch tag?.name {
+                    case "Result": return tag?.value["output"]?.stringValue ?? content
+                    case "MultiResult": return outputs(tag?.value) ?? content
+                    case "TaskNotFound": return tag?.value.stringValue ?? content
+                    default: break
+                    }
+                case "KillTask":
+                    switch tag?.name {
+                    case "Result": return tag?.value["message"]?.stringValue ?? content
+                    case "TaskNotFound": return tag?.value.stringValue ?? content
+                    default: break
+                    }
                 case "Todo":
                     let todos = Input.todos(tag?.value["todos"])
                     return todos.isEmpty ? content : GrokUpdateRecord.todoText(todos)
@@ -533,6 +551,16 @@ extension GrokUpdateRecord {
                 if failed, let tag { return readableFailures[tag.name] ?? tag.name }
                 return raw?["pre_formatted"]?.stringValue ?? raw?["content"]?.stringValue
                     ?? raw?["text"]?.stringValue
+            }
+
+            /// The outputs a read of several tasks found, one after another,
+            /// else its summary: `2/2 tasks completed (wait_all)`.
+            private static func outputs(_ results: JSONValue?) -> String? {
+                var outputs: [String] = []
+                if case .array(let items)? = results?["results"] {
+                    outputs = items.compactMap { $0["output"]?.stringValue }.filter { !$0.isEmpty }
+                }
+                return outputs.isEmpty ? results?["summary"]?.stringValue : outputs.joined(separator: "\n")
             }
 
             /// What a tagged failure reads as when nothing else describes it.
