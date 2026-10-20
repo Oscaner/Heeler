@@ -76,8 +76,14 @@ struct ChatStandardAdapterTests {
     @Test func eachProgramComparesEchoesTheWayItRecordsPrompts() throws {
         let claude = try #require(ChatTranscriptAdapter.standard(for: .claude))
         let codex = try #require(ChatTranscriptAdapter.standard(for: .codex))
+        let grok = try #require(ChatTranscriptAdapter.standard(for: .grok))
         #expect(claude.echoKey("Fix it\r\nplease ") == "Fix it\nplease")
         #expect(codex.echoKey("Fix \u{1B}[31mit\u{1B}[0m\r\nplease ") == "Fix it\nplease")
+        // Grok Build records the space Chat adds, and a prompt sent while it
+        // works only once that prompt's turn starts.
+        #expect(grok.echoKey("Fix it\r\nplease ") == "Fix it\nplease")
+        #expect(grok.echoClockStopsWhileWorking)
+        #expect(!claude.echoClockStopsWhileWorking && !codex.echoClockStopsWhileWorking)
     }
 
     private static func codexPath(threadID: String) -> String {

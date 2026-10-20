@@ -733,6 +733,5 @@ struct GrokTranscriptReducerTests {
         #expect(!adapter.joinsCachedHistory)
         #expect(!adapter.wantsFirstLine)
         #expect(!adapter.echoesByEntry)
-        #expect(ChatTranscriptAdapter.standard(for: .grok) == nil)
     }
 }

@@ -59,13 +59,15 @@ struct AgentChatAvailabilityTests {
         Agent(AgentInfo.fixture(paneID: "w1:p1", kind: kind))
     }
 
-    @Test(arguments: [("claude", ChatProgram.claude), ("codex", .codex), ("pi", .pi), ("omp", .omp)])
+    @Test(arguments: [
+        ("claude", ChatProgram.claude), ("codex", .codex), ("pi", .pi), ("omp", .omp), ("grok", .grok),
+    ])
     func supportedProgramsOfferChatOnPOSIXHosts(kind: String, program: ChatProgram) {
         #expect(AgentChatAvailability.program(for: agent(kind: kind), platform: .posix) == program)
         #expect(AgentChatAvailability.mayOfferChat(for: agent(kind: kind)))
     }
 
-    @Test(arguments: ["gemini", "cursor", "droid", "opencode", "grok", "Claude", ""])
+    @Test(arguments: ["gemini", "cursor", "droid", "opencode", "Claude", ""])
     func otherProgramsNeverOfferChat(kind: String) {
         #expect(AgentChatAvailability.program(for: agent(kind: kind), platform: .posix) == nil)
         #expect(!AgentChatAvailability.mayOfferChat(for: agent(kind: kind)))
