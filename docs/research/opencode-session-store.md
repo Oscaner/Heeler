@@ -61,13 +61,19 @@ were observed in the captures, the census or the bench.
   background `opencode serve --service`), `-wal` and `-shm` exist and
   `sqlite3 -readonly` reads it. The captures made about 8,500 such reads
   while OpenCode wrote, none of them locked, busy or unable to open.
-- On SQLite 3.54.0, a read-only open of a WAL database whose `-wal` and
-  `-shm` are absent fails with `unable to open database file (14)`:
-  `sqlite3 -readonly`, URI `mode=ro` and Python's `mode=ro` alike. Only URI
-  `immutable=1` opens it. Stock SQLite deletes both files when the last
-  connection closes; Apple's build kept them after close in this test. So on
-  Linux a store that no OpenCode process holds open is expected to be
-  unreadable read-only (F14).
+- A read-only open of a WAL database whose `-wal` and `-shm` are absent
+  depends on the build. Apple's SQLite 3.54.0 refuses it with `unable to
+  open database file (14)`: `sqlite3 -readonly`, URI `mode=ro` and Python's
+  `mode=ro` alike; only URI `immutable=1` opens it. Stock SQLite (3.22 and
+  later) creates both files to open it, and leaves them when it closes:
+  Homebrew's 3.53.3, and Python's 3.40.1 (Debian 12) and 3.46.1 in
+  containers, all read such a store this way.
+- Stock SQLite deletes both files when the last connection closes, as the
+  same containers showed; Apple's build kept them after close in this test.
+  So on Linux every store that no OpenCode process holds open lacks them, and
+  a read-only open would leave them in OpenCode's data directory. The probe
+  therefore starts no reader while either file is absent, and reads such a
+  store as closed (ADR 0025).
 
 ## Tables
 
@@ -553,8 +559,9 @@ to `/usr/bin/sqlite3` (3.54.0) and `python3` to Homebrew's (3.14.6);
 because Xcode is installed: without the Command Line Tools it only offers to
 install them.
 
-Linux defaults are not measured (F14); the Debian, Fedora and Arch rows are
-the least certain:
+Which tools Linux images carry by default is not measured (F14); the Debian,
+Fedora and Arch rows are the least certain. The system SQLite of Rocky 8,
+Ubuntu 20.04 and Debian 12 was confirmed in containers (below):
 
 | Host | `sqlite3` CLI by default | System SQLite | `python3` by default |
 | --- | --- | --- | --- |
@@ -598,7 +605,5 @@ are verified, and an answered item leaves this list.
   animations off; (d) the box after a paste with `prompt.paste=full`;
   (e) the queued-prompt indicator.
 - **F13.** Server commands sent through `agent.prompt`.
-- **F14.** On Linux: whether `-wal` and `-shm` go when the last connection
-  closes, which read-only opens then fail, and which readers common images
-  carry.
+- **F14.** On Linux: which readers common images carry by default.
 - **F15.** An exec's cost over SSH at Chat's polling pace.
