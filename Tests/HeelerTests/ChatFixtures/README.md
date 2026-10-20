@@ -170,13 +170,26 @@ numbers, so the numbers have gaps.
   62×41. `opencode-25` and `opencode-42` show the `Reject permission` stage:
   a scratch `.opencode/opencode.json` rule asked before a subagent read a
   scratch file, and Esc in the terminal rejected it.
+- `opencode-27`, `-28` and `-29` are derived, not captured: OpenCode
+  2.0.32's permission for a shell command, which no capture shows, rebuilt
+  at 180×47 from stem 10's rows and colors and the permission component in
+  OpenCode's bundle. A shell command's permission has no action row under
+  `△ Permission required`, only its `$ git status` line in the text color;
+  with Always allow focused (`opencode-28`) that line gives way to the
+  rule's, `This will always allow the following patterns for this
+  project.` and `- git status *`, a blank row apart. `opencode-29` is the
+  next command's permission, `rm -rf build`. Above them are stem 10's
+  earlier rows, a scratch prompt asking for both commands, and the two
+  calls running, the one whose permission shows in the warning color. A
+  script outside the repository derives them. Replace them with captures
+  when they are taken.
 
 Scrubbing applied the stores' path, account and placeholder rules to every
 byte. Assistant text in Chinese became English no wider than it, with blanks
 added at the end of its row, so every row keeps its captured width. The
 `/tmp` stems keep that scratch project's path, whole or shortened. The checks
 under the stores' scrubbing cover `screens/opencode/` as well. Together the
-files are about 520 KB. These screens are not part of `ScreenFixture.all`
+files are about 570 KB. These screens are not part of `ScreenFixture.all`
 either.
 
 ## OpenCode stores

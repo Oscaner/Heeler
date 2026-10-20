@@ -43,8 +43,12 @@ enum OpenCodeDialogParser {
     /// them under 80 columns.
     ///
     /// While `Always allow` has focus, OpenCode swaps the lines about the
-    /// request for what the rule would allow, so those lines are notes,
-    /// left out of the fingerprint; only the action row is the body.
+    /// request for what the rule would allow, so those lines are notes and
+    /// only the action row is the body. The fingerprint still carries the
+    /// lines, apart from the body: a shell command's permission has no
+    /// action row, and a subagent's names only the agent, so only their
+    /// `$ git status` or `◉ <description>` line tells one request from the
+    /// next.
     private static func permission(_ block: OpenCodeBlock, on screen: ANSIScreen) -> DialogParseResult {
         let layout = "Heeler doesn't know this permission's layout. Answer it with these keys or in the terminal."
         let sections = block.sections
@@ -63,6 +67,7 @@ enum OpenCodeDialogParser {
             target = action[action.index(after: space)...].trimmingCharacters(in: .whitespaces)
         }
         var notes = sections[1..<optionsIndex].flatMap { block.paragraphs($0) }
+        let showsRule = notes.first?.hasPrefix("This will always allow") == true
         let body = target.map { [$0] } ?? []
 
         var subject = DialogSubject()
@@ -76,7 +81,7 @@ enum OpenCodeDialogParser {
             default: break
             }
             // An edit's lines are its diff, which stays in the terminal.
-            if subject.toolName == "Edit", notes.first?.hasPrefix("This will always allow") != true {
+            if subject.toolName == "Edit", !showsRule {
                 notes = []
             }
         } else {
@@ -97,7 +102,8 @@ enum OpenCodeDialogParser {
                 progress: nil, options: options, rows: block.rows,
                 fingerprint: DialogFingerprint(
                     program: .opencode, kind: .openCodePermission, title: permissionTitle, sourceSuffix: nil,
-                    body: body, progress: nil, options: options),
+                    body: body, progress: nil, options: options, requestLines: showsRule ? nil : notes,
+                    ruleLines: showsRule ? notes : nil),
                 focus: DialogFocusState(focusedOrdinal: focused.map { $0 + 1 }), subject: subject))
     }
 

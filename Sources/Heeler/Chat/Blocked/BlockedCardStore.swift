@@ -103,6 +103,11 @@ final class BlockedCardStore {
     private(set) var history = BlockedHistory()
     /// Folded to a bar; a new dialog unfolds it.
     var isCollapsed = false
+    /// Bumped when another dialog shows, and not when the same one's focus
+    /// moves, which on OpenCode swaps a permission's lines for its rule's.
+    /// The card's identity, so a note or choice made on one dialog's card
+    /// never carries to the next.
+    private(set) var dialogGeneration = 0
 
     /// Whether Stop acts: also after an answer that showed no effect, as a
     /// way out of a dialog that keeps the card waiting.
@@ -429,7 +434,11 @@ final class BlockedCardStore {
     /// Brings the controls back once the dialog an answer showed no effect
     /// on has gone.
     private func releaseIfChanged(_ observation: DialogObservation) {
-        guard progress == .unconfirmed, observation.result.fingerprint != unconfirmedFingerprint else { return }
+        guard progress == .unconfirmed, let unconfirmed = unconfirmedFingerprint else { return }
+        if let fresh = observation.result.fingerprint, unconfirmed.matches(fresh) {
+            unconfirmedFingerprint = unconfirmed.merging(fresh)
+            return
+        }
         progress = .ready
         unconfirmedFingerprint = nil
     }
@@ -527,7 +536,12 @@ final class BlockedCardStore {
         }
         guard confirmation.isMet, let confirmed = confirmation.last else {
             progress = .unconfirmed
+            // The last read can show lines the first didn't, as OpenCode's
+            // rule in place of the request once Always allow has focus.
             unconfirmedFingerprint = fingerprint
+            if let last = confirmation.last?.result.fingerprint, last.matches(fingerprint) {
+                unconfirmedFingerprint = fingerprint.merging(last)
+            }
             notice = "The Agent hasn't responded yet. Answer in the terminal if it stays."
             return false
         }
@@ -563,7 +577,7 @@ final class BlockedCardStore {
     /// Waits until the dialog has shown long enough to take a key: the
     /// grace, or an Oh My Pi approval's arm.
     private func waitOutGrace(for fingerprint: DialogFingerprint, kind: BlockedDialogKind?) async {
-        guard let firstSeen, firstSeen.fingerprint == fingerprint else { return }
+        guard let firstSeen, firstSeen.fingerprint.matches(fingerprint) else { return }
         let settle = kind == .ompApproval ? max(timing.grace, timing.approvalArm) : timing.grace
         let wait = firstSeen.at + settle - clock.now()
         if wait > .zero { try? await clock.sleep(wait) }
@@ -595,16 +609,21 @@ final class BlockedCardStore {
 
     private func present(_ observation: DialogObservation) {
         let fingerprint = observation.result.fingerprint
-        if fingerprint != firstSeen?.fingerprint {
+        if let seen = firstSeen, let fingerprint, seen.fingerprint.matches(fingerprint) {
+            // The same dialog, its focus perhaps moved: keep when it showed,
+            // and the lines each read showed of it.
+            firstSeen = (seen.fingerprint.merging(fingerprint), seen.at)
+        } else if fingerprint != nil || firstSeen != nil {
             firstSeen = fingerprint.map { ($0, clock.now()) }
-            if degraded?.fingerprint != fingerprint { degraded = nil }
+            dialogGeneration += 1
+            if let degraded, fingerprint.map(degraded.fingerprint.matches) != true { self.degraded = nil }
             if fingerprint != nil { isCollapsed = false }
             notice = nil
         }
         let next: Content
         switch observation.result {
         case .dialog(let dialog):
-            if let degraded, degraded.fingerprint == dialog.fingerprint {
+            if let degraded, degraded.fingerprint.matches(dialog.fingerprint) {
                 next = .generic(Self.excerpt(of: dialog, on: observation.screen, reason: degraded.reason))
             } else {
                 next = .card(

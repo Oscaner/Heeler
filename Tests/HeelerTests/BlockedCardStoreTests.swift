@@ -773,6 +773,165 @@ struct BlockedCardStoreTests {
         #expect(store.notice == nil)
     }
 
+    /// OpenCode draws every shell command's permission alike but for its
+    /// `$` line, so a tap on the card for `git status` sends nothing once
+    /// the screen asks about `rm -rf build`.
+    @Test func aShellCommandThatChangedBeforeTheTapGetsNoKeys() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        let store = Self.store(.opencode, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+        await pane.show(try ScreenFixture.screen("opencode-29-permission-shell-next-180"))
+
+        await store.perform(.choose(ordinal: 1))
+
+        #expect(await pane.keys.isEmpty)
+        #expect(store.notice == "This prompt changed. Check it before answering.")
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected the next command's card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.subject.command == "rm -rf build")
+    }
+
+    /// With Always allow focused in the terminal, OpenCode shows the rule
+    /// in place of the command. A card that showed the command answers
+    /// only once it shows the rule too.
+    @Test func aCardAnswersOnlyTheLinesItShows() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        await pane.react(to: ["enter"], with: try ScreenFixture.screen("opencode-08-working-180"))
+        let store = Self.store(.opencode, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+        await pane.show(try ScreenFixture.screen("opencode-28-permission-shell-right1-180"))
+
+        await store.perform(.choose(ordinal: 2))
+
+        #expect(await pane.keys.isEmpty)
+        #expect(store.notice == "This prompt changed. Check it before answering.")
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected the rule's card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.subject.notes.last == "- git status *")
+
+        await store.perform(.choose(ordinal: 2))
+        #expect(await pane.keys == [["enter"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+    }
+
+    /// After an answer OpenCode can show the next command's permission
+    /// while herdr stays Blocked. Its `$` line confirms the answer, and a
+    /// tap on it waits out the grace from when it showed.
+    @Test func theNextShellCommandConfirmsTheAnswer() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        await pane.react(to: ["enter"], with: try ScreenFixture.screen("opencode-29-permission-shell-next-180"))
+        let clock = ManualClock()
+        let store = Self.store(.opencode, pane: pane, clock: clock)
+        store.update(activity: .blocked)
+        await store.refresh()
+
+        await store.perform(.choose(ordinal: 1))
+
+        #expect(await pane.keys == [["enter"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected the next command's card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.subject.command == "rm -rf build")
+
+        let sleeps = clock.sleeps.count
+        await pane.react(to: ["enter"], with: try ScreenFixture.screen("opencode-08-working-180"))
+        await store.perform(.choose(ordinal: 1))
+        #expect(await pane.keys == [["enter"], ["enter"]])
+        #expect(clock.sleeps.dropFirst(sleeps).first == .milliseconds(150))
+    }
+
+    /// An answer that showed no effect keeps the answers off while its
+    /// permission stays, and the next command's brings them back. After
+    /// Always allow the answer's last read showed the rule, so the next
+    /// command's rule tells it apart as well.
+    @Test func theNextShellCommandReleasesAnUnconfirmedAnswer() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        let store = Self.store(.opencode, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+        await store.perform(.choose(ordinal: 1))
+        #expect(await pane.keys == [["enter"]])
+        #expect(store.progress == .unconfirmed)
+        await store.refresh()
+        #expect(store.progress == .unconfirmed)
+
+        await pane.show(try ScreenFixture.screen("opencode-29-permission-shell-next-180"))
+        await store.refresh()
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+
+        let always = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        await always.react(to: ["right"], with: try ScreenFixture.screen("opencode-28-permission-shell-right1-180"))
+        let alwaysStore = Self.store(.opencode, pane: always)
+        alwaysStore.update(activity: .blocked)
+        await alwaysStore.refresh()
+        await alwaysStore.perform(.choose(ordinal: 2))
+        #expect(await always.keys == [["right"], ["enter"]])
+        #expect(alwaysStore.progress == .unconfirmed)
+        await alwaysStore.refresh()
+        #expect(alwaysStore.progress == .unconfirmed)
+
+        // `rm -rf build`'s permission with Always allow focused.
+        let rule = try ScreenFixture.text("opencode-28-permission-shell-right1-180")
+        try #require(rule.components(separatedBy: "- git status *").count == 2)
+        await always.show(ANSIScreenDecoder.decode(rule.replacingOccurrences(of: "- git status *", with: "- rm *        ")))
+        await alwaysStore.refresh()
+        #expect(alwaysStore.progress == .ready)
+    }
+
+    /// The next command's permission is a new dialog: the card unfolds,
+    /// and a tap waits out the grace from when it showed.
+    @Test func theNextShellCommandUnfoldsTheCardAndRestartsTheGrace() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        await pane.react(to: ["enter"], with: try ScreenFixture.screen("opencode-08-working-180"))
+        let clock = ManualClock()
+        let store = Self.store(.opencode, pane: pane, clock: clock)
+        store.update(activity: .blocked)
+        await store.refresh()
+        store.isCollapsed = true
+        clock.advance(.seconds(5))
+
+        await pane.show(try ScreenFixture.screen("opencode-29-permission-shell-next-180"))
+        await store.refresh()
+        #expect(!store.isCollapsed)
+
+        await store.perform(.choose(ordinal: 1))
+        #expect(await pane.keys == [["enter"]])
+        #expect(clock.sleeps == [.milliseconds(150)])
+        #expect(store.progress == .ready)
+    }
+
+    /// Always allow's focus swaps the command's line for the rule's on the
+    /// same card; the next command's permission makes a new one.
+    @Test func onlyTheNextShellCommandMakesANewCard() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        let store = Self.store(.opencode, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+        let card = store.dialogGeneration
+
+        await pane.show(try ScreenFixture.screen("opencode-28-permission-shell-right1-180"))
+        await store.refresh()
+        #expect(store.dialogGeneration == card)
+        await pane.show(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        await store.refresh()
+        #expect(store.dialogGeneration == card)
+
+        await pane.show(try ScreenFixture.screen("opencode-29-permission-shell-next-180"))
+        await store.refresh()
+        #expect(store.dialogGeneration != card)
+    }
+
     /// OpenCode's prompt would act on the key pad's keys, so a block with
     /// no dialog on screen gets a note in their place, once the quiet time
     /// has passed.

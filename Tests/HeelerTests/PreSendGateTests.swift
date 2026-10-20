@@ -107,8 +107,10 @@ struct DeliveryCheckTests {
         let delivered = [
             "opencode-02-session-empty-180", "opencode-10-permission-180", "opencode-11-permission-right1-180",
             "opencode-12-permission-right2-180", "opencode-13-question-180", "opencode-21-done-interrupted-180",
-            "opencode-24-after-ctrl-u-180", "opencode-25-reject-feedback-180", "opencode-32-session-empty-62",
-            "opencode-37-permission-long-62", "opencode-38-question-long-62", "opencode-42-reject-feedback-62",
+            "opencode-24-after-ctrl-u-180", "opencode-25-reject-feedback-180", "opencode-27-permission-shell-180",
+            "opencode-28-permission-shell-right1-180", "opencode-29-permission-shell-next-180",
+            "opencode-32-session-empty-62", "opencode-37-permission-long-62", "opencode-38-question-long-62",
+            "opencode-42-reject-feedback-62",
         ]
         let notDelivered = [
             "opencode-03-session-draft-180", "opencode-05-slash-space-180", "opencode-17-recalled-draft-180",

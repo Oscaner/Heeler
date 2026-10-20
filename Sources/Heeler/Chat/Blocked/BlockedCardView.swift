@@ -26,7 +26,7 @@ struct BlockedCardView: View {
                             BlockedDialogCard(card: card, store: store, maxHeight: maxHeight)
                         }
                     }
-                    .id(card.dialog.fingerprint)
+                    .id(store.dialogGeneration)
                 case .generic(let excerpt):
                     GenericDialogCard(excerpt: excerpt, store: store, maxHeight: maxHeight, openTerminal: openTerminal)
                 case .unreadable:

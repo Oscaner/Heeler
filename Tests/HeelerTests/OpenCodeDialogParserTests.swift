@@ -43,16 +43,23 @@ struct OpenCodeDialogParserTests {
         #expect(dialog.focus == DialogFocusState(focusedOrdinal: focus))
     }
 
-    @Test func focusLeavesTheFingerprintUnchanged() throws {
+    /// Reject's focus keeps the fingerprint. Always allow's shows the rule
+    /// in place of the lines about the request, so its read matches the
+    /// others without equalling them.
+    @Test func focusLeavesTheFingerprintMatching() throws {
         let once = try dialog("opencode-10-permission-180")
-        #expect(try dialog("opencode-11-permission-right1-180").fingerprint == once.fingerprint)
         #expect(try dialog("opencode-12-permission-right2-180").fingerprint == once.fingerprint)
+        let always = try dialog("opencode-11-permission-right1-180").fingerprint
+        #expect(always.matches(once.fingerprint))
+        #expect(once.fingerprint.matches(always))
+        #expect(always != once.fingerprint)
     }
 
     /// While Always allow has focus, OpenCode swaps `Path: .env` for what
     /// the rule would allow. The card shows those lines; the fingerprint
-    /// leaves them out, or the first Right would read as a new dialog.
-    @Test func notesAreShownButNotFingerprinted() throws {
+    /// keeps them apart from the body, or the first Right would read as a
+    /// new dialog.
+    @Test func notesAreShownAndSwappedForTheRule() throws {
         let once = try dialog("opencode-10-permission-180")
         let always = try dialog("opencode-11-permission-right1-180")
         #expect(once.subject.notes == ["Path: .env"])
@@ -62,8 +69,61 @@ struct OpenCodeDialogParserTests {
         #expect(swapped == once.subject)
         #expect(always.body == once.body)
         #expect(always.options.map(\.label) == once.options.map(\.label))
-        #expect(always.fingerprint == once.fingerprint)
+        #expect(always.fingerprint.matches(once.fingerprint))
         #expect(try dialog("opencode-12-permission-right2-180").subject == once.subject)
+    }
+
+    /// A shell command's permission has no action row, so only its `$`
+    /// line names the command, and two commands drawn alike differ. With
+    /// Always allow focused, OpenCode shows the rule instead, which
+    /// matches either command's read; once both reads of a request are
+    /// known, the next command differs from them too.
+    @Test func shellPermissionsAreToldApartByTheirCommand() throws {
+        let status = try dialog("opencode-27-permission-shell-180")
+        let rule = try dialog("opencode-28-permission-shell-right1-180")
+        let removal = try dialog("opencode-29-permission-shell-next-180")
+        for dialog in [status, rule, removal] {
+            #expect(dialog.kind == .openCodePermission)
+            #expect(dialog.body.isEmpty)
+            #expect(dialog.subject.toolName == "Shell")
+            #expect(dialog.options.map(\.label) == ["Allow once", "Always allow", "Reject"])
+        }
+        #expect(status.rows == 38..<46)
+        #expect(rule.rows == 36..<46)
+        #expect(status.subject.command == "git status")
+        #expect(removal.subject.command == "rm -rf build")
+        #expect(status.subject.notes == ["$ git status"])
+        #expect(rule.subject.command == nil)
+        #expect(
+            rule.subject.notes == ["This will always allow the following patterns for this project.", "- git status *"])
+        #expect(rule.focus.focusedOrdinal == 2)
+
+        #expect(status.fingerprint != removal.fingerprint)
+        #expect(!status.fingerprint.matches(removal.fingerprint))
+        #expect(rule.fingerprint.matches(status.fingerprint))
+        #expect(rule.fingerprint.matches(removal.fingerprint))
+        #expect(rule.fingerprint != status.fingerprint)
+        let both = status.fingerprint.merging(rule.fingerprint)
+        #expect(both.matches(status.fingerprint))
+        #expect(both.matches(rule.fingerprint))
+        #expect(!both.matches(removal.fingerprint))
+    }
+
+    /// A subagent's permission names only the agent; the `◉` line with its
+    /// task tells one request from the next.
+    @Test func subagentPermissionsAreToldApartByTheirTask() throws {
+        func subagent(_ task: String) throws -> BlockedDialog {
+            let screen = Self.permission(
+                options: ["Allow once", "Always allow", "Reject"], action: "# General Subagent", lines: ["◉ \(task)"])
+            return try #require(BlockedDialogParser.parse(screen, program: .opencode).dialog)
+        }
+        let review = try subagent("Review the staged diff")
+        let cleanup = try subagent("Delete the build folder")
+        #expect(review.body == ["General Subagent"])
+        #expect(cleanup.body == review.body)
+        #expect(review.subject.notes == ["◉ Review the staged diff"])
+        #expect(!review.fingerprint.matches(cleanup.fingerprint))
+        #expect(try subagent("Review the staged diff").fingerprint == review.fingerprint)
     }
 
     /// Without a rule to keep, OpenCode offers Allow once and Reject only.
@@ -233,9 +293,12 @@ struct OpenCodeDialogParserTests {
             of: styled.replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression))
     }
 
-    /// A permission to read `.env` like stem 10's, with these options, the
-    /// first focused, and the key hints at the end of their row.
-    private static func permission(options: [String]) -> ANSIScreen {
+    /// A permission like stem 10's, with these options, the first focused,
+    /// and the key hints at the end of their row: by default its read of
+    /// `.env`, else this action row, icon first, and these lines.
+    private static func permission(
+        options: [String], action: String = "→ Read .env", lines: [String] = ["Path: .env"]
+    ) -> ANSIScreen {
         // Each option has a blank on either side, and a blank parts them.
         var line = "  "
         for (index, label) in options.enumerated() {
@@ -243,12 +306,13 @@ struct OpenCodeDialogParserTests {
         }
         let hints = "ctrl+f fullscreen  ⇆ select  enter confirm"
         line += String(repeating: " ", count: columns - 5 - width(of: line) - width(of: hints) - 3) + hints
-        let rows = [
+        var rows = [
             "I'll check .env.", "", row(panel),
             row(panel, "  " + SGR.fg(245, 167, 66) + "△" + text + " Permission required"),
-            row(panel, "    " + muted + "→" + text + " Read .env"), row(panel),
-            row(panel, "  " + muted + "Path: .env"), row(panel), row(band), row(band, line), row(band),
+            row(panel, "    " + muted + String(action.prefix(1)) + text + String(action.dropFirst())), row(panel),
         ]
+        rows += lines.map { row(panel, "  " + muted + $0) }
+        rows += [row(panel), row(band), row(band, line), row(band)]
         return ScreenFixture.synthetic(rows)
     }
 

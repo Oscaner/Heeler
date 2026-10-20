@@ -211,8 +211,8 @@ struct DialogSubject: Sendable, Hashable {
     var workspacePath: String?
     /// OpenCode permission: the lines under the action, wrapped rows
     /// joined (`Path: .env`, `$ ls -la`). OpenCode swaps them for what the
-    /// rule would allow while `Always allow` has focus, so they stay out of
-    /// the fingerprint.
+    /// rule would allow while `Always allow` has focus, so the fingerprint
+    /// carries them apart from the body (`DialogFingerprint.matches`).
     var notes: [String] = []
 
     struct ReviewAnswer: Sendable, Hashable {
