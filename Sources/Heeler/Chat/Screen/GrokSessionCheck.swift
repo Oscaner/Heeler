@@ -19,10 +19,13 @@ enum GrokSessionCheck {
         let grok = GrokScreen(screen)
         let transcript = input.transcript
         // At Grok's start the session has no prompt yet, and a message from
-        // the Welcome screen is its first.
-        if grok.isWelcome, !transcript.recordedPrompts.isEmpty || transcript.needsOlderHistory {
-            return .otherSession(welcomeReason)
-        }
+        // the Welcome screen is its first. A transcript restored from the
+        // device's copy records no prompts, but keeps where the newest
+        // starts and the turns they open.
+        let hasMessages =
+            !transcript.recordedPrompts.isEmpty || transcript.latestPromptOffset != nil || !transcript.turns.isEmpty
+            || transcript.needsOlderHistory
+        if grok.isWelcome, hasMessages { return .otherSession(welcomeReason) }
         // Grok prints the line into the scrollback of the session it names
         // (`lifecycle.rs`, `load.rs`), so the screen shows that session,
         // whatever messages follow the line.

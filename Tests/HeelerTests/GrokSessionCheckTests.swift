@@ -260,6 +260,28 @@ struct GrokSessionCheckTests {
                 == .otherSession(GrokSessionCheck.welcomeReason))
     }
 
+    /// A transcript restored from the device's copy records no prompts,
+    /// but keeps where the newest starts and the turns, as
+    /// `ChatConversationEngine.restore()` builds it.
+    @Test func theWelcomeScreenOfARestoredConversationHolds() throws {
+        let screen = try ScreenFixture.screen("grok-20-welcome")
+        let entries = Self.kiwi.recordedPrompts.compactMap { prompt in
+            prompt.entryID.map { id in
+                ChatEntry(id: id, sourceOffset: prompt.offset, content: .user(ChatUserMessage(text: prompt.text)))
+            }
+        }
+        let restored = [
+            ChatTranscript(entries: entries, latestPromptOffset: Self.kiwi.latestPromptOffset, turns: Self.kiwi.turns),
+            ChatTranscript(entries: entries, latestPromptOffset: Self.kiwi.latestPromptOffset),
+            ChatTranscript(entries: entries, turns: Self.kiwi.turns),
+        ]
+
+        for transcript in restored {
+            #expect(transcript.recordedPrompts.isEmpty && !transcript.needsOlderHistory)
+            #expect(Self.verdict(screen, Self.input(transcript)) == .otherSession(GrokSessionCheck.welcomeReason))
+        }
+    }
+
     /// At Grok's start the session has no prompt yet, and the message is
     /// its first.
     @Test func theWelcomeScreenOfANewSessionPasses() throws {

@@ -2191,6 +2191,7 @@ struct AgentChatStoreTests {
     /// gate holds stats of the folder's prompt history.
     private static func grokStore(
         through line: Int, status: AgentStatus, server: Server? = nil, gate: HistoryGate? = nil,
+        cache: VolatileChatTranscriptCache = VolatileChatTranscriptCache(),
         timing: AgentChatStore.Timing = AgentChatStore.Timing(
             activeInterval: .milliseconds(5), idleInterval: .milliseconds(5))
     ) async throws -> (files: VirtualHostFiles, store: AgentChatStore, clock: Clock) {
@@ -2203,8 +2204,7 @@ struct AgentChatStoreTests {
             source: AgentChatSource(
                 hostID: host, socketLocation: .defaultSession,
                 files: gate?.files(files, holding: grokHistory) ?? files.hostFiles(),
-                agentInfo: { try await server?.read() ?? agent }, cache: VolatileChatTranscriptCache(),
-                adapter: .grok),
+                agentInfo: { try await server?.read() ?? agent }, cache: cache, adapter: .grok),
             timing: timing, now: { clock.now })
         await store.step()
         #expect(store.conversation.phase == .following(path: grokPath))
@@ -2669,6 +2669,31 @@ struct AgentChatStoreTests {
         #expect(
             store.sendConcern(for: "Reply with the word lime. ", after: Self.pongScreen) == Self.misdirectedReason)
         #expect(store.sessionConcern?.raisedBy == id)
+    }
+
+    /// The conversation as the device saved it records no prompts until
+    /// a live read: the Welcome screen holds it all the same.
+    @Test func theWelcomeScreenHoldsARestoredConversation() async throws {
+        let cache = VolatileChatTranscriptCache()
+        _ = try await Self.grokStore(through: 4, status: .idle, cache: cache)
+        // The same Agent on a device that can't reach the Host yet.
+        let agent = Self.grokAgent(.idle)
+        let server = Server(agent)
+        await server.fail(with: .channelFailed(detail: "agent.get failed"))
+        let store = AgentChatStore(
+            agentID: ConsoleAgent.ID(hostID: Self.host, paneID: agent.paneID), agent: agent, program: .grok,
+            source: AgentChatSource(
+                hostID: Self.host, socketLocation: .defaultSession, files: VirtualHostFiles().hostFiles(),
+                agentInfo: { try await server.read() }, cache: cache, adapter: .grok),
+            timing: AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)))
+        await store.step()
+
+        #expect(store.conversation.isFromCache)
+        #expect(store.conversation.transcript.recordedPrompts.isEmpty)
+        #expect(!store.conversation.transcript.needsOlderHistory)
+        #expect(
+            store.sendConcern(for: "Reply with the word lime. ", after: try ScreenFixture.screen("grok-20-welcome"))
+                == GrokSessionCheck.welcomeReason)
     }
 
     /// herdr follows `/new` within its idle recheck: a send held for the
