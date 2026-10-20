@@ -32,13 +32,15 @@ enum GrokStopGuard {
         // Grok offers the cancel in every pane while a turn runs.
         let offersCancel = grok.footer?.contains("Ctrl+c:cancel") == true
         guard grok.statusRow != nil || offersCancel else { return .refuse(notWorking) }
+        // Ghost text is not a draft: with nothing typed, Ctrl+C cancels. A
+        // draft's own hints lead the footer and push the focus hints past a
+        // phone's 62 columns, so the draft is checked before focus.
+        guard composer.draft.isEmpty else {
+            return .refuse("Grok Build's input box has text, and Ctrl+C would only clear it. Stop it in the terminal.")
+        }
         guard grok.promptHasFocus || offersCancel else {
             return .refuse(
                 "Grok Build's input box doesn't have focus, so Stop pressed nothing. Stop it in the terminal.")
-        }
-        // Ghost text is not a draft: with nothing typed, Ctrl+C cancels.
-        guard composer.draft.isEmpty else {
-            return .refuse("Grok Build's input box has text, and Ctrl+C would only clear it. Stop it in the terminal.")
         }
         return .press
     }

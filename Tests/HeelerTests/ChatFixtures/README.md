@@ -195,7 +195,7 @@ replacements of the same length. These screens are not part of
 herdr 0.9.5 (2026-10-19), kept as herdr returned them apart from the
 scrubbing below: CRLF rows, SGR styling only. Two Agents ran in scratch
 projects under the developer's account, `cap-grok-a` and `cap-grok-b`; every
-screen is 47 rows of 181 or 182 columns, except `grok-28` to `grok-33` (below).
+screen is 47 rows of 181 or 182 columns, except `grok-28` to `grok-34` (below).
 Screens whose header shows
 `/U/d/s/cap-grok-a/proj` ran with `HOME` pointed at a scratch directory, where
 Grok asks before running a tool; the developer's own settings put it in
@@ -216,9 +216,10 @@ prompts in Chinese, and its replies stay as captured.
 | `grok-26-waiting-subagent`, `grok-27-compacting` | `cap-grok-b`'s `B7-t6s`; `A12-t+1s`, a `/compact` a second in |
 | `grok-28-welcome-62`, `grok-29-welcome-40` | The Welcome screen at the phone's 62×41 grid and at 40×30, where Grok draws its menu without the box |
 | `grok-30-idle-62x20`, `grok-31-scrollback-62x20`, `grok-32-working-62x20`, `grok-33-working-scrollback-62x20` | The phone's 62×20 grid with the keyboard up, where Grok forces compact mode: idle, then the scrollback focused with Tab; a `sleep 15` turn running, then the scrollback focused |
+| `grok-34-working-draft-62` | The phone's 62×41 grid: a `sleep 60` turn running with `draft text` typed in the terminal, whose footer stops at `Enter:queue │ Shift+Enter/Opt+Enter:newline │` |
 
 Captures not marked `cap-grok-b` come from `cap-grok-a`, except `grok-28` to
-`grok-33`, which come from a later Agent (2026-10-20) in the scratch project
+`grok-34`, which come from a later Agent (2026-10-20) in the scratch project
 `/tmp/hcl/proj-grok`, read as captured, with nothing to scrub.
 
 Scrubbing replaced the account name with `developer` and the scratch

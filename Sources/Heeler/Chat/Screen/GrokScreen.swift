@@ -91,11 +91,13 @@ struct GrokScreen: Sendable {
     /// The footer offers `Shift+Tab:mode`, which shows only while the
     /// prompt has focus on the conversation's own view, or the suggestion
     /// hint, which shows only with prompt focus (`views/agent.rs`
-    /// `build_hints`). Either survives a footer cut at 40 columns. In
-    /// compact mode, which Grok forces at 20 rows or fewer (as at a phone's
-    /// 62×20 grid with the keyboard up), the footer is `Ctrl+.:shortcuts`
-    /// whatever has focus (1.0.62, live). Then only the box tells: Grok
-    /// draws its placeholder in an empty box without focus
+    /// `build_hints`). Either survives a footer cut at 40 columns while the
+    /// box is empty. A draft's send and newline hints come first and push
+    /// both past a 62-column edge (1.0.62, live), so callers read the draft
+    /// before focus. In compact mode, which Grok forces at 20 rows or fewer
+    /// (as at a phone's 62×20 grid with the keyboard up), the footer is
+    /// `Ctrl+.:shortcuts` whatever has focus (1.0.62, live). Then only the
+    /// box tells: Grok draws its placeholder in an empty box without focus
     /// (`views/prompt_widget`), so an empty box with no placeholder has it.
     let promptHasFocus: Bool
     /// The footer while Grok waits for a second press, such as

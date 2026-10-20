@@ -298,7 +298,9 @@ send, or a prompt restored by a cancel-rewind or a rewind. Ghost text was
 not captured live.
 
 The footer is the last row under the box. With the prompt focused on the
-main view it shows `Shift+Tab:mode` first or second:
+main view it shows `Shift+Tab:mode`, first or second with an empty box but
+third after a draft's hints, so a 62-column pane cuts it off (`Enter:queue │
+Shift+Enter/Opt+Enter:newline │`, live, 2026-10-20):
 
 - idle and empty: `Shift+Tab:mode │ Ctrl+.:shortcuts`;
 - a draft: `Enter:send │ Shift+Enter/Opt+Enter:newline │ Shift+Tab:mode │

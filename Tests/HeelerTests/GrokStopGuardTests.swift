@@ -109,6 +109,16 @@ struct GrokStopGuardTests {
         #expect(Self.verdict(ghost.screen) == .press)
     }
 
+    /// At the phone's 62 columns a draft's footer stops at
+    /// `Enter:queue │ Shift+Enter/Opt+Enter:newline │`, before
+    /// `Shift+Tab:mode` and `Ctrl+c:cancel`. The draft is still the reason.
+    @Test func refusesADraftWhoseHintsCutTheFocusHints() throws {
+        let screen = try ScreenFixture.screen("grok-34-working-draft-62")
+
+        #expect(GrokScreen(screen).composer?.draft == "draft text")
+        #expect(Self.verdict(screen) == .refuse(Self.draft))
+    }
+
     /// herdr says Working, but the screen shows no turn: Ctrl+C on an idle
     /// prompt arms Grok's quit. Background work's cue is not a turn.
     @Test func refusesWithoutAWorkingCue() throws {
