@@ -211,6 +211,12 @@ percentage}`, the checkpoint and `auto_compact_completed` in mid-turn, and a
 cancelled one writes `auto_compact_cancelled` (source). Nothing above a
 compaction is rewritten, and `summary_preview` was always null.
 
+`/compact` takes no focus: with text after it, Grok shows the toast
+`/compact takes no arguments.`, keeps the text in its box and writes
+nothing. In a session with no messages it compacts anyway; one such run
+took 1m37s and wrote the checkpoint and `auto_compact_completed` (live,
+2026-10-20).
+
 Each `toolCallId` writes three records:
 
 1. `tool_call`, whose `title` is the tool name, with a partial `rawInput`
@@ -497,7 +503,6 @@ Not captured yet:
 - F18: `prompt_history.jsonl` for a session in a worktree group, and its
   rewrite at 10,000 entries.
 - F19: Esc on the subagent stop panel.
-- F20: `/compact` with nothing to compact, and with a focus.
 - F21: captures at 40×30, 62×40 and 120×40 of the idle, draft, working,
   queued and subagent-wait screens, both cards, a Session line after `/new`,
   the dashboard and the armed-quit footer.

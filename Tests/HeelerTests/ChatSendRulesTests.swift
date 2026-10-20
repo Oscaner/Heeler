@@ -493,10 +493,12 @@ struct ChatSendRulesTests {
         #expect(rules.validate("/\(name)") == .unknownCommand(name))
     }
 
-    /// Chat matches only a bare `/compact` with what Grok Build records, so
-    /// a focus is refused before the idle rule.
+    /// Grok Build 1.0.62 answers `/compact` with text after it with the
+    /// toast "/compact takes no arguments." and sends nothing, so a focus is
+    /// refused before the idle rule, without pointing at the terminal.
     @Test func grokRefusesCompactWithAFocus() {
-        let focus = ComposerRefusal.commandUnavailable("Add compaction focus in the Agent terminal.")
+        let focus = ComposerRefusal.commandUnavailable(
+            "Grok Build's /compact takes no focus. Send /compact on its own.")
         let idle = Self.rules(.grok)
         let busy = Self.rules(.grok, idle: false)
 

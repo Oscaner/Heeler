@@ -46,11 +46,12 @@ enum GrokSlashCommands {
                 "Grok Build would treat this as a /btw side question and keep it out of the conversation. "
                     + "Rephrase it, or ask in the terminal.")
         }
-        // Chat matches only a bare `/compact` with what Grok records, and how
-        // Grok takes a focus is not captured. Checked before the menu, so a
-        // focus is refused while the Agent works too.
+        // Grok 1.0.62 answers `/compact` with text after it with the toast
+        // "/compact takes no arguments." and keeps the text in its box.
+        // Checked before the menu, so a focus is refused while the Agent
+        // works too.
         if isCompactWithFocus(trimmed) {
-            return .commandUnavailable("Add compaction focus in the Agent terminal.")
+            return .commandUnavailable("Grok Build's /compact takes no focus. Send /compact on its own.")
         }
         return nil
     }
