@@ -950,6 +950,10 @@ struct ChatConversationEngineTests {
         #expect(await engine.output(of: long) == .failure(.tooLong))
         #expect(await fixture.store.calls.last == .line(reference))
 
+        // A source can find a line too long only once it reads it.
+        await fixture.store.failNext(with: ChatToolOutputFailure.tooLong)
+        #expect(await engine.output(of: row) == .failure(.tooLong))
+
         // The store no longer holds the line.
         await fixture.store.write(Self.lines(0..<3))
         #expect(await engine.output(of: row) == .failure(.gone))

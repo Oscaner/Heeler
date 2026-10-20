@@ -35,6 +35,8 @@ protocol ChatTranscriptSource: Sendable {
     /// The request begun last has read as far back as one request may.
     var olderSearchExhausted: Bool { get }
     /// One recorded line again, for an expanded tool row; nil when gone.
+    /// Throws `ChatToolOutputFailure.tooLong` for a line found too long to
+    /// read only once it is asked for.
     func line(at reference: ChatOutputReference, files: ChatHostFiles) async throws -> ChatLine?
 }
 

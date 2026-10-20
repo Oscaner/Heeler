@@ -523,6 +523,21 @@ struct OpenCodeRecordSourceTests {
         #expect(await queries.fileCalls == 0)
     }
 
+    /// A row still over the output cap at a quarter of its output is too
+    /// long to show, which reading it again would not change.
+    @Test func aRowStillCutShortIsTooLong() async throws {
+        let queries = ScriptedQueries()
+        let expanded = Self.row(7, type: "assistant", data: #"{"content":[]}"#)
+        let cut = Self.records([expanded], eventSeq: 9, overflow: true)
+        await queries.answer(cut, cut, cut)
+        let source = OpenCodeRecordSource(session: Self.session)
+
+        await #expect(throws: ChatToolOutputFailure.tooLong) {
+            _ = try await source.line(at: ChatOutputReference(offset: 7, length: 4_096), files: queries.files)
+        }
+        #expect(await queries.shapes == ["row 7 \(256 << 10)", "row 7 \(128 << 10)", "row 7 \(64 << 10)"])
+    }
+
     /// A transport that cannot query OpenCode, as in the demo, says so the
     /// way its other Chat operations do.
     @Test func withoutAQueryTheHostCannotReadOpenCode() async throws {

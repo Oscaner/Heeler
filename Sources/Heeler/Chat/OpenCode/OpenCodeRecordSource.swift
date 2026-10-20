@@ -152,7 +152,8 @@ struct OpenCodeRecordSource: ChatTranscriptSource {
     }
 
     /// The row at the reference's `seq` again, its tool output cut at
-    /// `outputLimit` characters rather than the usual 16 Ki.
+    /// `outputLimit` characters rather than the usual 16 Ki. A row still
+    /// over the output cap at a quarter of that is too long to show.
     func line(at reference: ChatOutputReference, files: ChatHostFiles) async throws -> ChatLine? {
         let seq = Int64(clamping: reference.offset)
         var limit = budgets.outputLimit
@@ -170,7 +171,7 @@ struct OpenCodeRecordSource: ChatTranscriptSource {
                 throw Self.unexpectedUnchanged
             }
         }
-        throw Self.tooLarge
+        throw ChatToolOutputFailure.tooLong
     }
 
     // MARK: Tail

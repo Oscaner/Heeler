@@ -614,6 +614,8 @@ actor ChatConversationEngine {
             case nil:
                 return .failure(.gone)
             }
+        } catch let failure as ChatToolOutputFailure {
+            return .failure(failure)
         } catch {
             return .failure(
                 .unreadable((error as? TransportError)?.presentation.summary ?? "The Host could not be read."))
