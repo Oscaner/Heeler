@@ -15,6 +15,11 @@ Entries reference the pull request that made the change.
   Chinese. (#477)
 - See the Agent's task title in the detail header, with its harness and
   working directory on a second line. (#480)
+- Read OpenCode 2.x conversations in Chat on macOS and Linux Hosts, with
+  sends, Stop and cards for its permission and question dialogs. Chat reads
+  OpenCode's own database with a short read-only query on the Host, which
+  needs sqlite3 or python3, and says when OpenCode has left the
+  conversation it shows.
 
 ### Changed
 

@@ -257,7 +257,7 @@ its Done status until the first prompt of the new session.
   allowlist would refuse every upgrade.
 - The database holds every project's conversations. Chat's statements name
   only the four tables and the one session id herdr reports, and
-  [PRIVACY.md](../../PRIVACY.md) says so once Chat offers OpenCode.
+  [PRIVACY.md](../../PRIVACY.md) says so.
 - The store lags the screen: OpenCode writes a step's assistant row at the
   provider's first output and a text block when it ends, so a turn can show
   only its prompt for many seconds. Chat shows progress from Agent Status, not

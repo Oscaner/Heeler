@@ -199,8 +199,9 @@ keyboard submits or cancels. Delivered means the Host accepted the text into
 the pane — whether the Agent queues or acts on it is the Agent's business,
 and the Composer never claims otherwise.
 While Agent Status is Working and the draft is blank, Send becomes Stop: one
-Esc in the Agent's program, then a wait of up to three seconds for the status
-to leave Working rather than a second Esc. The wait is per Agent, shared by
+Esc in the Agent's program (in Chat, two for OpenCode, whose first Esc only
+arms its interrupt), then a wait of up to three seconds for the status to
+leave Working rather than another Esc. The wait is per Agent, shared by
 Chat and the terminal. With text, Send still delivers, so a prompt can queue
 behind the turn.
 Composer remains the default authored-input path on Agent detail. Direct Input
@@ -236,25 +237,31 @@ leaves the detail; a later session discovers whatever its terminal shows anew.
 _Avoid_: recent link, visible link, link history
 
 **Chat**:
-The native conversation a Claude Code, Codex, Pi or Oh My Pi Agent's detail can show in its
-terminal's place, read from the Agent's Transcript. Chat holds no Attach; its
-Composer and draft are the terminal's. Send is one `agent.prompt` request, made
-only after a screen read shows the program's input box empty, and refused for
-text the program would run rather than read. Its `/` menu offers the Agent's
-skills and `/compact`. Chat never resends: text left in the box after sending
-marks the message Not delivered. Stop presses Esc through `agent.send_keys`.
+The native conversation a Claude Code, Codex, Pi, Oh My Pi or OpenCode Agent's
+detail can show in its terminal's place, read from the Agent's Transcript. Chat
+holds no Attach; its Composer and draft are the terminal's. Send is one
+`agent.prompt` request, made only after a screen read shows the program's
+input box empty, and refused for text the program would run rather than read.
+Its `/` menu offers the Agent's skills and `/compact`; for OpenCode, only
+`/compact`. Chat never resends: text left in the box after sending marks the
+message Not delivered. Stop presses the program's Stop keys through
+`agent.send_keys`: Esc, or for OpenCode Esc twice after checking the screen.
+When OpenCode leaves the conversation herdr reported, as after its `/new`,
+Chat says so and shows no conversation.
 The choice between Chat and the terminal is app-wide, Terminal by default. Not
 offered on native Windows Hosts.
 _Avoid_: chat mode, conversation view, Monitor (ADR 0012's removed surface)
 
 **Transcript**:
-The file an Agent's program writes on its Host as its record of the
+What an Agent's program writes on its Host as its record of the
 conversation: Claude Code's session JSONL, with its subagents' files, or a
-Codex rollout, or a Pi/Oh My Pi v2-v3 tree JSONL. For Pi and Oh My Pi, herdr
+Codex rollout, or a Pi/Oh My Pi v2-v3 tree JSONL, or, for OpenCode, the
+session's rows in OpenCode's own SQLite database, which Heeler reads with a
+bounded read-only query on the Host (ADR 0025). For Pi and Oh My Pi, herdr
 normally names the exact absolute file path; a UUID can also locate a session
 under that program's default sessions directory. The session herdr reports
-names it. Heeler only reads it, over
-SFTP, and keeps decoded entries, never tool output, in an on-device cache.
+names it. Heeler only reads it, over SFTP, or for OpenCode by that query, and
+keeps decoded entries, never tool output, in an on-device cache.
 _Avoid_: log, history file, session file
 
 **Blocked Card**:
@@ -263,7 +270,8 @@ Composer's place. Its options come from the screen and the request's details
 from the Transcript; answers go through `agent.send_keys` and
 `pane.send_input`, never Attach. A card sends nothing once the dialog has
 changed and never resends. A dialog it cannot read gets a generic card with
-the Agent controls.
+the Agent controls. OpenCode Blocked with no dialog on screen gets a card that
+says why instead, since its prompt would act on those keys.
 _Avoid_: approval sheet, permission prompt (the program's own dialog), alert
 
 **Background Work**:

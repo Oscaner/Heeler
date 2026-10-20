@@ -1,10 +1,10 @@
 # OpenCode session store
 
-Observed on 2026-10-19 with OpenCode 2.0.32 under herdr 0.9.5, on macOS with
-SQLite 3.54.0. This note records what native Chat relies on to follow an
-OpenCode Agent: where OpenCode keeps a conversation, which tables and rows
-hold it, how they change while OpenCode works, what herdr and the terminal
-screen show, and what reading it costs.
+Observed on 2026-10-19, and at phone width on 2026-10-20, with OpenCode 2.0.32
+under herdr 0.9.5, on macOS with SQLite 3.54.0. This note records what native
+Chat relies on to follow an OpenCode Agent: where OpenCode keeps a
+conversation, which tables and rows hold it, how they change while OpenCode
+works, what herdr and the terminal screen show, and what reading it costs.
 [ADR 0025](../adr/0025-opencode-chat-reads-its-session-store.md) records the
 read path built on it.
 
@@ -18,8 +18,9 @@ read path built on it.
 | Query bench | `/usr/bin/sqlite3` 3.54.0, read-only, against that live store while OpenCode's background service held it | "bench" |
 | Live capture A | OpenCode 2.0.32 in a herdr pane at 180 by 47 cells, in a scratch project with scratch prompts; the store, `herdr agent get` and the screen polled every 300 ms | labels `a1` to `a11b`, `e1` to `e4` |
 | Live capture B | the same in a second scratch project; one aggregated `SELECT` and `herdr agent get` sampled every 150 ms | labels `B1` to `B9`, `Bbusy`, `Besc`, `Bpaste1`, `Bpaste2`, `Bat`, `Bcompact` |
+| Phone-width capture | OpenCode 2.0.32 on an isolated herdr 0.9.5 server on 2026-10-20, in a scratch project with scratch prompts. A 180 by 47 client, then a pty-attached `herdr agent attach` at 62 by 41 cells, sized the pane, which kept that size after each detach; `agent.read` read the visible screen | Chat fixture stems `opencode-22`, `opencode-25` (180 by 47) and `opencode-30` to `opencode-43` (62 by 41) |
 
-Both captures used one OpenAI model (GPT-6 Astra, variant `high`); other
+The live captures used one OpenAI model (GPT-6 Astra, variant `high`); other
 providers may fill text and reasoning differently. The captures stay outside
 the repository; Chat fixtures sanitized from them name the label they came
 from. Only structure was taken from the development machine's own sessions:
@@ -384,6 +385,10 @@ and accepts any non-empty id up to 512 bytes (`src/agent_resume.rs:5,
   with animations off matches neither (F12).
 - herdr's detection text matched the captured screen text in 61 of 69
   captures; the other 8 differed only in spinner frames.
+- In the phone-width capture, with the pane focused, every turn end, root
+  rejection, question dismissal and subagent rejection read `idle` with
+  `completion_seq` set, never `done`: herdr counts a completion in its
+  focused Tab as seen. The `done` rows above come from captures A and B.
 
 ## Screen
 
@@ -428,7 +433,23 @@ row. A modal's title ends in `esc`, with no box edge under it.
   of the input box unless a global form is pending
   (`routes/session/index.tsx:202-214, 1469, 1483`), so a request raised while
   the user watches a subagent shows no dialog there **(source)**.
-- Only 180-column screens are captured; phone-width screens are open.
+- At 62 columns by 41 rows (the phone-width capture) the same text and
+  layout identify every state. The working footer cuts `esc interrupt` to
+  `esc...rupt` and joins it to the progress bar
+  (`⬝⬝⬝⬝⬝⬝⬝esc...rupt  ↓ 1 shell · 9.4K (2%)  ctrl+p commands`, stem 35),
+  so only the bar marks a running turn there; the armed footer keeps
+  `esc again to interrupt` whole (stem 36), and the queued-prompt dock
+  keeps the cut hint (stem 43). The footer's directory is shortened segment
+  by segment on the home screen and a session (`/…/t…/<dir>/project:main`)
+  and shown whole in shell mode. The home screen keeps its logo's top row
+  and the muted `Ask anything… "` prefix, its example cut at the edge.
+- At that width a permission's key hints take their own row below the
+  options (stem 37), and long targets, questions and answers wrap inside the
+  bar, an answer's continuation rows indented under its label (stem 38); the
+  question footer stays `↑↓ select  enter submit  esc dismiss`. The `/`
+  popup sits directly on the box with no blank row between (stem 39), and
+  the subagent panel shows `Subagents  Shell  Terminals` with `esc` at its
+  right, a `General: <description>  Running` row and no box edge (stem 41).
 
 ## Keys
 
@@ -438,7 +459,7 @@ row. A modal's title ends in `esc`, with no box edge under it.
 | Allow once | Enter; Allow once is preselected |
 | Always allow | Right, then Enter, when offered |
 | Reject a root session's request | Right until Reject has focus (twice when Always allow is offered, else once), then Enter; or Esc |
-| Reject a subagent's request | Esc or Reject opens `△ Reject permission`, "Tell OpenCode what to do differently"; Enter sends the feedback, Esc goes back **(source, `permission.tsx:248-252, 272-405`; F3)** |
+| Reject a subagent's request | Esc or Reject opens `△ Reject permission`, "Tell OpenCode what to do differently", with `enter confirm  esc cancel` (Esc observed in the phone-width capture, stems 25 and 42); Enter sends the feedback, Esc goes back **(source, `permission.tsx:248-252, 272-405`; F3)** |
 | Answer a single-select question | the option's digit, which selects and submits |
 | Custom answer, multi-select | the digit of `Type your own answer`, the text and Enter; Space toggles an option **(source, `tui/src/routes/session/form.tsx:570-760`; F11)** |
 | Dismiss a question | Esc **(source; F2)** |
@@ -456,7 +477,9 @@ row. A modal's title ends in `esc`, with no box edge under it.
 - Up recalls the last prompt into an empty box, and Down opens the subagent
   panel. Enter on an empty box steers the first queued prompt
   (`prompt/index.tsx:1297-1305`, `routes/session/index.tsx:1522-1526`;
-  **source**). `ctrl+u` clears a one-line draft.
+  **source**). `ctrl+u` clears a one-line draft. In the phone-width capture,
+  Down on an empty box opened the panel while a subagent ran, and Esc closed
+  it without arming the interrupt.
 
 ## Sending
 
@@ -553,8 +576,8 @@ fixtures on SQLite 3.26.0 (Rocky 8, through Python 3.6), 3.31.1
 
 ## Open items
 
-Numbered as in the evidence pass; results will be added here as they are
-verified.
+Numbered as in the evidence pass. Results go into the sections above as they
+are verified, and an answered item leaves this list.
 
 - **F1.** Whether a rejected turn resumes when OpenCode's background service
   restarts. Testing it restarts the user's service.
@@ -579,5 +602,3 @@ verified.
   closes, which read-only opens then fail, and which readers common images
   carry.
 - **F15.** An exec's cost over SSH at Chat's polling pace.
-- Phone-width screens: whether the footer keeps `esc interrupt` at about 62
-  columns, and how dialogs wrap.

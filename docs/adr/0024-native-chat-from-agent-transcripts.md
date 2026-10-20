@@ -4,19 +4,24 @@ status: accepted
 
 # Native Chat from the Agent's own transcript
 
-A Claude Code, Codex, Pi or Oh My Pi Agent's detail can show Chat in its terminal's place:
-the Agent's conversation as native rows, read from the transcript its program
-writes on the Host. Heeler reads that file read-only over SFTP on the Host's
-existing SSH connection, with one adapter per program: Claude Code's project
-JSONL, with its subagent transcripts under `<session>/subagents/`, and Codex's
-rollout in its paginated and legacy forms, and Pi/Oh My Pi's v2-v3 tree
-JSONL. Nothing is installed on the Host
+A Claude Code, Codex, Pi, Oh My Pi or OpenCode Agent's detail can show Chat in
+its terminal's place: the Agent's conversation as native rows, read from the
+transcript its program writes on the Host. Heeler reads that file read-only
+over SFTP on the Host's existing SSH connection, with one adapter per program:
+Claude Code's project JSONL, with its subagent transcripts under
+`<session>/subagents/`, and Codex's rollout in its paginated and legacy forms,
+and Pi/Oh My Pi's v2-v3 tree JSONL. OpenCode 2.x writes no transcript file, so
+Chat reads its session's rows from OpenCode's own SQLite database with a
+bounded read-only query on the Host instead;
+[ADR 0025](0025-opencode-chat-reads-its-session-store.md) records that read
+path and how Chat tells when OpenCode has left the conversation herdr reports.
+Nothing is installed on the Host
 and herdr is unchanged. herdr still owns the Agent's identity and Agent
 Status, submission through `agent.prompt`, and keys through `agent.send_keys`;
 its `agent_session` names the transcript by a Claude Code session id or a
 Codex thread id, or Pi/OMP's exact absolute JSONL path (with UUID lookup for
-older integrations). Other Agents, and every Agent on a native Windows Host, hide
-the entry.
+older integrations), or an OpenCode `ses_` id. Other Agents, and every Agent on
+a native Windows Host, hide the entry.
 
 The formats as observed are recorded in
 [Claude Code transcripts](../research/claude-code-transcript-format.md) and
@@ -173,7 +178,10 @@ request, under rules that stand in for the screen the user cannot see:
   `:q!`, `:wq` and `:wq!`. Oh My Pi also refuses its whole-message `exit`,
   `quit` and `q` in any case, a leading `$` or `$$` and whitespace (Python),
   a whole `.` or `c` (Continue), a leading `->` or `=>` (its queue
-  shorthand), and 100 lines or more, which open its paste menu.
+  shorthand), and 100 lines or more, which open its paste menu. OpenCode
+  refuses Claude Code's words, which cover its own `exit`, `quit` and `:q`,
+  and a draft that is only file paths, which OpenCode can take as
+  attachments instead of text; a few words beside the path send it as text.
 - A leading `/` must name an entry of Chat's `/` menu: the Agent's skills from
   the existing Skills probe, and `/compact` while the Agent is idle. The menu
   offers no interactive or destructive program command. Every program shows
@@ -184,17 +192,26 @@ request, under rules that stand in for the screen the user cannot see:
   `user-invocable: false` stays out too: Claude Code 2.1.302 answers
   "Unknown command" when it is typed. Codex's `allow_implicit_invocation` and
   Pi's `disable-model-invocation` limit only the model, so their skills stay.
+  OpenCode's menu holds only `/compact`: its skills have no form a message
+  can invoke, and its server and custom commands are not offered.
   A leading path is text, and any other leading `/word` is refused with a
   pointer to the menu or the terminal.
 - Invisible characters are removed and exactly one trailing space is appended,
   so a final `/name` or `@path` cannot leave a completion popup open when
-  Enter arrives. Oh My Pi's `/compact` is the exception: it goes without the
-  space, which Oh My Pi would complete to `/compact soft` instead of running
-  it, and with a focus it is refused.
+  Enter arrives. Oh My Pi's and OpenCode's `/compact` are the exceptions:
+  they go without the space, which Oh My Pi would complete to
+  `/compact soft` instead of running it and OpenCode would send to the model
+  as a message, and with a focus or instructions they are refused.
 - Before sending, `agent.read` of the visible screen must show the program's
   input box empty, with nothing over the box that would take the keys.
   Anything else, an unreadable screen included, sends nothing and says why.
   Chat never clears the box.
+- herdr does not report OpenCode's `/new` or `/clear`, so before an OpenCode
+  send Chat also reads the Agent's record again and compares the terminal
+  title with the conversation's title (ADR 0025). It sends nothing, and says
+  why, when herdr now reports another conversation, which Chat then switches
+  to, when OpenCode is on its home screen, when the title names another
+  conversation, or when the check itself fails.
 - Three seconds after the acknowledgement the screen is read again. Text left
   in the box marks the message Not delivered. Chat never resends.
 
@@ -202,22 +219,31 @@ A sent message shows at once as a local echo, matched conservatively against
 the transcript.
 
 While Agent Status is Working and the draft is blank, Send becomes Stop, in
-system red. In Chat, Stop presses Esc through `agent.send_keys`, in line with
-the Agent page's keys; the terminal's Composer sends it on the Attach PTY (ADR
-0013). Then Stop waits. The acknowledgement means only that the key reached
-the PTY, and an Esc that lands after the turn ended can open the program's own
-history menus, so Stop shows a spinner until Agent Status leaves Working.
-After three seconds it works again and says the Agent still shows Working;
-background agents and shells, which Esc does not end, can keep it there. A
-failed request may still have pressed the key, so Stop then says so and works
+system red. In Chat, Stop presses the program's Stop keys in one
+`agent.send_keys` request, in line with the Agent page's keys: Esc, or Esc
+twice for OpenCode, whose first Esc only arms its interrupt. Before
+OpenCode's, Chat reads the screen and presses nothing unless it shows the
+conversation's prompt with a turn running and no dialog, menu or shell mode
+over it, where Esc would do something else. The terminal's Composer sends one
+Esc on the Attach PTY (ADR 0013). Then Stop waits. The acknowledgement means
+only that the keys reached the PTY, and an Esc that lands after the turn ended
+can open the program's own history menus, so Stop shows a spinner until Agent
+Status leaves Working. After three seconds it works again and says the Agent
+still shows Working; background agents and shells, which Esc does not end,
+can keep it there. OpenCode's interrupt resumes with a message that waited
+during the turn, so its notice says Stop may need a second tap for that. A
+failed request may still have pressed the keys, so Stop then says so and works
 again at once. The wait belongs to the Agent's Composer, not to a surface:
 switching between Chat and the terminal, or a rebuilt detail, keeps it. With
 text in the draft the button stays Send, so a prompt still queues behind the
 running turn (Pi and Codex 0.162.1 steer the turn with it), and ⌘↩ only
 ever sends. Oh My Pi
-is the exception: a steer there can move a running command to the
-background, so while its status band shows a turn running, Chat holds the
-message and says to send once it is idle or steer from the terminal. Esc in
+and OpenCode are the exceptions. A steer in Oh My Pi can move a running
+command to the background, and herdr writes Enter 300 ms after the paste
+whatever OpenCode shows by then, so a permission or question OpenCode raises
+in between would take it as its answer (ADR 0025). While Oh My Pi's status
+band or OpenCode's footer shows a turn running, Chat holds the message and
+says to send once it is idle or steer from the terminal. Esc in
 Pi or Oh My Pi puts a steer the turn has not taken back into the input box,
 and Esc in Codex 0.162.1 does the same with a follow-up queued with Tab, so
 a draft found there says Stop may have left it. A send that empties the draft keeps Stop
@@ -253,8 +279,9 @@ changed, waits until the dialog has shown for 150 ms, presses keys through
 `agent.send_keys`, and types text answers (feedback, a plan note, a custom
 answer) through `pane.send_input`. The answer is confirmed when the dialog on
 screen changes, when Claude Code's transcript shows the matching tool result,
-or when Codex or Oh My Pi leaves Blocked. Staying Blocked proves nothing,
-because herdr stays Blocked while the next queued approval takes the screen.
+or when Codex, Oh My Pi or OpenCode leaves Blocked. Staying Blocked proves
+nothing, because herdr stays Blocked while the next queued approval takes the
+screen.
 Three seconds without effect shows a hint, and nothing is resent: the card's
 answers stay disabled while the same dialog shows and no call that waited
 has resolved, so a second tap cannot send the key again, and Stop and the
@@ -293,6 +320,24 @@ option notes and typed answers stay in the terminal. A dialog the parsers
 do not know gets a generic card with the Agent controls. Answers the
 transcript does not record join the history as Allowed, Declined, Stopped and
 Answered rows.
+
+OpenCode draws a permission or question in its input box's place. A
+permission's options sit in a row: Allow once has focus and takes Enter,
+Always allow, when offered, is one checked Right step and Enter, and Reject
+presses Esc. OpenCode draws its subagents' requests there too, and Esc on one
+of them asks what to do differently instead of rejecting, so the card
+rejects only a request it matches to a pending call of the conversation it
+follows and otherwise says to reject in the terminal, where that feedback
+page stays. A single question's digit picks its answer and submits it, and
+Dismiss presses Esc for a matched call; several questions, multi-select
+questions and typed answers stay in the terminal. herdr also reports
+OpenCode Blocked with no dialog on screen, as for a failed turn, and there
+the generic card's keys would act on OpenCode's prompt: Up recalls the last
+prompt for Enter to send again, Down opens the subagent panel, and Enter on
+an empty box sends a queued prompt. OpenCode's card for a screen with no
+dialog therefore shows no keys. It says why OpenCode is Blocked, the subagent
+panel covering the request, the turn's error, or a likely failed model
+request, and points to the terminal.
 
 ## Background Work
 
@@ -471,12 +516,14 @@ no Attach at all.
 - Claude Code writes no transcript before the first prompt, and Codex reports
   no session to herdr until after it, also after a resume, by id or by name,
   or a restart in its pane. The Composer works in both states.
-- Following makes SFTP requests on the Host's connection at every poll. While
+- Following makes SFTP requests on the Host's connection at every poll, or,
+  for OpenCode, one exec per poll (ADR 0025). While
   a Workflow is listed, each poll also looks at up to two journals: a stat
   each, and for one that grew, reads of what it added, up to 128 KiB.
 - So that cached conversations open at once, after each connect the Console
   reads every listed Agent's transcript once, with its Chat hidden, and again
-  when the Agent's status changes. A missing one is looked for a few times,
+  when the Agent's status changes; OpenCode's, which would cost an exec each
+  time, is read only by an open Chat. A missing one is looked for a few times,
   then not again until the Agent's status or session changes or the Host
   reconnects; an open Chat keeps looking on its own.
 - Stop interrupts the running turn, unlike the Blocked card's Stop, which
@@ -501,6 +548,14 @@ no Attach at all.
     one-form answer to several questions, and steering a running Oh My Pi
     turn from Chat. Pi's extension dialogs, and Oh My Pi skills in a
     project's ancestor directories.
+  - For OpenCode: its skills and server and custom commands in the `/` menu;
+    paths and images sent as attachments; steering a running turn from Chat,
+    or starting a conversation from OpenCode's home screen; several
+    questions, multi-select questions and typed answers, and a rejection
+    with feedback; subagent progress and Background Work; a terminal
+    Composer Stop that presses the second Esc; and, as ADR 0025 records,
+    stores other than the default one and tool output OpenCode moved to a
+    file of its own.
   - The segment before a Codex undo. After one, Chat shows only the turns
     written since; the reducer accepts the earlier segment, but nothing loads
     it yet.

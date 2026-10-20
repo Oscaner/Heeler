@@ -41,16 +41,21 @@ you choose, as described below.
   as you open them. They travel only over the SSH connection between
   your device and your Host, and Heeler keeps them in memory while the
   Agent stays in the list and does not save them.
-- **Chat.** When you show Chat for a Claude Code or Codex agent, Heeler reads
-  the conversation transcript that agent's own program writes on your Host.
-  Through herdr it also reads the agent's screen, to check its input box
-  before sending a message and to show a dialog the agent is waiting on. Both
-  travel only over the direct SSH connection between your device and your
-  Host, and Heeler never changes or deletes the transcript. Heeler saves the
-  conversation it has read, without tool output, in a cache on your device.
-  The cache uses iOS Complete file protection, so it cannot be read while the
-  device is locked, is excluded from backups, holds at most 300 MB, and drops
-  a conversation not opened for 30 days.
+- **Chat.** When you show Chat for a Claude Code, Codex, Pi, Oh My Pi or
+  OpenCode agent, Heeler reads the conversation that agent's own program
+  records on your Host: the transcript file Claude Code, Codex, Pi and Oh My
+  Pi write. For OpenCode, Heeler runs a short read-only query on your Host,
+  with the sqlite3 or python3 already there, that reads only the conversation
+  Chat shows from OpenCode's database. It never reads OpenCode's settings or
+  credentials and never changes the database. Through herdr Heeler also reads
+  the agent's screen, to check its input box before sending a message and to
+  show a dialog the agent is waiting on. Both travel only over the direct SSH
+  connection between your device and your Host, and Heeler never changes or
+  deletes the transcript. Heeler saves the conversation it has read, without
+  tool output, in a cache on your device. The cache uses iOS Complete file
+  protection, so it cannot be read while the device is locked, is excluded
+  from backups, holds at most 300 MB, and drops a conversation not opened for
+  30 days.
 
 - **Overlay Networks.** Network settings are stored locally. Tailscale auth
   keys, EasyTier network secrets, and the device's ZeroTier identity are
