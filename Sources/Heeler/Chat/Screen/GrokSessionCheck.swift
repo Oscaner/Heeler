@@ -1,12 +1,14 @@
 import Foundation
 
 /// Whether Grok Build's screen, read just before a send, shows the session
-/// Chat follows. herdr follows `/new` and `/clear`, but keeps reporting the
-/// old session after `/resume`, `/fork`, the dashboard and the Welcome
-/// screen, and a message pasted then lands in a conversation Chat doesn't
-/// show. Three readings run in order, and the first verdict wins: the
-/// Welcome screen, a Session line, and the newest message on screen. Each
-/// says nothing when unsure; the post-send witness catches what they miss.
+/// Chat follows. herdr follows `/new`, `/clear` and a message sent from the
+/// dashboard, but keeps reporting the old session after `/resume`, `/fork`
+/// and going back from the dashboard, and a message pasted then lands in a
+/// conversation Chat doesn't show. What a message from the Welcome screen
+/// does to herdr's report was not captured. Three readings run in order,
+/// and the first verdict wins: the Welcome screen, a Session line, and the
+/// newest message on screen. Each says nothing when unsure; the post-send
+/// witness catches what they miss.
 enum GrokSessionCheck {
     static let welcomeReason =
         "Grok Build is on its welcome screen, where a message starts a new session. Go back to this conversation in the terminal, or start the new one there."

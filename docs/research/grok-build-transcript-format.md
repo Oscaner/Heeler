@@ -353,6 +353,12 @@ idle or done:
 The header (`<branch> <cwd> <N>K / 256K │ [Dashboard]`) never shows the
 session id.
 
+By the 1.0.45 source, the dashboard also opens one agent's own view (its
+session overlay, not captured), whose box sends to that agent:
+`Ctrl+\:dashboard` comes first in the footer, and `‹ i/n ›` sits in the
+header while there are other agents to cycle to (`agent_view/render.rs`). A
+card there replaces the footer's hints with its own.
+
 Cards replace the input box with a panel of rows starting `┃`. Options read
 `┃ <key> (○|●) <label>`, `●` marking the preselected row; the focused row
 has a lighter background and a bold label.
@@ -493,6 +499,9 @@ Not captured yet:
   and `Sleeping…`.
 - F26: minimal mode.
 - F27: `/fork`, then `/resume` back to the parent: does the fork's Session
-  line stay on screen?
+  line stay on screen? By the 1.0.45 source it doesn't: Grok prints a
+  Session line only into the scrollback of the session it names
+  (`dispatch/session/lifecycle.rs`, `load.rs`), the parent gets `Forked`,
+  and each agent keeps its own scrollback.
 - F28: the Welcome screen after `/home` with a reported session: does a
   send start a new session that herdr adopts?

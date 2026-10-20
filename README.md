@@ -136,9 +136,9 @@ available in the terminal. See [format and compatibility details](docs/research/
 
 For Grok Build, run `herdr integration install grok` on the Host and restart
 the Agent. Chat reads `~/.grok/sessions`; a custom `GROK_HOME` isn't found.
-herdr follows `/new` and `/clear` but keeps the earlier session after
-`/resume`, `/fork` or the dashboard, so Chat holds a message when Grok Build
-shows another session. See [format and compatibility details](docs/research/grok-build-transcript-format.md).
+herdr follows `/new`, `/clear` and a message sent from the dashboard, but not
+`/resume`, `/fork` or going back from the dashboard, so Chat holds a message
+when Grok Build shows another session. See [format and compatibility details](docs/research/grok-build-transcript-format.md).
 
 ### Codex shows “Waiting for Conversation”
 

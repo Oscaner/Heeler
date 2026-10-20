@@ -93,37 +93,41 @@ while herdr reports the Agent neither Working nor Blocked.
 Grok Build's input box is the bottom-most rounded box whose first row starts
 with its `❯` prompt. Chat sends only when the box holds no typed text and the
 footer shows it has focus (`Shift+Tab:mode` or `accept suggestion`), or from
-the Welcome screen; the dim italic suggestion Grok Build draws is not a
-draft. Its dashboard, where a message starts a new agent, its pickers,
-popups and `/btw` panel, a pending second key press, `/multiline`, a queued
-message being edited, shell and remember modes, minimal mode, and a wait on
-a subagent or background task, which a message would cancel, all hold the
-message. Grok Build can put a stashed draft back in the box right after it
-takes a message, so only text the message contains marks it Not delivered;
-other text holds the next send.
+the Welcome screen; the dim italic suggestion Grok Build draws is not a draft.
+Its dashboard, where a message starts a new agent, the dashboard's view of one
+agent, which may be another conversation's, its pickers, popups and `/btw`
+panel, a pending second key press, `/multiline`, a queued message being
+edited, shell and remember modes, minimal mode, and a wait on a subagent or
+background task, which a message would cancel, all hold the message. A card
+the dashboard's view shows stays generic, and Stop presses nothing there. Grok
+Build can put a stashed draft back in the box right after it takes a message,
+so only text the message contains marks it Not delivered; other text holds the
+next send.
 
-herdr follows Grok Build's `/new` and `/clear`, but keeps the earlier session
-after `/resume`, `/fork`, the dashboard and the Welcome screen, and Chat
-follows herdr. So the screen read that checks the input box before a send
-also holds the message when it shows a `Session <id>` line for another
-session, a newest message the conversation doesn't have (only once herdr
-reports the Agent idle and a transcript read since then has landed), or the
-Welcome screen of a conversation that already has messages. Such a hold
-reads the Agent's record again, so a `/new` herdr has just reported is
-followed. Nothing is read from the Host between that screen read and the
-prompt. After a send, Chat reads what Grok Build added to the folder's
-`prompt_history.jsonl` since just before the send, up to 64 KiB: two seconds
-after a message delivered while herdr reported the Agent neither Working nor
-Blocked, and again when the message would go overdue. When no line with the
-message's text names this session and exactly one names another, the message
-reads "Sent, but the Agent recorded it in another session.", and every later
-send is held until this conversation records a prompt, a send's screen check
-finds this conversation's newest message, that message is recorded here
-after all, or herdr reports another session. A `/resume` to a session
-already open writes nothing until its next prompt, so only that read tells,
-after the send. A session filed under another directory's group, such as a
-worktree fork, records its prompts in that group's file, so a message sent
-to it only goes overdue. Chat doesn't watch the screen between sends.
+herdr follows Grok Build's `/new`, `/clear` and a message sent from its
+dashboard, but keeps the earlier session after `/resume`, `/fork` and going
+back from the dashboard, and Chat follows herdr; what a message from the
+Welcome screen does to herdr's report was not captured. So the screen read
+that checks the input box before a send also holds the message when it shows a
+`Session <id>` line for another session, a newest message the conversation
+doesn't have (only once herdr reports the Agent idle and a transcript read
+since then has landed), or the Welcome screen of a conversation that already
+has messages. Such a hold reads the Agent's record again, so a `/new` herdr
+has just reported is followed. Nothing is read from the Host between that
+screen read and the prompt. After a send, Chat reads what Grok Build added to
+the folder's `prompt_history.jsonl` since just before the send, up to 64 KiB:
+two seconds after a message delivered while herdr reported the Agent neither
+Working nor Blocked, and again when the message would go overdue. When no line
+with the message's text names this session and exactly one names another, the
+message reads "Sent, but the Agent recorded it in another session.", and every
+later send is held until this conversation records a prompt, a send's screen
+check finds this conversation's newest message (not one that reads the same as
+a message recorded elsewhere), that message is recorded here after all, or
+herdr reports another session. A `/resume` to a session already open writes
+nothing until its next prompt, so only that read tells, after the send. A
+session filed under another directory's group, such as a worktree fork,
+records its prompts in that group's file, so a message sent to it only goes
+overdue. Chat doesn't watch the screen between sends.
 
 ## Entry and the terminal
 
