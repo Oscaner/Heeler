@@ -266,15 +266,21 @@ struct GrokUpdateRecord: Sendable {
     }
 
     /// `text` capped like a row's output, without the line breaks that end
-    /// it: a command's output ends with its last line's, which the row would
-    /// show as an empty line. Nil when nothing is left to show.
+    /// it: a command's output ends with its last line's, and a cap can fall
+    /// right after a line's, either of which the row would show as an empty
+    /// line. Nil when nothing is left to show.
     fileprivate static func preview(_ text: String?, imageCount: Int = 0) -> ChatToolPreview? {
-        guard let text = text.map(withoutTrailingLineBreaks), !text.isEmpty || imageCount > 0 else { return nil }
-        return ChatToolPreview(capping: text, imageCount: imageCount)
+        guard let text = text?.withoutTrailingLineBreaks, !text.isEmpty || imageCount > 0 else { return nil }
+        var preview = ChatToolPreview(capping: text, imageCount: imageCount)
+        preview.text = preview.text.withoutTrailingLineBreaks
+        return preview
     }
+}
 
-    private static func withoutTrailingLineBreaks(_ text: String) -> String {
-        var scalars = text.unicodeScalars
+extension StringProtocol {
+    /// The text without the `\n` and `\r` that end it.
+    var withoutTrailingLineBreaks: String {
+        var scalars = String(self).unicodeScalars
         while let last = scalars.last, last == "\n" || last == "\r" { scalars.removeLast() }
         return String(scalars)
     }

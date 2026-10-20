@@ -226,7 +226,7 @@ enum GrokFileChanges {
                 case .delete: "-"
                 case .insert: "+"
                 }
-            return sign + withoutNewline(row.text)
+            return sign + row.text.withoutTrailingLineBreaks
         }
         return ChatDiffHunk(oldStart: oldStart, oldLines: oldLines, newStart: newStart, newLines: newLines, lines: lines)
     }
@@ -281,12 +281,6 @@ enum GrokFileChanges {
         }
         if start < text.endIndex { lines.append(text[start...]) }
         return lines
-    }
-
-    private static func withoutNewline(_ line: Substring) -> String {
-        var scalars = line.unicodeScalars
-        while let last = scalars.last, last == "\n" || last == "\r" { scalars.removeLast() }
-        return String(scalars)
     }
 
     /// Only ASCII whitespace, as the pager's `trim_ascii` reads a blank line.

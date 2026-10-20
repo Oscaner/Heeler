@@ -270,21 +270,31 @@ struct GrokToolActivityTests {
         CommandOutput(
             shape: "only a line break without output_for_prompt", content: "\r\n", outputForPrompt: nil,
             preview: nil),
+        CommandOutput(
+            shape: "spaces ending the last line", content: "first\n  \n", outputForPrompt: "exit: 0\nfirst\n  \n",
+            preview: "first\n  "),
+        CommandOutput(shape: "only spaces", content: "   ", outputForPrompt: "exit: 0\n   ", preview: "   "),
+        CommandOutput(shape: "no final line break", content: "done", outputForPrompt: "exit: 0\ndone", preview: "done"),
     ]
+
+    /// A command and its result with `content` as the result's text, and
+    /// `outputForPrompt` (nil leaves it out) as its `output_for_prompt`.
+    private static func commandLines(content: String, outputForPrompt: String?) throws -> [ChatLine] {
+        let forPrompt = try outputForPrompt.map { #""output_for_prompt":\#(try json($0)),"# } ?? ""
+        return lines([
+            try prompt("Run the shell command: chmod +x hello.sh", index: 0, event: 1),
+            call(name: "run_terminal_command", input: #""command":"chmod +x hello.sh && ls -l hello.sh""#, event: 2),
+            result(
+                content: try text(content), rawOutput: #""type":"Bash",\#(forPrompt)"exit_code":0,"signal":null"#,
+                event: 3),
+        ])
+    }
 
     /// A command's last line ends with a line break, which the row's box
     /// would show as an empty line.
     @Test(arguments: commandOutputs)
     func commandOutputDropsOnlyItsTrailingLineBreaks(output: CommandOutput) throws {
-        let forPrompt = try output.outputForPrompt.map { #""output_for_prompt":\#(try Self.json($0)),"# } ?? ""
-        let lines = Self.lines([
-            try Self.prompt("Run the shell command: chmod +x hello.sh", index: 0, event: 1),
-            Self.call(
-                name: "run_terminal_command", input: #""command":"chmod +x hello.sh && ls -l hello.sh""#, event: 2),
-            Self.result(
-                content: try Self.text(output.content),
-                rawOutput: #""type":"Bash",\#(forPrompt)"exit_code":0,"signal":null"#, event: 3),
-        ])
+        let lines = try Self.commandLines(content: output.content, outputForPrompt: output.outputForPrompt)
         let reducer = Self.reducer(lines)
 
         let tool = try Self.tool(reducer.transcript(ChatProjectionContext(activity: .idle)), Self.callID)
@@ -296,6 +306,26 @@ struct GrokToolActivityTests {
             reducer.output(of: lines[2], for: tool)
         }
         #expect(expanded == .preview(output.preview.map(Self.preview)))
+    }
+
+    /// A row's cap can fall right after a line break; its box still ends
+    /// with the last line it keeps.
+    @Test func aCappedCommandOutputEndsWithItsLastLine() throws {
+        // 256 bytes a line, so the row's 8 KiB cap falls right after the
+        // 32nd line's break.
+        let line = String(repeating: "x", count: 255)
+        let output = String(repeating: line + "\n", count: 50)
+        let lines = try Self.commandLines(content: output, outputForPrompt: "exit: 0\n" + output)
+        let reducer = Self.reducer(lines)
+
+        let tool = try Self.tool(reducer.transcript(ChatProjectionContext(activity: .idle)), Self.callID)
+
+        let kept = Array(repeating: line, count: 32).joined(separator: "\n")
+        #expect(tool.preview == ChatToolPreview(text: kept, isTruncated: true))
+        let expanded = ChatToolPreview.$limits.withValue(ChatToolPreview.expandedLimits) {
+            reducer.output(of: lines[2], for: tool)
+        }
+        #expect(expanded == .preview(Self.preview(Array(repeating: line, count: 50).joined(separator: "\n"))))
     }
 
     /// What ripgrep exits with when a search finds nothing: 1 when nothing
