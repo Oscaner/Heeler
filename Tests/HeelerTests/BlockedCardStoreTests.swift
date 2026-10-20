@@ -1044,6 +1044,20 @@ struct BlockedCardStoreTests {
                 == "OpenCode stopped with an error: Rate limit reached. Retry later. herdr holds Chat's messages "
                 + "while it reports Blocked, so continue in the terminal.")
 
+        // A question or an exclamation ends the sentence by itself, as
+        // OpenCode 2.0.32 words a refused connection.
+        for failure in [
+            "ConnectionRefused: Unable to connect. Is the computer able to access the url?",
+            "Quota exhausted!",
+        ] {
+            store.update(transcript: Self.failedTurn(failure))
+            await store.refresh()
+            #expect(
+                store.unreadableNote
+                    == "OpenCode stopped with an error: \(failure) herdr holds Chat's messages while it reports "
+                    + "Blocked, so continue in the terminal.")
+        }
+
         // A long error is cut.
         store.update(transcript: Self.failedTurn(String(repeating: "x", count: 300)))
         await store.refresh()
