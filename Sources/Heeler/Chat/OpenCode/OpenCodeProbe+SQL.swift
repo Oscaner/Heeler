@@ -247,6 +247,13 @@ extension OpenCodeProbe {
           ELSE 1 END ELSE 1 END
         """
 
+    /// A shell-mode command's output text. OpenCode 2.0.32 keeps it in an
+    /// object with its cursor, size and truncation; a string reads as is.
+    private static let shellOutput = """
+        CASE json_type(m.data, '$.output') WHEN 'object' THEN json_extract(m.data, '$.output.output') \
+        ELSE json_extract(m.data, '$.output') END
+        """
+
     /// The row's data, cut to what Chat shows. A row that is not JSON reads
     /// as `{"k":"invalid"}`. A step keeps its items from `slim_items`.
     private static let slim = """
@@ -259,8 +266,8 @@ extension OpenCodeProbe {
               'time', json_extract(m.data, '$.time'))
           WHEN m.type = 'shell' THEN json_object('command', json_extract(m.data, '$.command'),
               'status', json_extract(m.data, '$.status'), 'exit', json_extract(m.data, '$.exit'),
-              'output', substr(json_extract(m.data, '$.output'), 1, \(toolOutputLimit)),
-              'n', length(json_extract(m.data, '$.output')), 'time', json_extract(m.data, '$.time'))
+              'output', substr(\(shellOutput), 1, \(toolOutputLimit)),
+              'n', length(\(shellOutput)), 'time', json_extract(m.data, '$.time'))
           WHEN m.type IN ('synthetic', 'system') THEN json_object(\(note))
           WHEN m.type = 'skill' THEN json_object(\(note),
               'skill', json_extract(m.data, '$.skill'), 'name', json_extract(m.data, '$.name'))

@@ -239,6 +239,27 @@ struct OpenCodeStoreQueryTests {
         #expect(question["meta"] as? NSDictionary == [:])
     }
 
+    /// OpenCode 2.0.32 keeps a shell-mode command's output as an object with
+    /// its text, cursor, size and truncation; the slim row keeps the text.
+    /// The fixtures' plain string output reads as it is.
+    @Test func aShellRowKeepsItsOutputText() throws {
+        let (harness, session) = try Self.store("pong")
+        try Self.insertRow(harness, session, seq: 20, type: "shell", data: #"""
+            {"metadata":{"background":true},"time":{"created":1800000100000,"completed":1800000100050},
+             "shellID":"sh_0a1b2c3d4e60Q1w2E3r4T5y6U7","command":"ls","status":"exited","exit":0,
+             "output":{"output":"README.md\nnotes.txt\n","cursor":20,"size":20,"truncated":false}}
+            """#)
+
+        let shell = try Self.data(#require(harness.records(Self.tail(session)).rows.first { $0.seq == 20 }))
+        #expect(shell["command"] as? String == "ls")
+        #expect(shell["output"] as? String == "README.md\nnotes.txt\n")
+        #expect(shell["n"] as? Int == 20)
+
+        let (rowTypes, rowTypesSession) = try Self.store("row-types")
+        let plain = try #require(rowTypes.records(Self.tail(rowTypesSession)).rows.first { $0.seq == 4 })
+        #expect(try Self.data(plain)["output"] as? String == "fatal: not a git repository\n")
+    }
+
     @Test func nestedArraysDecodeAsArrays() throws {
         let (harness, session) = try Self.store("odd-types")
         try harness.insert(into: "session_inbox", [
