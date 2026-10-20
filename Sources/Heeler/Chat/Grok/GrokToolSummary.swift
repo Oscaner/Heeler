@@ -304,10 +304,12 @@ struct GrokToolCall: Sendable {
             kind: summary.kind, name: toolName, title: summary.title, subtitle: summary.subtitle, status: status,
             note: note, questions: questions, callID: id)
         // A diff shows what the call changed, or would change while it waits.
+        // Once it has a result, only the result's changes show: a write of
+        // the text a file already held changed nothing.
         let changes: ChatFileChanges? =
             switch status {
-            case .succeeded: resultChanges ?? inputChanges
-            case .running, .awaitingApproval: inputChanges
+            case .succeeded: output == nil ? previewChanges : resultChanges
+            case .running, .awaitingApproval: previewChanges
             default: nil
             }
         if let changes = changes.map({ Self.shown($0, kind: summary.kind, directory: directory) }) {
@@ -328,6 +330,19 @@ struct GrokToolCall: Sendable {
             if tool.note == nil { tool.note = "Output exceeds the preview limit." }
         }
         return tool
+    }
+
+    /// The changes the input update previews. A write's preview never
+    /// records the file's old text, so only its result tells a new file
+    /// from one it replaces: until then the file reads as written.
+    private var previewChanges: ChatFileChanges? {
+        guard var changes = inputChanges else { return nil }
+        if rowKind == .fileWrite {
+            for index in changes.files.indices where changes.files[index].kind == .created {
+                changes.files[index].kind = .written
+            }
+        }
+        return changes
     }
 
     /// The output a row of `kind` shows.

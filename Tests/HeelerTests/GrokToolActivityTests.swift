@@ -417,6 +417,53 @@ struct GrokToolActivityTests {
         #expect(file.hunks == [ChatDiffHunk(oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-old", "+new"])])
     }
 
+    @Test func aWriteShowsOnlyWhatItsResultChanged() throws {
+        // Grok's preview of a write never records the file's old text, so
+        // until the result a new file reads as written, as one the write
+        // replaces would.
+        let write = try Self.lines("subagent-todo-question.jsonl", 25...30)
+        let id = "call-01900000-0000-7000-8000-000000000039-3"
+        let running = Self.transcript(Array(write[0..<4]), path: Self.pathB, activity: .working)
+        #expect(
+            try Self.tool(running, id).fileChanges
+                == ChatFileChanges(
+                    files: [
+                        ChatFileChange(
+                            path: "/Users/developer/scratch/cap-grok-b/proj/note.txt", kind: .written,
+                            recorded: [
+                                ChatDiffHunk(oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines: ["+hi"])
+                            ])
+                    ], directory: Self.directoryB))
+        #expect(try Self.tool(Self.transcript(write, path: Self.pathB), id).fileChanges?.files.map(\.kind) == [.created])
+
+        // A write of the text the file already held changed nothing: no
+        // diff shows, not even the preview's.
+        let path = "/Users/developer/scratch/cap-grok-a/proj/notes.txt"
+        let detail =
+            #"{"old_string":"same\n","old_line":1,"new_string":"same\n","new_line":1,"context_before":"","context_after":"","line_prefix":""}"#
+        let same = Self.lines([
+            try Self.prompt("Write notes.txt again.", index: 0, event: 1),
+            Self.call(name: "write", kind: "write", input: #""file_path":"\#(path)","content":"same\n""#, event: 2),
+            Self.record(
+                #""sessionUpdate":"tool_call_update","toolCallId":"\#(Self.callID)","kind":"edit","title":"Write `\#(path)`","content":[{"type":"diff","path":"\#(path)","oldText":"","newText":"same\n"}],"locations":[],"rawInput":{"variant":"Write","file_path":"\#(path)","content":"same\n"}"#,
+                event: 3),
+            Self.result(
+                content: #"{"type":"diff","path":"\#(path)","oldText":"same\n","newText":"same\n","_meta":{"details":[\#(detail)]}}"#,
+                rawOutput:
+                    #""type":"SearchReplace","EditsApplied":{"absolute_path":"\#(path)","old_string":"same\n","new_string":"same\n","edits":{"details":[\#(detail)]},"tool_output_for_prompt":"Wrote file successfully to \#(path)."}"#,
+                event: 4),
+            Self.completed("end_turn", event: 5),
+        ])
+        let reducer = Self.reducer(same)
+        let tool = try Self.tool(reducer.transcript(ChatProjectionContext(activity: .idle)), Self.callID)
+        #expect(
+            tool
+                == ChatToolActivity(
+                    kind: .fileWrite, name: "write", title: "notes.txt", status: .succeeded, callID: Self.callID,
+                    output: Self.reference(same, 4)))
+        #expect(reducer.output(of: same[3], for: tool) == .preview(nil))
+    }
+
     // MARK: Outcomes
 
     @Test func aRejectedCallIsDeclinedAndEndsTheTurn() throws {
