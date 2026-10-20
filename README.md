@@ -125,7 +125,7 @@ troubleshooting, see the [pairing guide](https://docs.heeler.bybee.dev/pairing).
 
 ## Native Chat
 
-On macOS and Linux Hosts, Chat displays Claude Code, Codex, Pi and Oh My Pi conversations from their transcript files over SSH. Saved conversations remain readable while reconnecting. Chat needs the conversation reference reported by herdr to identify the correct transcript; installing the integration alone does not prove that the current Agent has reported one.
+On macOS and Linux Hosts, Chat displays Claude Code, Codex, Pi, Oh My Pi and Grok Build conversations from their transcript files over SSH. Saved conversations remain readable while reconnecting. Chat needs the conversation reference reported by herdr to identify the correct transcript; installing the integration alone does not prove that the current Agent has reported one.
 
 For Pi and Oh My Pi, install the corresponding `herdr integration install pi`
 or `herdr integration install omp` on the Host and restart that Agent to load
@@ -133,6 +133,12 @@ its extension. Chat reads the v2/v3 JSONL file the integration reports, includin
 custom session directories. Messages, reasoning, tool results and compaction
 boundaries use the native timeline. Custom editors and extension dialogs stay
 available in the terminal. See [format and compatibility details](docs/research/pi-transcript-format.md).
+
+For Grok Build, run `herdr integration install grok` on the Host and restart
+the Agent. Chat reads `~/.grok/sessions`; a custom `GROK_HOME` isn't found.
+herdr follows `/new` and `/clear` but keeps the earlier session after
+`/resume`, `/fork` or the dashboard, so Chat holds a message when Grok Build
+shows another session. See [format and compatibility details](docs/research/grok-build-transcript-format.md).
 
 ### Codex shows “Waiting for Conversation”
 
