@@ -720,6 +720,34 @@ struct BlockedCardStoreTests {
         }
     }
 
+    /// Esc dismisses a matched question, and OpenCode records the dismissal
+    /// ("The user dismissed this question"), so the card keeps nothing and
+    /// the row shows the transcript's Declined.
+    @Test func anOpenCodeQuestionDismissKeepsNoCardAnswer() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-13-question-180"))
+        await pane.react(to: ["esc"], with: try ScreenFixture.screen("opencode-21-done-interrupted-180"))
+        let store = Self.store(.opencode, pane: pane)
+        let asked = ChatPendingRequest(
+            entryID: ChatEntryID("call_q"), callID: "call_q", kind: .question, toolName: "question",
+            summary: "Do you prefer red or blue?")
+        store.update(transcript: Self.transcript(pending: [asked]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.kind == .openCodeQuestion)
+        #expect(card.request?.callID == "call_q")
+
+        await store.perform(.dismiss)
+
+        #expect(await pane.keys == [["esc"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        #expect(store.history.isEmpty)
+    }
+
     /// Right moves the fill to Always allow, checked there before Enter. A
     /// Right that leaves the fill where it was stops before Enter.
     @Test func alwaysAllowPassesItsFocusCheck() async throws {

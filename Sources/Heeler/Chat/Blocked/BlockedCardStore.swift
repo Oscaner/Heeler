@@ -267,8 +267,11 @@ final class BlockedCardStore {
             history.record(.allowed, forCall: id)
         case .dismiss:
             // Oh My Pi's Esc denies the call and goes on, and OpenCode's
-            // rejects a permission, as their transcripts record.
-            guard let id = card.request?.callID, ![.ompApproval, .openCodePermission].contains(dialog.kind) else {
+            // rejects a permission or dismisses a question, as their
+            // transcripts record.
+            guard let id = card.request?.callID,
+                ![.ompApproval, .openCodePermission, .openCodeQuestion].contains(dialog.kind)
+            else {
                 return
             }
             history.record(.stopped, forCall: id)
