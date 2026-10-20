@@ -178,6 +178,24 @@ struct GrokDialogParserTests {
         #expect(dialog.options.map(\.number) == (dialog.kind == .grokPermission ? [2, 3, 4] : [1, 2]))
     }
 
+    /// The dashboard can show another agent's card, and the card's hints
+    /// replace the footer's, so the header's switcher tells. Such a card
+    /// holds sending as an excerpt without numbers.
+    @Test func aCardOnTheDashboardsViewOfAnAgentStaysGeneric() throws {
+        let screen = try GrokCards.screen("synthetic-permission-dashboard-overlay")
+        let result = GrokDialogParser.parse(screen)
+        let excerpt = try #require(result.excerpt, "parsed as \(result)")
+
+        #expect(excerpt.numbered.isEmpty)
+        #expect(
+            excerpt.reason
+                == "Grok Build is showing this card for an agent from its dashboard, which may not be this "
+                + "conversation. Answer it with these keys or in the terminal.")
+        #expect(BlockedDialogParser.parse(screen, program: .grok) == result)
+        // The same card on the conversation's own view.
+        #expect(try GrokCards.dialog("synthetic-permission-120").kind == .grokPermission)
+    }
+
     /// Phone widths (synthetic): rows stop at the card's edge, so a label
     /// cut there still names its option; a question wraps its text and its
     /// cursor's answer; the turn status label shrinks to `Waiting on …`.

@@ -49,6 +49,9 @@ struct GrokScreenBuilder {
     /// A footer drawn as is in place of the hints, such as a pending
     /// double press.
     var footer: String?
+    /// The header row from column 2: the location, then the items Grok
+    /// sets at its right, such as `‹ 1/2 ›` and `[Dashboard]`.
+    var header = "master ~/s/cap-grok-a/proj"
 
     var screen: ANSIScreen { ANSIScreenDecoder.decode(ansi) }
 
@@ -63,7 +66,7 @@ struct GrokScreenBuilder {
             bottom += dock.map { row([(Self.cut($0, to: columns - 2), Self.muted)]) } + [blank]
         }
         bottom += composerRows() + [blank, footerRow(), blank]
-        var top = [blank, row([("  ", ""), ("master ~/s/cap-grok-a/proj", Self.muted)]), blank]
+        var top = [blank, row([("  ", ""), (header, Self.muted)]), blank]
         top += scrollback.map { row([("     ", ""), (Self.cut($0, to: columns - 8), Self.text)]) }
         let filler = Array(repeating: blank, count: max(0, height - top.count - bottom.count))
         return (top + filler + bottom).joined(separator: "\r\n")

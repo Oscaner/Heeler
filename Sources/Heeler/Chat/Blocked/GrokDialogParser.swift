@@ -27,6 +27,9 @@ enum GrokDialogParser {
         let grok = GrokScreen(screen)
         guard let rows = grok.card else { return .none }
         let card = GrokCard(rows: rows, of: screen, footer: grok.footer)
+        // The card of an agent the dashboard shows, which may not be this
+        // conversation's.
+        if grok.isDashboardOverlay { return .unrecognized(card.excerpt(overlayReason)) }
         if let dialog = cancelPanel(card) ?? permission(card) ?? question(card, on: screen) {
             return .dialog(dialog)
         }
@@ -36,6 +39,9 @@ enum GrokDialogParser {
 
     private static let unknownReason =
         "Heeler doesn't know this Grok Build card. Answer it with these keys or in the terminal."
+    private static let overlayReason =
+        "Grok Build is showing this card for an agent from its dashboard, which may not be this conversation. "
+        + "Answer it with these keys or in the terminal."
     private static let questionReason =
         "Heeler answers only a single question Grok Build asks during its turn. Answer this one with these keys "
         + "or in the terminal."

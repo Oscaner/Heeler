@@ -117,6 +117,13 @@ struct GrokScreen: Sendable {
     let card: Range<Int>?
     /// Grok's dashboard, where a message dispatches a new agent.
     let isDashboard: Bool
+    /// The dashboard's view of one agent (Grok's session overlay): that
+    /// agent's own view, with `Ctrl+\:dashboard` first in the footer, and
+    /// `‹ i/n ›` in the header while there are other agents to cycle to
+    /// (`agent_view/render.rs`). A message or Ctrl+C reaches that agent,
+    /// which may not be this conversation. A card's hints replace the
+    /// footer's, so under a card only the header shows the view.
+    let isDashboardOverlay: Bool
     /// The Welcome view Grok opens on, whose composer sends.
     let isWelcome: Bool
     /// Minimal mode: a flush-left `❯` prompt without a box.
@@ -149,6 +156,9 @@ struct GrokScreen: Sendable {
         isDashboard =
             composer?.draft == "Dispatch a new agent" || footer?.hasPrefix("Enter:create") == true
             || rows.prefix(6).contains { $0.trimmedText.hasPrefix("+ New Agent") }
+        isDashboardOverlay =
+            footer?.hasPrefix("Ctrl+\\:dashboard") == true
+            || rows.prefix(2).contains { $0.text.range(of: #"‹ \d+/\d+ ›"#, options: .regularExpression) != nil }
         isWelcome = Self.showsWelcome(rows)
         isMinimal = composer == nil && Self.showsMinimalPrompt(rows)
         let boxed = Self.boxedRows(rows)

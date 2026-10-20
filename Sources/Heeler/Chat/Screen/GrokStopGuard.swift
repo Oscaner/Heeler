@@ -15,7 +15,7 @@ enum GrokStopGuard {
         if context.activity == .blocked || grok.card != nil { return .refuse(asking) }
         guard context.activity == .working else { return .refuse(notWorking) }
         // Minimal mode draws no box either.
-        let showsConversation = grok.overlay == nil && !grok.isDashboard && !grok.isWelcome
+        let showsConversation = grok.overlay == nil && !grok.isDashboard && !grok.isDashboardOverlay && !grok.isWelcome
         guard let composer = grok.composer, composer.mode == .prompt, showsConversation else {
             return .refuse(
                 "Grok Build is showing a menu or another view, so Stop pressed nothing. Close it in the terminal first.")

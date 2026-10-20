@@ -191,6 +191,37 @@ struct GrokInputBoxDetectorTests {
                 ))
     }
 
+    /// The dashboard's view of an agent (synthetic, by the 1.0.45 source)
+    /// shows that agent's own box, so a message would reach it, whichever
+    /// conversation it is. Grok sets `Ctrl+\:dashboard` first in the
+    /// footer, and `‹ i/n ›` in the header while there are other agents to
+    /// cycle to, which a pending press leaves alone.
+    @Test func theDashboardsViewOfAnAgentHoldsTheSend() {
+        let overlay =
+            "Grok Build is showing an agent from its dashboard, which may not be this conversation. Go back to the conversation in the terminal first."
+        let header = "master ~/s/cap-grok-a/proj  ‹ 1/2 › │ [Dashboard]"
+        let alone = GrokScreenBuilder(hints: ["Ctrl+\\:dashboard", "Ctrl+x:stop", "Shift+Tab:mode", "Ctrl+.:shortcuts"])
+        let cycling = GrokScreenBuilder(
+            hints: [
+                "Ctrl+\\:dashboard", "Ctrl+[/Ctrl+]:prev/next agent", "Ctrl+x:stop", "Shift+Tab:mode",
+                "Ctrl+.:shortcuts",
+            ],
+            header: header)
+        let working = GrokScreenBuilder(
+            status: .init(label: "Thinking…"), typed: "Reply with the word lime.",
+            hints: ["Ctrl+\\:dashboard", "Ctrl+x:stop", "Shift+Tab:mode", "Ctrl+c:cancel", "Ctrl+.:shortcuts"])
+        let pending = GrokScreenBuilder(footer: "Ctrl+c:press again to quit", header: header)
+
+        for builder in [alone, cycling, working, pending] {
+            #expect(GrokScreen(builder.screen).isDashboardOverlay)
+            #expect(GrokInputBoxDetector.detect(builder.screen) == .noComposer(overlay))
+        }
+        // The conversation's own view, its header without the switcher.
+        let own = GrokScreenBuilder(header: "master ~/s/cap-grok-a/proj  26K / 256K │ [Dashboard]")
+        #expect(!GrokScreen(own.screen).isDashboardOverlay)
+        #expect(GrokInputBoxDetector.detect(own.screen) == .empty(placeholder: nil))
+    }
+
     @Test(arguments: [
         "grok-07-slash-popup", "grok-08-at-popup", "grok-09-model-picker", "grok-10-btw", "grok-21-resume-picker",
         "grok-22-rewind-picker",

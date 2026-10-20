@@ -12,6 +12,11 @@ enum GrokInputBoxDetector {
                 "Grok Build is showing its dashboard, where a message starts a new agent. Go back to the conversation in the terminal first."
             )
         }
+        if grok.isDashboardOverlay {
+            return .noComposer(
+                "Grok Build is showing an agent from its dashboard, which may not be this conversation. Go back to the conversation in the terminal first."
+            )
+        }
         if let overlay = grok.overlay { return .overlay(overlay) }
         if let press = grok.pendingDoublePress {
             return .disabled(

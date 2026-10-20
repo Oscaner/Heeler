@@ -48,6 +48,9 @@ struct GrokCardBuilder {
     var hints: [String]
     /// The terminal theme: default colors, and reverse video for the band.
     var terminalTheme = false
+    /// The header row from column 2, such as one with the dashboard's
+    /// `‹ 1/2 ›` switcher.
+    var header = "master ~/s/cap-grok-b/proj"
 
     var screen: ANSIScreen { ANSIScreenDecoder.decode(ansi) }
 
@@ -56,7 +59,7 @@ struct GrokCardBuilder {
         if let status { bottom += [statusRow(status), blank] }
         bottom += ([Row.blank] + rows + [Row.blank]).map(cardRow)
         bottom += [blank, footerRow(), blank]
-        let top = [blank, line([("  ", ""), ("master ~/s/cap-grok-b/proj", muted)]), blank]
+        let top = [blank, line([("  ", ""), (header, muted)]), blank]
         let filler = Array(repeating: blank, count: max(0, height - top.count - bottom.count))
         return (top + filler + bottom).joined(separator: "\r\n")
     }
@@ -182,6 +185,10 @@ enum GrokCards {
             permission(columns: 120, cursor: 1)
         case "synthetic-permission-cursor-on-never-allow":
             permission(columns: 120, cursor: 5)
+        case "synthetic-permission-dashboard-overlay":
+            // The dashboard shows another agent's card; the switcher in
+            // the header is all that tells.
+            permission(columns: 120, header: "master ~/s/cap-grok-b/proj  ‹ 2/3 › │ [Dashboard]")
         case "synthetic-question-40":
             // The cursor's answer wraps its label and description at 25
             // cells; the other answer shows one row, its description cut.
@@ -285,7 +292,8 @@ enum GrokCards {
     /// `cursor`. At 40 columns the always-approve and reject rows stop at
     /// the card's edge.
     private static func permission(
-        columns: Int, focused: Bool = true, cursor: Int = 3, terminalTheme: Bool = false
+        columns: Int, focused: Bool = true, cursor: Int = 3, terminalTheme: Bool = false,
+        header: String = "master ~/s/cap-grok-b/proj"
     ) -> GrokCardBuilder {
         let labels = [
             "Yes, and don't ask again for anything (always-approve mode)", "Always allow: ls -l", "Yes, proceed",
@@ -297,7 +305,7 @@ enum GrokCards {
                 Row("›  List the files", boldFrom: 3), Row("│ ls -l"), Row("← → narrow scope  ·  e edit pattern"),
                 .blank,
             ] + options(labels, cursor: cursor, band: focused),
-            hints: focused ? permissionHints : ["Tab/Space:permission"], terminalTheme: terminalTheme)
+            hints: focused ? permissionHints : ["Tab/Space:permission"], terminalTheme: terminalTheme, header: header)
     }
 
     /// The panel Ctrl+C opens while a subagent runs, like grok-16's, the

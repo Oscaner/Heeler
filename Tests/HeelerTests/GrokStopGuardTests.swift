@@ -148,6 +148,19 @@ struct GrokStopGuardTests {
         #expect(Self.verdict(screen) == .refuse(isCard ? Self.asking : Self.otherView))
     }
 
+    /// On the dashboard's view of an agent, Ctrl+C would cancel that
+    /// agent's turn, whichever conversation it is.
+    @Test func refusesOnTheDashboardsViewOfAnAgent() {
+        let screen = GrokScreenBuilder(
+            status: .init(label: "Thinking…"), hints: ["Ctrl+\\:dashboard", "Ctrl+x:stop"] + Self.workingHints
+        ).screen
+
+        #expect(Self.verdict(screen) == .refuse(Self.otherView))
+        // The same turn on the conversation's own view.
+        let own = GrokScreenBuilder(status: .init(label: "Thinking…"), hints: Self.workingHints)
+        #expect(Self.verdict(own.screen) == .press)
+    }
+
     /// While a cancel is pending, Ctrl+C maps to Quit.
     @Test func refusesWhileCancelling() {
         let screen = GrokScreenBuilder(status: .init(label: "Cancelling…"), hints: Self.workingHints).screen
