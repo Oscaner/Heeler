@@ -105,8 +105,9 @@ struct OpenCodeStoreFixture: Decodable, Sendable {
 /// the version and then every other statement inside one transaction, each
 /// row's text on its own line as `-list` prints it (an empty line for NULL),
 /// and a failure on stderr in the CLI's words. The output carries the
-/// script's markers and its `Z`, `W` and `O` lines, so `OpenCodeProbe.parse`
-/// reads it as it reads a Host's.
+/// script's markers and its `Z`, `W` and `O` lines, with the rows and the
+/// `Z` line cut at `OpenCodeProbe.outputCap` as the script's `head -c` cuts
+/// them, so `OpenCodeProbe.parse` reads it as it reads a Host's.
 ///
 /// Where the test's SQLite can cap its parser stack, every read parses on
 /// the fixed stack SQLite had before 3.46, as Debian 12's does.
@@ -305,8 +306,9 @@ final class OpenCodeSQLiteHarness {
             }
         }
         var stdout = Data("\(OpenCodeProbe.beginMarker(nonce: nonce))\n".utf8)
-        stdout.append(body)
-        stdout.append(Data("Z \(status)\nW \(walPresent ? 1 : 0) \(shmPresent ? 1 : 0)\n".utf8))
+        body.append(Data("Z \(status)\n".utf8))
+        stdout.append(body.prefix(OpenCodeProbe.outputCap))
+        stdout.append(Data("W \(walPresent ? 1 : 0) \(shmPresent ? 1 : 0)\n".utf8))
         if case .tail = query.kind, !otherStores.isEmpty {
             stdout.append(Data("O \(otherStores.joined(separator: " "))\n".utf8))
         }

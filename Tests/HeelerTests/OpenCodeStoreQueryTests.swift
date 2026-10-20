@@ -299,6 +299,26 @@ struct OpenCodeStoreQueryTests {
         #expect(inbox["more"] as? Int == 4)
     }
 
+    /// The record source's largest older page reads in one query: its
+    /// lines stay under the output cap even with the row that crosses its
+    /// budget, so `head -c` never cuts it and the source never reads it
+    /// again at half.
+    @Test func theLargestOlderPageReadsInOneQuery() throws {
+        let (harness, session) = try Self.store("pong")
+        let item = #"{"type":"text","text":"\#(String(repeating: "t", count: 60_000))"}"#
+        for seq in Int64(20)..<50 {
+            try Self.insertRow(harness, session, seq: seq, type: "assistant", data: """
+                {"time":{"created":1800000100000,"completed":1800000100500},"content":[\(item),\(item)]}
+                """)
+        }
+        let budget = OpenCodeRecordSource.Budgets().olderMaximumPage
+        let page = try harness.records(OpenCodeQuery(session: session, kind: .older(before: 50, budget: budget)))
+        #expect(!page.overflow)
+        #expect(page.rows.last?.seq == 49)
+        // A full page: its rows reach the budget.
+        #expect(try page.rows.map(Self.dataLength).reduce(0, +) >= budget)
+    }
+
     @Test func aRowFetchReadsLargerOutput() throws {
         let (harness, session) = try Self.store("pong")
         let output = String(repeating: "o", count: 100_000)

@@ -397,7 +397,7 @@ struct OpenCodeRecordSourceTests {
         #expect(source.windowStart == 10)
         #expect(source.hasOlder)
         #expect(source.olderPageLengths.first == 512 << 10)
-        #expect(source.olderPageLengths.maximum == 2 << 20)
+        #expect(source.olderPageLengths.maximum == 1 << 20)
 
         // Pages hold only rows: the session and inbox lines are newer.
         #expect(try await source.loadOlder(queries.files, length: nil) == .lines(page.map(Self.line)))
@@ -411,7 +411,7 @@ struct OpenCodeRecordSourceTests {
 
         _ = try await source.poll(queries.files)
 
-        #expect(await queries.shapes == ["tail \(512 << 10)", "older 10 \(512 << 10)", "older 6 \(2 << 20)", "poll"])
+        #expect(await queries.shapes == ["tail \(512 << 10)", "older 10 \(512 << 10)", "older 6 \(1 << 20)", "poll"])
         #expect(
             await queries.lastCursor
                 == Self.cursor(

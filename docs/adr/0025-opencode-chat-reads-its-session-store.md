@@ -70,9 +70,11 @@ Cards and the cache work as described there.
   over 1 MiB arrives without its content.
 - Reads are budgeted: the newest 512 KiB of rows when a conversation opens, at
   most 1 MiB per poll (more reads the tail again), and older pages from
-  512 KiB up to 2 MiB, at most 8 MiB per search. Output cut at the 2 MiB cap
-  halves the budget, at most twice; then the conversation is reported as too
-  large to read in one query.
+  512 KiB up to 1 MiB, at most 8 MiB per search. A read's lines run past its
+  rows' data, and it ends with the row that crosses its budget, so every
+  budget stays at half the 2 MiB cap or less. Output cut at the cap halves
+  the budget, at most twice; then the conversation is reported as too large
+  to read in one query.
 - Sessions OpenCode imported from 1.x are read in `session_v2` like any
   other. They keep their 1.x `version` and have no `idle` rows, and 1.x took
   no steers, so until an `idle` row shows such a session going on in

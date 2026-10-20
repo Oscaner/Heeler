@@ -24,7 +24,9 @@ struct OpenCodeRecordSource: ChatTranscriptSource {
         var poll = 1 << 20
         /// The first older page; it doubles to `olderMaximumPage`.
         var olderPage = 512 << 10
-        var olderMaximumPage = 2 << 20
+        /// Half the output cap: a page's lines run past its rows' data, and
+        /// it may end with a row that crosses the budget.
+        var olderMaximumPage = 1 << 20
         /// How much one request for older history reads back.
         var olderSearch = 8 << 20
         /// Characters of a tool's output a row read again for an expanded
