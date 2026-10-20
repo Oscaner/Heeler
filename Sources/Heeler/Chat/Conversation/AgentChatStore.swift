@@ -47,7 +47,7 @@ final class AgentChatStore {
         /// moves an idle Agent to another session without a status change.
         var idleSessionRecheck: TimeInterval = 5
         /// How long after delivery a sent prompt may stay unrecorded before
-        /// its echo says so.
+        /// its echo says so, counted on the send's echo clock.
         var echoTimeout: TimeInterval = 10
         /// How long Pi or Oh My Pi stays idle before Chat looks in its input
         /// box for unrecorded sends, overdue or not, that the turn which
@@ -71,7 +71,7 @@ final class AgentChatStore {
         case awaiting
         /// The transcript recorded it; its entry replaces the echo.
         case recorded
-        /// Still unrecorded `Timing.echoTimeout` after delivery.
+        /// Still unrecorded once its echo clock reaches `Timing.echoTimeout`.
         case overdue
         /// Unrecorded, and its text sits in the idle Agent's input box: Pi
         /// and Oh My Pi put a steer the turn had not taken back there when
@@ -184,6 +184,12 @@ final class AgentChatStore {
     /// steers queued in the turn it stops, so sends delivered before this
     /// are never looked for in the box.
     @ObservationIgnored private var turnStartedAt: Date?
+    /// When herdr last reported the Agent Working or Blocked, while it
+    /// still does, and the earlier spells it did so that ended after the
+    /// oldest send still awaiting its echo was delivered: a program whose
+    /// echo clock stops while it works leaves them out of that clock.
+    @ObservationIgnored private var busySince: Date?
+    @ObservationIgnored private var busySpells: [(start: Date, end: Date)] = []
     /// Recorded prompts already taken by a send in the current
     /// conversation: one recorded copy answers one send. Keyed by entry for
     /// a program whose entries outlive a rewrite of its file, otherwise by
@@ -250,6 +256,7 @@ final class AgentChatStore {
         case .working: turnStartedAt = now()
         default: break
         }
+        noteActivity(ChatAgentActivity(agent.status))
         followReference()
     }
 
@@ -479,6 +486,7 @@ final class AgentChatStore {
         guard statusChanged else { return }
         let activity = ChatAgentActivity(next.status)
         blocked.update(activity: activity)
+        noteActivity(activity)
         idleSince = activity == .idle ? now() : nil
         // Answering a dialog resumes the turn it interrupted.
         if activity == .working, previous != .working, previous != .blocked { turnStartedAt = now() }
@@ -676,6 +684,7 @@ final class AgentChatStore {
             if identityChanged {
                 agent = fresh
                 blocked.update(activity: ChatAgentActivity(fresh.status))
+                noteActivity(ChatAgentActivity(fresh.status))
             }
             adopt(ConversationReference.resolve(fresh.agentSession), replacingAgent: identityChanged)
         } catch {
@@ -1003,7 +1012,7 @@ final class AgentChatStore {
                 // and a refused one nowhere: with a prompt after it and no
                 // compaction, it never ran, whatever the screen read found.
                 statuses[send.id] = .abandoned
-            } else if isUnwritten || date.timeIntervalSince(deliveredAt) < timing.echoTimeout
+            } else if isUnwritten || echoClock(for: send, at: date) < timing.echoTimeout
                 || awaitsCompaction(send, at: date)
             {
                 statuses[send.id] = .awaiting
@@ -1015,12 +1024,43 @@ final class AgentChatStore {
             }
         }
         if statuses != sendStatuses { sendStatuses = statuses }
+        // Only an awaiting send's clock still decides anything, so spells
+        // that ended before the oldest one was delivered go. Dropping
+        // spells only moves a clock on, past a timeout it already reached.
+        let oldestAwaiting = sends.compactMap { statuses[$0.id] == .awaiting ? $0.deliveredAt : nil }.min()
+        busySpells.removeAll { spell in oldestAwaiting.map { spell.end <= $0 } ?? true }
         // The program may have forked into a session herdr has not
         // reported through the snapshot yet.
         if becameOverdue {
             needsAgentRefresh = true
             needsRelocate = true
             wake()
+        }
+    }
+
+    /// Opens a busy spell when herdr reports the Agent Working or Blocked,
+    /// and closes it when herdr reports anything else.
+    private func noteActivity(_ activity: ChatAgentActivity) {
+        let isBusy = activity == .working || activity == .blocked
+        if isBusy, busySince == nil {
+            busySince = now()
+        } else if !isBusy, let start = busySince {
+            busySpells.append((start: start, end: now()))
+            busySince = nil
+        }
+    }
+
+    /// How long `send` has waited for its record by `date`: the time since
+    /// delivery or, for a program whose echo clock stops while it works
+    /// (`ChatTranscriptAdapter.echoClockStopsWhileWorking`), only the part
+    /// of it herdr reported the Agent neither Working nor Blocked.
+    private func echoClock(for send: TrackedSend, at date: Date) -> TimeInterval {
+        guard let deliveredAt = send.deliveredAt else { return 0 }
+        let waited = date.timeIntervalSince(deliveredAt)
+        guard source.adapter.echoClockStopsWhileWorking else { return waited }
+        let spells = busySpells + (busySince.map { [(start: $0, end: date)] } ?? [])
+        return spells.reduce(waited) { clock, spell in
+            clock - max(0, min(spell.end, date).timeIntervalSince(max(spell.start, deliveredAt)))
         }
     }
 

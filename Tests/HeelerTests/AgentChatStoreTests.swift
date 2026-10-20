@@ -2170,6 +2170,207 @@ struct AgentChatStoreTests {
         #expect(store.conversation.phase == .following(path: path))
     }
 
+    // MARK: Grok Build's echo clock
+
+    /// The session in `grok/core-turns.jsonl`.
+    private static let grokSession = "01900000-0000-7000-8000-000000000004"
+    private static let grokPath = "/home/dev/.grok/sessions/%2Fhome%2Fdev%2Fproj/\(grokSession)/updates.jsonl"
+
+    private static func grokAgent(_ status: AgentStatus) -> Agent {
+        agent(session: grokSession, status: status, program: .grok)
+    }
+
+    /// Lines `range` of a `grok/` fixture (1-based, inclusive), as written.
+    private static func grokLines(_ fixture: String, _ range: ClosedRange<Int>) throws -> String {
+        let rows = try ChatFixture.text("grok/\(fixture)").split(separator: "\n", omittingEmptySubsequences: false)
+        return rows[(range.lowerBound - 1)..<range.upperBound].joined(separator: "\n") + "\n"
+    }
+
+    /// A store following lines 1 to `line` of `grok/core-turns.jsonl`
+    /// through Grok Build's own adapter, while herdr reports `status`.
+    private static func grokStore(
+        through line: Int, status: AgentStatus, server: Server? = nil
+    ) async throws -> (files: VirtualHostFiles, store: AgentChatStore, clock: Clock) {
+        let clock = Clock()
+        let files = VirtualHostFiles()
+        let agent = Self.grokAgent(status)
+        await files.write(try grokLines("core-turns.jsonl", 1...line), at: grokPath)
+        let store = AgentChatStore(
+            agentID: ConsoleAgent.ID(hostID: host, paneID: agent.paneID), agent: agent, program: .grok,
+            source: AgentChatSource(
+                hostID: host, socketLocation: .defaultSession, files: files.hostFiles(),
+                agentInfo: { try await server?.read() ?? agent }, cache: VolatileChatTranscriptCache(),
+                adapter: .grok),
+            timing: AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)),
+            now: { clock.now })
+        await store.step()
+        #expect(store.conversation.phase == .following(path: grokPath))
+        return (files, store, clock)
+    }
+
+    /// Grok Build writes a prompt sent while it works only once the turn
+    /// ahead of it ends and its own starts (27 s later in one capture),
+    /// and herdr reports it Working throughout, so its echo waits that out.
+    @Test func aGrokSendQueuedBehindATurnWaitsForItToStart() async throws {
+        // The terminal's second prompt is running.
+        let (files, store, clock) = try await Self.grokStore(through: 5, status: .working)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ", delivered: false)])
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ")])
+
+        clock.now = clock.now.addingTimeInterval(20)
+        await files.append(try Self.grokLines("core-turns.jsonl", 6...7), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        clock.now = clock.now.addingTimeInterval(7)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        await files.append(try Self.grokLines("core-turns.jsonl", 8...8), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    /// `/compact` keeps herdr reporting Grok Build Working until the
+    /// compaction is written: about 8 s in a small session, longer in a
+    /// real one.
+    @Test func aGrokCompactionLongerThanTheTimeoutStaysAwaiting() async throws {
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "/compact ", delivered: false)])
+        store.updateSends([Self.sent(id, "/compact ")])
+        clock.now = clock.now.addingTimeInterval(1)
+        store.agentDidChange(Self.grokAgent(.working))
+
+        clock.now = clock.now.addingTimeInterval(30)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        await files.append(try Self.grokLines("compaction.jsonl", 5...6), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    /// herdr reports Grok Build idle for up to half a second after a
+    /// prompt goes in. A send in that moment queues behind that prompt's
+    /// turn, and its echo waits for its own like one sent while Grok works.
+    @Test func aSendRightAfterASubmitWaitsForItsQueuedTurn() async throws {
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ", delivered: false)])
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ")])
+        clock.now = clock.now.addingTimeInterval(1)
+        store.agentDidChange(Self.grokAgent(.working))
+        await store.step()
+
+        // The prompt typed in the terminal runs first.
+        clock.now = clock.now.addingTimeInterval(25)
+        await files.append(try Self.grokLines("core-turns.jsonl", 5...7), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        await files.append(try Self.grokLines("core-turns.jsonl", 8...8), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    /// The echo clock runs whenever herdr reports Grok Build neither
+    /// Working nor Blocked: ten such seconds without a record make a send
+    /// overdue, whatever turns and cards came between them.
+    @Test func aGrokSendUnrecordedForTenIdleSecondsIsOverdue() async throws {
+        let (_, store, clock) = try await Self.grokStore(through: 4, status: .idle)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ", delivered: false)])
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ")])
+
+        clock.now = clock.now.addingTimeInterval(6)
+        store.agentDidChange(Self.grokAgent(.working))
+        clock.now = clock.now.addingTimeInterval(20)
+        store.agentDidChange(Self.grokAgent(.blocked))
+        clock.now = clock.now.addingTimeInterval(15)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        // Polls after the card still leave the busy seconds out.
+        store.agentDidChange(Self.grokAgent(.idle))
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        clock.now = clock.now.addingTimeInterval(2)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(store.sendStatuses[id] == .overdue)
+    }
+
+    /// `agent.get` can report a new terminal in the pane before a snapshot
+    /// does. Its status replaces the old one on the echo clock too: a send
+    /// the old terminal queued runs out once the new one has idled ten
+    /// seconds, rather than waiting on a turn that ended with that terminal.
+    @Test func theEchoClockFollowsAnAgentReplacedByAQuery() async throws {
+        let server = Server(Self.grokAgent(.working))
+        let (_, store, clock) = try await Self.grokStore(through: 5, status: .working, server: server)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ", delivered: false)])
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ")])
+
+        await server.set(
+            Agent(
+                terminalID: "term-2", kind: "grok", title: "", status: .idle, workspaceID: "w1", tabID: "t1",
+                paneID: "w1:p1", cwd: Self.cwd, revision: 2,
+                agentSession: AgentSessionInfo(
+                    agent: "grok", kind: .id, source: "herdr:grok", value: Self.grokSession)))
+        await store.step()
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .abandoned)
+    }
+
+    /// A store following `program`'s transcript while herdr reports the
+    /// Agent idle, and that Agent with another status: Claude Code's and
+    /// Codex's through the numbered stand-in, Pi's and Oh My Pi's through
+    /// their own adapter.
+    private static func idleStore(
+        _ program: ChatProgram
+    ) async throws -> (store: AgentChatStore, clock: Clock, agent: (AgentStatus) -> Agent) {
+        switch program {
+        case .pi, .omp:
+            let clock = Clock()
+            let (files, store, path, _) = try skillStore(program, clock: clock)
+            await files.write(piHeader + "\n" + ompMessage("u1", parent: nil, role: "user", "go"), at: path)
+            await store.step()
+            #expect(store.conversation.phase == .following(path: path))
+            return (store, clock, { piAgent(program, status: $0) })
+        default:
+            let (fixture, session, _) = await followed(program, screen: .unavailable)
+            return (fixture.store, fixture.clock, { agent(session: session, status: $0, program: program) })
+        }
+    }
+
+    /// Only Grok Build's echo clock stops while it works: every other
+    /// program's send still goes overdue 10 s after delivery while herdr
+    /// reports the Agent Working.
+    @Test(arguments: [ChatProgram.claude, .codex, .pi, .omp])
+    func otherProgramsTimeOutBusySendsAsBefore(program: ChatProgram) async throws {
+        #expect(ChatTranscriptAdapter.standard(for: program)?.echoClockStopsWhileWorking == false)
+        let (store, clock, agent) = try await Self.idleStore(program)
+        store.agentDidChange(agent(.working))
+        let id = UUID()
+        store.updateSends([Self.sent(id, "hello ", delivered: false)])
+        store.updateSends([Self.sent(id, "hello ")])
+
+        clock.now = clock.now.addingTimeInterval(9)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(store.sendStatuses[id] == .overdue)
+    }
+
     // MARK: Tool output
 
     @Test func anExpandedToolRowReadsItsOutputOnce() async throws {

@@ -653,12 +653,16 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
 extension ChatTranscriptAdapter {
     /// How Chat reads Grok Build's `updates.jsonl`. A `rewind_marker` in
     /// the tail can hide turns above it, so cached entries never join live
-    /// ones, as for Pi.
+    /// ones, as for Pi. Grok writes a prompt sent while it works only once
+    /// that prompt's turn starts (27 s later in one capture), and keeps
+    /// herdr reporting Working through a `/compact` until it writes the
+    /// compaction, so its echo clock stops while herdr reports it busy.
     static var grok: ChatTranscriptAdapter {
         ChatTranscriptAdapter(
             revision: GrokTranscriptReducer.revision,
             joinsCachedHistory: false,
             makeReducer: { GrokTranscriptReducer(transcriptPath: $0.path) },
-            echoKey: { GrokTranscriptReducer.echoKey($0) })
+            echoKey: { GrokTranscriptReducer.echoKey($0) },
+            echoClockStopsWhileWorking: true)
     }
 }

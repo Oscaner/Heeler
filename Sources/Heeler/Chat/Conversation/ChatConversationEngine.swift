@@ -124,6 +124,10 @@ struct ChatTranscriptAdapter: Sendable {
     /// Whether a recorded prompt keeps its entry when the program rewrites
     /// its file, so sends are matched to entries rather than to offsets.
     var echoesByEntry = false
+    /// Whether the program can leave a send unrecorded for as long as herdr
+    /// reports the Agent Working or Blocked, so its echo times out on the
+    /// time herdr reports neither rather than on the time since delivery.
+    var echoClockStopsWhileWorking = false
 }
 
 /// One conversation's transcript on its Host: finds the file, follows it,
