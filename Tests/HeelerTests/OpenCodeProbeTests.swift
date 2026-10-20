@@ -361,18 +361,46 @@ struct OpenCodeProbeTests {
     /// `head -c` cut the reader's output, its exit line with it: the poll
     /// reads the tail instead.
     @Test func aMissingExitLineIsAnOverflow() throws {
-        let response = try Self.parse(
-            [
-                "V 3.54.0", "E 12", #"R {"k":"row","id":"msg_a","type":"user","seq":7,"tu":3,"f":true,"d":{}}"#,
-                #"R {"k":"row","id":"msg_b","type":"assistant","se"#,
-            ], terminated: false)
-        guard case .records(let records) = response else {
-            Issue.record("expected records, read \(response)")
-            return
+        let read = ["V 3.54.0", "E 12", #"R {"k":"row","id":"msg_a","type":"user","seq":7,"tu":3,"f":true,"d":{}}"#]
+        let readBytes = read.map { $0.utf8.count + 1 }.reduce(0, +)
+        let row = #"R {"k":"row","id":"msg_b","type":"assistant","seq":9,"tu":5,"f":true,"d":{"t":""#
+        let filler = OpenCodeProbe.outputCap - readBytes - row.utf8.count
+        // Cut inside a row, so the script's `W` line joins it; and cut at
+        // the end of a line.
+        let cutInsideARow = read + [row + String(repeating: "x", count: filler) + "W 1 1"]
+        let cutAtALineEnd = read + [row + String(repeating: "x", count: filler - 4) + #""}}"#, "W 1 1"]
+        for (lines, rows, ignored) in [(cutInsideARow, [Int64(7)], 1), (cutAtALineEnd, [7, 9], 0)] {
+            let response = try Self.parse(lines)
+            guard case .records(let records) = response else {
+                Issue.record("expected records, read \(response)")
+                continue
+            }
+            #expect(records.overflow)
+            #expect(records.rows.map(\.seq) == rows)
+            #expect(records.ignoredLines == ignored)
         }
-        #expect(records.overflow)
-        #expect(records.rows.map(\.seq) == [7])
-        #expect(records.ignoredLines == 1)
+    }
+
+    /// Short of the cap, the reader's output always ends with its exit
+    /// line. Without it the script went wrong: BusyBox's `tr -c '[:print:]'`
+    /// once turned a missing store's line into this.
+    @Test func aMissingExitLineShortOfTheCapIsMalformed() throws {
+        let malformed = TransportError.malformedResponse(
+            "OpenCode's store query printed no exit status (exit status 0)")
+        #expect(throws: malformed) { try Self.parse(["??n?????????????????r???p?n?????????p?n???????", "W 0 0"]) }
+        #expect(throws: malformed) {
+            try Self.parse(["V 3.54.0", "E 12", #"R {"k":"row","id":"msg_b","type":"assistant","se"#])
+        }
+    }
+
+    /// The missing store's path reaches the line as printable ASCII through
+    /// a byte range: BusyBox's `tr` has no character classes in a
+    /// complement.
+    @Test func theMissingStorePathPrintsThroughAByteRange() throws {
+        let nonce = OpenCodeProbe.makeNonce()
+        let shell = ScriptParts(OpenCodeProbe.script(Self.tail, nonce: nonce), nonce: nonce).shell
+        #expect(shell.contains("  printf 'P nodb %s\\n' \"$p\" | tr -c ' -~\\n' '?'"))
+        #expect(!shell.contains { $0.contains("[:") })
     }
 
     /// The reader's last error line, read with the side files the script

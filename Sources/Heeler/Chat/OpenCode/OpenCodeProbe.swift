@@ -77,7 +77,9 @@ enum OpenCodeProbe {
             "printf '%s\\n' \"__HEELER_OC_BEGIN_$N\"",
             "if [ ! -f \"$db\" ]; then",
             "  case $db in \"$HOME\"/*) p=\"~${db#\"$HOME\"}\" ;; *) p=$db ;; esac",
-            "  printf 'P nodb %s\\n' \"$p\" | tr -c '[:print:]\\n' '?'",
+            // A range rather than `[:print:]`, which BusyBox's `tr -c` reads
+            // as its letters, so it mangled the whole line.
+            "  printf 'P nodb %s\\n' \"$p\" | tr -c ' -~\\n' '?'",
             // Stock SQLite opens a WAL database read-only by creating its
             // missing side files; Apple's refuses. Neither reader starts.
             "elif [ ! -e \"$db-wal\" ] || [ ! -e \"$db-shm\" ]; then",
@@ -200,6 +202,13 @@ enum OpenCodeProbe {
             return .sessionMissing(otherStores: output.otherStores.filter(isStoreName))
         }
         guard let exitLine = output.exitLine else {
+            // `head -c` cut the reader's output, its exit line with it.
+            // Short of the cap, a missing exit line is a script that went
+            // wrong, not a conversation too large to read.
+            guard output.readerBytes >= outputCap else {
+                throw TransportError.malformedResponse(
+                    "OpenCode's store query printed no exit status (exit status \(exitStatus))")
+            }
             return .records(output.records(overflow: true))
         }
         if exitLine != 0 {
@@ -232,6 +241,10 @@ enum OpenCodeProbe {
         var walPresent: Bool?
         var otherStores: [String] = []
         var ignoredLines = 0
+        /// The body less the script's own `W` and `O` lines: what the
+        /// reader printed through `head -c`, with its exit line. A `W` line
+        /// joined to a row cut mid-line counts too, past the cap.
+        private(set) var readerBytes = 0
 
         private struct RowHead: Decodable {
             let id: String
@@ -245,6 +258,7 @@ enum OpenCodeProbe {
             if lines.last?.isEmpty == true {
                 lines.removeLast()
             }
+            var scriptBytes = 0
             for slice in lines {
                 let line = Data(slice)
                 guard let tag = line.first, line.count == 1 || line[1] == 0x20,
@@ -253,7 +267,11 @@ enum OpenCodeProbe {
                     ignoredLines += 1
                     continue
                 }
+                if tag == UInt8(ascii: "W") || tag == UInt8(ascii: "O") {
+                    scriptBytes += line.count + 1
+                }
             }
+            readerBytes = body.count - scriptBytes
         }
 
         /// False for a line this parse does not know. SQLite turns a lone
