@@ -9,7 +9,7 @@ import Foundation
 /// line is read. Entry ids come from byte offsets, never from `eventId`,
 /// which Grok numbers again after a rewind.
 struct GrokTranscriptReducer: ChatTranscriptReducer {
-    static let revision = 3
+    static let revision = 4
 
     /// The session's file on the Host.
     let transcriptPath: String
@@ -74,7 +74,9 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
                 return .preview(nil, fileChanges: shown)
             }
             return .preview(tool.kind == .question ? nil : output.preview)
-        case .taskCompleted(let end) where tool.kind == .command:
+        case .taskCompleted(let end):
+            // A background command's or monitor's row points at its task's
+            // end.
             return .preview(end.preview)
         case .subagentFinished(let finished) where tool.kind == .agent:
             return .preview(finished.preview)

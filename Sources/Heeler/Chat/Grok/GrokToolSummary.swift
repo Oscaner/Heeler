@@ -343,10 +343,10 @@ struct GrokToolCall: Sendable {
             if let end = subagentEnd { return end.preview }
             // Work in the background reports when it ends.
             return sentToBackground || input?.isBackground == true ? nil : output?.preview
-        case .command:
-            if let end = taskEnd { return end.preview }
-            return output?.preview
         default:
+            // A command or a monitor in the background shows its output
+            // once its task ends.
+            if let end = taskEnd { return end.preview }
             return output?.preview
         }
     }

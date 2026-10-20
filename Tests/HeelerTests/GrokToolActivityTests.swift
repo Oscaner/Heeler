@@ -690,7 +690,7 @@ struct GrokToolActivityTests {
                     status: .succeeded, note: "3 tool calls · 2 turns · 37s", callID: audit,
                     preview: Self.preview("No dependency is outdated."), output: Self.reference(lines, 26)))
 
-        let all = Self.transcript(lines)
+        let all = Self.transcript(Array(lines[0..<27]))
         #expect(
             try Self.tool(all, server)
                 == ChatToolActivity(
@@ -707,6 +707,44 @@ struct GrokToolActivityTests {
                             kind: .taskNotification, title: "Background command finished",
                             detail: "npm run dev · Killed"))))
         #expect(all.backgroundWork.isEmpty)
+    }
+
+    @Test func monitorsShowTheirOutputOnceTheyEnd() throws {
+        let lines = try Self.lines("background-tasks.jsonl")
+        let monitor = "call-01900000-0000-7000-8000-000000000051-3"
+        let title = "Start monitor: Wait for the build to finish"
+
+        // The result names the monitor's task and holds no output.
+        let watching = Self.transcript(Array(lines[27..<34]))
+        #expect(
+            try Self.tool(watching, monitor)
+                == ChatToolActivity(
+                    kind: .other, name: "monitor", title: title, status: .started, note: "Sent to the background",
+                    callID: monitor, output: Self.reference(lines, 32)))
+
+        // Its output comes with its task's end.
+        let ended = Array(lines[27..<35])
+        let reducer = Self.reducer(ended)
+        let tool = try Self.tool(
+            reducer.transcript(ChatProjectionContext(windowStart: ended[0].offset, activity: .idle)), monitor)
+        #expect(
+            tool
+                == ChatToolActivity(
+                    kind: .other, name: "monitor", title: title, status: .succeeded,
+                    note: "Finished in the background", exitCode: 0, callID: monitor,
+                    preview: Self.preview("BUILD SUCCEEDED\n"), output: Self.reference(lines, 35)))
+        #expect(
+            Self.notices(Self.transcript(ended)).last?.content
+                == .notice(
+                    ChatNotice(
+                        kind: .taskNotification, title: "Background task finished",
+                        detail: "[monitor] Wait for the build to finish · Exit code 0")))
+
+        // Expanded, the row reads the task's end again.
+        let expanded = ChatToolPreview.$limits.withValue(ChatToolPreview.expandedLimits) {
+            reducer.output(of: lines[34], for: tool)
+        }
+        #expect(expanded == .preview(Self.preview("BUILD SUCCEEDED\n")))
     }
 
     // MARK: Expanded output

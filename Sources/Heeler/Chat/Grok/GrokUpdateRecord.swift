@@ -66,16 +66,17 @@ struct GrokUpdateRecord: Sendable {
         case failed(message: String?)
     }
 
-    /// A command Grok moved to the background (`task_backgrounded`).
+    /// A command or monitor Grok runs in the background
+    /// (`task_backgrounded`).
     struct TaskBackgrounded: Sendable {
         let callID: String?
         let taskID: String?
     }
 
-    /// A background command that ended (`task_completed`).
+    /// A background command or monitor that ended (`task_completed`).
     struct TaskCompleted: Sendable {
         let taskID: String?
-        /// `bash` for a command.
+        /// `bash` for a command, `monitor` for a monitor.
         let taskKind: String?
         /// What the user saw run: `display_command`, else `command`.
         let command: String?
