@@ -61,6 +61,16 @@ struct InputBoxStateDetectorTests {
         #expect(try state("omp-31-plan-review") == .dialog(title: nil))
     }
 
+    /// Every Grok Build card holds a send as a dialog, the ones Heeler
+    /// answers and the ones it leaves to the terminal alike.
+    @Test("Grok Build: a card in the composer's place is a dialog", arguments: [
+        "grok-12-permission-command", "grok-13-permission-compound", "grok-14-permission-edit", "grok-15-question",
+        "grok-16-subagent-panel", "grok-23-rewind-confirm", "grok-25-fork-question",
+    ])
+    func grokCardsReadAsDialogs(stem: String) throws {
+        #expect(try state(stem) == .dialog(title: nil))
+    }
+
     // MARK: Claude, synthetic until captured
 
     /// Claude's box between its rules, with the mode line under it.

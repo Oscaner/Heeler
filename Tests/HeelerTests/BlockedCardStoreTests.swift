@@ -666,6 +666,53 @@ struct BlockedCardStoreTests {
         #expect(await tui.queued.isEmpty)
     }
 
+    // MARK: Grok Build
+
+    /// A digit approves at once. Grok Build records no approval, so the
+    /// card keeps it, and the call's row reads Allowed.
+    @Test func aGrokApprovalRecordsAllowedOnTheCall() async throws {
+        let pane = FakePane(try ScreenFixture.screen("grok-12-permission-command"))
+        await pane.react(to: ["3"], with: try ScreenFixture.screen("grok-03-working"))
+        let store = Self.store(.grok, pane: pane)
+        store.update(transcript: Self.transcript(pending: [Self.grokCommand("call-1", "chmod 644 README.md")]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.kind == .grokPermission)
+        #expect(card.request?.callID == "call-1")
+
+        await store.perform(.choose(ordinal: 2))
+
+        #expect(await pane.keys == [["3"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        #expect(store.history.calls["call-1"] == .allowed)
+    }
+
+    /// The reject row's digit, from its button or from Stop. Grok Build's
+    /// transcript records the rejection, so the card keeps nothing.
+    @Test func aGrokDenyLeavesTheDeclineToTheTranscript() async throws {
+        let request = Self.grokCommand("call-1", "chmod 644 README.md")
+        for action in [DialogAction.dismiss, .choose(ordinal: 3)] {
+            let pane = FakePane(try ScreenFixture.screen("grok-12-permission-command"))
+            await pane.react(to: ["4"], with: try ScreenFixture.screen("grok-01-idle-empty"))
+            let store = Self.store(.grok, pane: pane)
+            store.update(transcript: Self.transcript(pending: [request]))
+            store.update(activity: .blocked)
+            await store.refresh()
+
+            await store.perform(action)
+
+            #expect(await pane.keys == [["4"]], "\(action)")
+            #expect(store.progress == .ready, "\(action)")
+            #expect(store.composerFocusRequest == 0, "\(action)")
+            #expect(store.history.isEmpty, "\(action)")
+        }
+    }
+
     // MARK: Helpers
 
     private static let fruit = FakeQuestionTUI.Question(
@@ -688,6 +735,11 @@ struct BlockedCardStoreTests {
                 sendKeys: { await tui.send($0) },
                 paste: { await tui.paste($0) }),
             clock: ManualClock().clock)
+    }
+
+    private static func grokCommand(_ id: String, _ command: String) -> ChatPendingRequest {
+        ChatPendingRequest(
+            entryID: ChatEntryID(id), callID: id, kind: .command, toolName: "run_terminal_command", summary: command)
     }
 
     private static func ompBash(_ id: String, _ command: String) -> ChatPendingRequest {
@@ -913,6 +965,32 @@ struct BlockedRequestMatchTests {
         ]
         #expect(BlockedRequestMatch.request(for: approval, in: requests)?.callID == "c|fc")
         #expect(BlockedRequestMatch.request(for: approval, in: [request("d", "Bash", "echo approved-2")]) == nil)
+    }
+
+    /// A command by its start, a file by its name, a question by its text.
+    /// The subagent panel has no call.
+    @Test(arguments: [
+        "grok-12-permission-command", "grok-13-permission-compound", "grok-14-permission-edit", "grok-15-question",
+        "grok-16-subagent-panel",
+    ])
+    func grokCardsMatchTheirCall(stem: String) throws {
+        let question = "How should we handle the README rename plan?"
+        let requests = [
+            request("compound", "run_terminal_command", #"chmod 600 README.md; echo "EXIT_CODE:$?"; ls -l README.md"#),
+            request("command", "run_terminal_command", "chmod 644 README.md"),
+            request("write", "write", "/Users/developer/scratch/cap-grok-a/proj/notes.txt", kind: .fileWrite),
+            request(
+                "ask", "ask_user_question", question, kind: .question, questions: [ChatQuestion(text: question)]),
+            // The same command under another tool's name never matches.
+            request("read", "read_file", "chmod 644 README.md", kind: .fileRead),
+        ]
+        let expected = [
+            "grok-12-permission-command": "command", "grok-13-permission-compound": "compound",
+            "grok-14-permission-edit": "write", "grok-15-question": "ask",
+        ]
+
+        #expect(BlockedRequestMatch.request(for: try dialog(stem), in: requests)?.callID == expected[stem])
+        #expect(BlockedRequestMatch.request(for: try dialog(stem), in: [requests[4]]) == nil)
     }
 
     @Test func aCodexCommandMatchesInsideItsScript() throws {

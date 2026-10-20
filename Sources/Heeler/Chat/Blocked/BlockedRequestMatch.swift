@@ -46,7 +46,15 @@ enum BlockedRequestMatch {
             return request.toolName == "ask" && asks(request, subject.question ?? dialog.title)
         case .ompQuestionReview:
             return request.toolName == "ask"
-        case .claudeWorkspaceTrust, .codexNetwork:
+        case .grokPermission:
+            // A command by its start; an edit or a new file by its name.
+            if let command = subject.command {
+                return request.toolName == "run_terminal_command" && begins(request.summary, with: command)
+            }
+            return ["search_replace", "write"].contains(request.toolName) && sameFile(request.summary, subject.filePath)
+        case .grokQuestion:
+            return request.toolName == "ask_user_question" && asks(request, subject.question ?? dialog.title)
+        case .claudeWorkspaceTrust, .codexNetwork, .grokCancelTurn:
             return false
         }
     }

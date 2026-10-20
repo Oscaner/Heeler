@@ -387,8 +387,8 @@ struct GrokScreen: Sendable {
     }
 
     /// The row without the scrollbar Grok draws at the right edge of the
-    /// scrollback, trimmed.
-    private static func withoutScrollbar(_ text: String) -> String {
+    /// scrollback and of a card's long list, trimmed.
+    static func withoutScrollbar(_ text: String) -> String {
         guard let range = text.range(of: #"\s*[█▐▌]+\s*$"#, options: .regularExpression) else { return text }
         return String(text[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
     }

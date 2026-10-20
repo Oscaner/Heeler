@@ -144,7 +144,7 @@ private struct BlockedDialogCard: View {
             // screen's rows leave out the question the options answer.
             let shown = dialog.body.filter { !$0.hasPrefix("Claude has written up a plan") }
             BlockedPlanBox(text: BlockedRequestMatch.claudePlanText(call: card.request?.summary, shownRows: shown))
-        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion:
+        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion, .grokQuestion:
             VStack(alignment: .leading, spacing: 4) {
                 // Codex's asynchronous questions name their page by the
                 // question itself.
@@ -192,8 +192,32 @@ private struct BlockedDialogCard: View {
                     BlockedCardText(item.element)
                 }
             }
+        case .grokPermission:
+            grokPermission
+        case .grokCancelTurn:
+            BlockedCardText("Subagents are still running.")
+            if let count = dialog.body.first {
+                BlockedCardText(count)
+            }
         case .codexNetwork:
             EmptyView()
+        }
+    }
+
+    /// A command under its description; a file by itself, since the title
+    /// names the tool; else the card's own words.
+    @ViewBuilder
+    private var grokPermission: some View {
+        let subject = dialog.subject
+        if let command = subject.command {
+            if let description = subject.commandDescription {
+                BlockedCardText(description)
+            }
+            BlockedCodeBox(text: card.request?.summary ?? command)
+        } else if let path = subject.filePath {
+            BlockedCodeBox(text: card.request?.summary ?? path)
+        } else if let description = dialog.body.first {
+            BlockedCardText(description)
         }
     }
 
@@ -266,6 +290,10 @@ private struct BlockedDialogCard: View {
             Button("Skip Question") { perform(.skipQuestion) }
                 .font(.subheadline)
                 .buttonStyle(.borderless)
+        case .grokQuestion where dialog.options.contains(where: { $0.role == .otherText }):
+            Text("Type your own answer in the terminal.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         case .ompQuestion, .ompQuestionReview:
             VStack(alignment: .leading, spacing: 4) {
                 if dialog.focus.composerDraftGuard {
@@ -472,7 +500,11 @@ extension DialogOption {
     /// folder for the session and saves no rule; its `don't ask again`
     /// options and Codex 0.162.1's `(a)`/`(p)` ones save one. Oh My Pi
     /// 18.12's `Approve <tool> for this session` saves none and stops asking
-    /// until the session ends. Recheck when a program's version changes.
+    /// until the session ends. Grok Build's `Always allow: <prefix>` saves
+    /// the rule for the project's folder, where it outlives the session,
+    /// and `allow all edits during this session` saves none (the 1.0.45
+    /// source, `permission/hub_gate.rs`; not captured live). Recheck when a
+    /// program's version changes.
     func persistenceNote(program: ChatProgram) -> String {
         let folded = DialogRowScanner.comparable(label.lowercased())
         switch program {
@@ -484,7 +516,11 @@ extension DialogOption {
             return "Oh My Pi won't ask again for \(subject) in this session."
         case .claude where folded.contains(DialogRowScanner.comparable("always allow access to")):
             return "Lets Claude work in this folder for the session."
-        case .claude, .codex, .pi, .grok:
+        case .grok where folded.contains(DialogRowScanner.comparable("all edits during this session")):
+            return "Grok Build won't ask about edits again in this session."
+        case .grok:
+            return "Grok Build saves this rule for the project and won't ask again."
+        case .claude, .codex, .pi:
             return "Saves a rule, so this isn't asked again."
         }
     }
@@ -493,23 +529,27 @@ extension DialogOption {
 private extension BlockedDialog {
     var cardTitle: String {
         switch kind {
-        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion: "Question"
+        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion, .grokQuestion: "Question"
         case .codexAsyncCollapsed: "Questions"
         case .ompApproval: "Allow \(subject.toolName ?? "Tool")"
+        case .grokCancelTurn: "Subagents Still Running"
         default: title.hasSuffix(":") ? String(title.dropLast()) : title
         }
     }
 
-    /// Whether Esc does something a card can name: the planner refuses it
-    /// only on Codex's asynchronous question.
-    var canStop: Bool { kind != .codexAsyncQuestion }
+    /// Whether Stop does something a card can name: the planner refuses it
+    /// on Codex's asynchronous question, and on Grok Build's question and
+    /// subagent panel, where Esc only parks the keyboard or keeps the turn
+    /// running.
+    var canStop: Bool { ![.codexAsyncQuestion, .grokQuestion, .grokCancelTurn].contains(kind) }
 
-    /// What Esc does, for the folded card: it quits Claude Code on the
-    /// trust dialog and only denies an Oh My Pi approval.
+    /// What Stop does, for the folded card: it quits Claude Code on the
+    /// trust dialog, only denies an Oh My Pi approval, and presses a Grok
+    /// Build permission's reject row.
     var stopTitle: String {
         switch kind {
         case .claudeWorkspaceTrust: "Exit Claude Code"
-        case .ompApproval: "Deny"
+        case .ompApproval, .grokPermission: "Deny"
         default: "Stop"
         }
     }

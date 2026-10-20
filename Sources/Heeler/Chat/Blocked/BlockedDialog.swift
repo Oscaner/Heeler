@@ -30,6 +30,13 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
     case ompQuestion
     /// The `Review answers` page after several Oh My Pi questions.
     case ompQuestionReview
+    /// Grok Build's permission card, answered by a row's digit.
+    case grokPermission
+    /// A single question Grok Build's agent asks during its turn, with
+    /// single-select answers, answered by a row's key.
+    case grokQuestion
+    /// The panel Ctrl+C opens while Grok Build's subagents run.
+    case grokCancelTurn
 
     var program: ChatProgram {
         switch self {
@@ -41,6 +48,8 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
             .codex
         case .ompApproval, .ompQuestion, .ompQuestionReview:
             .omp
+        case .grokPermission, .grokQuestion, .grokCancelTurn:
+            .grok
         }
     }
 }
@@ -303,7 +312,8 @@ enum BlockedDialogParser {
         case .claude: ClaudeDialogParser.parse(screen)
         case .codex: CodexDialogParser.parse(screen)
         case .omp: OMPDialogParser.parse(screen)
-        case .pi, .grok: .none
+        case .grok: GrokDialogParser.parse(screen)
+        case .pi: .none
         }
     }
 }
