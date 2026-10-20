@@ -9,7 +9,7 @@ import Foundation
 /// line is read. Entry ids come from byte offsets, never from `eventId`,
 /// which Grok numbers again after a rewind.
 struct GrokTranscriptReducer: ChatTranscriptReducer {
-    static let revision = 6
+    static let revision = 7
 
     /// The session's file on the Host.
     let transcriptPath: String
@@ -521,16 +521,23 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
                     detail: detail.isEmpty ? nil : detail.joined(separator: " · ")), record)
         }
 
-        /// A subagent started: it belongs to the spawn call that describes it
-        /// the same way, else to the first spawn still without one. Grok can
-        /// write it before the spawn's input update.
+        /// A subagent started: it belongs to the open spawn call that
+        /// describes it the same way, else to the first open one. A spawn is
+        /// open while it is in the latest turn and has neither a subagent nor
+        /// a result. Grok writes the record before the spawn's result, and
+        /// can write it before the spawn's input update, so a spawn that
+        /// failed, or one from an earlier turn, did not start it.
         private mutating func readSpawn(_ spawned: GrokUpdateRecord.SubagentSpawned) {
             guard let subagentID = spawned.subagentID, subagentCalls[subagentID] == nil else { return }
-            let unattached = callOrder.filter { calls[$0]?.isSpawn == true && calls[$0]?.subagentID == nil }
-            let described = spawned.description.flatMap { description in
-                unattached.first { calls[$0]?.input?.description == description }
+            let turn = turnEnds.count - 1
+            let open = callOrder.filter { id in
+                guard let call = calls[id] else { return false }
+                return call.isSpawn && call.subagentID == nil && call.output == nil && call.turn == turn
             }
-            guard let callID = described ?? unattached.first else { return }
+            let described = spawned.description.flatMap { description in
+                open.first { calls[$0]?.input?.description == description }
+            }
+            guard let callID = described ?? open.first else { return }
             subagentCalls[subagentID] = callID
             calls[callID]?.subagentID = subagentID
             calls[callID]?.subagentType = spawned.subagentType

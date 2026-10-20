@@ -687,6 +687,108 @@ struct GrokToolActivityTests {
         #expect(try Self.tool(finished, id) == withNote)
     }
 
+    /// The subagent the spawns below describe, and the spawn that starts it
+    /// after an earlier one did not.
+    private static let subagent = "01900000-0000-7000-8000-000000000011"
+    private static let laterSpawn = "call-01900000-0000-7000-8000-000000000011-1"
+
+    private static func spawn(_ id: String, type: String?, background: Bool, event: Int) -> String {
+        let type = type.map { #","subagent_type":"\#($0)""# } ?? ""
+        return call(
+            id, name: "spawn_subagent", kind: "task",
+            input: #""description":"Audit dependencies","prompt":"List outdated dependencies."\#(type),"background":\#(background)"#,
+            event: event)
+    }
+
+    private static func spawned(event: Int) -> String {
+        record(
+            #""sessionUpdate":"subagent_spawned","subagent_id":"\#(subagent)","subagent_type":"explore","description":"Audit dependencies""#,
+            event: event, method: "_x.ai/session/update")
+    }
+
+    private static func subagentFinished(event: Int) -> String {
+        record(
+            #""sessionUpdate":"subagent_finished","subagent_id":"\#(subagent)","status":"completed","tool_calls":3,"turns":2,"duration_ms":37450,"output":"No dependency is outdated.""#,
+            event: event, method: "_x.ai/session/update")
+    }
+
+    @Test func aSubagentStartsFromAnOpenSpawnOfItsTurn() throws {
+        // A spawn with the subagent's description that failed, or that an
+        // earlier turn left without a result, did not start it.
+        var earlier = ChatToolActivity(
+            kind: .agent, name: "spawn_subagent", title: "Audit dependencies", subtitle: "auditor", status: .failed,
+            callID: Self.callID, preview: Self.preview("unknown subagent type"))
+        var later = ChatToolActivity(
+            kind: .agent, name: "spawn_subagent", title: "Audit dependencies", subtitle: "explore", status: .succeeded,
+            note: "3 tool calls · 2 turns · 37s", callID: Self.laterSpawn,
+            preview: Self.preview("No dependency is outdated."))
+        let failure = Self.result(
+            status: "failed", content: try Self.text("Tool `spawn_subagent` failed: unknown subagent type"),
+            rawOutput: #""error":"tool_execution_failed","message":"unknown subagent type""#, event: 3)
+
+        // Retried in the same turn.
+        let retried = Self.lines([
+            try Self.prompt("Audit the dependencies with a subagent.", index: 0, event: 1),
+            Self.spawn(Self.callID, type: "auditor", background: false, event: 2),
+            failure,
+            Self.spawn(Self.laterSpawn, type: "explore", background: false, event: 4),
+            Self.spawned(event: 5),
+            Self.subagentFinished(event: 6),
+            Self.result(
+                Self.laterSpawn, content: try Self.text("No dependency is outdated."),
+                rawOutput:
+                    #""type":"SubagentCompleted","output":"No dependency is outdated.","subagent_id":"\#(Self.subagent)","subagent_type":"explore","tool_calls":3,"turns":2,"duration_ms":37450"#,
+                event: 7),
+            Self.completed("end_turn", event: 8),
+        ])
+        var transcript = Self.transcript(retried)
+        earlier.output = Self.reference(retried, 3)
+        later.output = Self.reference(retried, 6)
+        #expect(try Self.tool(transcript, Self.callID) == earlier)
+        #expect(try Self.tool(transcript, Self.laterSpawn) == later)
+
+        // Run in the background in the next turn, after the failure.
+        let afterFailure = try Self.backgroundSpawn(after: [failure, Self.completed("end_turn", event: 4)])
+        transcript = Self.transcript(afterFailure)
+        earlier.output = Self.reference(afterFailure, 3)
+        later.output = Self.reference(afterFailure, afterFailure.count)
+        #expect(try Self.tool(transcript, Self.callID) == earlier)
+        #expect(try Self.tool(transcript, Self.laterSpawn) == later)
+
+        // Or after a turn cancelled before the spawn had a result.
+        let afterCancel = try Self.backgroundSpawn(after: [Self.completed("cancelled", event: 3)])
+        transcript = Self.transcript(afterCancel)
+        later.output = Self.reference(afterCancel, afterCancel.count)
+        #expect(
+            try Self.tool(transcript, Self.callID)
+                == ChatToolActivity(
+                    kind: .agent, name: "spawn_subagent", title: "Audit dependencies", subtitle: "auditor",
+                    status: .interrupted, callID: Self.callID))
+        #expect(try Self.tool(transcript, Self.laterSpawn) == later)
+    }
+
+    /// A turn whose spawn ends with `end`, then a turn whose spawn starts
+    /// the subagent in the background, which finishes after the turn.
+    private static func backgroundSpawn(after end: [String]) throws -> [ChatLine] {
+        let event = 3 + end.count
+        var rows: [String] = [
+            try prompt("Audit the dependencies with a subagent.", index: 0, event: 1),
+            spawn(callID, type: "auditor", background: false, event: 2),
+        ]
+        rows += end
+        rows += [
+            try prompt("Run it in the background instead.", index: 1, event: event),
+            spawn(laterSpawn, type: nil, background: true, event: event + 1),
+            spawned(event: event + 2),
+            result(
+                laterSpawn, content: try text("Subagent started in background."),
+                rawOutput: #""type":"Text","text":"Subagent started in background.""#, event: event + 3),
+            completed("end_turn", event: event + 4),
+            subagentFinished(event: event + 5),
+        ]
+        return lines(rows)
+    }
+
     @Test func backgroundedCommandsSayTheyWentToTheBackground() throws {
         let lines = try Self.lines("background-tasks.jsonl")
         let server = "call-01900000-0000-7000-8000-00000000003e-0"
