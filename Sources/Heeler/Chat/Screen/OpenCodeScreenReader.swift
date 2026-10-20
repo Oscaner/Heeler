@@ -165,8 +165,8 @@ enum OpenCodeScreenReader {
 
     /// `esc interrupt`, or the progress bar of four or more `■`/`⬝` cells
     /// that starts the footer while a turn runs (`[⋯]` with animations
-    /// off). At 62 columns the footer cuts the hint to `esc...rupt` and
-    /// keeps the bar.
+    /// off). At 62 columns the footer can cut the hint (`esc...rupt`, or
+    /// `esc...upt` beside `↓ 1 subagent`) and keeps the bar.
     private static func showsRunningTurn(_ footer: String) -> Bool {
         footer.contains("esc interrupt") || footer.hasPrefix("[⋯]")
             || footer.prefix(while: { $0 == "■" || $0 == "⬝" }).count >= 4

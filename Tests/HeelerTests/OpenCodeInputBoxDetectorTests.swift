@@ -113,7 +113,7 @@ struct OpenCodeInputBoxDetectorTests {
     }
 
     /// At 62 columns a draft wraps, the home screen's placeholder is cut
-    /// short, and the footer cuts its hint to `esc...rupt`.
+    /// short, and the footer can cut its hint to `esc...rupt`.
     @Test(arguments: ScreenFixture.opencode.filter { $0.hasSuffix("-62") })
     func phoneWidthScreensReadAsTheirState(stem: String) throws {
         try expectItsState(stem)
@@ -255,7 +255,8 @@ struct OpenCodeInputBoxDetectorTests {
 
     /// The footer's progress bar and `esc interrupt` say a turn runs, and
     /// `esc again to interrupt` that one Esc armed the interrupt. At 62
-    /// columns the hint is cut to `esc...rupt` and the bar says it alone.
+    /// columns the hint can be cut to `esc...rupt`, and then the bar says it
+    /// alone.
     @Test func theFooterSaysWhetherATurnRunsAndEscIsArmed() throws {
         let captures: [(stem: String, running: Bool, armed: Bool)] = [
             ("opencode-02-session-empty-180", false, false), ("opencode-07-shell-mode-180", false, false),
