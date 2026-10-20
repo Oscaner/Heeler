@@ -1423,9 +1423,10 @@ struct ConsoleView: View {
     private var flatAgentListRows: some View {
         agentHostIssueRows
         let qualifiers = agentTitleQualifiers
+        let saved = console.savedChatEntries
         ForEach(filteredAgents) { @Sendable agent in
             MainActorContent {
-                agentRow(agent, qualifier: qualifiers[agent.id])
+                agentRow(agent, qualifier: qualifiers[agent.id], saved: saved[agent.id])
                     // Right under an iPad sidebar's bar, a rule over the
                     // first row would crowd it.
                     .listRowSeparator(
@@ -1440,12 +1441,13 @@ struct ConsoleView: View {
     private var workspaceAgentListRows: some View {
         agentHostIssueRows
         let qualifiers = agentTitleQualifiers
+        let saved = console.savedChatEntries
         ForEach(workspaceSections) { @Sendable section in
             MainActorContent {
                 Section {
                     if !section.isCollapsed {
                         ForEach(section.agents) { @Sendable agent in
-                            MainActorContent { agentRow(agent, qualifier: qualifiers[agent.id]) }
+                            MainActorContent { agentRow(agent, qualifier: qualifiers[agent.id], saved: saved[agent.id]) }
                         }
                     }
                 } header: {
@@ -1467,6 +1469,7 @@ struct ConsoleView: View {
     @ViewBuilder
     private var groupedAgentListRows: some View {
         let qualifiers = agentTitleQualifiers
+        let saved = console.savedChatEntries
         ForEach(hostSections) { @Sendable section in
             MainActorContent {
                 let opensDetail = connectionDetail(for: section.hostID) != nil
@@ -1478,7 +1481,7 @@ struct ConsoleView: View {
                             ConsoleHostIssueRow(issue: issue) { openHostIssue($0) }
                         }
                         ForEach(section.agents) { @Sendable agent in
-                            MainActorContent { agentRow(agent, qualifier: qualifiers[agent.id]) }
+                            MainActorContent { agentRow(agent, qualifier: qualifiers[agent.id], saved: saved[agent.id]) }
                         }
                     }
                 } header: {
@@ -1498,7 +1501,7 @@ struct ConsoleView: View {
         }
     }
 
-    private func agentRow(_ agent: ConsoleAgent, qualifier: String?) -> some View {
+    private func agentRow(_ agent: ConsoleAgent, qualifier: String?, saved: HostReadiness?) -> some View {
         NavigationLink(value: ConsoleSelection.agent(agent.id)) {
             AgentCardView(
                 agent: agent,
@@ -1506,7 +1509,8 @@ struct ConsoleView: View {
                 isPinned: console.pins.isPinned(
                     hostID: agent.hostID, paneID: agent.agent.paneID),
                 changes: console.rowChanges.store(for: agent),
-                qualifier: qualifier)
+                qualifier: qualifier,
+                saved: saved)
             .modifier(ConsoleRowSelectionContent())
         }
         // The list reads what it shows: a row on screen reads its Agent's
@@ -1552,7 +1556,8 @@ struct ConsoleView: View {
                     layout: console.rowLayout(for: agent.hostID),
                     isPinned: console.pins.isPinned(
                         hostID: agent.hostID, paneID: agent.agent.paneID),
-                    qualifier: qualifier)
+                    qualifier: qualifier,
+                    saved: saved)
             })
         .modifier(
             AgentWindowDrag(
@@ -2358,6 +2363,15 @@ private struct ConsoleHostSectionHeaderView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(presentation.readiness.nameEmphasis.color)
                     .lineLimit(1)
+                // Rows under a Host that is not connected may be saved Chat
+                // entry points; the header says why in words, not only in
+                // the badge.
+                if presentation.readiness.tone != .connected {
+                    Text(presentation.readiness.text)
+                        .font(.footnote)
+                        .foregroundStyle(presentation.readiness.tone.tint)
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 0)
                 if presentation.showsStatusPills {
                     ConsoleHostStatusCountPills(items: presentation.statusItems)

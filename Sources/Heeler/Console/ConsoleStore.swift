@@ -1162,14 +1162,39 @@ final class ConsoleStore {
     /// Live rows plus saved Chat entry points while a Host is unproven. The
     /// separate `agents` property remains the only realtime inventory.
     var chatDisplayAgents: [ConsoleAgent] {
-        let live = Set(agents.map(\.id))
-        let saved = projections.values.flatMap { projection -> [ConsoleAgent] in
-            guard projection.status != .connected || projection.isAwaitingSnapshot else { return [] }
-            return cachedChats.agents(on: projection.host).filter { !live.contains($0.id) }
-        }
-        return agents + saved.consoleSorted(sortByHost: [:]) { [pins] in
+        agents + savedChatAgents.map(\.agent).consoleSorted(sortByHost: [:]) { [pins] in
             pins.pinRank(hostID: $0.id.hostID, paneID: $0.id.paneID)
         }
+    }
+
+    /// The saved entries among `chatDisplayAgents`, each with its Host's
+    /// readiness, so its row reads as saved rather than as an Agent that is
+    /// running. Live Agents have no entry.
+    var savedChatEntries: [ConsoleAgent.ID: HostReadiness] {
+        Dictionary(savedChatAgents.map { ($0.agent.id, $0.readiness) }) { first, _ in first }
+    }
+
+    private var savedChatAgents: [(agent: ConsoleAgent, readiness: HostReadiness)] {
+        let live = Set(agents.map(\.id))
+        return projections.values.flatMap { projection -> [(agent: ConsoleAgent, readiness: HostReadiness)] in
+            guard projection.status != .connected || projection.isAwaitingSnapshot else { return [] }
+            let saved = cachedChats.agents(on: projection.host).filter { !live.contains($0.id) }
+            guard !saved.isEmpty else { return [] }
+            let hostReadiness = readiness(of: projection.host)
+            return saved.map { ($0, hostReadiness) }
+        }
+    }
+
+    /// What the Host's section header says of it, from the same inputs.
+    private func readiness(of host: Host) -> HostReadiness {
+        let isAwaitingSnapshot = hostsAwaitingSnapshot.contains(host.id)
+        let issue = ConsoleHostStatusPresentation(
+            host: host, status: hostStatuses[host.id],
+            standingFailure: hostStandingFailures[host.id],
+            isAwaitingSnapshot: isAwaitingSnapshot, syncError: hostSyncErrors[host.id])
+        return ConsoleHostSectionHeaderPresentation.readiness(
+            connectionStatus: hostStatuses[host.id], isAwaitingSnapshot: isAwaitingSnapshot,
+            statusSeverity: issue?.severity, isEmpty: false, inventoryNoun: "Agents")
     }
 
     func chatProgram(for agent: ConsoleAgent) -> ChatProgram? {
