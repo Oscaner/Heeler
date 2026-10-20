@@ -144,7 +144,7 @@ private struct BlockedDialogCard: View {
             // screen's rows leave out the question the options answer.
             let shown = dialog.body.filter { !$0.hasPrefix("Claude has written up a plan") }
             BlockedPlanBox(text: BlockedRequestMatch.claudePlanText(call: card.request?.summary, shownRows: shown))
-        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion:
+        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion, .openCodeQuestion:
             VStack(alignment: .leading, spacing: 4) {
                 // Codex's asynchronous questions name their page by the
                 // question itself.
@@ -191,6 +191,21 @@ private struct BlockedDialogCard: View {
                 MainActorContent {
                     BlockedCardText(item.element)
                 }
+            }
+        case .openCodePermission:
+            // The action and its target, then OpenCode's lines about it; a
+            // command has only its `$` line, shown as the target instead.
+            if let target = dialog.body.first ?? card.request?.summary ?? subject.command {
+                BlockedCodeBox(text: target)
+            }
+            let notes = subject.notes.filter { !dialog.body.isEmpty || !$0.hasPrefix("$ ") }
+            ForEach(Array(notes.enumerated()), id: \.offset) { @Sendable item in
+                MainActorContent {
+                    BlockedCardText(item.element)
+                }
+            }
+            if let focused = dialog.focus.focusedOrdinal, focused != 1, let option = dialog.option(focused) {
+                BlockedCardText("Selected in the terminal: \(option.label)")
             }
         case .codexNetwork:
             EmptyView()
@@ -278,6 +293,10 @@ private struct BlockedDialogCard: View {
             }
             .font(.footnote)
             .foregroundStyle(.secondary)
+        case .openCodeQuestion:
+            Text("Type your own answer in the terminal.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         default:
             EmptyView()
         }
@@ -496,7 +515,7 @@ extension DialogOption {
 private extension BlockedDialog {
     var cardTitle: String {
         switch kind {
-        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion: "Question"
+        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion, .openCodeQuestion: "Question"
         case .codexAsyncCollapsed: "Questions"
         case .ompApproval: "Allow \(subject.toolName ?? "Tool")"
         default: title.hasSuffix(":") ? String(title.dropLast()) : title
@@ -508,11 +527,13 @@ private extension BlockedDialog {
     var canStop: Bool { kind != .codexAsyncQuestion }
 
     /// What Esc does, for the folded card: it quits Claude Code on the
-    /// trust dialog and only denies an Oh My Pi approval.
+    /// trust dialog, only denies an Oh My Pi approval and rejects an
+    /// OpenCode permission.
     var stopTitle: String {
         switch kind {
         case .claudeWorkspaceTrust: "Exit Claude Code"
         case .ompApproval: "Deny"
+        case .openCodePermission: "Reject"
         default: "Stop"
         }
     }

@@ -61,10 +61,17 @@ enum ScreenFixture {
         "omp-37-approval-session-a-after-down", "omp-37-approval-session-b-draft",
     ]
 
-    static let opencode: [String] = []
+    static let opencode = [
+        "opencode-08-working-180", "opencode-10-permission-180", "opencode-11-permission-right1-180",
+        "opencode-12-permission-right2-180", "opencode-13-question-180", "opencode-14-session-picker-180",
+        "opencode-15-subagent-panel-180", "opencode-25-reject-feedback-180", "opencode-32-session-empty-62",
+        "opencode-37-permission-long-62", "opencode-38-question-long-62", "opencode-42-reject-feedback-62",
+        "opencode-43-queued-dock-62",
+    ]
 
     /// The Claude and Codex captures that the dialog and input-box suites walk.
-    /// Pi and Oh My Pi captures stay out so those suites keep their expectations.
+    /// Pi, Oh My Pi and OpenCode captures stay out so those suites keep their
+    /// expectations.
     static let all = claude + codex
 
     static func path(_ stem: String) -> String {

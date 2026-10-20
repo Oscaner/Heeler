@@ -46,8 +46,30 @@ enum BlockedRequestMatch {
             return request.toolName == "ask" && asks(request, subject.question ?? dialog.title)
         case .ompQuestionReview:
             return request.toolName == "ask"
+        case .openCodePermission:
+            return openCodePermission(request, subject)
+        case .openCodeQuestion:
+            return request.kind == .question && asks(request, subject.question ?? dialog.title)
         case .claudeWorkspaceTrust, .codexNetwork:
             return false
+        }
+    }
+
+    /// The action on OpenCode's permission names the call's kind, and its
+    /// target is the call's file, command or URL. Other actions match no
+    /// call, so the card won't reject them.
+    private static func openCodePermission(_ request: ChatPendingRequest, _ subject: DialogSubject) -> Bool {
+        switch subject.toolName {
+        case "Read":
+            request.kind == .fileRead && samePath(request.summary, subject.filePath)
+        case "Edit", "Write", "Patch":
+            [.fileEdit, .fileWrite].contains(request.kind) && samePath(request.summary, subject.filePath)
+        case "Shell", "Bash":
+            request.kind == .command && begins(request.summary, with: subject.command)
+        case "WebFetch":
+            request.kind == .web && begins(request.summary, with: subject.url)
+        default:
+            false
         }
     }
 

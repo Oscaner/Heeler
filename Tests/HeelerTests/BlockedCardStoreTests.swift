@@ -666,6 +666,90 @@ struct BlockedCardStoreTests {
         #expect(await tui.queued.isEmpty)
     }
 
+    // MARK: OpenCode
+
+    /// The permission to read `.env` matches the session's read of it, not
+    /// the command before it, so Reject goes as Esc. OpenCode records the
+    /// rejection, so the card keeps nothing.
+    @Test func anOpenCodePermissionMatchesItsPendingCall() async throws {
+        let read = Self.openCodeRead("call_r", "/Users/developer/work/heeler-tmp-chat/opencode-a/project/.env")
+        for action in [DialogAction.choose(ordinal: 3), .dismiss] {
+            let pane = FakePane(try ScreenFixture.screen("opencode-10-permission-180"))
+            await pane.react(to: ["esc"], with: try ScreenFixture.screen("opencode-08-working-180"))
+            let store = Self.store(.opencode, pane: pane)
+            store.update(transcript: Self.transcript(pending: [Self.bash("call_s", "ls -la"), read]))
+            store.update(activity: .blocked)
+            await store.refresh()
+            guard case .card(let card) = store.content else {
+                Issue.record("Expected a card, got \(store.content)")
+                return
+            }
+            #expect(card.dialog.kind == .openCodePermission)
+            #expect(card.request?.callID == "call_r")
+
+            await store.perform(action)
+
+            #expect(await pane.keys == [["esc"]], "\(action)")
+            #expect(store.progress == .ready, "\(action)")
+            #expect(store.notice == nil, "\(action)")
+            #expect(store.composerFocusRequest == 0, "\(action)")
+            #expect(store.history.isEmpty, "\(action)")
+        }
+    }
+
+    /// Right moves the fill to Always allow, checked there before Enter. A
+    /// Right that leaves the fill where it was stops before Enter.
+    @Test func alwaysAllowPassesItsFocusCheck() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-10-permission-180"))
+        await pane.react(to: ["right"], with: try ScreenFixture.screen("opencode-11-permission-right1-180"))
+        await pane.react(to: ["enter"], with: try ScreenFixture.screen("opencode-08-working-180"))
+        let store = Self.store(.opencode, pane: pane)
+        let read = Self.openCodeRead("call_r", "/Users/developer/work/heeler-tmp-chat/opencode-a/project/.env")
+        store.update(transcript: Self.transcript(pending: [read]))
+        store.update(activity: .blocked)
+        await store.refresh()
+
+        await store.perform(.choose(ordinal: 2))
+
+        #expect(await pane.keys == [["right"], ["enter"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        #expect(store.history.calls["call_r"] == .allowed)
+
+        let stuck = FakePane(try ScreenFixture.screen("opencode-10-permission-180"))
+        let stuckStore = Self.store(.opencode, pane: stuck)
+        stuckStore.update(activity: .blocked)
+        await stuckStore.refresh()
+
+        await stuckStore.perform(.choose(ordinal: 2))
+
+        #expect(await stuck.keys == [["right"]])
+        #expect(
+            stuckStore.notice
+                == "The dialog didn't respond the way Heeler expected, so it stopped. Finish here or in the terminal.")
+    }
+
+    /// From Reject, Allow once is two Lefts away, each checked, then Enter.
+    @Test func allowOnceFromRejectMovesTwiceAndConfirms() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-12-permission-right2-180"))
+        await pane.react(
+            to: ["left"],
+            withEach: [
+                try ScreenFixture.screen("opencode-11-permission-right1-180"),
+                try ScreenFixture.screen("opencode-10-permission-180"),
+            ])
+        await pane.react(to: ["enter"], with: try ScreenFixture.screen("opencode-08-working-180"))
+        let store = Self.store(.opencode, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+
+        await store.perform(.choose(ordinal: 1))
+
+        #expect(await pane.keys == [["left"], ["left"], ["enter"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+    }
+
     // MARK: Helpers
 
     private static let fruit = FakeQuestionTUI.Question(
@@ -692,6 +776,10 @@ struct BlockedCardStoreTests {
 
     private static func ompBash(_ id: String, _ command: String) -> ChatPendingRequest {
         ChatPendingRequest(entryID: ChatEntryID(id), callID: id, kind: .command, toolName: "bash", summary: command)
+    }
+
+    private static func openCodeRead(_ id: String, _ path: String) -> ChatPendingRequest {
+        ChatPendingRequest(entryID: ChatEntryID(id), callID: id, kind: .fileRead, toolName: "read", summary: path)
     }
 
     private static func store(_ program: ChatProgram, pane: FakePane, clock: ManualClock = ManualClock()) -> BlockedCardStore {
@@ -739,6 +827,7 @@ private final class StoreBox {
 private actor FakePane {
     private var screen: ANSIScreen
     private var reactions: [[String]: ANSIScreen] = [:]
+    private var queuedReactions: [[String]: [ANSIScreen]] = [:]
     private(set) var keys: [[String]] = []
     private(set) var pastes: [String] = []
     private(set) var reads = 0
@@ -760,9 +849,19 @@ private actor FakePane {
         reactions[keys] = screen
     }
 
+    /// One screen per press of `keys`, in turn, before any fixed reaction.
+    func react(to keys: [String], withEach screens: [ANSIScreen]) {
+        queuedReactions[keys] = screens
+    }
+
     func send(_ keys: [String]) {
         self.keys.append(keys)
-        if let next = reactions[keys] { screen = next }
+        if var queue = queuedReactions[keys], !queue.isEmpty {
+            screen = queue.removeFirst()
+            queuedReactions[keys] = queue
+        } else if let next = reactions[keys] {
+            screen = next
+        }
     }
 
     func paste(_ text: String) {
@@ -913,6 +1012,30 @@ struct BlockedRequestMatchTests {
         ]
         #expect(BlockedRequestMatch.request(for: approval, in: requests)?.callID == "c|fc")
         #expect(BlockedRequestMatch.request(for: approval, in: [request("d", "Bash", "echo approved-2")]) == nil)
+    }
+
+    /// OpenCode's action names the call's kind, and its target is the
+    /// call's file; a question matches the call asking it.
+    @Test func openCodeDialogsMatchTheirCallsByKindAndTarget() throws {
+        let permission = try dialog("opencode-10-permission-180")
+        let requests = [
+            request("a", "bash", "cat .env"), request("b", "read", "/w/project/.env.example", kind: .fileRead),
+            request("c", "read", "/w/project/.env", kind: .fileRead),
+        ]
+        #expect(BlockedRequestMatch.request(for: permission, in: requests)?.callID == "c")
+        let write = request("d", "write", "/w/project/.env", kind: .fileWrite)
+        #expect(BlockedRequestMatch.request(for: permission, in: [write]) == nil)
+
+        let wrapped = try dialog("opencode-37-permission-long-62")
+        let path = "config/scratch-environments/placeholder-staging-environment/phone-width-capture/dummy-settings.env"
+        let read = request("e", "read", "/w/project/" + path, kind: .fileRead)
+        #expect(BlockedRequestMatch.request(for: wrapped, in: [read])?.callID == "e")
+
+        let question = try dialog("opencode-13-question-180")
+        let asked = request("q", "question", "Do you prefer red or blue?", kind: .question)
+        #expect(BlockedRequestMatch.request(for: question, in: [request("x", "bash", "ls"), asked])?.callID == "q")
+        let other = request("y", "question", "Which size?", kind: .question)
+        #expect(BlockedRequestMatch.request(for: question, in: [other]) == nil)
     }
 
     @Test func aCodexCommandMatchesInsideItsScript() throws {

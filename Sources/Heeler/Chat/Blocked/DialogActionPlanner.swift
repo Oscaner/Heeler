@@ -11,8 +11,8 @@ import Foundation
 enum DialogActionPlanner {
     /// - Parameter toolUseID: The matched request's `tool_use` id. Each
     ///   program's planner decides what it is for: a Claude card or an
-    ///   Oh My Pi question confirms by the request's result, and Codex
-    ///   ignores it.
+    ///   Oh My Pi question confirms by the request's result, OpenCode sends
+    ///   Esc only for a matched call, and Codex ignores it.
     static func plan(
         _ action: DialogAction, for dialog: BlockedDialog, toolUseID: String? = nil
     ) throws(DialogPlanError) -> DialogActionPlan {
@@ -20,7 +20,8 @@ enum DialogActionPlanner {
         case .claude: try ClaudeDialogPlanner(dialog: dialog, toolUseID: toolUseID).plan(action)
         case .codex: try CodexDialogPlanner(dialog: dialog).plan(action)
         case .omp: try OMPDialogPlanner(dialog: dialog, toolUseID: toolUseID).plan(action)
-        case .pi, .opencode: throw .unsupported("Answer this dialog in the Agent terminal.")
+        case .opencode: try OpenCodeDialogPlanner(dialog: dialog, toolUseID: toolUseID).plan(action)
+        case .pi: throw .unsupported("Answer this dialog in the Agent terminal.")
         }
     }
 
@@ -103,13 +104,22 @@ struct StepBuilder {
         steps.append(contentsOf: more)
     }
 
-    /// One arrow key per row from the focus to `target`, each checked.
-    mutating func move(to target: Int) throws(DialogPlanError) {
+    /// How a dialog lays out its options: in a column, or in a row like
+    /// OpenCode's permission.
+    enum Axis {
+        case vertical, horizontal
+    }
+
+    /// One arrow key per option from the focus to `target`, each checked.
+    mutating func move(to target: Int, axis: Axis = .vertical) throws(DialogPlanError) {
         guard var current = focus else { throw .noFocus }
         while current != target {
-            let isDown = target > current
-            current += isDown ? 1 : -1
-            keys(isDown ? "down" : "up")
+            let isForward = target > current
+            current += isForward ? 1 : -1
+            switch axis {
+            case .vertical: keys(isForward ? "down" : "up")
+            case .horizontal: keys(isForward ? "right" : "left")
+            }
             expect(.focus(ordinal: current))
         }
         focus = target
@@ -322,7 +332,7 @@ private struct CodexDialogPlanner {
             try asyncQuestion(action)
         case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFileRead, .claudeFetch, .claudePlan,
             .claudeQuestion, .claudeQuestionReview, .claudeWorkspaceTrust, .ompApproval, .ompQuestion,
-            .ompQuestionReview:
+            .ompQuestionReview, .openCodePermission, .openCodeQuestion:
             throw .unsupported("Not a Codex dialog.")
         }
     }
