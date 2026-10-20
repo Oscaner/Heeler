@@ -88,16 +88,18 @@ struct OpenCodeDialogParserTests {
         #expect(dialog.fingerprint != captured.fingerprint)
     }
 
-    @Test func alwaysAllowSaysItKeepsAProjectRule() throws {
+    /// The rule Always allow saves reaches past the request: for this read
+    /// of `.env`, every read in the project, as OpenCode itself says only
+    /// while the option has focus.
+    @Test func alwaysAllowSaysItsRuleCanAllowMore() throws {
         let always = try #require(try dialog("opencode-10-permission-180").option(2))
         #expect(always.label == "Always allow")
         #expect(always.role == .approvePersistent)
         #expect(
             always.persistenceNote(program: .opencode)
-                == "Always allows this for the project in OpenCode, so it isn't asked again.")
-        // As OpenCode itself says while the option has focus.
-        let note = try dialog("opencode-11-permission-right1-180").subject.notes.first
-        #expect(note?.hasSuffix("for this project.") == true)
+                == "Saves an OpenCode rule for this project that can allow more than this request.")
+        let rule = try dialog("opencode-11-permission-right1-180").subject.notes
+        #expect(rule == ["This will always allow read for this project."])
     }
 
     // MARK: Questions
