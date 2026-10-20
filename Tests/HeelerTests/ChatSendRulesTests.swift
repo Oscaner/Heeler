@@ -472,6 +472,25 @@ struct ChatSendRulesTests {
                         + "from its path."))
     }
 
+    /// OpenCode names a command by its file's path under `commands/` and
+    /// runs a message whose first word names one, so a leading `/name` with
+    /// a slash in it is no path in prose there. A bare one is refused as a
+    /// path first.
+    @Test(arguments: [
+        ("/git/commit fix the typo", "git/commit"), ("/usr/bin/env python3 is missing", "usr/bin/env"),
+        ("/review/pr\n12", "review/pr"),
+    ])
+    func openCodeRefusesALeadingCommandPath(draft: String, name: String) {
+        let rules = Self.rules(.opencode)
+
+        #expect(
+            rules.validate(draft)
+                == .unsafeText(
+                    "OpenCode can run a message starting with /\(name) as one of its commands. "
+                        + "Start with another word, or open the terminal to run it."))
+        #expect(rules.validate("/git/commit") != nil)
+    }
+
     @Test(arguments: ["look at /home/dev/shot.png", "a.png is broken", "https://example.invalid/a.png", "notes.txt"])
     func openCodeSendsPathsInsideText(draft: String) {
         let rules = Self.rules(.opencode)

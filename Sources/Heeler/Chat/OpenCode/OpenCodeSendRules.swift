@@ -8,6 +8,13 @@ import Foundation
 /// (`tui/src/component/prompt/local-attachment.ts`). Chat cannot tell from
 /// here which paths name such files, so it refuses every draft that is only
 /// paths, read the way OpenCode reads a paste, and says how to send one.
+///
+/// OpenCode names a command by its file's path under `commands/`, so
+/// `.opencode/commands/git/commit.md` is `/git/commit`, and a message whose
+/// first word names one runs it (`tui/src/component/prompt/index.tsx`). A
+/// command's template can run shell commands without asking. Chat cannot
+/// see which commands exist, so a leading `/name` with a slash in it, which
+/// the shared rules leave to prose such as `/usr/bin/env`, is refused too.
 enum OpenCodeSendRules {
     private static let pathOnlyRefusal = ComposerRefusal.unsafeText(
         "OpenCode can take a message that is only a file path as an attachment instead of text. "
@@ -21,9 +28,24 @@ enum OpenCodeSendRules {
     private static let pathPrefixes = ["~/", "./", "../", "file://"]
 
     /// The refusal of a draft without its invisible characters (`clean`)
-    /// that, trimmed, is only paths; nil for any other.
+    /// that, trimmed, is only paths or starts with a command path; nil for
+    /// any other.
     static func refusal(_ clean: String, _ trimmed: String) -> ComposerRefusal? {
-        isOnlyPaths(trimmed) ? pathOnlyRefusal : nil
+        if isOnlyPaths(trimmed) { return pathOnlyRefusal }
+        if let name = commandPath(trimmed) {
+            return .unsafeText(
+                "OpenCode can run a message starting with /\(name) as one of its commands. "
+                    + "Start with another word, or open the terminal to run it.")
+        }
+        return nil
+    }
+
+    /// The first word of a draft starting with `/` when it has another
+    /// slash, `git/commit` in `/git/commit fix the typo`; nil otherwise.
+    private static func commandPath(_ trimmed: String) -> Substring? {
+        guard trimmed.hasPrefix("/") else { return nil }
+        let name = trimmed.dropFirst().prefix { !$0.isWhitespace }
+        return name.contains("/") ? name : nil
     }
 
     /// Whether OpenCode could read the trimmed draft as paths rather than

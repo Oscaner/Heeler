@@ -195,7 +195,9 @@ request, under rules that stand in for the screen the user cannot see:
   OpenCode's menu holds only `/compact`: its skills have no form a message
   can invoke, and its server and custom commands are not offered.
   A leading path is text, and any other leading `/word` is refused with a
-  pointer to the menu or the terminal.
+  pointer to the menu or the terminal. OpenCode names a custom command by its
+  file's path (`/git/commit`) and runs a message that starts with one, so
+  there a leading `/word` with a slash in it is refused too.
 - Invisible characters are removed and exactly one trailing space is appended,
   so a final `/name` or `@path` cannot leave a completion popup open when
   Enter arrives. Oh My Pi's and OpenCode's `/compact` are the exceptions:
