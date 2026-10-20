@@ -40,6 +40,15 @@ struct AgentComposerInterrupt {
     ) -> AgentComposerInterrupt {
         AgentComposerInterrupt(wait: .escape, accessibilityHint: escapeHint, perform: perform)
     }
+
+    /// The terminal Composer's Stop for an Agent of `kind`: one Esc, or nil
+    /// to keep Send in Grok Build, where Esc only shows a toast. Its turns
+    /// stop with Ctrl+C, which Chat's Stop presses after reading the screen.
+    static func terminal(
+        forAgentKind kind: String, _ perform: @escaping @MainActor () async -> AgentInterruptOutcome
+    ) -> AgentComposerInterrupt? {
+        SupportedAgentKind(rawValue: kind) == .grok ? nil : .escape(perform)
+    }
 }
 
 /// The Composer's trailing button. While the Agent is Working and the draft

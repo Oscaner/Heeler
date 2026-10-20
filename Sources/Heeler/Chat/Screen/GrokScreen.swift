@@ -89,6 +89,12 @@ struct GrokScreen: Sendable {
     let cue: String?
     /// The row that shows a popup, picker or panel over the composer.
     let overlay: String?
+    /// The rows of the card in the composer's place, such as a permission,
+    /// a question or the subagent panel: the bottom-most run of rows that
+    /// begin with `┃`, when one of them is an option row such as
+    /// `┃  3 (●) Yes, proceed`, the rule herdr reports Blocked by. The
+    /// rewind picker draws the same bar without options.
+    let card: Range<Int>?
     /// Grok's dashboard, where a message dispatches a new agent.
     let isDashboard: Bool
     /// The Welcome view Grok opens on, whose composer sends.
@@ -115,6 +121,7 @@ struct GrokScreen: Sendable {
         dockSections = area?.dock ?? []
         cue = area?.cue
         overlay = Self.overlay(rows, composer: composer)
+        card = Self.card(in: rows)
         isDashboard =
             composer?.draft == "Dispatch a new agent" || footer?.hasPrefix("Enter:create") == true
             || rows.prefix(6).contains { $0.trimmedText.hasPrefix("+ New Agent") }
@@ -339,6 +346,21 @@ struct GrokScreen: Sendable {
         }
         return ruleText
     }
+
+    private static func card(in rows: [ScreenRow]) -> Range<Int>? {
+        guard let bottom = rows.indices.last(where: { rows[$0].trimmedText.hasPrefix("┃") }) else { return nil }
+        var top = bottom
+        while top > 0, rows[top - 1].trimmedText.hasPrefix("┃") { top -= 1 }
+        let card = top..<(bottom + 1)
+        let offersOptions = card.contains {
+            rows[$0].trimmedText.range(of: optionRow, options: .regularExpression) != nil
+        }
+        return offersOptions ? card : nil
+    }
+
+    /// A row key, digits or a letter such as `z` or `y`, then the radio
+    /// mark (herdr's Blocked rule for Grok Build).
+    private static let optionRow = #"^┃\s+[0-9a-z]+\s+\([●○]\)(?:\s|$)"#
 
     /// The Welcome box lists `Resume session … ctrl+r` and `Quit … ctrl+q`
     /// (never matched by its version string).

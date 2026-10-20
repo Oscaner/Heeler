@@ -226,6 +226,20 @@ struct AgentComposerStopStoreTests {
         #expect(await interrupt.perform() == .failed("The surface's own press."))
     }
 
+    /// Esc only shows a toast in Grok Build, whose turns stop with Ctrl+C,
+    /// so its terminal Composer keeps Send. Every other kind presses Esc.
+    @Test func theTerminalStopIsEscOutsideGrokBuild() async {
+        let grok = AgentComposerInterrupt.terminal(forAgentKind: "grok") { .sent }
+        #expect(grok == nil)
+
+        for kind in ["claude", "codex", "pi", "omp", "opencode", "an-unknown-agent"] {
+            let interrupt = AgentComposerInterrupt.terminal(forAgentKind: kind) { .failed("The surface's own press.") }
+            #expect(interrupt?.wait == .escape, "\(kind)")
+            #expect(interrupt?.accessibilityHint == AgentComposerInterrupt.escapeHint, "\(kind)")
+            #expect(await interrupt?.perform() == .failed("The surface's own press."), "\(kind)")
+        }
+    }
+
     @Test func aStopIgnoresTapsInsideItsMinimumGapAcrossStatusChanges() async {
         let window = ScriptedTransportCallGate()
         let clock = StopClock()

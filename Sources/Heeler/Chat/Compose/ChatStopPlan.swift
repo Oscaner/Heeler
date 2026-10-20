@@ -36,11 +36,12 @@ struct ChatStopPlan: Sendable {
         switch program {
         case .claude, .codex, .pi, .omp: .escape
         case .grok:
-            // Ctrl+C cancels Grok Build's turn; Esc only shows a toast. Until
-            // Chat reads Grok's screen, the guard refuses every press.
+            // Ctrl+C cancels Grok Build's turn; Esc only shows a toast. Ctrl+C
+            // can also clear a draft, answer a card or quit, so the guard
+            // reads the screen first.
             ChatStopPlan(
                 keys: ["ctrl+c"],
-                screenGuard: { _ in .refuse("Stop Grok Build in the terminal with Ctrl+C.") },
+                screenGuard: { GrokStopGuard.verdict($0) },
                 wait: AgentStopWait(
                     window: .seconds(3),
                     unconfirmedNotice:
