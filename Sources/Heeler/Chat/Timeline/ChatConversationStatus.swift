@@ -8,17 +8,17 @@ extension ChatUnavailableReason {
         switch self {
         case .noSession: "Waiting for Conversation"
         case .unidentifiedSession: "Conversation Not Identified"
-        case .notFound, .mismatched: "Conversation Not Found"
+        case .notFound, .mismatched, .sessionStore(_, .sessionMissing): "Conversation Not Found"
         case .awaitingFirstMessage: "No Messages Yet"
         case .compressed: "Conversation Compressed"
-        case .unsupportedSession, .unsupportedFormat: "Conversation Not Readable"
+        case .unsupportedSession, .unsupportedFormat, .sessionStore: "Conversation Not Readable"
         }
     }
 
     var systemImage: String {
         switch self {
         case .noSession, .awaitingFirstMessage: "bubble.left.and.bubble.right"
-        case .notFound, .mismatched: "doc.text.magnifyingglass"
+        case .notFound, .mismatched, .sessionStore(_, .sessionMissing): "doc.text.magnifyingglass"
         default: "exclamationmark.bubble"
         }
     }
@@ -54,6 +54,8 @@ extension ChatUnavailableReason {
             "The transcript under this session's name holds another conversation."
         case .unsupportedFormat(let format):
             "Chat can't read \(format)."
+        case .sessionStore(_, let problem):
+            problem.explanation
         }
     }
 
@@ -77,6 +79,8 @@ extension ChatUnavailableReason {
             "The transcript under this session's name holds another conversation.\(saved)"
         case .compressed, .unsupportedFormat:
             "Chat can't read this transcript now.\(saved)"
+        case .sessionStore(let program, _):
+            "Chat can't read this conversation from \(program.chatName)'s database now.\(saved)"
         }
     }
 
@@ -84,6 +88,7 @@ extension ChatUnavailableReason {
     var offersRetry: Bool {
         switch self {
         case .noSession, .notFound, .mismatched: true
+        case .sessionStore(_, let problem): problem.isRetryable
         default: false
         }
     }
@@ -98,6 +103,32 @@ extension ChatUnavailableReason {
         switch self {
         case .noSession, .awaitingFirstMessage: true
         default: false
+        }
+    }
+}
+
+extension ChatSessionStoreProblem {
+    /// OpenCode's database is the only session store Chat reads (ADR 0025).
+    var explanation: String {
+        switch self {
+        case .noStore(let path):
+            "Heeler couldn't find OpenCode's database at \(path). Chat reads OpenCode's default database."
+        case .sessionMissing(let otherStores) where otherStores.isEmpty:
+            "OpenCode's database has no conversation with this id. If this OpenCode uses another database, such as one set with OPENCODE_DB, Chat can't read it."
+        case .sessionMissing(let otherStores):
+            "OpenCode's default database has no conversation with this id. This Host also has \(otherStores.joined(separator: ", ")), which other OpenCode builds use; Chat reads only the default database."
+        case .noReader:
+            "Reading OpenCode's conversations needs sqlite3 or python3 on the Host. Install one, then tap Check Again."
+        case .readerTooOld(let version):
+            "The Host's SQLite \(version) can't read OpenCode's database: Chat needs SQLite 3.25 or newer with JSON support, through sqlite3 or Python 3.6 or newer."
+        case .storeClosed:
+            "OpenCode's database is closed, which usually means OpenCode isn't running. Chat shows saved messages and checks again."
+        case .olderOpenCode:
+            "This OpenCode keeps conversations in its 1.x format, which Chat doesn't read. Chat reads OpenCode 2.x."
+        case .unsupportedLayout(let detail):
+            "OpenCode's database has a layout Chat doesn't read (\(detail)). A newer OpenCode may have changed it."
+        case .subagentSession:
+            "herdr reports a subagent's session, which Chat doesn't show. Open the main conversation in the terminal."
         }
     }
 }

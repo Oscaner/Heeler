@@ -81,11 +81,14 @@ struct AgentChatStoreTests {
         let server: Server
         let store: AgentChatStore
 
+        /// - Parameter adapter: how the conversation is read; nil reads
+        ///   `NumberedChatReducer` transcript files.
         init(
             session: String?, program: ChatProgram = .claude,
             limits: TranscriptFollower.Limits = TranscriptFollower.Limits(),
             timing: AgentChatStore.Timing = AgentChatStore.Timing(
                 activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)),
+            adapter: ChatTranscriptAdapter? = nil,
             cachedSession: @escaping @Sendable (Agent) async -> AgentSessionInfo? = { _ in nil },
             screen: BlockedScreenIO = .unavailable
         ) {
@@ -99,7 +102,7 @@ struct AgentChatStoreTests {
                 source: AgentChatSource(
                     hostID: AgentChatStoreTests.host, socketLocation: .defaultSession,
                     files: files.hostFiles(), agentInfo: { try await server.read() }, cache: cache,
-                    adapter: NumberedChatReducer.adapter(limits: limits, wantsFirstLine: program == .codex),
+                    adapter: adapter ?? NumberedChatReducer.adapter(limits: limits, wantsFirstLine: program == .codex),
                     cachedSession: cachedSession, screen: screen),
                 timing: timing, now: { clock.now })
         }
@@ -240,6 +243,165 @@ struct AgentChatStoreTests {
 
         fixture.store.agentDidChange(Self.agent(session: Self.second))
         #expect(fixture.store.backgroundWork == ChatBackgroundWork())
+    }
+
+    // MARK: Pace
+
+    /// Every program that writes a transcript file is read at ADR 0024's
+    /// pace: each second while the Agent works or is Blocked and for 15 s
+    /// after a change, every 4 s otherwise. A read that timed out changes
+    /// neither.
+    @Test(arguments: [ChatProgram.claude, .codex, .pi, .omp])
+    func fileTranscriptsKeepTheirPace(program: ChatProgram) async throws {
+        let adapter = try #require(ChatTranscriptAdapter.standard(for: program))
+        let fixture = Fixture(
+            session: Self.first, program: program,
+            timing: AgentChatStore.Timing(activeInterval: .seconds(1), idleInterval: .seconds(4)),
+            adapter: adapter)
+        /// One look for the transcript, past any backoff, that times out.
+        func timedOutRead() async {
+            await fixture.files.failNext(.home, with: TransportError.hostFileTimedOut)
+            fixture.advance(31)
+            await fixture.store.step()
+            #expect(fixture.store.conversation.readFailure == .hostFileTimedOut)
+        }
+
+        for status in [AgentStatus.working, .blocked] {
+            fixture.store.agentDidChange(Self.agent(session: Self.first, status: status, program: program))
+            for _ in 0..<3 {
+                await timedOutRead()
+                #expect(fixture.store.interval == .seconds(1))
+            }
+        }
+        fixture.store.agentDidChange(Self.agent(session: Self.first, program: program))
+        #expect(fixture.store.interval == .seconds(1))
+        fixture.advance(16)
+        #expect(fixture.store.interval == .seconds(4))
+        for _ in 0..<3 {
+            await timedOutRead()
+            #expect(fixture.store.interval == .seconds(4))
+        }
+    }
+
+    private static let openCodeSession = "ses_0a1b2c3d4e5fK2mN8pQ4rT6vX9"
+
+    /// An OpenCode Agent's store whose conversation `records` holds, read
+    /// by query, at the default paces.
+    private static func queried(_ records: InMemoryRecordSource.Store) -> Fixture {
+        Fixture(
+            session: openCodeSession, program: .opencode,
+            timing: AgentChatStore.Timing(
+                activeInterval: .seconds(1), idleInterval: .seconds(4),
+                backgroundWorkStaleness: ChatBackgroundWork.Staleness(workflowQuiet: 7_200, subagentRun: 10_800)),
+            adapter: InMemoryRecordSource.adapter(records, sessionID: openCodeSession))
+    }
+
+    /// Each read of a conversation read by query is an exec on the Host,
+    /// so every active arm keeps a pace of its own (ADR 0025).
+    @Test func aQueriedConversationLingersAtItsOwnPace() async throws {
+        let records = InMemoryRecordSource.Store()
+        await records.write(NumberedChatReducer.lines(0..<2))
+        let fixture = Self.queried(records)
+        await fixture.store.step()
+        #expect(fixture.store.conversation.phase == .following(path: "memory:\(Self.openCodeSession)"))
+
+        for status in [AgentStatus.working, .blocked] {
+            fixture.store.agentDidChange(Self.agent(session: Self.openCodeSession, status: status, program: .opencode))
+            #expect(fixture.store.interval == .seconds(2))
+        }
+        fixture.store.agentDidChange(Self.agent(session: Self.openCodeSession, program: .opencode))
+        #expect(fixture.store.interval == .seconds(2))
+        fixture.advance(16)
+        #expect(fixture.store.interval == .seconds(4))
+
+        // Work the program still runs in the background holds the pace.
+        await records.append(NumberedChatReducer.launch("s1", journal: nil, at: fixture.clock.now))
+        await fixture.store.step()
+        fixture.advance(16)
+        #expect(fixture.store.backgroundWork.rows.map(\.id) == ["s1"])
+        #expect(fixture.store.interval == .seconds(2))
+    }
+
+    /// A query past its deadline holds the Host's query lane until its
+    /// watchdog ends it, so each timeout in a row doubles the pause.
+    @Test func aTimedOutQueryBacksOffUntilAReadWorks() async throws {
+        let records = InMemoryRecordSource.Store()
+        await records.write(NumberedChatReducer.lines(0..<2))
+        let fixture = Self.queried(records)
+        fixture.store.agentDidChange(Self.agent(session: Self.openCodeSession, status: .working, program: .opencode))
+        await fixture.store.step()
+        var intervals = [fixture.store.interval]
+
+        for _ in 0..<5 {
+            await records.failNext(with: TransportError.hostFileTimedOut)
+            await fixture.store.step()
+            #expect(fixture.store.conversation.readFailure == .hostFileTimedOut)
+            intervals.append(fixture.store.interval)
+        }
+
+        #expect(intervals == [2, 4, 8, 16, 30, 30].map { Duration.seconds($0) })
+
+        // Another failure is no timeout in a row, nor a read that worked.
+        await records.failNext(with: TransportError.hostStoreUnreadable(detail: "OpenCode's database is busy."))
+        await fixture.store.step()
+        #expect(fixture.store.interval == .seconds(30))
+
+        await fixture.store.step()
+        #expect(fixture.store.conversation.readFailure == nil)
+        #expect(fixture.store.interval == .seconds(2))
+    }
+
+    /// A problem only the user can fix is not looked at again until Retry
+    /// or a change to the Agent; a closed store is, after the usual wait.
+    @Test func storeProblemsThatCannotFixThemselvesWaitForRetry() async throws {
+        let records = InMemoryRecordSource.Store()
+        await records.write(NumberedChatReducer.lines(0..<2))
+        let fixture = Self.queried(records)
+        let following = ChatConversationSnapshot.Phase.following(path: "memory:\(Self.openCodeSession)")
+        func unavailable(_ problem: ChatSessionStoreProblem) -> ChatSourceUnavailable {
+            ChatSourceUnavailable(reason: .sessionStore(.opencode, problem))
+        }
+        func opens() async -> Int {
+            await records.calls.filter { $0 == .open }.count
+        }
+
+        await records.failNext(with: unavailable(.noReader))
+        await fixture.store.step()
+        #expect(fixture.store.conversation.phase == .unavailable(.sessionStore(.opencode, .noReader)))
+        fixture.advance(120)
+        await fixture.store.step()
+        #expect(await opens() == 1)
+
+        fixture.store.retry()
+        await fixture.store.step()
+        #expect(await opens() == 2)
+        #expect(fixture.store.conversation.phase == following)
+
+        // The poll finds the store closed, and so does the open right after.
+        await records.failNext(with: unavailable(.storeClosed))
+        await records.failNext(with: unavailable(.storeClosed))
+        await fixture.store.step()
+        await fixture.store.step()
+        #expect(fixture.store.conversation.phase == .unavailable(.sessionStore(.opencode, .storeClosed)))
+        await fixture.store.step()
+        #expect(await opens() == 3)
+        fixture.advance(2)
+        await fixture.store.step()
+        #expect(await opens() == 4)
+        #expect(fixture.store.conversation.phase == following)
+
+        await records.failNext(with: unavailable(.subagentSession))
+        await records.failNext(with: unavailable(.subagentSession))
+        await fixture.store.step()
+        await fixture.store.step()
+        fixture.advance(120)
+        await fixture.store.step()
+        #expect(await opens() == 5)
+
+        fixture.store.agentDidChange(Self.agent(session: Self.openCodeSession, status: .working, program: .opencode))
+        await fixture.store.step()
+        #expect(await opens() == 6)
+        #expect(fixture.store.conversation.phase == following)
     }
 
     @Test func followsTheSessionHerdrReports() async throws {

@@ -982,4 +982,103 @@ struct ChatConversationEngineTests {
         #expect(Self.numbers(snapshot) == Self.numbers(opened) + Self.ids(30..<32))
         #expect(await fixture.savedDocument() != nil)
     }
+
+    // MARK: OpenCode
+
+    /// A scratch OpenCode store, queried the way a Host's is.
+    private actor OpenCodeStore {
+        private let harness: OpenCodeSQLiteHarness
+
+        init(scenario: String) throws {
+            harness = try OpenCodeSQLiteHarness(scenario: scenario)
+        }
+
+        /// Changes the store in one transaction, as OpenCode does.
+        func commit(_ sql: String) throws {
+            try harness.execute("BEGIN;\n\(sql)\nCOMMIT;")
+        }
+
+        func response(_ query: OpenCodeQuery) throws -> OpenCodeQueryResponse {
+            try harness.response(query)
+        }
+
+        /// Only queries reach the store: there are no files to read.
+        nonisolated var files: ChatHostFiles {
+            let none = TransportError.hostFeatureUnavailable(feature: "Files")
+            return ChatHostFiles(
+                status: { _ in throw none }, list: { _ in throw none }, read: { _ in throw none },
+                home: { throw none }, queryOpenCode: { try await self.response($0) })
+        }
+    }
+
+    @Test func anOpenCodeConversationFollowsThroughItsStore() async throws {
+        let id = "ses_0a1b2c3d4e5fK2mN8pQ4rT6vX9"
+        let store = try OpenCodeStore(scenario: "pong")
+        let context = ChatProjectionContext(activity: .idle)
+        func makeEngine() -> ChatConversationEngine {
+            ChatConversationEngine(
+                reference: ConversationReference(program: .opencode, sessionID: id),
+                cacheKey: ChatCacheKey(hostID: Self.host, herdrSession: "", program: .opencode, conversationID: id),
+                files: store.files, cache: VolatileChatTranscriptCache(), adapter: .openCode, now: { Self.start })
+        }
+        /// What opening the store afresh shows, which following it must
+        /// show too.
+        func reopened() async -> ChatTranscript {
+            await makeEngine().open(directories: [], context: context).transcript
+        }
+        func texts(_ snapshot: ChatConversationSnapshot) -> [String] {
+            snapshot.transcript.entries.compactMap { entry -> String? in
+                switch entry.content {
+                case .user(let message): message.text
+                case .assistant(let message): message.text
+                default: nil
+                }
+            }
+        }
+        let engine = makeEngine()
+
+        let opened = await engine.open(directories: [], context: context)
+
+        #expect(opened.phase == .following(path: "opencode:\(id)"))
+        #expect(opened.transcript.title == "Pong")
+        #expect(texts(opened) == ["Reply with exactly the word pong.", "pong"])
+        #expect(opened.older == .reachedStart)
+        #expect(opened.readOffset == 13)
+
+        // A prompt's row and the counter move together.
+        try await store.commit(
+            """
+            INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+              VALUES ('msg_0a1b2c3d4e40aaaaaaaaaaaaaa', '\(id)', 'user', 13, 1800000020000, 1800000020000,
+                      '{"time":{"created":1800000020000},"text":"Once more.","files":[],"agents":[]}');
+            UPDATE event_sequence SET seq = 13 WHERE aggregate_id = '\(id)';
+            """)
+        let appended = await engine.poll(context: context)
+
+        #expect(texts(appended) == ["Reply with exactly the word pong.", "pong", "Once more."])
+        #expect(appended.readOffset == 14)
+        #expect(appended.layoutGeneration == opened.layoutGeneration)
+        let afresh = await reopened()
+        #expect(appended.transcript.entries == afresh.entries)
+        #expect(appended.transcript.turns == afresh.turns)
+
+        // The counter alone says nothing changed.
+        #expect(await engine.poll(context: context).revision == appended.revision)
+
+        // A committed undo deletes the rows from its boundary on while the
+        // counter moves on: following starts over.
+        try await store.commit(
+            """
+            DELETE FROM session_message WHERE session_id = '\(id)' AND seq >= 13;
+            UPDATE event_sequence SET seq = 15 WHERE aggregate_id = '\(id)';
+            """)
+        let reset = await engine.poll(context: context)
+
+        #expect(texts(reset) == ["Reply with exactly the word pong.", "pong"])
+        #expect(reset.layoutGeneration > appended.layoutGeneration)
+        #expect(reset.readOffset == 16)
+        let undone = await reopened()
+        #expect(reset.transcript.entries == undone.entries)
+        #expect(reset.transcript.turns == undone.turns)
+    }
 }

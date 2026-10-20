@@ -24,6 +24,49 @@ enum ChatUnavailableReason: Equatable, Sendable {
     case mismatched
     /// The transcript is in a format Chat does not read.
     case unsupportedFormat(String)
+    /// The store the program keeps its conversations in, which Chat reads
+    /// by query (ADR 0025), cannot give this one.
+    case sessionStore(ChatProgram, ChatSessionStoreProblem)
+}
+
+/// Why a program's session store cannot give Chat the conversation herdr
+/// reports (ADR 0025). Only OpenCode keeps one.
+enum ChatSessionStoreProblem: Equatable, Sendable {
+    /// No database where Chat reads it, the path shown with `~` for home.
+    case noStore(path: String)
+    /// The database has no conversation with the reported id.
+    /// `otherStores` names the store files beside it, which Chat never reads.
+    case sessionMissing(otherStores: [String])
+    /// The Host has neither `sqlite3` nor a `python3` Chat can use.
+    case noReader
+    /// The reader's SQLite, at this version, is too old or lacks JSON.
+    case readerTooOld(String)
+    /// The database's side files are gone: OpenCode isn't running.
+    case storeClosed
+    /// The database holds only OpenCode 1.x tables.
+    case olderOpenCode
+    /// Tables or columns Chat reads are missing, named in the text.
+    case unsupportedLayout(String)
+    /// herdr reports a subagent's session; Chat follows the root's.
+    case subagentSession
+
+    /// Whether the user can fix it on the Host, so Chat offers Retry.
+    var isRetryable: Bool {
+        switch self {
+        case .noStore, .sessionMissing, .noReader, .readerTooOld, .storeClosed: true
+        case .olderOpenCode, .unsupportedLayout, .subagentSession: false
+        }
+    }
+
+    /// Whether the store may answer later without the user doing anything,
+    /// as when OpenCode starts, so Chat looks again by itself. The rest wait
+    /// for Retry, a status change or a send.
+    var reopensByItself: Bool {
+        switch self {
+        case .noStore, .sessionMissing, .storeClosed: true
+        case .noReader, .readerTooOld, .olderOpenCode, .unsupportedLayout, .subagentSession: false
+        }
+    }
 }
 
 /// Whether earlier messages exist above the ones shown.

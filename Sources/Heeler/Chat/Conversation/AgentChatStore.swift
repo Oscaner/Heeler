@@ -33,6 +33,11 @@ final class AgentChatStore {
     struct Timing: Sendable {
         var activeInterval: Duration = .seconds(1)
         var idleInterval: Duration = .seconds(4)
+        /// The active pace of a conversation read by query, each read an
+        /// exec on the Host (ADR 0025).
+        var queryActiveInterval: Duration = .seconds(2)
+        /// The longest pause a query that keeps timing out backs off to.
+        var queryTimeoutBackoffCap: Duration = .seconds(30)
         /// How long after a change, a send or a status change polling stays
         /// at the active interval.
         var activeLinger: TimeInterval = 15
@@ -146,6 +151,9 @@ final class AgentChatStore {
     @ObservationIgnored private var needsRelocate = false
     @ObservationIgnored private var nextOpen: Date?
     @ObservationIgnored private var failedOpens = 0
+    /// Reads in a row that timed out, which slow a conversation read by
+    /// query.
+    @ObservationIgnored private var timedOutReads = 0
     @ObservationIgnored private var lastActivity: Date?
     @ObservationIgnored private var isSuspended = false
     @ObservationIgnored private var loop: Task<Void, Never>?
@@ -517,6 +525,7 @@ final class AgentChatStore {
         let context = projectionContext
         let snapshot: ChatConversationSnapshot
         var polled = false
+        var didRead = true
         if olderRequested {
             olderRequested = false
             snapshot = await engine.loadOlder(context: context)
@@ -535,8 +544,10 @@ final class AgentChatStore {
             if !Task.isCancelled, engine === self.engine { scheduleNextOpen(after: snapshot) }
         } else {
             snapshot = await engine.reproject(context: context)
+            didRead = false
         }
         guard !Task.isCancelled, engine === self.engine, !isAwaitingSession else { return }
+        if didRead { countTimeout(snapshot.readFailure) }
         apply(snapshot, from: engine)
         matchSends()
         // Persist the transcript before optional journal requests can wait
@@ -633,16 +644,44 @@ final class AgentChatStore {
     }
 
     /// The pause after each turn. Internal for tests.
+    ///
+    /// A conversation read by query keeps its own active pace, and each read
+    /// in a row that timed out doubles the pause, up to a cap: a query past
+    /// its deadline holds the Host's query lane until its watchdog ends it
+    /// (ADR 0025).
     var interval: Duration {
         if engine == nil { return .seconds(timing.sessionRecheck) }
-        if [.working, .blocked].contains(agent.status) { return timing.activeInterval }
+        guard source.adapter.readsByQuery else { return pace(active: timing.activeInterval) }
+        let pace = pace(active: timing.queryActiveInterval)
+        let cap = max(pace, timing.queryTimeoutBackoffCap)
+        var interval = pace
+        var doublings = timedOutReads
+        while doublings > 0, interval < cap {
+            interval *= 2
+            doublings -= 1
+        }
+        return min(interval, cap)
+    }
+
+    private func pace(active: Duration) -> Duration {
+        if [.working, .blocked].contains(agent.status) { return active }
         if let lastActivity, now().timeIntervalSince(lastActivity) < timing.activeLinger {
-            return timing.activeInterval
+            return active
         }
         // herdr can report the Agent idle while its program still runs
         // work in the background.
-        if backgroundWork.holdsActivePace { return timing.activeInterval }
+        if backgroundWork.holdsActivePace { return active }
         return timing.idleInterval
+    }
+
+    /// Counts a read that timed out; a read without a failure starts over,
+    /// and another failure leaves the count.
+    private func countTimeout(_ failure: TransportError?) {
+        switch failure {
+        case .hostFileTimedOut?: timedOutReads += 1
+        case nil: timedOutReads = 0
+        default: break
+        }
     }
 
     // MARK: Session
@@ -747,6 +786,7 @@ final class AgentChatStore {
         needsRelocate = false
         nextOpen = nil
         failedOpens = 0
+        timedOutReads = 0
         // Reads still running for the last conversation drop their results.
         outputs = ChatToolOutputs()
         waitingOutputs = []
@@ -853,6 +893,11 @@ final class AgentChatStore {
             // a turn that keeps the active pace: look on every pass.
             nextOpen = nil
             failedOpens = 0
+            return
+        case .unavailable(.sessionStore(_, let problem)) where !problem.reopensByItself:
+            // Nothing on the Host fixes this unprompted: open again on Retry
+            // or a status change.
+            nextOpen = .distantFuture
             return
         default:
             break
