@@ -1432,6 +1432,51 @@ struct TerminalAttachTests {
             "a SwiftUI update reported the viewport \(counters.reports) times")
     }
 
+    @MainActor
+    @Test(.timeLimit(.minutes(1)))
+    func anOutgoingSurfaceUpdateCannotReclaimTheReplacementsControls() async throws {
+        let keyboard = TerminalKeyboardControl()
+        let scroll = TerminalScrollControl()
+        let outgoingFeed = TerminalByteFeed()
+        let incomingFeed = TerminalByteFeed()
+        func screen(_ feed: TerminalByteFeed, fontSize: Float) -> TerminalScreenView {
+            var screen = TerminalScreenView(feed: feed)
+            screen.keyboardControl = keyboard
+            screen.scrollControl = scroll
+            screen.fontSize = fontSize
+            return screen
+        }
+        let outgoing = UIHostingController(rootView: screen(outgoingFeed, fontSize: 13))
+        let outgoingWindow = try await makeTestWindow(
+            frame: CGRect(x: 0, y: 0, width: 402, height: 874),
+            rootViewController: outgoing)
+        defer { outgoingWindow.isHidden = true }
+        outgoing.view.layoutIfNeeded()
+        let previous = try #require(keyboard.terminal)
+
+        let incoming = UIHostingController(rootView: screen(incomingFeed, fontSize: 13))
+        let incomingWindow = try await makeTestWindow(
+            frame: CGRect(x: 0, y: 0, width: 402, height: 874),
+            rootViewController: incoming)
+        defer { incomingWindow.isHidden = true }
+        incoming.view.layoutIfNeeded()
+        let replacement = try #require(keyboard.terminal)
+        try #require(replacement !== previous)
+
+        // A departing navigation destination can still receive layout updates
+        // while its replacement already owns the keyboard and scroll chrome.
+        outgoing.rootView = screen(outgoingFeed, fontSize: 15)
+        outgoing.view.setNeedsLayout()
+        outgoing.view.layoutIfNeeded()
+        await Task.yield()
+        #expect(keyboard.terminal === replacement)
+        #expect(scroll.terminal === replacement)
+        keyboard.requestKeyboard()
+        #expect(replacement.isFirstResponder)
+        #expect(!previous.isFirstResponder)
+        keyboard.dismissKeyboard()
+    }
+
     /// A keyboard changing hands passes through several transient heights —
     /// both terminals' accessories ride it at once while it does. Forwarding
     /// each one to Ghostty and the remote PTY makes a full-screen TUI redraw
