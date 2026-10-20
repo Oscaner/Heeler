@@ -139,6 +139,7 @@ struct GrokStopGuardTests {
         "grok-12-permission-command", "grok-13-permission-compound", "grok-14-permission-edit", "grok-15-question",
         "grok-16-subagent-panel", "grok-23-rewind-confirm", "grok-25-fork-question", "grok-07-slash-popup",
         "grok-10-btw", "grok-11-dashboard", "grok-20-welcome", "grok-21-resume-picker", "grok-22-rewind-picker",
+        "grok-28-welcome-62", "grok-29-welcome-40",
     ])
     func refusesOverCardsMenusAndOtherViews(stem: String) throws {
         let screen = try ScreenFixture.screen(stem)

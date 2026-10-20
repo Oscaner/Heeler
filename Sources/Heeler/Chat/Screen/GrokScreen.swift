@@ -397,16 +397,25 @@ struct GrokScreen: Sendable {
     /// mark (herdr's Blocked rule for Grok Build).
     private static let optionRow = #"^┃\s+[0-9a-z]+\s+\([●○]\)(?:\s|$)"#
 
-    /// The Welcome box lists `Resume session … ctrl+r` and `Quit … ctrl+q`
-    /// (never matched by its version string).
+    /// The Welcome menu lists `Resume session … ctrl+r` and `Quit … ctrl+q`
+    /// (never matched by its version string). From about 90 columns Grok draws it
+    /// in a box beside its logo; narrower, as at a phone's 40 to 62
+    /// columns, it stacks the menu under the logo without the box (1.0.45
+    /// `views/welcome/hero_box.rs`), each row only its label and key.
     private static func showsWelcome(_ rows: [ScreenRow]) -> Bool {
         let boxed = rows.compactMap { row -> String? in
             let text = row.trimmedText
             guard text.count > 1, text.hasPrefix("│"), text.hasSuffix("│") else { return nil }
             return String(text.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
         }
-        return boxed.contains { $0.contains("Resume session") && $0.hasSuffix("ctrl+r") }
-            && boxed.contains { $0.contains("Quit") && $0.hasSuffix("ctrl+q") }
+        if boxed.contains(where: { $0.contains("Resume session") && $0.hasSuffix("ctrl+r") })
+            && boxed.contains(where: { $0.contains("Quit") && $0.hasSuffix("ctrl+q") })
+        {
+            return true
+        }
+        let stacked = rows.map(\.trimmedText)
+        return stacked.contains { $0.range(of: #"^Resume session\s{2,}ctrl\+r$"#, options: .regularExpression) != nil }
+            && stacked.contains { $0.range(of: #"^Quit\s{2,}ctrl\+q$"#, options: .regularExpression) != nil }
     }
 
     // MARK: Scrollback

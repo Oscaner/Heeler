@@ -250,9 +250,14 @@ struct GrokSessionCheckTests {
 
     // MARK: Welcome
 
-    /// grok-20: a message from the Welcome screen starts a new session.
-    @Test func theWelcomeScreenOfAConversationWithHistoryHolds() throws {
-        let screen = try ScreenFixture.screen("grok-20-welcome")
+    /// The Welcome screen wide (grok-20) and at phone widths, where Grok
+    /// draws its menu without the box (grok-28, grok-29).
+    private static let welcomes = ["grok-20-welcome", "grok-28-welcome-62", "grok-29-welcome-40"]
+
+    /// A message from the Welcome screen starts a new session.
+    @Test(arguments: welcomes)
+    func theWelcomeScreenOfAConversationWithHistoryHolds(stem: String) throws {
+        let screen = try ScreenFixture.screen(stem)
 
         #expect(Self.verdict(screen, Self.input()) == .otherSession(GrokSessionCheck.welcomeReason))
         #expect(
@@ -284,8 +289,9 @@ struct GrokSessionCheckTests {
 
     /// At Grok's start the session has no prompt yet, and the message is
     /// its first.
-    @Test func theWelcomeScreenOfANewSessionPasses() throws {
-        let screen = try ScreenFixture.screen("grok-20-welcome")
+    @Test(arguments: welcomes)
+    func theWelcomeScreenOfANewSessionPasses(stem: String) throws {
+        let screen = try ScreenFixture.screen(stem)
 
         #expect(Self.verdict(screen, Self.input(Self.transcript([]))) == .unknown)
     }

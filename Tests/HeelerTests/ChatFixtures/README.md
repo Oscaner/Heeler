@@ -195,7 +195,8 @@ replacements of the same length. These screens are not part of
 herdr 0.9.5 (2026-10-19), kept as herdr returned them apart from the
 scrubbing below: CRLF rows, SGR styling only. Two Agents ran in scratch
 projects under the developer's account, `cap-grok-a` and `cap-grok-b`; every
-screen is 47 rows of 181 or 182 columns. Screens whose header shows
+screen is 47 rows of 181 or 182 columns, except `grok-28` and `grok-29` (below).
+Screens whose header shows
 `/U/d/s/cap-grok-a/proj` ran with `HOME` pointed at a scratch directory, where
 Grok asks before running a tool; the developer's own settings put it in
 Auto-review, which draws no permission card. The model answered the scratch
@@ -213,8 +214,11 @@ prompts in Chinese, and its replies stay as captured.
 | `grok-20-welcome`, `grok-21-resume-picker`, `grok-22-rewind-picker` | `A1-after-start`; `cap-grok-b`'s `B5-picker`; `X8-picker` |
 | `grok-23-rewind-confirm`, `grok-24-restored-draft`, `grok-25-fork-question` | `X8-after-enter`; `X1-after-early-ctrlc-2s`, a prompt Ctrl+C stopped before any output, put back in the box; `cap-grok-b`'s `X2-after-fork`, the worktree question `/fork` asks |
 | `grok-26-waiting-subagent`, `grok-27-compacting` | `cap-grok-b`'s `B7-t6s`; `A12-t+1s`, a `/compact` a second in |
+| `grok-28-welcome-62`, `grok-29-welcome-40` | The Welcome screen at the phone's 62×41 grid and at 40×30, where Grok draws its menu without the box |
 
-Captures not marked `cap-grok-b` come from `cap-grok-a`.
+Captures not marked `cap-grok-b` come from `cap-grok-a`, except `grok-28` and
+`grok-29`, which come from a later Agent (2026-10-20) in the scratch project
+`/tmp/hcl/proj-grok`, read as captured, with nothing to scrub.
 
 Scrubbing replaced the account name with `developer` and the scratch
 directory the probes ran in with `/Users/developer/scratch/`; the header's

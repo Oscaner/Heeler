@@ -313,7 +313,7 @@ main view it shows `Shift+Tab:mode` first or second:
 (`views/agent.rs`). A pending double press replaces every hint with `press
 again to <label>` (`app/app_view.rs`; not captured). Hints stop at the
 pane's right edge. The Welcome screen's footer holds only the channel tag
-(`[stable]`).
+(`[stable]`), with the name and version before it below about 90 columns.
 
 While a turn runs, a status row above the box starts with a braille spinner
 (U+2800–U+28FF), then a label, the elapsed times, tokens and `[stop]`:
@@ -340,8 +340,11 @@ Other views take the box's place or sit on it, and herdr reports all of them
 idle or done:
 
 - the Welcome modal at start (`Resume session ctrl+r`, `Quit ctrl+q`, a
-  `Tip:` row). Its box sends normally: the first message becomes the bound
-  session's first prompt.
+  `Tip:` row). From about 90 columns its menu sits in a box beside the logo;
+  narrower, as at a phone's 40 to 62 columns, Grok stacks it under the logo
+  without the box, and the footer reads `Grok Build <version> [stable]`
+  (live, 2026-10-20). Its input box sends normally: the first message
+  becomes the bound session's first prompt.
 - the resume picker (`┌─ Resume session`, footer `↑↓ nav | e expand | /
   search | f filter | d delete`) and the rewind picker;
 - the slash, `@` and `/model` popups, drawn above the box with a count at

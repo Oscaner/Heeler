@@ -69,6 +69,7 @@ enum ScreenFixture {
         "grok-16-subagent-panel", "grok-17-session-new", "grok-18-session-fork", "grok-19-resumed-other",
         "grok-20-welcome", "grok-21-resume-picker", "grok-22-rewind-picker", "grok-23-rewind-confirm",
         "grok-24-restored-draft", "grok-25-fork-question", "grok-26-waiting-subagent", "grok-27-compacting",
+        "grok-28-welcome-62", "grok-29-welcome-40",
     ]
 
     /// The Claude and Codex captures that the dialog and input-box suites walk.

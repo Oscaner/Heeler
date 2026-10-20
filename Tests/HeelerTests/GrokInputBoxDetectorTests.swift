@@ -90,7 +90,7 @@ struct GrokInputBoxDetectorTests {
 
     @Test(arguments: [
         "grok-01-idle-empty", "grok-03-working", "grok-05-queued", "grok-20-welcome", "grok-27-compacting",
-        "working at 62 columns (synthetic)", "working at 40 columns (synthetic)", "queued at 62 columns (synthetic)",
+        "grok-28-welcome-62", "grok-29-welcome-40", "working at 62 columns (synthetic)", "working at 40 columns (synthetic)", "queued at 62 columns (synthetic)",
         "queued at 40 columns (synthetic)",
     ])
     func readsAFocusedEmptyComposer(stem: String) throws {

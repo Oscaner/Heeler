@@ -48,6 +48,7 @@ struct PreSendGateTests {
         let sendable: Set = [
             "grok-01-idle-empty", "grok-03-working", "grok-05-queued", "grok-06-esc-toast", "grok-17-session-new",
             "grok-18-session-fork", "grok-19-resumed-other", "grok-20-welcome", "grok-27-compacting",
+            "grok-28-welcome-62", "grok-29-welcome-40",
         ]
         let screen = try ScreenFixture.screen(stem)
 
