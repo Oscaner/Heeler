@@ -141,6 +141,21 @@ struct GrokSessionCheckTests {
                 == .otherSession(GrokSessionCheck.unknownPromptReason))
     }
 
+    /// At 20 rows or fewer, as at the phone's 62×20 grid with the keyboard
+    /// up (grok-30), Grok draws user rows without their `❯`, apart from
+    /// replies only by a shaded band. The screen then shows no newest
+    /// message, so the check says nothing, and the witness catches a send
+    /// another session takes.
+    @Test func aCompactScreenShowsNoNewestMessage() throws {
+        let compact = try ScreenFixture.screen("grok-30-idle-62x20")
+        // The same newest message where Grok marks it.
+        let marked = Self.screen(["❯ Run the shell command: sleep 30", "", "Done.", "", "Worked for 33s"])
+
+        #expect(GrokScreen(compact).userRows.isEmpty)
+        #expect(Self.verdict(compact, Self.input()) == .unknown)
+        #expect(Self.verdict(marked, Self.input()) == .otherSession(GrokSessionCheck.unknownPromptReason))
+    }
+
     @Test func theNewestRecordedPromptPasses() {
         let screen = Self.screen([
             "❯ Reply with exactly the word pong.", "", "pong", "", "❯ Reply with the word kiwi.",

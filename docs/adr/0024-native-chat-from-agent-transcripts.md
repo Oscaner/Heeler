@@ -116,10 +116,13 @@ that checks the input box before a send also holds the message when it shows a
 `Session <id>` line for another session, a newest message the conversation
 doesn't have (only once herdr reports the Agent idle and a transcript read
 since then has landed), or the Welcome screen of a conversation that already
-has messages. Such a hold reads the Agent's record again, so a `/new` herdr
-has just reported is followed. Nothing is read from the Host between that
-screen read and the prompt. After a send, Chat reads what Grok Build added to
-the folder's `prompt_history.jsonl` since just before the send, up to 64 KiB:
+has messages. At 20 rows or fewer Grok Build draws the user's messages
+without their `❯`, so there the screen shows no newest message, and only the
+read after a send catches a message another session took. Such a hold reads
+the Agent's record again, so a `/new` herdr has just reported is followed.
+Nothing is read from the Host between that screen read and the prompt. After
+a send, Chat reads what Grok Build added to the folder's
+`prompt_history.jsonl` since just before the send, up to 64 KiB:
 two seconds after a message delivered while herdr reported the Agent neither
 Working nor Blocked, and again when the message would go overdue. When no line
 with the message's text names this session and exactly one names another, the

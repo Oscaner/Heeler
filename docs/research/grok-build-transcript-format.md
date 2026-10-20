@@ -326,9 +326,12 @@ pane's right edge. The Welcome screen's footer holds only the channel tag
 
 At 20 rows or fewer Grok forces compact mode (`views/agent.rs`
 `AUTO_COMPACT_MAX_ROWS`), as at the phone's 62×20 grid with the keyboard
-up. Its footer is only `Ctrl+.:shortcuts`, idle or working and whichever
-pane has focus, so it drops `Shift+Tab:mode` and `Ctrl+c:cancel` (live,
-2026-10-20). Only the placeholder then shows that the prompt lacks focus.
+up. Its footer is only `Ctrl+.:shortcuts`, idle or working, with the prompt
+or the scrollback focused, so it drops `Shift+Tab:mode` and `Ctrl+c:cancel`;
+a card keeps its own hints (live, 2026-10-20). Only the placeholder then
+shows that the prompt lacks focus. The scrollback's user rows lose their
+`❯`: their text starts four columns in, as a reply's does, on a shaded band
+(live, 2026-10-20), so only color tells a message from a reply there.
 
 While a turn runs, a status row above the box starts with a braille spinner
 (U+2800–U+28FF), then a label, the elapsed times, tokens and `[stop]`:
@@ -346,10 +349,10 @@ wait on a background task that has a description shows `<description>…`,
 like a running command. Toasts such as `Press Ctrl+c to cancel the turn`
 and `Input cleared · ctrl+z to undo` also sit above the box.
 
-Scrollback user rows are unboxed, five columns in: `❯ <text>`, with a time
-at the right edge (`11:10 PM`, or `HH:MM:SS | Mon D` while hovered) and
-sometimes a scrollbar glyph (`█`) after it. A long prompt wraps and ends
-with `…`.
+Scrollback user rows are unboxed, five columns in: `❯ <text>` (without the
+`❯` in compact mode, above), with a time at the right edge (`11:10 PM`, or
+`HH:MM:SS | Mon D` while hovered) and sometimes a scrollbar glyph (`█`)
+after it. A long prompt wraps and ends with `…`.
 
 Other views take the box's place or sit on it, and herdr reports all of them
 idle or done:

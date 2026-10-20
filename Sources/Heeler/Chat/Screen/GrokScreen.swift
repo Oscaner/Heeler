@@ -457,7 +457,9 @@ struct GrokScreen: Sendable {
     /// indent (five in every capture), never the composer's or a queued
     /// item's. The row's time comes in either form: the default `%-I:%M
     /// %p`, or `HH:MM:SS | Mon D` while hovered (1.0.45
-    /// `scrollback/wrappers/entry_renderer.rs`).
+    /// `scrollback/wrappers/entry_renderer.rs`). Compact mode, at 20 rows
+    /// or fewer, draws its user rows without the `❯`, apart from replies
+    /// only by a shaded band, so it shows none.
     private static func userRows(_ rows: [ScreenRow], boxed: [Bool]) -> [UserRow] {
         rows.indices.compactMap { index in
             let text = ScreenRow.normalizedSpaces(rows[index].text)
