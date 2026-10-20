@@ -2606,6 +2606,37 @@ struct AgentChatStoreTests {
         #expect(store.sessionConcern?.raisedBy == id)
     }
 
+    /// Chat registers a send as its check starts, as the Chat surface
+    /// does: the mark is on its way during the screen read, lands before
+    /// the check keeps it, and the send is witnessed.
+    @Test func aSendRegisteredBeforeItsScreenReadIsWitnessed() async throws {
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle)
+        await files.write(try Self.historyLine("Reply with exactly the word pong."), at: Self.grokHistory)
+        let id = UUID()
+        let text = "Reply with the word kiwi. "
+        let screen = Self.quietGrokScreen
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: ChatSendRules(program: .grok, commands: []), activity: { .idle },
+                readScreen: {
+                    // `agent.read` takes longer than the mark's stat.
+                    await store.witnessMarksSettled()
+                    return screen
+                },
+                sendConcern: { store.sendConcern(for: $0, after: $1) },
+                willReadScreen: { store.updateSends([Self.sent(id, text, delivered: false)]) }
+            ).preflight)
+
+        #expect(await preflight("Reply with the word kiwi.") == nil)
+        store.updateSends([Self.sent(id, text)])
+        await files.append(
+            try Self.historyLine("Reply with the word kiwi.", session: Self.otherGrokSession), to: Self.grokHistory)
+        clock.now = clock.now.addingTimeInterval(2)
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .misdirected)
+    }
+
     /// Grok Build's prompt history names another session for the send:
     /// its echo says so, and every later send is held, whatever the screen
     /// shows of the session it went to.

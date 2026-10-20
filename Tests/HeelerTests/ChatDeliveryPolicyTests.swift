@@ -291,6 +291,39 @@ struct ChatDeliveryPolicyTests {
         #expect(await transport.agentPromptParams.count == 1)
     }
 
+    /// Chat registers the send just before the screen read, so the
+    /// witness mark a new send takes is on its way before `agent.read`. A
+    /// Blocked Agent's send, refused first, registers nothing.
+    @Test func theSendRegistersBeforeTheScreenRead() async throws {
+        let ready = try ScreenFixture.screen("grok-01-idle-empty")
+        let events = Events()
+        let readScreen: @MainActor () async throws -> ANSIScreen = {
+            events.entries.append("read")
+            return ready
+        }
+        let concern: @MainActor (String, ANSIScreen) -> String? = { _, _ in
+            events.entries.append("concern")
+            return nil
+        }
+        let register: @MainActor () -> Void = { events.entries.append("register") }
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: Self.grokRules, activity: { .idle }, readScreen: readScreen, sendConcern: concern,
+                willReadScreen: register
+            ).preflight)
+        let blocked = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: Self.grokRules, activity: { .blocked }, readScreen: readScreen, sendConcern: concern,
+                willReadScreen: register
+            ).preflight)
+
+        #expect(await preflight("hello") == nil)
+        #expect(events.entries == ["register", "read", "concern"])
+        events.entries = []
+        #expect(await blocked("hello") == .agentBlocked)
+        #expect(events.entries.isEmpty)
+    }
+
     @Test func theRulesShapeWhatIsSentAndRefused() {
         let policy = Self.policy { Self.draft("") }
 

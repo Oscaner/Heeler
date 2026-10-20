@@ -9,11 +9,15 @@ extension ComposerDeliveryPolicy {
     /// touches the Attach PTY. `sendConcern` gets the text as sent and the
     /// screen the input box passed on, and may hold the message for what
     /// Chat knows beyond the box; nothing is awaited between them.
+    /// `willReadScreen` runs just before the first read, once the Agent is
+    /// not Blocked: Chat registers the send there, so a send witness's mark
+    /// is on its way before `agent.read` rather than after it.
     static func chat(
         rules: ChatSendRules,
         activity: @escaping @MainActor () -> ChatAgentActivity,
         readScreen: @escaping @MainActor () async throws -> ANSIScreen,
         sendConcern: @escaping @MainActor (_ outgoing: String, _ screen: ANSIScreen) -> String? = { _, _ in nil },
+        willReadScreen: @escaping @MainActor () -> Void = {},
         pause: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     ) -> ComposerDeliveryPolicy {
         let program = rules.program
@@ -24,6 +28,7 @@ extension ComposerDeliveryPolicy {
             validate: { rules.validate($0) },
             preflight: { text in
                 if activity() == .blocked { return .agentBlocked }
+                willReadScreen()
                 let screen: ANSIScreen
                 do {
                     screen = try await readScreen()

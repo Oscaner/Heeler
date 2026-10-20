@@ -692,7 +692,19 @@ struct AgentChatSurfaceView: View {
     }
 
     private var sendPolicy: ComposerDeliveryPolicy {
-        .chat(rules: sendRules, activity: agentActivity, readScreen: readAgentScreen, sendConcern: sendConcern)
+        .chat(
+            rules: sendRules, activity: agentActivity, readScreen: readAgentScreen, sendConcern: sendConcern,
+            willReadScreen: registerSends)
+    }
+
+    /// Hands Chat the Composer's messages as a send's check starts, ahead
+    /// of the change that follows the next render, so a new send's witness
+    /// mark is on its way before the screen read.
+    private var registerSends: @MainActor () -> Void {
+        let chat = chat
+        let composer = composer
+        let rules = sendRules
+        return { chat?.updateSends(ChatComposerEchoes.sentMessages(composer.messages, rules: rules)) }
     }
 
     /// What holds a send the input box would take: a screen showing
