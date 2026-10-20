@@ -56,7 +56,11 @@ enum GrokSessionCheck {
             return .unknown
         }
         let prompts = transcript.recordedPrompts.map { squeezed($0.text) }
-        if prompts.last?.hasPrefix(text) == true { return .thisSession }
+        if prompts.last?.hasPrefix(text) == true {
+            // A send another session took reads the same on its screen.
+            let misdirected = input.misdirectedSendKeys.contains { squeezed($0).hasPrefix(text) }
+            return misdirected ? .unknown : .thisSession
+        }
         return prompts.contains { $0.hasPrefix(text) } ? .unknown : .otherSession(unknownPromptReason)
     }
 

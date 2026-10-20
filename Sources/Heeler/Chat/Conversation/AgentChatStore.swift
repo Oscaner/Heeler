@@ -564,13 +564,16 @@ final class AgentChatStore {
         guard let sessionID = followed?.sessionID, !isAwaitingSession else { return nil }
         let date = now()
         let unrecorded = sends.filter { send in
-            guard send.generation == conversationGeneration, let deliveredAt = send.deliveredAt else { return false }
-            return sendStatuses[send.id] != .recorded && date.timeIntervalSince(deliveredAt) < timing.echoTimeout
+            send.generation == conversationGeneration && send.deliveredAt != nil && sendStatuses[send.id] != .recorded
+        }
+        let recent = unrecorded.filter { send in
+            send.deliveredAt.map { date.timeIntervalSince($0) < timing.echoTimeout } ?? false
         }
         return ChatSessionCheckInput(
             sessionID: sessionID, transcript: conversation.transcript, activity: ChatAgentActivity(agent.status),
             polledSinceIdle: idleSince.flatMap { idle in lastReadStartedAt.map { $0 >= idle } } ?? false,
-            unrecordedSendKeys: Set(unrecorded.map(\.key)))
+            unrecordedSendKeys: Set(recent.map(\.key)),
+            misdirectedSendKeys: Set(unrecorded.filter { misdirectedSends.contains($0.id) }.map(\.key)))
     }
 
     /// The skills the Host offers, so a Codex `$name` prompt shows as the

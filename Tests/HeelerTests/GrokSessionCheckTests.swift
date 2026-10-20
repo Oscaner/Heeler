@@ -28,11 +28,11 @@ struct GrokSessionCheckTests {
 
     private static func input(
         _ transcript: ChatTranscript = kiwi, session: String = bound, activity: ChatAgentActivity = .idle,
-        polledSinceIdle: Bool = true, unrecorded: Set<String> = []
+        polledSinceIdle: Bool = true, unrecorded: Set<String> = [], misdirected: Set<String> = []
     ) -> ChatSessionCheckInput {
         ChatSessionCheckInput(
             sessionID: session, transcript: transcript, activity: activity, polledSinceIdle: polledSinceIdle,
-            unrecordedSendKeys: unrecorded)
+            unrecordedSendKeys: unrecorded, misdirectedSendKeys: misdirected)
     }
 
     /// An idle Grok whose scrollback shows `rows` from column 5.
@@ -211,6 +211,21 @@ struct GrokSessionCheckTests {
             Self.verdict(screen, Self.input(unrecorded: ["Reply with the word lime. Then say nothing else."]))
                 == .unknown)
         #expect(Self.verdict(screen, Self.input()) == .otherSession(GrokSessionCheck.unknownPromptReason))
+    }
+
+    /// A send another session took shows on that session's screen however
+    /// old. Where it reads the same as this conversation's newest message,
+    /// the screen can't tell which session it shows.
+    @Test func aMisdirectedSendLikeTheNewestMessageSaysNothing() {
+        let kiwi = Self.screen(["❯ Reply with the word kiwi."])
+        let lime = Self.screen(["❯ Reply with the word lime."])
+
+        #expect(Self.verdict(kiwi, Self.input(misdirected: ["Reply with the word kiwi. "])) == .unknown)
+        #expect(Self.verdict(kiwi, Self.input()) == .thisSession)
+        // A copy this conversation lacks still shows another session.
+        #expect(
+            Self.verdict(lime, Self.input(misdirected: ["Reply with the word lime. "]))
+                == .otherSession(GrokSessionCheck.unknownPromptReason))
     }
 
     @Test(arguments: [

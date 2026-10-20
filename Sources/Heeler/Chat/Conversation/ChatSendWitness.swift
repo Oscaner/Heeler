@@ -13,6 +13,10 @@ struct ChatSessionCheckInput: Sendable {
     /// Echo keys of Chat's sends delivered in the last echo timeout that
     /// the transcript has not recorded yet, which may already show.
     var unrecordedSendKeys: Set<String>
+    /// Echo keys of Chat's sends the prompt log says another session took,
+    /// however old: that session's screen keeps showing them, and one may
+    /// read the same as a message of this conversation.
+    var misdirectedSendKeys: Set<String> = []
 }
 
 /// What the Agent's screen says about the session it shows.

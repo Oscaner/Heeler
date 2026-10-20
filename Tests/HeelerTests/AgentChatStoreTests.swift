@@ -2656,6 +2656,21 @@ struct AgentChatStoreTests {
         #expect(store.sessionConcern == nil)
     }
 
+    /// The other session's screen keeps the misdirected copy, however
+    /// old: where it reads the same as this conversation's newest message,
+    /// it never clears the concern.
+    @Test func aMisdirectedCopyLikeTheNewestMessageKeepsTheConcern() async throws {
+        let (_, store, clock, id) = try await Self.misdirectedGrokSend("Reply with exactly the word pong. ")
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .misdirected)
+        #expect(
+            store.sendConcern(for: "Reply with the word lime. ", after: Self.pongScreen) == Self.misdirectedReason)
+        #expect(store.sessionConcern?.raisedBy == id)
+    }
+
     /// herdr follows `/new` within its idle recheck: a send held for the
     /// Session line asks herdr at once, and the next one goes.
     @Test func aSessionLineHoldRefreshesTheAgentAndTheNextSendPasses() async throws {
