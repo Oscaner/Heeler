@@ -331,6 +331,8 @@ struct OpenCodeChatStoreTests {
         try await fixture.pane.show(Self.sessionScreen)
         await fixture.report(Self.apple, title: Self.appleTitle)
         fixture.store.agentDidChange(Self.agent(session: Self.apple, title: Self.appleTitle))
+        // The changed record alone moves Chat, before any record read.
+        #expect(fixture.phase == .locating)
         await fixture.store.step()
 
         #expect(fixture.phase == Self.following(Self.apple))
