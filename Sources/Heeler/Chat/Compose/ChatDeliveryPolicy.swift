@@ -6,11 +6,14 @@ extension ComposerDeliveryPolicy {
     /// into an input box read as empty; a second read `DeliveryCheck.delay`
     /// after `agent.prompt` tells whether Enter took it. Both reads go
     /// through `agent.read`, and a Blocked Agent refuses: nothing here
-    /// touches the Attach PTY.
+    /// touches the Attach PTY. `sendConcern` gets the text as sent and the
+    /// screen the input box passed on, and may hold the message for what
+    /// Chat knows beyond the box; nothing is awaited between them.
     static func chat(
         rules: ChatSendRules,
         activity: @escaping @MainActor () -> ChatAgentActivity,
         readScreen: @escaping @MainActor () async throws -> ANSIScreen,
+        sendConcern: @escaping @MainActor (_ outgoing: String, _ screen: ANSIScreen) -> String? = { _, _ in nil },
         pause: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     ) -> ComposerDeliveryPolicy {
         let program = rules.program
@@ -19,7 +22,7 @@ extension ComposerDeliveryPolicy {
             insertsIntoAttachWhenBlocked: false,
             outgoingText: { rules.outgoingText($0) },
             validate: { rules.validate($0) },
-            preflight: { _ in
+            preflight: { text in
                 if activity() == .blocked { return .agentBlocked }
                 let screen: ANSIScreen
                 do {
@@ -28,7 +31,8 @@ extension ComposerDeliveryPolicy {
                     return .inputNotReady(Self.unreadableScreenReason(error))
                 }
                 switch PreSendGate.check(screen, program: program, activity: activity()) {
-                case .send: return nil
+                case .send:
+                    return sendConcern(rules.outgoingText(text), screen).map { .inputNotReady($0) }
                 case .holdBlocked: return .agentBlocked
                 case .hold(let state): return .inputNotReady(state.holdReason(for: program))
                 }

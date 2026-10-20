@@ -657,12 +657,17 @@ extension ChatTranscriptAdapter {
     /// that prompt's turn starts (27 s later in one capture), and keeps
     /// herdr reporting Working through a `/compact` until it writes the
     /// compaction, so its echo clock stops while herdr reports it busy.
+    /// herdr keeps the old session after `/resume`, `/fork`, the dashboard
+    /// and the Welcome screen, so a send first reads the screen for another
+    /// session, then the folder's prompt history for the session that took it.
     static var grok: ChatTranscriptAdapter {
         ChatTranscriptAdapter(
             revision: GrokTranscriptReducer.revision,
             joinsCachedHistory: false,
             makeReducer: { GrokTranscriptReducer(transcriptPath: $0.path) },
             echoKey: { GrokTranscriptReducer.echoKey($0) },
-            echoClockStopsWhileWorking: true)
+            echoClockStopsWhileWorking: true,
+            sessionCheck: { GrokSessionCheck.verdict($0, $1) },
+            sendWitness: GrokPromptHistoryWitness.witness)
     }
 }

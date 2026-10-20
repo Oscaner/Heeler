@@ -66,6 +66,26 @@ struct GrokScreen: Sendable {
         var trailer: String
     }
 
+    /// A message the user sent, as the scrollback shows it: `❯ ` and the
+    /// text at the scrollback's indent, outside any box.
+    struct UserRow: Equatable, Sendable {
+        var row: Int
+        /// The row's text after `❯ `, without the scrollbar and the time
+        /// Grok sets at the right. A long message goes on below, unmarked.
+        var text: String
+    }
+
+    /// The system line Grok prints when its screen moves to a session it
+    /// made or found: `Session <id>, use /dashboard to switch between
+    /// sessions` after `/new` and `/clear`, `Session <id> (forked from
+    /// <parent>), use …` after `/fork`, and `Session <id> found locally
+    /// (originally in <dir>)`.
+    struct SessionLine: Equatable, Sendable {
+        var row: Int
+        /// The session the screen shows: the line's first id, lowercased.
+        var sessionID: String
+    }
+
     let composer: Composer?
     /// The shortcuts row: the last nonblank row below the composer, or on
     /// the screen when no composer shows.
@@ -101,6 +121,10 @@ struct GrokScreen: Sendable {
     let isWelcome: Bool
     /// Minimal mode: a flush-left `❯` prompt without a box.
     let isMinimal: Bool
+    /// The user rows on screen, top to bottom.
+    let userRows: [UserRow]
+    /// The bottom-most Session line.
+    let sessionLine: SessionLine?
 
     init(_ screen: ANSIScreen) {
         let rows = screen.rows
@@ -127,6 +151,9 @@ struct GrokScreen: Sendable {
             || rows.prefix(6).contains { $0.trimmedText.hasPrefix("+ New Agent") }
         isWelcome = Self.showsWelcome(rows)
         isMinimal = composer == nil && Self.showsMinimalPrompt(rows)
+        let boxed = Self.boxedRows(rows)
+        userRows = Self.userRows(rows, boxed: boxed)
+        sessionLine = Self.sessionLine(rows, boxed: boxed)
     }
 
     /// The turn waits on something a message would end: a subagent, a
@@ -373,6 +400,83 @@ struct GrokScreen: Sendable {
         return boxed.contains { $0.contains("Resume session") && $0.hasSuffix("ctrl+r") }
             && boxed.contains { $0.contains("Quit") && $0.hasSuffix("ctrl+q") }
     }
+
+    // MARK: Scrollback
+
+    /// Which rows lie inside a box: rows that begin with `│` or `┃`, and
+    /// everything from a `╭` or `┌` top through its `╰` or `└` bottom.
+    private static func boxedRows(_ rows: [ScreenRow]) -> [Bool] {
+        var isOpen = false
+        return rows.map { row in
+            let text = row.trimmedText
+            if text.hasPrefix("╭") || text.hasPrefix("┌") {
+                isOpen = true
+                return true
+            }
+            if text.hasPrefix("╰") || text.hasPrefix("└") {
+                isOpen = false
+                return true
+            }
+            return isOpen || text.hasPrefix("│") || text.hasPrefix("┃")
+        }
+    }
+
+    /// Rows outside boxes that begin `❯ ` at a three- to six-column
+    /// indent (five in every capture), never the composer's or a queued
+    /// item's. The row's time comes in either form: the default `%-I:%M
+    /// %p`, or `HH:MM:SS | Mon D` while hovered (1.0.45
+    /// `scrollback/wrappers/entry_renderer.rs`).
+    private static func userRows(_ rows: [ScreenRow], boxed: [Bool]) -> [UserRow] {
+        rows.indices.compactMap { index in
+            let text = ScreenRow.normalizedSpaces(rows[index].text)
+            guard !boxed[index], text.contains("❯"),
+                let lead = text.range(of: #"^ {3,6}❯ "#, options: .regularExpression)
+            else { return nil }
+            var rest = withoutScrollbar(String(text[lead.upperBound...]))
+            for time in userRowTimes {
+                guard let range = rest.range(of: time, options: .regularExpression) else { continue }
+                rest = String(rest[..<range.lowerBound])
+                break
+            }
+            return UserRow(row: index, text: rest.trimmingCharacters(in: .whitespaces))
+        }
+    }
+
+    private static let userRowTimes = [
+        #"\s{2,}\d{1,2}:\d{2}\s?[AP]M\s*$"#, #"\s{2,}\d{2}:\d{2}:\d{2} \| [A-Z][a-z]{2} \d{1,2}\s*$"#,
+    ]
+
+    /// The bottom-most row outside boxes that, joined with the rows that
+    /// wrap it, reads as a Session line. Grok wraps system lines at word
+    /// ends and after an id's hyphens, keeping the indent, so a narrow
+    /// screen splits the ids: at 40 columns the `/fork` form takes four
+    /// rows before its `, use`. Whitespace goes before matching, so
+    /// assistant text that merely starts with an id never matches. The
+    /// `Session: <id>` form Grok prints without `/new` is not matched.
+    private static func sessionLine(_ rows: [ScreenRow], boxed: [Bool]) -> SessionLine? {
+        for index in rows.indices.reversed() where !boxed[index] && rows[index].trimmedText.hasPrefix("Session") {
+            let first = withoutScrollbar(rows[index].trimmedText)
+            guard first == "Session" || first.hasPrefix("Session "), let indent = rows[index].indent else { continue }
+            var joined = first
+            for next in rows.indices.dropFirst(index + 1).prefix(sessionLineWraps) {
+                let text = withoutScrollbar(rows[next].trimmedText)
+                guard !boxed[next], rows[next].indent == indent, let lead = text.first,
+                    lead.isLetter || lead.isNumber || "(),-/".contains(lead), !text.hasPrefix("Session")
+                else { break }
+                joined += text
+            }
+            let squeezed = String(joined.filter { !$0.isWhitespace })
+            guard squeezed.range(of: sessionLinePattern, options: .regularExpression) != nil else { continue }
+            let id = squeezed.dropFirst("Session".count).prefix(36)
+            return SessionLine(row: index, sessionID: id.lowercased())
+        }
+        return nil
+    }
+
+    /// The most rows a Session line wraps onto below its first.
+    private static let sessionLineWraps = 4
+    private static let uuid = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+    private static let sessionLinePattern = "^Session\(uuid)(\\(forkedfrom\(uuid)\\))?(,use/|foundlocally)"
 
     /// Minimal mode draws its prompt flush left, with `minimal · … /help`
     /// above it while idle (the 1.0.45 source; not captured). The

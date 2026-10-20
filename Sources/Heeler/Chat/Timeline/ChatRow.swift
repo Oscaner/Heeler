@@ -47,6 +47,8 @@ struct ChatPendingEcho: Identifiable, Equatable, Sendable {
         case discarded
         /// Delivered, and the program declined it on screen, as given here.
         case refused(String)
+        /// Delivered, and the program recorded it in another session.
+        case misdirected
     }
 
     let id: UUID

@@ -128,6 +128,12 @@ struct ChatTranscriptAdapter: Sendable {
     /// reports the Agent Working or Blocked, so its echo times out on the
     /// time herdr reports neither rather than on the time since delivery.
     var echoClockStopsWhileWorking = false
+    /// Reads the Agent's screen before a send, for a program whose screen
+    /// can move to another session without herdr reporting it.
+    var sessionCheck: (@Sendable (ANSIScreen, ChatSessionCheckInput) -> ChatScreenSessionVerdict)? = nil
+    /// The program's log of the prompts it submits, which names the
+    /// session that took each one.
+    var sendWitness: ChatSendWitness? = nil
 }
 
 /// One conversation's transcript on its Host: finds the file, follows it,

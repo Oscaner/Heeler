@@ -692,7 +692,14 @@ struct AgentChatSurfaceView: View {
     }
 
     private var sendPolicy: ComposerDeliveryPolicy {
-        .chat(rules: sendRules, activity: agentActivity, readScreen: readAgentScreen)
+        .chat(rules: sendRules, activity: agentActivity, readScreen: readAgentScreen, sendConcern: sendConcern)
+    }
+
+    /// What holds a send the input box would take: a screen showing
+    /// another session, or a send the Agent recorded in another one.
+    private var sendConcern: @MainActor (String, ANSIScreen) -> String? {
+        let chat = chat
+        return { text, screen in chat?.sendConcern(for: text, after: screen) }
     }
 
     /// What herdr reports the Agent doing when asked, not when this view
