@@ -540,23 +540,62 @@ struct OpenCodeStoreQueryTests {
 
     /// SQLite before 3.46, as Debian 12, Ubuntu 24.04 and RHEL 9 ship it,
     /// parses on a fixed stack of 100 entries and fails a statement nested
-    /// deeper. Every statement parses with 20 entries to spare, about six
-    /// levels of nesting, so a change that deepens one fails here first.
-    @Test(.enabled(if: OpenCodeSQLiteHarness.limitsParserDepth, "this SQLite cannot cap its parser stack"))
-    func everyStatementParsesOnTheParserStackOfOlderSQLite() throws {
+    /// deeper. Where this SQLite can cap its parser stack, every statement
+    /// parses with 20 entries to spare, about six levels of nesting. iOS
+    /// 26's SQLite cannot, so on every SQLite the statements also nest no
+    /// deeper than they do now, in parentheses and in expressions. A change
+    /// that deepens one fails here first: check it against the capped stack
+    /// before raising either limit, and lower a limit that is no longer
+    /// reached.
+    @Test func everyStatementParsesOnTheParserStackOfOlderSQLite() throws {
         let (harness, _) = try Self.store("pong")
+        var statements: [(name: String, sql: String)] = []
+        for query in OpenCodeProbeTests.queries {
+            for (index, sql) in OpenCodeProbe.statements(query).enumerated() {
+                statements.append(("\(query.kind) statement \(index)", sql))
+            }
+        }
+
+        let depths = statements.map { Self.parenthesisDepth($0.sql) }
+        #expect(depths.max() == Self.deepestParentheses)
+        for (statement, depth) in zip(statements, depths) {
+            #expect(depth <= Self.deepestParentheses, "\(statement.name)")
+            #expect(
+                harness.prepareFailure(statement.sql, expressionDepth: Self.deepestExpression) == nil,
+                "\(statement.name)")
+        }
+        #expect(
+            statements.contains { harness.prepareFailure($0.sql, expressionDepth: Self.deepestExpression - 1) != nil })
+
+        guard OpenCodeSQLiteHarness.limitsParserDepth else { return }
         let spared = OpenCodeSQLiteHarness.fixedParserStack - 20
         // The cap holds below 100 entries: 28 nested calls fit 100, not 80.
         let nested = "SELECT " + String(repeating: "coalesce(", count: 28) + "1"
             + String(repeating: ", 2)", count: 28)
         #expect(harness.prepareFailure(nested, parserStack: OpenCodeSQLiteHarness.fixedParserStack) == nil)
         #expect(harness.prepareFailure(nested, parserStack: spared) != nil)
+        for statement in statements {
+            #expect(harness.prepareFailure(statement.sql, parserStack: spared) == nil, "\(statement.name)")
+        }
+    }
 
-        for query in OpenCodeProbeTests.queries {
-            for (index, statement) in OpenCodeProbe.statements(query).enumerated() {
-                #expect(harness.prepareFailure(statement, parserStack: spared) == nil, "\(query.kind) statement \(index)")
+    /// How deep any statement nests parentheses and expressions now.
+    private static let deepestParentheses = 11
+    private static let deepestExpression: Int32 = 26
+
+    /// The deepest parentheses in a statement, outside its string literals.
+    private static func parenthesisDepth(_ statement: String) -> Int {
+        var depth = 0
+        var deepest = 0
+        for character in OpenCodeProbeTests.split(statement).code {
+            if character == "(" {
+                depth += 1
+                deepest = max(deepest, depth)
+            } else if character == ")" {
+                depth -= 1
             }
         }
+        return deepest
     }
 
     // MARK: Helpers

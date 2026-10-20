@@ -339,15 +339,20 @@ final class OpenCodeSQLiteHarness {
         return records
     }
 
-    /// Prepares `sql` against this store on a parser stack of at most
-    /// `parserStack` entries, without running it: nil when it parses, else
-    /// SQLite's message.
-    func prepareFailure(_ sql: String, parserStack: Int32) -> String? {
+    /// Prepares `sql` against this store without running it, on a parser
+    /// stack of at most `parserStack` entries or with expressions at most
+    /// `expressionDepth` deep: nil when it parses, else SQLite's message.
+    func prepareFailure(_ sql: String, parserStack: Int32? = nil, expressionDepth: Int32? = nil) -> String? {
         var reader: OpaquePointer?
         defer { sqlite3_close(reader) }
         guard sqlite3_open_v2(databaseURL.path(percentEncoded: false), &reader, SQLITE_OPEN_READONLY, nil) == SQLITE_OK
         else { return "unable to open database file" }
-        sqlite3_limit(reader, Self.parserDepthLimit, parserStack)
+        if let parserStack {
+            sqlite3_limit(reader, Self.parserDepthLimit, parserStack)
+        }
+        if let expressionDepth {
+            sqlite3_limit(reader, SQLITE_LIMIT_EXPR_DEPTH, expressionDepth)
+        }
         var statement: OpaquePointer?
         defer { sqlite3_finalize(statement) }
         return sqlite3_prepare_v2(reader, sql, -1, &statement, nil) == SQLITE_OK ? nil : Self.message(reader)

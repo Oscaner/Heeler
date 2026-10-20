@@ -122,9 +122,11 @@ The query shows nothing it cannot account for:
   functions, the JSON1 functions, `pragma_table_info` as a table-valued
   function), which a test checks. They also nest shallowly enough for the
   fixed 100-entry parser stack of SQLite before 3.46, with 20 entries to
-  spare, which a test checks where its SQLite can cap that stack. A reader
-  that reports an older SQLite, or fails on that syntax, on JSON1 or on its
-  parser stack, reads as too old.
+  spare, which a test checks where its SQLite can cap that stack. iOS 26's
+  SQLite, which CI tests on, cannot, so the same test also keeps every
+  statement's parentheses and expressions from nesting deeper than the
+  deepest do now. A reader that reports an older SQLite, or fails on that
+  syntax, on JSON1 or on its parser stack, reads as too old.
 
 ### What it never does
 
