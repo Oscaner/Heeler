@@ -9,7 +9,7 @@ import Foundation
 /// line is read. Entry ids come from byte offsets, never from `eventId`,
 /// which Grok numbers again after a rewind.
 struct GrokTranscriptReducer: ChatTranscriptReducer {
-    static let revision = 7
+    static let revision = 8
 
     /// The session's file on the Host.
     let transcriptPath: String

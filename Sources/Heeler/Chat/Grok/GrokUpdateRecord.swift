@@ -265,10 +265,18 @@ struct GrokUpdateRecord: Sendable {
         return Int64(exactly: number)
     }
 
-    /// `text` capped like a row's output; nil when there is none.
+    /// `text` capped like a row's output, without the line breaks that end
+    /// it: a command's output ends with its last line's, which the row would
+    /// show as an empty line. Nil when nothing is left to show.
     fileprivate static func preview(_ text: String?, imageCount: Int = 0) -> ChatToolPreview? {
-        guard let text, !text.isEmpty || imageCount > 0 else { return nil }
+        guard let text = text.map(withoutTrailingLineBreaks), !text.isEmpty || imageCount > 0 else { return nil }
         return ChatToolPreview(capping: text, imageCount: imageCount)
+    }
+
+    private static func withoutTrailingLineBreaks(_ text: String) -> String {
+        var scalars = text.unicodeScalars
+        while let last = scalars.last, last == "\n" || last == "\r" { scalars.removeLast() }
+        return String(scalars)
     }
 }
 

@@ -190,7 +190,7 @@ struct GrokToolActivityTests {
         let entry = try #require(transcript.entries.first { $0.id.rawValue == "grok:tool:\(id)" })
         #expect(entry.sourceOffset == 6391)
         let output =
-            "total 8\ndrwxr-xr-x@  4 developer  staff  128 Oct 19 22:53 .\ndrwxr-xr-x@  4 developer  staff  128 Oct 19 22:57 ..\ndrwxr-xr-x@ 12 developer  staff  384 Oct 19 22:53 .git\n-rw-r--r--@  1 developer  staff   90 Oct 19 22:53 README.md\n---\n       5\n"
+            "total 8\ndrwxr-xr-x@  4 developer  staff  128 Oct 19 22:53 .\ndrwxr-xr-x@  4 developer  staff  128 Oct 19 22:57 ..\ndrwxr-xr-x@ 12 developer  staff  384 Oct 19 22:53 .git\n-rw-r--r--@  1 developer  staff   90 Oct 19 22:53 README.md\n---\n       5"
         #expect(
             try Self.tool(transcript, id)
                 == ChatToolActivity(
@@ -221,7 +221,7 @@ struct GrokToolActivityTests {
             try Self.tool(Self.transcript(shell), bash)
                 == ChatToolActivity(
                     kind: .command, name: "run_terminal_command", title: "echo hi", status: .succeeded, exitCode: 0,
-                    callID: bash, preview: Self.preview("hi\n"), output: Self.reference(shell, 6)))
+                    callID: bash, preview: Self.preview("hi"), output: Self.reference(shell, 6)))
 
         // Grok completes a command that exits non-zero; the row fails.
         let failing = Self.transcript(
@@ -236,7 +236,66 @@ struct GrokToolActivityTests {
         let failed = try Self.tool(failing, Self.callID)
         #expect(failed.status == .failed)
         #expect(failed.exitCode == 2)
-        #expect(failed.preview == Self.preview("1 failed\n"))
+        #expect(failed.preview == Self.preview("1 failed"))
+    }
+
+    struct CommandOutput: Sendable, CustomTestStringConvertible {
+        let shape: String
+        /// The result's content text.
+        let content: String
+        /// `rawOutput.output_for_prompt`; nil leaves it out.
+        let outputForPrompt: String?
+        /// What the row shows; nil when it shows no output.
+        let preview: String?
+
+        var testDescription: String { shape }
+    }
+
+    private static let listing = "-rwxr-xr-x@ 1 developer  wheel  21 Oct 20 19:30 hello.sh"
+
+    private static let commandOutputs: [CommandOutput] = [
+        // An approved `chmod +x hello.sh && ls -l hello.sh` as Grok Build
+        // 1.0.62 recorded it in a live run, the account renamed.
+        CommandOutput(
+            shape: "one line", content: listing + "\n", outputForPrompt: "exit: 0\n" + listing + "\n",
+            preview: listing),
+        CommandOutput(
+            shape: "blank lines and indents", content: "\n  first\r\n\n  second\n\n\n",
+            outputForPrompt: "exit: 0\n\n  first\r\n\n  second\n\n\n", preview: "\n  first\r\n\n  second"),
+        CommandOutput(
+            shape: "content without output_for_prompt", content: "  first\n\nsecond\n", outputForPrompt: nil,
+            preview: "  first\n\nsecond"),
+        CommandOutput(shape: "nothing", content: "", outputForPrompt: "exit: 0\n", preview: nil),
+        CommandOutput(shape: "only a line break", content: "\n", outputForPrompt: "exit: 0\n\n", preview: nil),
+        CommandOutput(
+            shape: "only a line break without output_for_prompt", content: "\r\n", outputForPrompt: nil,
+            preview: nil),
+    ]
+
+    /// A command's last line ends with a line break, which the row's box
+    /// would show as an empty line.
+    @Test(arguments: commandOutputs)
+    func commandOutputDropsOnlyItsTrailingLineBreaks(output: CommandOutput) throws {
+        let forPrompt = try output.outputForPrompt.map { #""output_for_prompt":\#(try Self.json($0)),"# } ?? ""
+        let lines = Self.lines([
+            try Self.prompt("Run the shell command: chmod +x hello.sh", index: 0, event: 1),
+            Self.call(
+                name: "run_terminal_command", input: #""command":"chmod +x hello.sh && ls -l hello.sh""#, event: 2),
+            Self.result(
+                content: try Self.text(output.content),
+                rawOutput: #""type":"Bash",\#(forPrompt)"exit_code":0,"signal":null"#, event: 3),
+        ])
+        let reducer = Self.reducer(lines)
+
+        let tool = try Self.tool(reducer.transcript(ChatProjectionContext(activity: .idle)), Self.callID)
+
+        #expect(tool.status == .succeeded)
+        #expect(tool.preview == output.preview.map(Self.preview))
+        // Expanded, the row reads the same output again.
+        let expanded = ChatToolPreview.$limits.withValue(ChatToolPreview.expandedLimits) {
+            reducer.output(of: lines[2], for: tool)
+        }
+        #expect(expanded == .preview(output.preview.map(Self.preview)))
     }
 
     /// What ripgrep exits with when a search finds nothing: 1 when nothing
@@ -824,7 +883,7 @@ struct GrokToolActivityTests {
                 == ChatToolActivity(
                     kind: .command, name: "run_terminal_command", title: "make test", subtitle: "Run the test suite",
                     status: .succeeded, note: "Finished in the background", exitCode: 0, callID: tests,
-                    preview: Self.preview("Running 42 tests\n42 passed\n"), output: Self.reference(lines, 22)))
+                    preview: Self.preview("Running 42 tests\n42 passed"), output: Self.reference(lines, 22)))
         #expect(
             Self.notices(tested).map(\.id.rawValue) == ["grok:15752:notice"])
         #expect(
@@ -848,7 +907,7 @@ struct GrokToolActivityTests {
                 == ChatToolActivity(
                     kind: .command, name: "run_terminal_command", title: "npm run dev",
                     subtitle: "Start the dev server", status: .interrupted, note: "Stopped in the background",
-                    callID: server, preview: Self.preview("ready on http://localhost:3000\n"),
+                    callID: server, preview: Self.preview("ready on http://localhost:3000"),
                     output: Self.reference(lines, 27)))
         #expect(
             Self.notices(all).last
@@ -884,7 +943,7 @@ struct GrokToolActivityTests {
                 == ChatToolActivity(
                     kind: .other, name: "monitor", title: title, status: .succeeded,
                     note: "Finished in the background", exitCode: 0, callID: monitor,
-                    preview: Self.preview("BUILD SUCCEEDED\n"), output: Self.reference(lines, 35)))
+                    preview: Self.preview("BUILD SUCCEEDED"), output: Self.reference(lines, 35)))
         #expect(
             Self.notices(Self.transcript(ended)).last?.content
                 == .notice(
@@ -896,7 +955,7 @@ struct GrokToolActivityTests {
         let expanded = ChatToolPreview.$limits.withValue(ChatToolPreview.expandedLimits) {
             reducer.output(of: lines[34], for: tool)
         }
-        #expect(expanded == .preview(Self.preview("BUILD SUCCEEDED\n")))
+        #expect(expanded == .preview(Self.preview("BUILD SUCCEEDED")))
     }
 
     struct TaskAction: Sendable, CustomTestStringConvertible {
@@ -926,13 +985,13 @@ struct GrokToolActivityTests {
             input: #""task_ids":["\#(backgroundTask)"],"timeout_ms":30000"#, failed: false,
             rawOutput:
                 #""type":"TaskOutput","Result":{"task_id":"\#(backgroundTask)","command":"make test","status":"completed","exit_code":0,"started":"2026-10-19T11:20:21Z","ended":"2026-10-19T11:21:20Z","duration_secs":59.25,"output":"Running 42 tests\n42 passed\n","output_file":"","truncated":false,"truncation_hint":"","raw_output_bytes":27}"#,
-            preview: "Running 42 tests\n42 passed\n"),
+            preview: "Running 42 tests\n42 passed"),
         TaskAction(
             shape: "TaskOutput.MultiResult", name: "get_command_or_subagent_output", kind: "background_task_action",
             input: #""task_ids":["\#(backgroundTask)","\#(lintTask)"],"timeout_ms":30000"#, failed: false,
             rawOutput:
                 #""type":"TaskOutput","MultiResult":{"mode":"wait_all","results":[{"task_id":"\#(backgroundTask)","command":"make test","status":"completed","exit_code":0,"started":"2026-10-19T11:20:21Z","ended":"2026-10-19T11:21:20Z","duration_secs":59.25,"output":"42 passed\n","output_file":"","truncated":false,"truncation_hint":"","raw_output_bytes":10},{"task_id":"\#(lintTask)","command":"npm run lint","status":"completed","exit_code":0,"started":"2026-10-19T11:20:22Z","ended":"2026-10-19T11:20:30Z","duration_secs":8.0,"output":"No lint errors.\n","output_file":"","truncated":false,"truncation_hint":"","raw_output_bytes":16}],"summary":"2/2 tasks completed (wait_all)"}"#,
-            preview: "42 passed\n\nNo lint errors.\n"),
+            preview: "42 passed\n\nNo lint errors."),
         TaskAction(
             shape: "TaskOutput.MultiResult without output", name: "get_command_or_subagent_output",
             kind: "background_task_action", input: #""task_ids":["\#(backgroundTask)"]"#, failed: false,
@@ -1005,7 +1064,7 @@ struct GrokToolActivityTests {
         let expanded = ChatToolPreview.$limits.withValue(ChatToolPreview.expandedLimits) {
             reducer.output(of: lines[2], for: tool)
         }
-        #expect(expanded == .preview(Self.preview(output)))
+        #expect(expanded == .preview(Self.preview((1...60).map { "line \($0)" }.joined(separator: "\n"))))
         // Another call's line, or a line without the result, holds none.
         var other = tool
         other.callID = "call-01900000-0000-7000-8000-000000000011-9"
@@ -1032,6 +1091,6 @@ struct GrokToolActivityTests {
             "call-01900000-0000-7000-8000-000000000040-1")
         #expect(
             backgroundReducer.output(of: background[21], for: tests)
-                == .preview(Self.preview("Running 42 tests\n42 passed\n")))
+                == .preview(Self.preview("Running 42 tests\n42 passed")))
     }
 }
