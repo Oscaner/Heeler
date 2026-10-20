@@ -107,8 +107,11 @@ The query shows nothing it cannot account for:
   unsupported format;
 - the statements use only the syntax of SQLite 3.25 with JSON1 (window
   functions, the JSON1 functions, `pragma_table_info` as a table-valued
-  function), which a test checks; a reader that reports an older SQLite, or
-  fails on that syntax or on JSON1, reads as too old.
+  function), which a test checks. They also nest shallowly enough for the
+  fixed 100-entry parser stack of SQLite before 3.46, with 20 entries to
+  spare, which a test checks where its SQLite can cap that stack. A reader
+  that reports an older SQLite, or fails on that syntax, on JSON1 or on its
+  parser stack, reads as too old.
 
 ### What it never does
 

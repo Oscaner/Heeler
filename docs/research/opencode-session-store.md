@@ -544,6 +544,13 @@ the least certain:
 | Arch | when `python` is installed, through its `sqlite` dependency | current | not in `base` |
 | Alpine, minimal containers | no | | no |
 
+SQLite before 3.46 parses on a fixed stack of 100 entries and fails a
+statement nested deeper with "parser stack overflow". Chat's statements need
+at most 57, measured with the parser-depth limit of SQLite 3.53. In
+containers they printed the same output for 320 queries over the store
+fixtures on SQLite 3.26.0 (Rocky 8, through Python 3.6), 3.31.1
+(Ubuntu 20.04), 3.40.1 (Debian 12) and 3.53.3.
+
 ## Open items
 
 Numbered as in the evidence pass; results will be added here as they are
