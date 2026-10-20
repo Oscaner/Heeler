@@ -91,7 +91,12 @@ struct GrokScreen: Sendable {
     /// The footer offers `Shift+Tab:mode`, which shows only while the
     /// prompt has focus on the conversation's own view, or the suggestion
     /// hint, which shows only with prompt focus (`views/agent.rs`
-    /// `build_hints`). Either survives a footer cut at 40 columns.
+    /// `build_hints`). Either survives a footer cut at 40 columns. In
+    /// compact mode, which Grok forces at 20 rows or fewer (as at a phone's
+    /// 62×20 grid with the keyboard up), the footer is `Ctrl+.:shortcuts`
+    /// whatever has focus (1.0.62, live). Then only the box tells: Grok
+    /// draws its placeholder in an empty box without focus
+    /// (`views/prompt_widget`), so an empty box with no placeholder has it.
     let promptHasFocus: Bool
     /// The footer while Grok waits for a second press, such as
     /// `Ctrl+c:press again to quit`, which replaces every hint.
@@ -136,7 +141,7 @@ struct GrokScreen: Sendable {
         var composer = Self.composer(in: rows)
         let below = (composer?.bottomRow ?? -1) + 1
         let footer = rows.indices.reversed().first { $0 >= below && !rows[$0].isBlank }.map { rows[$0].trimmedText }
-        let promptHasFocus = footer.map { $0.contains("Shift+Tab:mode") || $0.contains("accept suggestion") } ?? false
+        let promptHasFocus = Self.promptHasFocus(footer: footer, composer: composer)
         // Without focus, Grok draws its placeholder in an empty box.
         if !promptHasFocus, composer?.draft == "Build anything" {
             composer?.draft = ""
@@ -396,6 +401,14 @@ struct GrokScreen: Sendable {
     /// A row key, digits or a letter such as `z` or `y`, then the radio
     /// mark (herdr's Blocked rule for Grok Build).
     private static let optionRow = #"^┃\s+[0-9a-z]+\s+\([●○]\)(?:\s|$)"#
+
+    /// See `promptHasFocus`. With text in the box, a compact footer leaves
+    /// focus unknown, so it reads as unfocused.
+    private static func promptHasFocus(footer: String?, composer: Composer?) -> Bool {
+        guard let footer else { return false }
+        if footer.contains("Shift+Tab:mode") || footer.contains("accept suggestion") { return true }
+        return footer == "Ctrl+.:shortcuts" && composer?.draft.isEmpty == true
+    }
 
     /// The Welcome menu lists `Resume session … ctrl+r` and `Quit … ctrl+q`
     /// (never matched by its version string). From about 90 columns Grok draws it

@@ -282,8 +282,9 @@ starting `│ ❯ `, and a `╰─` bottom border that carries the model label
 Remember mode (`│ # `) only with `[features] remember_mode`. The bottom
 border adds `multiline` while `/multiline` is on, and the top border can
 carry a label such as `Stashed`, `editing queued #N` or a `/rename` title
-(source). The agent view draws no placeholder; the dashboard's box reads
-`❯ Dispatch a new agent`. A paste of 4 or more lines, or over 10,000 bytes,
+(source). The agent view draws no placeholder while the prompt has focus;
+without focus an empty box reads `❯ Build anything` (live, 2026-10-20), and
+the dashboard's box reads `❯ Dispatch a new agent`. A paste of 4 or more lines, or over 10,000 bytes,
 shows as a chip that still holds the whole text. `/minimal` draws no box at
 all (user guide; not captured).
 
@@ -314,6 +315,12 @@ main view it shows `Shift+Tab:mode` first or second:
 again to <label>` (`app/app_view.rs`; not captured). Hints stop at the
 pane's right edge. The Welcome screen's footer holds only the channel tag
 (`[stable]`), with the name and version before it below about 90 columns.
+
+At 20 rows or fewer Grok forces compact mode (`views/agent.rs`
+`AUTO_COMPACT_MAX_ROWS`), as at the phone's 62×20 grid with the keyboard
+up. Its footer is only `Ctrl+.:shortcuts`, idle or working and whichever
+pane has focus, so it drops `Shift+Tab:mode` and `Ctrl+c:cancel` (live,
+2026-10-20). Only the placeholder then shows that the prompt lacks focus.
 
 While a turn runs, a status row above the box starts with a braille spinner
 (U+2800–U+28FF), then a label, the elapsed times, tokens and `[stop]`:

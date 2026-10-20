@@ -56,7 +56,7 @@ struct GrokStopGuardTests {
             status: .init(label: "Sleep 45 seconds then echo done…"), hints: workingHints, footer: footer)
     }
 
-    @Test(arguments: ["grok-03-working", "grok-05-queued", "grok-26-waiting-subagent"])
+    @Test(arguments: ["grok-03-working", "grok-05-queued", "grok-26-waiting-subagent", "grok-32-working-62x20"])
     func pressesWhileGrokShowsItWorking(stem: String) throws {
         #expect(Self.verdict(try ScreenFixture.screen(stem)) == .press)
     }
@@ -208,6 +208,15 @@ struct GrokStopGuardTests {
 
         #expect(Self.verdict(tasks.screen) == .refuse(Self.unfocused))
         #expect(Self.verdict(queuePane.screen) == .press)
+    }
+
+    /// Compact mode, which Grok forces at 20 rows or fewer, cuts every
+    /// footer to `Ctrl+.:shortcuts`, the cancel hint too. With the
+    /// scrollback focused only the placeholder in the empty box shows it.
+    @Test func refusesACompactScreenWithTheScrollbackFocused() throws {
+        let screen = try ScreenFixture.screen("grok-33-working-scrollback-62x20")
+
+        #expect(Self.verdict(screen) == .refuse(Self.unfocused))
     }
 
     /// Minimal mode draws no box (the 1.0.45 source; not captured), and

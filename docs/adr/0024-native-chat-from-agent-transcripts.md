@@ -94,6 +94,10 @@ Grok Build's input box is the bottom-most rounded box whose first row starts
 with its `❯` prompt. Chat sends only when the box holds no typed text and the
 footer shows it has focus (`Shift+Tab:mode` or `accept suggestion`), or from
 the Welcome screen; the dim italic suggestion Grok Build draws is not a draft.
+At 20 rows or fewer, as on a phone with the keyboard up, Grok Build's compact
+footer is only `Ctrl+.:shortcuts` whatever has focus, so there an empty box
+without the `Build anything` placeholder, which it draws only without focus,
+counts as focused.
 Its dashboard, where a message starts a new agent, the dashboard's view of one
 agent, which may be another conversation's, its pickers, popups and `/btw`
 panel, a pending second key press, `/multiline`, a queued message being

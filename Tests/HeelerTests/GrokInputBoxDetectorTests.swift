@@ -90,7 +90,8 @@ struct GrokInputBoxDetectorTests {
 
     @Test(arguments: [
         "grok-01-idle-empty", "grok-03-working", "grok-05-queued", "grok-20-welcome", "grok-27-compacting",
-        "grok-28-welcome-62", "grok-29-welcome-40", "working at 62 columns (synthetic)", "working at 40 columns (synthetic)", "queued at 62 columns (synthetic)",
+        "grok-28-welcome-62", "grok-29-welcome-40", "grok-30-idle-62x20", "grok-32-working-62x20",
+        "working at 62 columns (synthetic)", "working at 40 columns (synthetic)", "queued at 62 columns (synthetic)",
         "queued at 40 columns (synthetic)",
     ])
     func readsAFocusedEmptyComposer(stem: String) throws {
@@ -154,6 +155,18 @@ struct GrokInputBoxDetectorTests {
     ])
     func anUnfocusedPromptIsNotEmpty(row: String) {
         let screen = GrokScreenBuilder(placeholder: "Build anything", footer: row).screen
+
+        #expect(GrokScreen(screen).composer?.draft == "")
+        #expect(GrokInputBoxDetector.detect(screen) == .disabled(Self.unfocused))
+    }
+
+    /// At 20 rows or fewer, as at the phone's 62×20 grid with the keyboard
+    /// up, Grok forces compact mode, whose footer is `Ctrl+.:shortcuts`
+    /// whatever has focus. With the scrollback focused the empty box shows
+    /// the placeholder, idle or working.
+    @Test(arguments: ["grok-31-scrollback-62x20", "grok-33-working-scrollback-62x20"])
+    func readsACompactScreenWithoutPromptFocus(stem: String) throws {
+        let screen = try ScreenFixture.screen(stem)
 
         #expect(GrokScreen(screen).composer?.draft == "")
         #expect(GrokInputBoxDetector.detect(screen) == .disabled(Self.unfocused))
