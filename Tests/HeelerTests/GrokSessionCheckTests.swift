@@ -106,18 +106,25 @@ struct GrokSessionCheckTests {
         #expect(Self.verdict(screen, Self.input()) == .thisSession)
     }
 
-    /// A message of this conversation below the line: the screen moved
-    /// back to it since, or the line was printed in its scrollback.
-    @Test func aSessionLineAboveTheBoundPromptIsHistory() {
+    /// Grok prints a Session line only into the scrollback of the session
+    /// it names (1.0.45 `lifecycle.rs`, `load.rs`; the parent of a fork
+    /// gets `Forked`), so the screen shows that session whatever messages
+    /// follow the line, even this conversation's newest.
+    @Test func aSessionLineHoldsWhateverMessagesFollowIt() throws {
         let screen = Self.screen([
             "Session \(Self.other), use /dashboard to switch between sessions", "", "❯ Reply with the word kiwi.", "",
             "kiwi", "", "Worked for 3.4s",
         ])
+        #expect(Self.verdict(screen, Self.input()) == .otherSession(GrokSessionCheck.sessionLineReason))
 
-        #expect(Self.verdict(screen, Self.input()) == .thisSession)
-        // An older message of this conversation doesn't make it history.
-        let lime = Self.transcript(["Reply with the word kiwi.", "Reply with the word lime."])
-        #expect(Self.verdict(screen, Self.input(lime)) == .otherSession(GrokSessionCheck.sessionLineReason))
+        // grok-18, the fork's first message repeating the parent's newest.
+        var rows = try ScreenFixture.text("grok-18-session-fork").components(separatedBy: "\r\n")
+        rows[16] = rows[4]
+        let fork = ANSIScreenDecoder.decode(rows.joined(separator: "\r\n"))
+        #expect(GrokScreen(fork).userRows.map(\.text) == ["Reply with exactly: two.", "Reply with exactly: two."])
+        let parent = Self.input(
+            Self.transcript(["Reply with exactly: two."]), session: "01900000-0000-7000-8000-000000000001")
+        #expect(Self.verdict(fork, parent) == .otherSession(GrokSessionCheck.sessionLineReason))
     }
 
     // MARK: The newest message

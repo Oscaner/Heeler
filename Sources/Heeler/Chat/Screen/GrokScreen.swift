@@ -69,7 +69,6 @@ struct GrokScreen: Sendable {
     /// A message the user sent, as the scrollback shows it: `❯ ` and the
     /// text at the scrollback's indent, outside any box.
     struct UserRow: Equatable, Sendable {
-        var row: Int
         /// The row's text after `❯ `, without the scrollbar and the time
         /// Grok sets at the right. A long message goes on below, unmarked.
         var text: String
@@ -81,7 +80,6 @@ struct GrokScreen: Sendable {
     /// <parent>), use …` after `/fork`, and `Session <id> found locally
     /// (originally in <dir>)`.
     struct SessionLine: Equatable, Sendable {
-        var row: Int
         /// The session the screen shows: the line's first id, lowercased.
         var sessionID: String
     }
@@ -448,7 +446,7 @@ struct GrokScreen: Sendable {
                 rest = String(rest[..<range.lowerBound])
                 break
             }
-            return UserRow(row: index, text: rest.trimmingCharacters(in: .whitespaces))
+            return UserRow(text: rest.trimmingCharacters(in: .whitespaces))
         }
     }
 
@@ -478,7 +476,7 @@ struct GrokScreen: Sendable {
             let squeezed = String(joined.filter { !$0.isWhitespace })
             guard squeezed.range(of: sessionLinePattern, options: .regularExpression) != nil else { continue }
             let id = squeezed.dropFirst("Session".count).prefix(36)
-            return SessionLine(row: index, sessionID: id.lowercased())
+            return SessionLine(sessionID: id.lowercased())
         }
         return nil
     }

@@ -23,14 +23,10 @@ enum GrokSessionCheck {
         if grok.isWelcome, !transcript.recordedPrompts.isEmpty || transcript.needsOlderHistory {
             return .otherSession(welcomeReason)
         }
-        let newest = transcript.recordedPrompts.last.map { squeezed($0.text) }
-        // A message of this conversation below the line makes it history.
-        if let line = grok.sessionLine, line.sessionID != input.sessionID.lowercased(),
-            !grok.userRows.contains(where: { row in
-                let text = key(of: row)
-                return row.row > line.row && !text.isEmpty && newest?.hasPrefix(text) == true
-            })
-        {
+        // Grok prints the line into the scrollback of the session it names
+        // (`lifecycle.rs`, `load.rs`), so the screen shows that session,
+        // whatever messages follow the line.
+        if let line = grok.sessionLine, line.sessionID != input.sessionID.lowercased() {
             return .otherSession(sessionLineReason)
         }
         return newestMessage(grok, input)
