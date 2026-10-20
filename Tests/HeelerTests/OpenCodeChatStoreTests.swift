@@ -325,6 +325,8 @@ struct OpenCodeChatStoreTests {
         #expect(fixture.store.conversation.transcript.title == "Other secret title")
 
         try await fixture.leaveForHome(from: Self.other)
+        // Done's snapshot brings the Console's record up to herdr's.
+        fixture.store.agentDidChange(Self.agent(session: Self.other, title: "OpenCode", status: .done))
         #expect(fixture.phase == Self.startScreen)
         try await fixture.pane.show(Self.sessionScreen)
         await fixture.report(Self.apple, title: Self.appleTitle)
@@ -332,6 +334,35 @@ struct OpenCodeChatStoreTests {
         await fixture.store.step()
 
         #expect(fixture.phase == Self.following(Self.apple))
+    }
+
+    /// A conversation picked in the terminal changes no status, so the
+    /// Console's record still names the one before it. The Console hands
+    /// that older record over again on any update, such as the title the
+    /// next pick writes: no report of a conversation, so Chat keeps the
+    /// start screen until the screen shows the stale one again.
+    @Test func anOlderConsoleRecordKeepsTheStartScreen() async throws {
+        let fixture = try Fixture()
+        await fixture.store.step()
+        await fixture.report(Self.other, title: Self.otherTitle)
+        await fixture.recheck()
+        #expect(fixture.phase == Self.following(Self.other))
+        let generation = fixture.store.conversationGeneration
+        try await fixture.leaveForHome(from: Self.other)
+        #expect(fixture.phase == Self.startScreen)
+
+        try await fixture.pane.show(Self.sessionScreen)
+        await fixture.report(Self.other, title: Self.otherTitle)
+        fixture.store.agentDidChange(Self.agent(session: Self.apple, title: Self.otherTitle))
+        await fixture.store.step()
+
+        #expect(fixture.phase == Self.startScreen)
+        #expect(fixture.store.conversationGeneration == generation)
+
+        await fixture.recheck()
+
+        #expect(fixture.phase == Self.following(Self.other))
+        #expect(fixture.store.conversationGeneration == generation)
     }
 
     /// Picking the conversation again shows its own title, which the home

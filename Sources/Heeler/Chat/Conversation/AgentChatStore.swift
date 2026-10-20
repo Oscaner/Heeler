@@ -488,7 +488,11 @@ final class AgentChatStore {
         let identityChanged = !sameIdentity(agent, next)
         if identityChanged { forgetStaleSession() }
         let reported = resolveReported(next.agentSession)
-        let bindingReturned = isAwaitingSession && reported != .noSession
+        // While the start screen marks a conversation stale, the same record
+        // handed over again is no report: OpenCode changes its conversation
+        // without a status change, so the Console's record can be older than
+        // the answer herdr gave Chat (`checkStartScreen`).
+        let bindingReturned = isAwaitingSession && staleSession == nil && reported != .noSession
         let previous = ChatAgentActivity(agent.status)
         agent = next
         if sessionChanged || identityChanged || bindingReturned {
