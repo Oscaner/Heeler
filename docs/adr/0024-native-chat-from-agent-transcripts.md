@@ -93,7 +93,7 @@ while herdr reports the Agent neither Working nor Blocked.
 Grok Build's input box is the bottom-most rounded box whose first row starts
 with its `❯` prompt. Chat sends only when the box holds no typed text and the
 footer shows it has focus (`Shift+Tab:mode` or `accept suggestion`), or from
-the Welcome screen; the dim italic suggestion Grok Build draws is not a draft.
+the Welcome screen; the italic suggestion Grok Build draws is not a draft.
 At 20 rows or fewer, as on a phone with the keyboard up, Grok Build's compact
 footer is only `Ctrl+.:shortcuts` whatever has focus, so there an empty box
 without the `Build anything` placeholder, which it draws only without focus,
@@ -110,18 +110,24 @@ next send.
 
 herdr follows Grok Build's `/new`, `/clear` and a message sent from its
 dashboard, but keeps the earlier session after `/resume`, `/fork` and going
-back from the dashboard, and Chat follows herdr; what a message from the
-Welcome screen does to herdr's report was not captured. So the screen read
-that checks the input box before a send also holds the message when it shows a
-`Session <id>` line for another session, a newest message the conversation
-doesn't have (only once herdr reports the Agent idle and a transcript read
-since then has landed), or the Welcome screen of a conversation that already
-has messages. Such a hold reads the Agent's record again, so a `/new` herdr
-has just reported is followed. Nothing is read from the Host between that
-screen read and the prompt. At 20 rows or fewer Grok Build draws the user's
-messages without their `❯`, so there the screen shows no newest message, and
-only the read after a send catches a message another session took. After a
-send, Chat reads what Grok Build added to the folder's
+back from the dashboard, and Chat follows herdr. At Grok Build's start a
+message from the Welcome screen went to the session herdr reported, but on
+the Welcome screen `/welcome` opens later, text sent there started a new
+session first, which herdr then reported (1.0.62): a message then ran in
+it, and a `/resume` left herdr on it, empty, while the screen showed the
+resumed session. So the screen read that checks the input box before a send
+also holds the message when it shows a `Session <id>` line for another
+session, a newest message the conversation doesn't have (only once herdr
+reports the Agent idle and a transcript read since then has landed), or the
+Welcome screen of a conversation that already has messages. Such a hold
+reads the Agent's record again, so a `/new` herdr has just reported is
+followed. Nothing is read from the Host between that screen read and the
+prompt. At 20 rows or fewer Grok Build draws the user's messages without
+their `❯`, so there the screen shows no newest message, and after such a
+`/resume` the conversation Chat follows has no message to compare it with;
+in both cases, unless a `Session <id>` line for another session shows, only
+the read after a send catches a message another session took. After a send,
+Chat reads what Grok Build added to the folder's
 `prompt_history.jsonl` since just before the send, up to 64 KiB:
 two seconds after a message delivered while herdr reported the Agent neither
 Working nor Blocked, and again when the message would go overdue. When no line
