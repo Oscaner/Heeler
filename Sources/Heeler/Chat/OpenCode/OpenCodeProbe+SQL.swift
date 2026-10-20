@@ -46,15 +46,16 @@ extension OpenCodeProbe {
                 cursor.eventSeq.map {
                     "(SELECT seq FROM event_sequence WHERE aggregate_id = \(session)) IS NOT \($0)"
                 } ?? "1"
-            let window = pollWindow(session, cursor: cursor, changed: changed)
             statements += [
                 sessionStatement(session, changed: changed),
+                // The rows that start inside the budget, then `X` for the
+                // first row that does not, from one pass over the window.
                 """
-                \(window)
-                SELECT 'R ' || \(rowObject(dataLimit: rowDataLimit))
-                  FROM w WHERE acc - len < \(cursor.budget) ORDER BY seq
+                \(pollWindow(session, cursor: cursor, changed: changed))
+                SELECT CASE WHEN acc - len < \(cursor.budget) THEN 'R ' || \(rowObject(dataLimit: rowDataLimit))
+                            ELSE 'X' END
+                  FROM w WHERE coalesce(previous_start, 0) < \(cursor.budget) ORDER BY seq
                 """,
-                "\(window)\nSELECT 'X' FROM w WHERE acc - len >= \(cursor.budget) LIMIT 1",
                 firstStatement(session, changed: changed),
                 """
                 SELECT 'C ' || (SELECT count(*) FROM session_message WHERE session_id = \(session)
@@ -174,8 +175,9 @@ extension OpenCodeProbe {
             """
     }
 
-    /// The rows a poll reads, oldest first with a running total: newer than
-    /// the window, still open, or updated inside it since the last read.
+    /// The rows a poll reads, oldest first with a running total and where
+    /// the row before each starts: newer than the window, still open, or
+    /// updated inside it since the last read.
     private static func pollWindow(
         _ session: String, cursor: OpenCodePollCursor, changed: String
     ) -> String {
@@ -190,7 +192,9 @@ extension OpenCodeProbe {
         return """
             WITH \(slimmed(rows, outputLimit: toolOutputLimit)),
             w AS (SELECT *, length(CAST(d AS BLOB)) AS len,
-                         sum(length(CAST(d AS BLOB))) OVER (ORDER BY seq ROWS UNBOUNDED PRECEDING) AS acc
+                         sum(length(CAST(d AS BLOB))) OVER (ORDER BY seq ROWS UNBOUNDED PRECEDING) AS acc,
+                         sum(length(CAST(d AS BLOB)))
+                           OVER (ORDER BY seq ROWS BETWEEN UNBOUNDED PRECEDING AND 2 PRECEDING) AS previous_start
                     FROM r)
             """
     }

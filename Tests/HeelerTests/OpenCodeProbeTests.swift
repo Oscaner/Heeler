@@ -43,12 +43,13 @@ struct OpenCodeProbeTests {
                     of: ["db", "N", "sq", "py", "d", "o", "HOME", "XDG_DATA_HOME"]),
                 "\(Self.unquotedVariables(in: shell))")
 
-            // Each here-document ends at a delimiter carrying the nonce, so a
-            // statement cannot end it early.
-            #expect(parts.shell.contains { $0.hasSuffix("<<'__HEELER_SQL_\(nonce)__'") })
+            // The one here-document ends at a delimiter carrying the nonce,
+            // so a statement cannot end it early. Python's program is fixed
+            // text in single quotes.
+            #expect(parts.shell.filter { $0.contains("<<") } == ["  fi <<'__HEELER_SQL_\(nonce)__'"])
             #expect(parts.shell.contains("__HEELER_SQL_\(nonce)__"))
-            #expect(parts.shell.contains { $0.hasSuffix("<<'__HEELER_PY_\(nonce)__'") })
-            #expect(parts.shell.contains("__HEELER_PY_\(nonce)__"))
+            #expect(parts.python.joined(separator: "\n") == OpenCodeProbe.pythonReader)
+            #expect(!OpenCodeProbe.pythonReader.contains("'"))
             #expect(parts.shell.first == "N=\(nonce)")
         }
     }
@@ -67,10 +68,13 @@ struct OpenCodeProbeTests {
         #expect(try #require(automatic.lastIndex(of: "sq=")) < darwin)
 
         // The CLI whenever there is one, Python only without it.
-        let cli = try #require(automatic.firstIndex { $0.hasPrefix("elif [ -n \"$sq\" ]") })
-        let python = try #require(automatic.firstIndex { $0.hasPrefix("elif [ -n \"$py\" ]") })
+        let readers = try #require(automatic.firstIndex(of: "elif [ -n \"$sq$py\" ]; then"))
+        #expect(automatic[readers + 1] == "  { if [ -n \"$sq\" ]; then")
+        #expect(automatic[readers + 2].hasPrefix("    \"$sq\" "))
+        #expect(automatic[readers + 3] == "  else")
+        #expect(automatic[readers + 4] == "    \"$py\" -I -c '")
         let noReader = try #require(automatic.firstIndex(of: "  printf 'P noreader\\n'"))
-        #expect(cli < python && python < noReader)
+        #expect(readers < noReader)
 
         // A test's Python-only read clears the CLI after the lookups.
         let pythonOnly = ScriptParts(
@@ -78,13 +82,13 @@ struct OpenCodeProbeTests {
         ).shell
         let cleared = try #require(pythonOnly.lastIndex(of: "sq="))
         let lookupsEnd = try #require(pythonOnly[darwin...].firstIndex(of: "fi"))
-        #expect(cleared > lookupsEnd && cleared < cli)
+        #expect(cleared > lookupsEnd && cleared < readers)
     }
 
     @Test func theScriptIgnoresTheUsersSqliterc() throws {
         let nonce = OpenCodeProbe.makeNonce()
         let shell = ScriptParts(OpenCodeProbe.script(Self.tail, nonce: nonce), nonce: nonce).shell
-        let cli = try #require(shell.first { $0.hasPrefix("  { \"$sq\" ") })
+        let cli = try #require(shell.first { $0.hasPrefix("    \"$sq\" ") })
         #expect(cli.contains(" -init /dev/null "))
         #expect(cli.contains(" -batch -bail "))
     }
@@ -103,12 +107,53 @@ struct OpenCodeProbeTests {
         #expect(!python.contains("print("))
     }
 
+    /// Python runs what the CLI runs: each text in the here-document that
+    /// ends in `;` at a line end, without the CLI's dot-command lines.
+    @Test func everyStatementSplitsWhereBothReadersSplitIt() throws {
+        for query in Self.queries {
+            let statements = OpenCodeProbe.statements(query)
+            for statement in statements {
+                let lines = statement.split(separator: "\n")
+                #expect(!statement.contains(";"), "\(statement.prefix(60))")
+                #expect(!lines.contains { $0.hasPrefix(".") }, "\(statement.prefix(60))")
+            }
+            let nonce = OpenCodeProbe.makeNonce()
+            let sql = ScriptParts(OpenCodeProbe.script(query, nonce: nonce), nonce: nonce).sql
+            let texts = (sql.joined(separator: "\n") + "\n").components(separatedBy: ";\n").map { text in
+                text.split(separator: "\n", omittingEmptySubsequences: false).filter { !$0.hasPrefix(".") }
+                    .joined(separator: "\n")
+            }.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            var run = ["PRAGMA query_only = 1"]
+            run += statements.prefix(1)
+            run.append("BEGIN")
+            run += statements.dropFirst()
+            run.append("COMMIT")
+            #expect(texts == run)
+        }
+    }
+
+    /// Every poll uploads its whole script, every 2 seconds while the Agent
+    /// works: the statements go once, for whichever reader runs, and the
+    /// poll's window is built once.
+    @Test func aPollScriptStaysSmall() throws {
+        for query in Self.queries {
+            guard case .poll = query.kind else { continue }
+            let script = OpenCodeProbe.script(query, nonce: OpenCodeProbe.makeNonce())
+            let text = String(decoding: script, as: UTF8.self)
+            #expect(script.count <= 16_384, "\(script.count) bytes")
+            #expect(text.ranges(of: "w AS (").count == 1)
+            for statement in OpenCodeProbe.statements(query) {
+                #expect(text.ranges(of: statement).count == 1, "\(statement.prefix(60))")
+            }
+        }
+    }
+
     @Test func everyOpenIsReadOnly() throws {
         for query in Self.queries {
             let nonce = OpenCodeProbe.makeNonce()
             let script = String(decoding: OpenCodeProbe.script(query, nonce: nonce), as: UTF8.self)
             let parts = ScriptParts(OpenCodeProbe.script(query, nonce: nonce), nonce: nonce)
-            let cli = try #require(parts.shell.first { $0.hasPrefix("  { \"$sq\" ") })
+            let cli = try #require(parts.shell.first { $0.hasPrefix("    \"$sq\" ") })
             #expect(cli.contains(" -readonly "))
             let python = parts.python.joined(separator: "\n")
             #expect(python.contains("\"?mode=ro\""))
@@ -236,9 +281,9 @@ struct OpenCodeProbeTests {
         let shell = ScriptParts(OpenCodeProbe.script(Self.tail, nonce: nonce), nonce: nonce).shell
         let closed = try #require(
             shell.firstIndex(of: "elif [ ! -e \"$db-wal\" ] || [ ! -e \"$db-shm\" ]; then"))
-        let cli = try #require(shell.firstIndex { $0.hasPrefix("elif [ -n \"$sq\" ]") })
+        let readers = try #require(shell.firstIndex(of: "elif [ -n \"$sq$py\" ]; then"))
         #expect(shell[closed + 1] == "  printf 'P closed\\n'")
-        #expect(closed < cli)
+        #expect(closed < readers)
 
         let response = try Self.parse(["P closed", "W 1 0"])
         #expect(response == .unavailable(.storeClosed))
@@ -669,21 +714,22 @@ struct OpenCodeProbeTests {
     }
 }
 
-/// The script's lines outside its here-documents, and the bodies of the SQL
-/// and Python here-documents.
+/// The script's lines outside its here-document and Python's program, the
+/// here-document's SQL, and the program.
 private struct ScriptParts {
     var shell: [String] = []
     var sql: [String] = []
     var python: [String] = []
 
+    /// The here-document's lines go to `sql`; the program in single quotes
+    /// after Python's `-c` goes to `python`, the quote lines staying shell.
     init(_ script: Data, nonce: String) {
         let sqlDelimiter = "__HEELER_SQL_\(nonce)__"
-        let pythonDelimiter = "__HEELER_PY_\(nonce)__"
         var body: WritableKeyPath<ScriptParts, [String]>?
         for line in String(decoding: script, as: UTF8.self).split(separator: "\n", omittingEmptySubsequences: false) {
             let line = String(line)
             if let current = body {
-                if line == sqlDelimiter || line == pythonDelimiter {
+                if current == \.sql ? line == sqlDelimiter : line.hasPrefix("' ") {
                     body = nil
                     shell.append(line)
                 } else {
@@ -694,7 +740,7 @@ private struct ScriptParts {
             shell.append(line)
             if line.hasSuffix("<<'\(sqlDelimiter)'") {
                 body = \.sql
-            } else if line.hasSuffix("<<'\(pythonDelimiter)'") {
+            } else if line.hasSuffix(" -c '") {
                 body = \.python
             }
         }

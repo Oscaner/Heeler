@@ -16,8 +16,10 @@ import Foundation
 /// holding a per-request nonce.
 ///
 /// The only values that reach the script are the nonce, the validated
-/// session id inside SQL string literals, integers, and the statements as
-/// base64 for Python. Nothing is interpolated into a shell word.
+/// session id inside SQL string literals, and integers. Nothing is
+/// interpolated into a shell word. The statements travel once, in one
+/// here-document that whichever reader runs reads, because every poll
+/// uploads the whole script.
 enum OpenCodeProbe {
     enum Reader: Equatable, Sendable {
         /// `sqlite3`, else a `python3` that is not Darwin's install shim.
@@ -48,7 +50,6 @@ enum OpenCodeProbe {
     static func script(_ query: OpenCodeQuery, nonce: String, reader: Reader = .automatic) -> Data {
         let statements = statements(query)
         let sqlDelimiter = "__HEELER_SQL_\(nonce)__"
-        let pythonDelimiter = "__HEELER_PY_\(nonce)__"
         var lines = [
             "N=\(nonce)",
             "LC_ALL=C",
@@ -84,9 +85,16 @@ enum OpenCodeProbe {
             // missing side files; Apple's refuses. Neither reader starts.
             "elif [ ! -e \"$db-wal\" ] || [ ! -e \"$db-shm\" ]; then",
             "  printf 'P closed\\n'",
-            "elif [ -n \"$sq\" ]; then",
-            "  { \"$sq\" -init /dev/null -readonly -batch -bail -noheader -list \"$db\" "
-                + "<<'\(sqlDelimiter)'",
+            "elif [ -n \"$sq$py\" ]; then",
+            // The CLI whenever there is one, Python only without it. Both
+            // read the statements from the here-document below.
+            "  { if [ -n \"$sq\" ]; then",
+            "    \"$sq\" -init /dev/null -readonly -batch -bail -noheader -list \"$db\"",
+            "  else",
+            "    \"$py\" -I -c '",
+            pythonReader,
+            "' \"$db\"",
+            "  fi <<'\(sqlDelimiter)'",
             ".timeout 1000",
             "PRAGMA query_only = 1;",
             "\(statements.first ?? versionStatement);",
@@ -94,11 +102,6 @@ enum OpenCodeProbe {
             "\(statements.dropFirst().joined(separator: ";\n"));",
             "COMMIT;",
             sqlDelimiter,
-            "    printf 'Z %s\\n' \"$?\"; } | head -c \(outputCap)",
-            "elif [ -n \"$py\" ]; then",
-            "  { \"$py\" -I - \"$db\" <<'\(pythonDelimiter)'",
-            pythonReader(statements),
-            pythonDelimiter,
             "    printf 'Z %s\\n' \"$?\"; } | head -c \(outputCap)",
             "else",
             "  printf 'P noreader\\n'",
@@ -126,40 +129,42 @@ enum OpenCodeProbe {
         return Data((lines.joined(separator: "\n") + "\n").utf8)
     }
 
-    /// Python writes the bytes SQLite returns, as the CLI does: text that is
-    /// not UTF-8 (SQLite's form of a lone surrogate escape) reaches the parse
+    /// Python reads the statements the CLI reads, from the same
+    /// here-document: it runs each text that ends in `;` at a line end and
+    /// skips the CLI's dot-command lines, so no statement holds a `;` or
+    /// starts a line with `.`. The program goes in single quotes on the
+    /// command line, so it holds no `'` itself.
+    ///
+    /// It writes the bytes SQLite returns, as the CLI does: text that is not
+    /// UTF-8 (SQLite's form of a lone surrogate escape) reaches the parse
     /// instead of failing the read, and an ASCII stdout under `LC_ALL=C`
     /// (Python 3.6) never fails on text. It skips NULL rows, as the CLI's
     /// empty lines are skipped, and reports any failure in the CLI's form,
     /// a Python built without its `sqlite3` module included.
-    private static func pythonReader(_ statements: [String]) -> String {
-        let encoded = (try? JSONEncoder().encode(statements)) ?? Data("[]".utf8)
-        return """
-            import sys, json, base64
-            from urllib.parse import quote
-            S = json.loads(base64.b64decode("\(encoded.base64EncodedString())").decode("utf-8"))
-            out = sys.stdout.buffer
-            try:
-                import sqlite3
-                c = sqlite3.connect("file:" + quote(sys.argv[1]) + "?mode=ro", uri=True,
-                                    timeout=1.0, isolation_level=None)
-                c.text_factory = bytes
-                c.execute("PRAGMA query_only = 1")
-                for i, s in enumerate(S):
-                    if i == 1:
-                        c.execute("BEGIN")
-                    for row in c.execute(s):
-                        v = row[0]
-                        if v is not None:
-                            out.write((v if isinstance(v, bytes) else str(v).encode("utf-8")) + b"\\n")
-                c.execute("COMMIT")
-                out.flush()
-            except Exception as e:
-                out.flush()
-                sys.stderr.write("Error: " + type(e).__name__ + ": " + str(e) + "\\n")
-                sys.exit(1)
-            """
-    }
+    static let pythonReader = """
+        import sys
+        from urllib.parse import quote
+        out = sys.stdout.buffer
+        try:
+            import sqlite3
+            c = sqlite3.connect("file:" + quote(sys.argv[1]) + "?mode=ro", uri=True,
+                                timeout=1.0, isolation_level=None)
+            c.text_factory = bytes
+            c.execute("PRAGMA query_only = 1")
+            for s in sys.stdin.buffer.read().decode("utf-8").split(";\\n"):
+                s = "\\n".join(l for l in s.split("\\n") if not l.startswith("."))
+                if not s.strip():
+                    continue
+                for row in c.execute(s):
+                    v = row[0]
+                    if v is not None:
+                        out.write((v if isinstance(v, bytes) else str(v).encode("utf-8")) + b"\\n")
+            out.flush()
+        except Exception as e:
+            out.flush()
+            sys.stderr.write("Error: " + type(e).__name__ + ": " + str(e) + "\\n")
+            sys.exit(1)
+        """
 
     // MARK: Parse
 

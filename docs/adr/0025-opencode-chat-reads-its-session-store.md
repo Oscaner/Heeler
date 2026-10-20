@@ -42,10 +42,12 @@ Cards and the cache work as described there.
   `~/.sqliterc` from adding output or writing a file. Python opens a `mode=ro`
   URI with the same timeout. Both set `PRAGMA query_only = 1` and read inside
   one transaction, so every statement sees one snapshot.
-- The SQL is fixed text from the app, carried to the reader in a quoted
-  here-document whose delimiter holds the nonce. It interpolates only
-  integers and the validated session id; no text from the Host or the user.
-  Every reader's output passes through `head -c` with a 2 MiB cap.
+- The SQL is fixed text from the app, carried once in a quoted
+  here-document whose delimiter holds the nonce, and whichever reader runs
+  reads it: Python's program is fixed text passed with `-c`, and it splits
+  the statements where the CLI does. The SQL interpolates only integers and
+  the validated session id; no text from the Host or the user. Every
+  reader's output passes through `head -c` with a 2 MiB cap.
 
 ### What it reads
 
@@ -93,7 +95,10 @@ Cards and the cache work as described there.
   status: about 110 bytes with the markers. Otherwise the poll reads the rows
   newer than the newest held, the rows still open (an unfinished step, a
   running compaction or shell command), rows updated within 2 seconds of the
-  newest update seen, the session row and the queue.
+  newest update seen, the session row and the queue. Either way it uploads
+  its whole script, about 14 KiB, which a test keeps under 16 KiB: the
+  statements travel once, and the poll slims its rows once, marking a row
+  past its budget in the same pass.
 - OpenCode rewrites its newest assistant row while a step runs, and a revert
   commit deletes rows while the counter and the highest `seq` keep rising.
   Each poll therefore also counts the rows in the window Chat holds, and a
@@ -241,8 +246,10 @@ its Done status until the first prompt of the new session.
 - Following an OpenCode conversation costs one exec channel per poll on the
   Host's connection, where other programs cost SFTP requests. That exec
   shares the connection's four ordinary-session channels with Changes, the
-  Skills probe and Agent discovery. Its cost on a remote Host is not yet
-  measured; if it is high, the polling pace goes down.
+  Skills probe and Agent discovery, and uploads its 14 KiB script each time:
+  up to about 26 MB an hour at the 2-second pace and half that at the
+  4-second one. Its cost on a remote Host is not yet measured; if it is
+  high, the polling pace goes down.
 - The Host needs `sqlite3` with JSON support from SQLite 3.25 on, or
   `python3` 3.6 or newer whose SQLite is that recent. macOS has
   `/usr/bin/sqlite3`; many Linux server images have `python3` but not the

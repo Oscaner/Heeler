@@ -79,6 +79,29 @@ struct OpenCodeStoreQueryTests {
                 == [187, 188, 193])
     }
 
+    /// A poll prints the rows that start inside its budget, oldest first,
+    /// and one `X` for the rows it leaves out, which reads as an overflow.
+    @Test func aPollPastItsBudgetMarksTheRowsLeftOut() throws {
+        let (queued, session) = try Self.store("steer-queued")
+        var cursor = try Self.cursor(after: queued.records(Self.tail(session)))
+        let (finished, _) = try Self.store("steer")
+        let whole = try finished.records(OpenCodeQuery(session: session, kind: .poll(cursor)))
+        #expect(whole.rows.map(\.seq) == [177, 187, 188, 193])
+        #expect(!whole.overflow)
+
+        // The third row would start past the budget. One byte more lets it in.
+        cursor.budget = try whole.rows.prefix(2).map(Self.dataLength).reduce(0, +)
+        let poll = OpenCodeQuery(session: session, kind: .poll(cursor))
+        let cut = try finished.records(poll)
+        #expect(cut.rows.map(\.seq) == [177, 187])
+        #expect(cut.overflow)
+        #expect(finished.lines(poll).filter { $0 == "X" }.count == 1)
+        cursor.budget += 1
+        let more = try finished.records(OpenCodeQuery(session: session, kind: .poll(cursor)))
+        #expect(more.rows.map(\.seq) == [177, 187, 188])
+        #expect(more.overflow)
+    }
+
     /// The cursor comes from the store before `/undo`. A staged revert keeps
     /// its rows and names its boundary; committed, the window counts fewer.
     @Test func aRevertCommitShowsAsAShorterWindow() throws {
