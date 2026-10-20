@@ -134,6 +134,14 @@ final class AgentChatStore {
     /// herdr reports a session of its own.
     @ObservationIgnored private var continuedSession: ConversationReference?
     @ObservationIgnored private var followed: ConversationReference?
+    /// The conversation herdr still reports after the program left it for
+    /// its home screen, and the terminal title it had there. Reports of it
+    /// read as no report until the program shows it again or herdr reports
+    /// another (`checkStartScreen`).
+    @ObservationIgnored private var staleSession: ConversationReference?
+    @ObservationIgnored private var staleTitle: String?
+    /// Retry asks the start-screen watch for a look at the screen.
+    @ObservationIgnored private var screenCheckRequested = false
     @ObservationIgnored private var engine: ChatConversationEngine?
     @ObservationIgnored private var restored = false
     @ObservationIgnored private var appliedRevision: Int?
@@ -412,11 +420,13 @@ final class AgentChatStore {
     }
 
     /// Looks for the transcript again now, after a failure or an
-    /// unavailable state the user may have fixed.
+    /// unavailable state the user may have fixed, such as a program shown
+    /// on its home screen that shows the conversation again.
     func retry() {
         needsAgentRefresh = true
         nextOpen = nil
         failedOpens = 0
+        screenCheckRequested = true
         wake()
     }
 
@@ -476,12 +486,14 @@ final class AgentChatStore {
         let statusChanged = next.status != agent.status
         let sessionChanged = next.agentSession != agent.agentSession
         let identityChanged = !sameIdentity(agent, next)
-        let bindingReturned = isAwaitingSession && next.agentSession != nil
+        if identityChanged { forgetStaleSession() }
+        let reported = resolveReported(next.agentSession)
+        let bindingReturned = isAwaitingSession && reported != .noSession
         let previous = ChatAgentActivity(agent.status)
         agent = next
         if sessionChanged || identityChanged || bindingReturned {
             sessionRecordRevision += 1
-            adopt(ConversationReference.resolve(next.agentSession), replacingAgent: identityChanged)
+            adopt(reported, replacingAgent: identityChanged)
             wake()
         }
         guard statusChanged else { return }
@@ -511,7 +523,10 @@ final class AgentChatStore {
     func step() async {
         await restoreIfNeeded()
         guard !Task.isCancelled else { return }
-        if needsAgentRefresh || sessionRecheckIsDue { await refreshAgent() }
+        if needsAgentRefresh || sessionRecheckIsDue, let fresh = await refreshAgent() {
+            guard !Task.isCancelled else { return }
+            await checkStartScreen(fresh)
+        }
         guard !Task.isCancelled else { return }
         // The query may select another session. Restore that session's own
         // document before waiting for its transcript, too.
@@ -699,32 +714,43 @@ final class AgentChatStore {
         return now().timeIntervalSince(lastAgentRefresh) >= interval
     }
 
-    private func refreshAgent() async {
+    /// Re-reads the Agent's record and adopts the session it reports.
+    /// Returns the record, unless reading it failed or a newer Console
+    /// record overtook it.
+    private func refreshAgent() async -> Agent? {
         needsAgentRefresh = false
         lastAgentRefresh = now()
         let recordRevision = sessionRecordRevision
-        // The Console's record keeps whatever its last snapshot said; herdr's
-        // answer here is newer, and only a later change to that record
-        // overrides it.
         do {
             let fresh = try await source.agentInfo()
-            guard !Task.isCancelled, recordRevision == sessionRecordRevision else { return }
+            guard !Task.isCancelled, recordRevision == sessionRecordRevision else { return nil }
             agentRefreshFailure = nil
             updateReadFailure()
-            let identityChanged = !sameIdentity(agent, fresh)
-            if identityChanged {
-                agent = fresh
-                blocked.update(activity: ChatAgentActivity(fresh.status))
-            }
-            adopt(ConversationReference.resolve(fresh.agentSession), replacingAgent: identityChanged)
+            adoptRecord(fresh)
+            return fresh
         } catch {
             guard !Task.isCancelled, recordRevision == sessionRecordRevision,
                 !(error is CancellationError), error as? TransportError != .cancelled
-            else { return }
+            else { return nil }
             agentRefreshFailure = error as? TransportError
                 ?? .channelFailed(detail: String(describing: type(of: error)))
             updateReadFailure()
+            return nil
         }
+    }
+
+    /// Adopts the session in a record herdr just answered with. The
+    /// Console's record keeps whatever its last snapshot said; herdr's
+    /// answer here is newer, and only a later change to that record
+    /// overrides it.
+    private func adoptRecord(_ fresh: Agent) {
+        let identityChanged = !sameIdentity(agent, fresh)
+        if identityChanged {
+            agent = fresh
+            blocked.update(activity: ChatAgentActivity(fresh.status))
+            forgetStaleSession()
+        }
+        adopt(resolveReported(fresh.agentSession), replacingAgent: identityChanged)
     }
 
     private func sameIdentity(_ lhs: Agent, _ rhs: Agent) -> Bool {
@@ -734,16 +760,40 @@ final class AgentChatStore {
 
     /// An unreported binding does not prove that this Agent changed its
     /// conversation. Keep its last document readable, but stop remote reads
-    /// until the Host supplies an explicit binding again.
+    /// until the Host supplies an explicit binding again. A report of a
+    /// stale conversation counts as none (`resolveReported`).
     private var isAwaitingSession: Bool {
         resolution == .noSession && followed != nil
     }
 
+    /// What herdr's report means here: a report of the conversation the
+    /// program left for its home screen reads as none.
+    private func resolveReported(_ session: AgentSessionInfo?) -> ConversationReference.Resolution {
+        let resolved = ConversationReference.resolve(session)
+        if let staleSession, resolved == .bound(staleSession) { return .noSession }
+        return resolved
+    }
+
+    /// Why Chat shows no conversation while it awaits a session from herdr:
+    /// none reported, or only the one the program left for its home screen.
+    private var awaitingReason: ChatUnavailableReason {
+        staleSession == nil ? .noSession(program) : .startScreen(program)
+    }
+
+    /// Whether the conversation shows `awaitingReason`.
+    private var showsAwaitingReason: Bool {
+        switch conversation.phase {
+        case .unavailable(.noSession), .unavailable(.startScreen): true
+        default: false
+        }
+    }
+
     private func adopt(_ next: ConversationReference.Resolution, replacingAgent: Bool = false) {
         guard next != resolution || replacingAgent else { return }
+        if next != .noSession { forgetStaleSession() }
         resolution = next
         if !replacingAgent, isAwaitingSession {
-            conversation.phase = .unavailable(.noSession(program))
+            conversation.phase = .unavailable(awaitingReason)
             conversation.isFromCache = !conversation.transcript.entries.isEmpty
             if conversation.older == .loading { conversation.older = .available }
             olderRequested = false
@@ -765,7 +815,7 @@ final class AgentChatStore {
         guard target != followed || force else {
             if target == nil {
                 showUnavailable()
-            } else if case .unavailable(.noSession) = conversation.phase {
+            } else if showsAwaitingReason {
                 // Resume the same timeline rather than changing its identity
                 // or clearing the entries while the Host is being read.
                 conversation.phase = .locating
@@ -797,7 +847,7 @@ final class AgentChatStore {
             showUnavailable()
         } else {
             conversation = ChatConversationSnapshot()
-            if isAwaitingSession { conversation.phase = .unavailable(.noSession(program)) }
+            if isAwaitingSession { conversation.phase = .unavailable(awaitingReason) }
             updateReadFailure()
         }
     }
@@ -823,6 +873,115 @@ final class AgentChatStore {
             files: source.files, cache: source.cache, adapter: source.adapter, now: now)
     }
 
+    // MARK: Start screen
+
+    /// The start-screen watch (ADR 0025), for a program that leaves its
+    /// conversation without herdr reporting it
+    /// (`ChatProgram.leavesSessionWithoutReport`): after OpenCode's `/new`
+    /// herdr keeps reporting the conversation OpenCode left for its home
+    /// screen. Each record read while Chat shows the idle Agent reads the
+    /// screen once, unless the terminal title is the followed
+    /// conversation's own, and the home screen marks the conversation
+    /// stale: reports of it read as none, and Chat shows no conversation.
+    /// The mark clears when herdr reports another conversation (`adopt`),
+    /// when the screen shows a conversation under the stale one's title,
+    /// unless that is the title the home screen has too, and when it shows
+    /// one on the first read after Retry.
+    private func checkStartScreen(_ fresh: Agent) async {
+        let retried = screenCheckRequested
+        screenCheckRequested = false
+        guard program.leavesSessionWithoutReport, isVisible, ChatAgentActivity(fresh.status) == .idle else {
+            return
+        }
+        let title = fresh.terminalTitleStripped
+        let recordRevision = sessionRecordRevision
+        if let staleSession {
+            let showsStaleTitle = staleTitle != OpenCodeTerminalTitle.untitled && title == staleTitle
+            guard showsStaleTitle || retried else { return }
+            let route = await screenRoute()
+            guard !Task.isCancelled, recordRevision == sessionRecordRevision, self.staleSession == staleSession,
+                route == .session
+            else { return }
+            clearStaleSession(reporting: fresh.agentSession)
+            return
+        }
+        guard case .bound(let reference) = resolution, reference == followed else { return }
+        let sessionTitle = conversation.transcript.title
+        guard OpenCodeTerminalTitle.verdict(terminalTitle: title, sessionTitle: sessionTitle) != .matches else {
+            return
+        }
+        let route = await screenRoute()
+        guard !Task.isCancelled, recordRevision == sessionRecordRevision, resolution == .bound(reference),
+            followed == reference, route == .home
+        else { return }
+        staleSession = reference
+        staleTitle = OpenCodeTerminalTitle.expected(sessionTitle: sessionTitle)
+        adopt(.noSession)
+    }
+
+    /// The route the Agent's screen shows, or nil when it can't be read.
+    private func screenRoute() async -> OpenCodeScreen.Route? {
+        guard let screen = try? await source.screen.readScreen() else { return nil }
+        return OpenCodeScreenReader.read(screen).route
+    }
+
+    /// Drops the stale mark and adopts what herdr reports now. A report of
+    /// the same conversation resumes its kept timeline (`followReference`).
+    private func clearStaleSession(reporting session: AgentSessionInfo?) {
+        forgetStaleSession()
+        let next = resolveReported(session)
+        guard next != resolution else {
+            // herdr reports none: Chat waits for one, as for any program.
+            if isAwaitingSession { conversation.phase = .unavailable(awaitingReason) }
+            return
+        }
+        adopt(next)
+    }
+
+    private func forgetStaleSession() {
+        staleSession = nil
+        staleTitle = nil
+    }
+
+    /// The check before each send, for a program that can leave its
+    /// conversation without herdr reporting it
+    /// (`ChatProgram.confirmsSessionBeforeSend`): reads the Agent's record
+    /// once and adopts it, so Chat follows a session herdr newly reports,
+    /// then compares the terminal title with the conversation's. Returns
+    /// why the message would land outside the conversation Chat shows, or
+    /// nil to go on.
+    func confirmSessionBeforeSend() async -> String? {
+        guard program.confirmsSessionBeforeSend else { return nil }
+        let shown = followed
+        let recordRevision = sessionRecordRevision
+        // A newer Console record during the read may have moved Chat too.
+        guard let fresh = try? await source.agentInfo(), !Task.isCancelled,
+            recordRevision == sessionRecordRevision
+        else { return Self.uncheckedSessionReason(program) }
+        let before = resolution
+        adoptRecord(fresh)
+        if resolution != before { wake() }
+        let name = program.chatName
+        if followed != shown {
+            return "herdr now reports another \(name) conversation for this Agent. Chat is switching to it; check it, then send again."
+        }
+        if staleSession != nil {
+            return "\(name) is on its home screen, so this conversation isn't open there. Open it in the terminal first."
+        }
+        let verdict = OpenCodeTerminalTitle.verdict(
+            terminalTitle: fresh.terminalTitleStripped, sessionTitle: conversation.transcript.title)
+        if case .differs(let title) = verdict {
+            return "\(name)'s terminal shows another conversation (\(title)). Open this one in the terminal, then send again."
+        }
+        return nil
+    }
+
+    /// Why a send that couldn't be checked sent nothing: the Agent's record
+    /// couldn't be read, or there is no Chat to check with.
+    static func uncheckedSessionReason(_ program: ChatProgram) -> String {
+        "Heeler couldn't check which conversation \(program.chatName) shows, so it sent nothing. Try again."
+    }
+
     // MARK: Snapshots
 
     private func apply(_ snapshot: ChatConversationSnapshot, from origin: ChatConversationEngine) {
@@ -835,7 +994,7 @@ final class AgentChatStore {
         transcriptReadFailure = snapshot.readFailure
         var next = snapshot
         next.readFailure = transcriptReadFailure ?? agentRefreshFailure
-        if isAwaitingSession { next.phase = .unavailable(.noSession(program)) }
+        if isAwaitingSession { next.phase = .unavailable(awaitingReason) }
         if olderRequested, next.older == .available { next.older = .loading }
         conversation = next
         blocked.update(transcript: next.transcript)
@@ -1336,6 +1495,30 @@ extension ChatProgram {
         switch self {
         case .claude, .codex, .pi, .omp: true
         case .opencode: false
+        }
+    }
+
+    /// Whether the program can leave its conversation without herdr
+    /// reporting it, so Chat watches for its home screen while the Agent
+    /// idles (`AgentChatStore.checkStartScreen`). OpenCode 2.0.32's `/new`
+    /// opens its home screen, where herdr's integration reports nothing and
+    /// herdr keeps the conversation it left (ADR 0025). Opting in needs the
+    /// program's screen reader and terminal title in the watch.
+    var leavesSessionWithoutReport: Bool {
+        switch self {
+        case .claude, .codex, .pi, .omp: false
+        case .opencode: true
+        }
+    }
+
+    /// Whether each send first checks that the program still shows the
+    /// conversation Chat shows (`AgentChatStore.confirmSessionBeforeSend`),
+    /// which a program that leaves it without a report may not. Opting in
+    /// needs the program's terminal title in the check.
+    var confirmsSessionBeforeSend: Bool {
+        switch self {
+        case .claude, .codex, .pi, .omp: false
+        case .opencode: true
         }
     }
 }

@@ -7,10 +7,16 @@ extension ComposerDeliveryPolicy {
     /// after `agent.prompt` tells whether Enter took it. Both reads go
     /// through `agent.read`, and a Blocked Agent refuses: nothing here
     /// touches the Attach PTY.
+    ///
+    /// `confirmSession`, for a program that can leave its conversation
+    /// without herdr reporting it (`ChatProgram.confirmsSessionBeforeSend`),
+    /// runs before the screen read: why the message would land outside the
+    /// conversation Chat shows, or nil to go on.
     static func chat(
         rules: ChatSendRules,
         activity: @escaping @MainActor () -> ChatAgentActivity,
         readScreen: @escaping @MainActor () async throws -> ANSIScreen,
+        confirmSession: (@MainActor () async -> String?)? = nil,
         pause: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     ) -> ComposerDeliveryPolicy {
         let program = rules.program
@@ -21,6 +27,7 @@ extension ComposerDeliveryPolicy {
             validate: { rules.validate($0) },
             preflight: { _ in
                 if activity() == .blocked { return .agentBlocked }
+                if let confirmSession, let reason = await confirmSession() { return .inputNotReady(reason) }
                 let screen: ANSIScreen
                 do {
                     screen = try await readScreen()

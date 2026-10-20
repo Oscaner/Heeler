@@ -12,6 +12,7 @@ extension ChatUnavailableReason {
         case .awaitingFirstMessage: "No Messages Yet"
         case .compressed: "Conversation Compressed"
         case .unsupportedSession, .unsupportedFormat, .sessionStore: "Conversation Not Readable"
+        case .startScreen: "Not in This Conversation"
         }
     }
 
@@ -56,6 +57,8 @@ extension ChatUnavailableReason {
             "Chat can't read \(format)."
         case .sessionStore(_, let problem):
             problem.explanation
+        case .startScreen(let program):
+            "\(program.chatName) is on its home screen, so the conversation herdr reported is no longer open there. Open a conversation in the terminal, or send a first message there to start one. Chat follows it once herdr reports it."
         }
     }
 
@@ -81,13 +84,16 @@ extension ChatUnavailableReason {
             "Chat can't read this transcript now.\(saved)"
         case .sessionStore(let program, _):
             "Chat can't read this conversation from \(program.chatName)'s database now.\(saved)"
+        // Never over the timeline, which this reason hides.
+        case .startScreen(let program):
+            "\(program.chatName) is on its home screen."
         }
     }
 
     /// Whether looking again could find something the user may have fixed.
     var offersRetry: Bool {
         switch self {
-        case .noSession, .notFound, .mismatched: true
+        case .noSession, .notFound, .mismatched, .startScreen: true
         case .sessionStore(_, let problem): problem.isRetryable
         default: false
         }
@@ -237,9 +243,11 @@ enum ChatBannerLine: Equatable, Identifiable {
 
 extension ChatConversationSnapshot {
     /// Whether the timeline is up rather than a placeholder: it has entries,
-    /// or messages sent from this device the program hasn't recorded yet.
+    /// or messages sent from this device the program hasn't recorded yet,
+    /// and no reason hides them.
     func showsTimeline(hasPendingEchoes: Bool) -> Bool {
-        !transcript.entries.isEmpty || hasPendingEchoes
+        if case .unavailable(let reason) = phase, reason.hidesConversation { return false }
+        return !transcript.entries.isEmpty || hasPendingEchoes
     }
 }
 

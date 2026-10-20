@@ -52,6 +52,81 @@ struct ChatDeliveryPolicyTests {
         #expect(reads.count == 0)
     }
 
+    /// Each program's idle capture with an empty input box.
+    private static let readyScreens: [ChatProgram: String] = [
+        .claude: "claude-01-ready", .codex: "codex-00-ready", .pi: "pi-06-empty-editor-119",
+        .omp: "omp-08-empty-120-after-first", .opencode: "opencode-02-session-empty-180",
+    ]
+
+    /// Without a session check, a send reads the screen once and goes into
+    /// an empty box, and a Blocked Agent refuses it unread.
+    @Test(arguments: ChatProgram.allCases)
+    func withoutASessionCheckNothingChanges(program: ChatProgram) async throws {
+        let ready = try ScreenFixture.screen(try #require(Self.readyScreens[program]))
+        let rules = ChatSendRules(
+            program: program, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: program))
+        let reads = Reads()
+        func preflight(_ activity: ChatAgentActivity) throws -> @MainActor (String) async -> ComposerRefusal? {
+            try #require(
+                ComposerDeliveryPolicy.chat(
+                    rules: rules, activity: { activity },
+                    readScreen: {
+                        reads.count += 1
+                        return ready
+                    }
+                ).preflight)
+        }
+
+        let idle = try preflight(.idle)
+        let blocked = try preflight(.blocked)
+
+        #expect(await idle("hello") == nil)
+        #expect(reads.count == 1)
+        #expect(await blocked("hello") == .agentBlocked)
+        #expect(reads.count == 1)
+    }
+
+    @MainActor
+    private final class Calls {
+        var names: [String] = []
+    }
+
+    /// The session check runs after the Blocked check and before the screen
+    /// read: a reason refuses the message unread, and nil lets the read go
+    /// on.
+    @Test func aSessionCheckRunsBeforeTheScreenAndCanRefuse() async throws {
+        let ready = try ScreenFixture.screen("opencode-02-session-empty-180")
+        let reason = "OpenCode's terminal shows another conversation (Other). Open this one in the terminal, then send again."
+        let calls = Calls()
+        func preflight(
+            _ activity: ChatAgentActivity, check: String?
+        ) throws -> @MainActor (String) async -> ComposerRefusal? {
+            try #require(
+                ComposerDeliveryPolicy.chat(
+                    rules: Self.openCodeRules, activity: { activity },
+                    readScreen: {
+                        calls.names.append("read")
+                        return ready
+                    },
+                    confirmSession: {
+                        calls.names.append("check")
+                        return check
+                    }
+                ).preflight)
+        }
+
+        let blocked = try preflight(.blocked, check: reason)
+        let refused = try preflight(.idle, check: reason)
+        let confirmed = try preflight(.idle, check: nil)
+
+        #expect(await blocked("hello") == .agentBlocked)
+        #expect(calls.names.isEmpty)
+        #expect(await refused("hello") == .inputNotReady(reason))
+        #expect(calls.names == ["check"])
+        #expect(await confirmed("hello") == nil)
+        #expect(calls.names == ["check", "check", "read"])
+    }
+
     @Test func textAlreadyInTheBoxHoldsTheMessage() async throws {
         let preflight = try #require(Self.policy { Self.draft("half typed") }.preflight)
 

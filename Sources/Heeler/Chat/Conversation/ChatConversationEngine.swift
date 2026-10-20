@@ -27,6 +27,17 @@ enum ChatUnavailableReason: Equatable, Sendable {
     /// The store the program keeps its conversations in, which Chat reads
     /// by query (ADR 0025), cannot give this one.
     case sessionStore(ChatProgram, ChatSessionStoreProblem)
+    /// The program shows its home screen, where the conversation herdr
+    /// still reports is no longer open: OpenCode keeps reporting one after
+    /// `/new` or `/clear` (ADR 0025).
+    case startScreen(ChatProgram)
+
+    /// Whether Chat shows the explanation in the conversation's place even
+    /// over saved messages, which stay in memory until the program shows
+    /// the conversation again.
+    var hidesConversation: Bool {
+        if case .startScreen = self { true } else { false }
+    }
 }
 
 /// Why a program's session store cannot give Chat the conversation herdr

@@ -471,6 +471,7 @@ struct AgentChatSurfaceView: View {
             .padding(.top, -topInset)
             .ignoresSafeArea(.container, edges: .bottom)
             .accessibilityHidden(presentation != .timeline)
+            .modifier(HiddenConversation(isHidden: hidesConversation))
             if presentation != .timeline {
                 GeometryReader { proxy in
                     ScrollView {
@@ -501,6 +502,26 @@ struct AgentChatSurfaceView: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { conversationBottom = $0 }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { bottomChromeHeight = $0 }
+    }
+
+    /// Whether the reason Chat shows takes the place of rows it keeps, such
+    /// as OpenCode on its home screen: the placeholder over them has no
+    /// background of its own.
+    private var hidesConversation: Bool {
+        if case .unavailable(let reason) = presentation { return reason.hidesConversation }
+        return false
+    }
+
+    /// Hides the timeline and keeps touches off it, without rebuilding it,
+    /// so the conversation comes back where it was.
+    private struct HiddenConversation: ViewModifier {
+        let isHidden: Bool
+
+        func body(content: Content) -> some View {
+            content
+                .opacity(isHidden ? 0 : 1)
+                .allowsHitTesting(!isHidden)
+        }
     }
 
     /// How far rows fade into the bottom chrome's edge before they blur.
@@ -692,7 +713,20 @@ struct AgentChatSurfaceView: View {
     }
 
     private var sendPolicy: ComposerDeliveryPolicy {
-        .chat(rules: sendRules, activity: agentActivity, readScreen: readAgentScreen)
+        .chat(rules: sendRules, activity: agentActivity, readScreen: readAgentScreen, confirmSession: confirmSession)
+    }
+
+    /// Whether the program still shows the conversation Chat shows, for a
+    /// program that can leave it without herdr reporting it. Without a
+    /// store there is nothing to check with, so nothing is sent.
+    private var confirmSession: (@MainActor () async -> String?)? {
+        guard program.confirmsSessionBeforeSend else { return nil }
+        let chat = chat
+        let program = program
+        return {
+            guard let chat else { return AgentChatStore.uncheckedSessionReason(program) }
+            return await chat.confirmSessionBeforeSend()
+        }
     }
 
     /// What herdr reports the Agent doing when asked, not when this view
