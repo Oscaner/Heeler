@@ -66,12 +66,52 @@ struct GrokUpdateRecord: Sendable {
         case failed(message: String?)
     }
 
+    /// A command Grok moved to the background (`task_backgrounded`).
+    struct TaskBackgrounded: Sendable {
+        let callID: String?
+        let taskID: String?
+    }
+
+    /// A background command that ended (`task_completed`).
+    struct TaskCompleted: Sendable {
+        let taskID: String?
+        /// `bash` for a command.
+        let taskKind: String?
+        /// What the user saw run: `display_command`, else `command`.
+        let command: String?
+        let exitCode: Int?
+        let signal: String?
+        /// Grok stopped it on request (`explicitly_killed`).
+        let wasKilled: Bool
+        /// The start of its output.
+        let preview: ChatToolPreview?
+    }
+
+    struct SubagentSpawned: Sendable {
+        let subagentID: String?
+        let subagentType: String?
+        let description: String?
+    }
+
+    struct SubagentFinished: Sendable {
+        let subagentID: String?
+        /// `completed`, `failed` or `cancelled`.
+        let status: String?
+        let error: String?
+        let toolCalls: Int?
+        let turns: Int?
+        let durationMilliseconds: Int64?
+        /// The start of the subagent's report.
+        let preview: ChatToolPreview?
+    }
+
     enum Kind: Sendable {
         case userChunk(UserChunk)
         case agentMessage(AgentChunk)
         case agentThought(AgentChunk)
-        case toolCall(id: String?)
-        case toolUpdate(id: String?)
+        /// Nil when the record names no call.
+        case toolCall(Tool?)
+        case toolUpdate(Tool?)
         case turnCompleted(TurnCompleted)
         case rewind(targetPromptIndex: Int?)
         case compactionCheckpoint
@@ -79,10 +119,10 @@ struct GrokUpdateRecord: Sendable {
         case compactionFailed(error: String?)
         case retry(Retry)
         case imageDropped(notes: [String])
-        case taskBackgrounded
-        case taskCompleted
-        case subagentSpawned
-        case subagentFinished
+        case taskBackgrounded(TaskBackgrounded)
+        case taskCompleted(TaskCompleted)
+        case subagentSpawned(SubagentSpawned)
+        case subagentFinished(SubagentFinished)
         /// A kind Chat shows nothing for.
         case skipped(String)
         /// A kind this build does not know.
@@ -145,9 +185,9 @@ struct GrokUpdateRecord: Sendable {
         case "agent_thought_chunk":
             return .agentThought(agentChunk(update, meta))
         case "tool_call":
-            return .toolCall(id: update["toolCallId"]?.stringValue)
+            return .toolCall(Tool(update))
         case "tool_call_update":
-            return .toolUpdate(id: update["toolCallId"]?.stringValue)
+            return .toolUpdate(Tool(update))
         case "turn_completed":
             return .turnCompleted(
                 TurnCompleted(
@@ -178,10 +218,33 @@ struct GrokUpdateRecord: Sendable {
         case "image_dropped":
             guard case .array(let notes) = update["notes"] else { return .imageDropped(notes: []) }
             return .imageDropped(notes: notes.compactMap(\.stringValue))
-        case "task_backgrounded": return .taskBackgrounded
-        case "task_completed": return .taskCompleted
-        case "subagent_spawned": return .subagentSpawned
-        case "subagent_finished": return .subagentFinished
+        case "task_backgrounded":
+            return .taskBackgrounded(
+                TaskBackgrounded(
+                    callID: update["tool_call_id"]?.stringValue, taskID: update["task_id"]?.stringValue))
+        case "task_completed":
+            let task = update["task_snapshot"]
+            return .taskCompleted(
+                TaskCompleted(
+                    taskID: task?["task_id"]?.stringValue, taskKind: task?["kind"]?.stringValue,
+                    command: task?["display_command"]?.stringValue ?? task?["command"]?.stringValue,
+                    exitCode: integer(task?["exit_code"]).flatMap { Int(exactly: $0) },
+                    signal: task?["signal"]?.stringValue, wasKilled: task?["explicitly_killed"] == .bool(true),
+                    preview: preview(task?["output"]?.stringValue)))
+        case "subagent_spawned":
+            return .subagentSpawned(
+                SubagentSpawned(
+                    subagentID: update["subagent_id"]?.stringValue, subagentType: update["subagent_type"]?.stringValue,
+                    description: update["description"]?.stringValue))
+        case "subagent_finished":
+            return .subagentFinished(
+                SubagentFinished(
+                    subagentID: update["subagent_id"]?.stringValue, status: update["status"]?.stringValue,
+                    error: update["error"]?.stringValue,
+                    toolCalls: integer(update["tool_calls"]).flatMap { Int(exactly: $0) },
+                    turns: integer(update["turns"]).flatMap { Int(exactly: $0) },
+                    durationMilliseconds: integer(update["duration_ms"]),
+                    preview: preview(update["output"]?.stringValue)))
         case _ where skippedKinds.contains(type) || type.hasPrefix("memory_dream_"):
             return .skipped(type)
         default:
@@ -196,8 +259,331 @@ struct GrokUpdateRecord: Sendable {
     }
 
     /// A whole number, which JSON decodes as a double.
-    private static func integer(_ value: JSONValue?) -> Int64? {
+    fileprivate static func integer(_ value: JSONValue?) -> Int64? {
         guard case .number(let number)? = value else { return nil }
         return Int64(exactly: number)
+    }
+
+    /// `text` capped like a row's output; nil when there is none.
+    fileprivate static func preview(_ text: String?, imageCount: Int = 0) -> ChatToolPreview? {
+        guard let text, !text.isEmpty || imageCount > 0 else { return nil }
+        return ChatToolPreview(capping: text, imageCount: imageCount)
+    }
+}
+
+// MARK: Tools
+
+extension GrokUpdateRecord {
+    /// One record of a tool call. Grok writes three for each `toolCallId`:
+    /// the call, whose `title` is the tool's name; the input it holds back
+    /// until the call runs, with a readable `title`, `locations` and
+    /// `rawInput.variant`; and the result, with `status`, `rawOutput` and,
+    /// for a call that never ran, `_meta.toolNotRun`.
+    struct Tool: Sendable {
+        let callID: String
+        /// Grok's name for the tool (`_meta["x.ai/tool"].name`):
+        /// `run_terminal_command`, `search_replace`.
+        let name: String?
+        /// Grok's own kind for the tool: `execute`, `task`, `plan`.
+        let toolKind: String?
+        /// The tool's label: `Run Command`.
+        let label: String?
+        /// The ACP kind: `execute`, `read`, `edit`, `other`.
+        let kind: String?
+        let title: String?
+        /// The first path the record locates.
+        let location: String?
+        let input: Input?
+        /// `in_progress`, `completed` or `failed`.
+        let status: String?
+        /// Why the call never ran: `rejected` or `cancelled`.
+        let notRun: String?
+        /// Nil for a record that is not the call's result.
+        let output: Output?
+        /// The diff items in `content`, or a result's `EditsApplied` when its
+        /// content holds none.
+        let fileChanges: ChatFileChanges?
+
+        init?(_ update: JSONValue) {
+            guard let callID = update["toolCallId"]?.stringValue, !callID.isEmpty else { return nil }
+            let meta = update["_meta"]
+            let tool = meta?["x.ai/tool"]
+            self.callID = callID
+            name = tool?["name"]?.stringValue
+            toolKind = tool?["kind"]?.stringValue
+            label = tool?["label"]?.stringValue
+            kind = update["kind"]?.stringValue
+            title = update["title"]?.stringValue
+            if case .array(let locations) = update["locations"] {
+                location = locations.lazy.compactMap { $0["path"]?.stringValue }.first
+            } else {
+                location = nil
+            }
+            input = update["rawInput"].map { Input($0, meta: meta) }
+            status = update["status"]?.stringValue
+            notRun = meta?["toolNotRun"]?.stringValue
+            output = Output(update, status: status, notRun: notRun)
+            var changes = GrokFileChanges.changes(content: update["content"])
+            if changes == nil, output != nil, let applied = update["rawOutput"]?["EditsApplied"] {
+                changes = GrokFileChanges.changes(applied: applied)
+            }
+            fileChanges = changes
+        }
+
+        /// What a call's `rawInput` names. The call holds part of it, the
+        /// input update all of it.
+        struct Input: Sendable {
+            struct Todo: Equatable, Sendable {
+                let content: String
+                /// `pending`, `in_progress` or `completed`.
+                let status: String?
+            }
+
+            /// The input update's name for the tool's input: `Bash`,
+            /// `SearchReplace`, `Task`.
+            var variant: String?
+            var command: String?
+            var description: String?
+            /// The file a read, edit or write names.
+            var filePath: String?
+            /// The directory a listing or search names.
+            var path: String?
+            var pattern: String?
+            var query: String?
+            var url: String?
+            /// An MCP tool's `<server>__<tool>`.
+            var toolName: String?
+            var subagentType: String?
+            /// The call starts its command or subagent in the background.
+            var isBackground = false
+            var questions: [ChatQuestion] = []
+            var todos: [Todo] = []
+
+            init(_ raw: JSONValue, meta: JSONValue?) {
+                variant = raw["variant"]?.stringValue
+                command = raw["command"]?.stringValue
+                description = raw["description"]?.stringValue
+                filePath = raw["file_path"]?.stringValue ?? raw["target_file"]?.stringValue
+                path = raw["target_directory"]?.stringValue ?? raw["path"]?.stringValue
+                pattern = raw["pattern"]?.stringValue
+                query = raw["query"]?.stringValue ?? raw["search_term"]?.stringValue
+                url = raw["url"]?.stringValue
+                toolName = raw["tool_name"]?.stringValue
+                subagentType = raw["subagent_type"]?.stringValue
+                isBackground =
+                    ["is_background", "background", "run_in_background"].contains { raw[$0] == .bool(true) }
+                    || meta?["subagentBackground"] == .bool(true)
+                questions = Self.questions(raw["questions"])
+                todos = Self.todos(raw["todos"])
+            }
+
+            /// Adds what a later record of the call names.
+            mutating func merge(_ later: Input) {
+                variant = later.variant ?? variant
+                command = later.command ?? command
+                description = later.description ?? description
+                filePath = later.filePath ?? filePath
+                path = later.path ?? path
+                pattern = later.pattern ?? pattern
+                query = later.query ?? query
+                url = later.url ?? url
+                toolName = later.toolName ?? toolName
+                subagentType = later.subagentType ?? subagentType
+                isBackground = isBackground || later.isBackground
+                if !later.questions.isEmpty { questions = later.questions }
+                if !later.todos.isEmpty { todos = later.todos }
+            }
+
+            /// `questions[{question, options[{label, description}]}]`; the
+            /// input update adds `multiSelect`.
+            private static func questions(_ value: JSONValue?) -> [ChatQuestion] {
+                guard case .array(let items) = value else { return [] }
+                return items.compactMap { item in
+                    guard let text = item["question"]?.stringValue else { return nil }
+                    var options: [ChatQuestion.Option] = []
+                    if case .array(let listed) = item["options"] {
+                        options = listed.compactMap { option in
+                            option["label"]?.stringValue.map {
+                                ChatQuestion.Option(label: $0, detail: option["description"]?.stringValue)
+                            }
+                        }
+                    }
+                    return ChatQuestion(
+                        id: item["id"]?.stringValue, header: item["header"]?.stringValue, text: text, options: options,
+                        isMultiSelect: item["multiSelect"] == .bool(true) || item["multi_select"] == .bool(true))
+                }
+            }
+
+            static func todos(_ value: JSONValue?) -> [Todo] {
+                guard case .array(let items) = value else { return [] }
+                return items.compactMap { item in
+                    item["content"]?.stringValue.map { Todo(content: $0, status: item["status"]?.stringValue) }
+                }
+            }
+        }
+
+        /// A call's result.
+        struct Output: Sendable {
+            /// `rawOutput.type`: `Bash`, `SearchReplace`, `MCP`, `Text`.
+            let type: String?
+            /// What the row shows; nil when it shows something else, such as
+            /// an edit's diff or a question's answers.
+            let preview: ChatToolPreview?
+            /// A command's exit code, when it ran to its end.
+            let exitCode: Int?
+            let signal: String?
+            /// Grok moved the command to the background before it ended; the
+            /// result has no status then.
+            let isBackgrounded: Bool
+            /// The background task the call started.
+            let taskID: String?
+            /// A question's answers, as Grok lists them for the model:
+            /// `"<question>"="<answer>", …`.
+            let answers: String?
+            /// The user declined the questions, or no user could answer them.
+            let isUnanswered: Bool
+            let command: String?
+            /// The file an edit changed.
+            let path: String?
+            /// An MCP call's server and tool.
+            let server: String?
+            let tool: String?
+
+            static let answeredPrefix = "User has answered your questions: "
+            private static let answeredSuffix = ". You can now continue with the user's answers in mind."
+            private static let unansweredPrefixes = [
+                "User declined to answer the questions", "No user is available to answer questions",
+            ]
+
+            init?(_ update: JSONValue, status: String?, notRun: String?) {
+                let raw = update["rawOutput"]
+                let type = raw?["type"]?.stringValue
+                let signal = raw?["signal"]?.stringValue
+                let isBackgrounded = type == "Bash" && signal == "backgrounded"
+                guard status == "completed" || status == "failed" || notRun != nil || isBackgrounded else {
+                    return nil
+                }
+                self.type = type
+                self.signal = signal
+                self.isBackgrounded = isBackgrounded
+                exitCode =
+                    signal == nil ? GrokUpdateRecord.integer(raw?["exit_code"]).flatMap { Int(exactly: $0) } : nil
+                taskID = type == "BackgroundTaskStarted" ? raw?["task_id"]?.stringValue : nil
+                command = raw?["command"]?.stringValue
+                path = raw?["EditsApplied"]?["absolute_path"]?.stringValue
+                server = type == "MCP" ? raw?["server_name"]?.stringValue : nil
+                tool = type == "MCP" ? raw?["tool_name"]?.stringValue : nil
+                let content = Self.content(update["content"])
+                let tag = Self.tag(raw)
+                let message = content.text ?? tag?.value["message"]?.stringValue ?? ""
+                if message.hasPrefix(Self.answeredPrefix) {
+                    var answers = message.dropFirst(Self.answeredPrefix.count)
+                    if answers.hasSuffix(Self.answeredSuffix) { answers = answers.dropLast(Self.answeredSuffix.count) }
+                    self.answers = String(answers)
+                } else {
+                    answers = nil
+                }
+                isUnanswered = Self.unansweredPrefixes.contains { message.hasPrefix($0) }
+                if notRun == nil {
+                    let text = Self.shownText(raw, type: type, tag: tag, content: content.text, failed: status == "failed")
+                    preview = GrokUpdateRecord.preview(
+                        text ?? (content.images > 0 ? "" : nil), imageCount: content.images)
+                } else {
+                    // A call that never ran holds only Grok's note to the model.
+                    preview = nil
+                }
+            }
+
+            /// The text a result shows: an error's message, a command's
+            /// output, an MCP tool's, a subagent's report or the todo list,
+            /// else the content's text, else a failure's readable name.
+            private static func shownText(
+                _ raw: JSONValue?, type: String?, tag: (name: String, value: JSONValue)?, content: String?,
+                failed: Bool
+            ) -> String? {
+                if raw?["error"] != nil, let message = raw?["message"]?.stringValue { return message }
+                switch type {
+                case "Bash":
+                    // A command sent to the background shows its output once
+                    // its task ends.
+                    if raw?["signal"]?.stringValue == "backgrounded" { return nil }
+                    return raw?["output_for_prompt"]?.stringValue.map(withoutExitLine) ?? content
+                case "MCP":
+                    let output = raw?["output"]
+                    return output?["OkayOutput"]?.stringValue ?? output?["Error"]?.stringValue ?? content
+                case "SubagentCompleted":
+                    return raw?["output"]?.stringValue ?? content
+                case "Todo":
+                    let todos = Input.todos(tag?.value["todos"])
+                    return todos.isEmpty ? content : GrokUpdateRecord.todoText(todos)
+                case "AskUserQuestion", "BackgroundTaskStarted":
+                    return nil
+                case "SearchReplace" where tag?.name == "EditsApplied":
+                    return nil
+                case "ListDir" where tag?.name == "Content":
+                    return tag?.value["content"]?.stringValue ?? content
+                default:
+                    break
+                }
+                if let content { return content }
+                if failed, let tag { return readableFailures[tag.name] ?? tag.name }
+                return raw?["pre_formatted"]?.stringValue ?? raw?["content"]?.stringValue
+                    ?? raw?["text"]?.stringValue
+            }
+
+            /// What a tagged failure reads as when nothing else describes it.
+            private static let readableFailures = [
+                "FileNotFound": "File not found", "NotADirectory": "Not a directory",
+                "MultipleMatchesFound": "Multiple matches", "InvalidInput": "Invalid input",
+                "FileTooLarge": "File too large",
+            ]
+
+            /// The variant of an externally tagged `rawOutput`, such as
+            /// `{type: ReadFile, FileNotFound: "…"}`: its one key besides
+            /// `type` that starts with a capital.
+            private static func tag(_ raw: JSONValue?) -> (name: String, value: JSONValue)? {
+                guard case .object(let fields)? = raw,
+                    let name = fields.keys.filter({ $0 != "type" && $0.first?.isUppercase == true }).min(),
+                    let value = fields[name]
+                else { return nil }
+                return (name, value)
+            }
+
+            /// The text items of `content`, joined, and its images.
+            private static func content(_ value: JSONValue?) -> (text: String?, images: Int) {
+                guard case .array(let items) = value else { return (nil, 0) }
+                var texts: [String] = []
+                var images = 0
+                for item in items where item["type"]?.stringValue == "content" {
+                    switch item["content"]?["type"]?.stringValue {
+                    case "text": if let text = item["content"]?["text"]?.stringValue { texts.append(text) }
+                    case "image": images += 1
+                    default: break
+                    }
+                }
+                let text = texts.joined(separator: "\n")
+                return (text.isEmpty ? nil : text, images)
+            }
+
+            /// A command's output without the `exit: <code>` line Grok puts
+            /// first for the model.
+            private static func withoutExitLine(_ text: String) -> String {
+                guard text.hasPrefix("exit: ") else { return text }
+                let scalars = text.unicodeScalars
+                guard let newline = scalars.firstIndex(of: "\n") else { return "" }
+                return String(scalars[scalars.index(after: newline)...])
+            }
+        }
+    }
+
+    /// A todo list as rows show it, one `[x]`, `[~]` or `[ ]` line per item.
+    static func todoText(_ todos: [Tool.Input.Todo]) -> String {
+        todos.map { todo in
+            switch todo.status {
+            case "completed": "[x] \(todo.content)"
+            case "in_progress": "[~] \(todo.content)"
+            default: "[ ] \(todo.content)"
+            }
+        }.joined(separator: "\n")
     }
 }

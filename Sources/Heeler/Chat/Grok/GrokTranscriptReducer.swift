@@ -9,16 +9,29 @@ import Foundation
 /// line is read. Entry ids come from byte offsets, never from `eventId`,
 /// which Grok numbers again after a rewind.
 struct GrokTranscriptReducer: ChatTranscriptReducer {
-    static let revision = 1
+    static let revision = 2
 
     /// The session's file on the Host.
     let transcriptPath: String
+    /// The directory the session started in, which paths read relative to.
+    let directory: String?
     private var records: [UInt64: GrokUpdateRecord] = [:]
     private var invalid: Set<UInt64> = []
     private var oversized: Set<UInt64> = []
 
     init(transcriptPath: String) {
         self.transcriptPath = transcriptPath
+        directory = Self.directory(ofTranscript: transcriptPath)
+    }
+
+    /// The directory a session's group names: the directory
+    /// percent-encoded. A long directory's group is a slug, which names none.
+    static func directory(ofTranscript path: String) -> String? {
+        let group = GrokTranscriptLocator.groupDirectory(ofTranscript: path)
+        guard let name = group.split(separator: "/").last, let directory = String(name).removingPercentEncoding,
+            RemoteHostPath.isAbsolute(directory)
+        else { return nil }
+        return directory
     }
 
     mutating func append(_ lines: [ChatLine]) {
@@ -39,7 +52,7 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
     func transcript(_ context: ChatProjectionContext) -> ChatTranscript {
         let ordered = records.values.sorted { $0.offset < $1.offset }
         let rewound = Self.rewound(ordered, windowStart: context.windowStart)
-        var projection = Projection(activity: context.activity)
+        var projection = Projection(activity: context.activity, directory: directory)
         for (index, record) in ordered.enumerated() where !rewound.contains(index) {
             projection.read(record)
         }
@@ -48,6 +61,26 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
         transcript.diagnostics.invalidLines = invalid.count
         transcript.diagnostics.oversizedLines = oversized.count
         return transcript
+    }
+
+    func output(of line: ChatLine, for tool: ChatToolActivity) -> ChatToolOutput? {
+        guard !line.isTruncated, let record = GrokUpdateRecord.decode(line) else { return nil }
+        switch record.kind {
+        case .toolUpdate(let update?) where update.callID == tool.callID:
+            guard let output = update.output else { return nil }
+            // A row that shows a diff reads its changes, not the result's text.
+            if tool.fileChanges != nil, let changes = update.fileChanges {
+                let shown = GrokToolCall.shown(changes, kind: tool.kind, directory: tool.fileChanges?.directory)
+                return .preview(nil, fileChanges: shown)
+            }
+            return .preview(tool.kind == .question ? nil : output.preview)
+        case .taskCompleted(let end) where tool.kind == .command:
+            return .preview(end.preview)
+        case .subagentFinished(let finished) where tool.kind == .agent:
+            return .preview(finished.preview)
+        default:
+            return nil
+        }
     }
 
     /// What a sent prompt and a recorded one are compared on. Grok records
@@ -151,6 +184,7 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
 
     private struct Projection {
         let activity: ChatAgentActivity
+        let directory: String?
         var transcript = ChatTranscript()
         var open: OpenTurn?
         /// Records before the first counted prompt belong to a turn opened
@@ -160,9 +194,20 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
         /// The entry the previous record's message or thought placed, which
         /// the next part of the same block extends.
         var lastChunk: (entry: Int, isReasoning: Bool, chunkID: Int, promptID: String?)?
+        /// Each tool call by id, in the order first seen. Its entry holds a
+        /// placeholder until `finish()` builds the row from every record.
+        var calls: [String: GrokToolCall] = [:]
+        var callOrder: [String] = []
+        /// How each turn ended, in the order counted prompts opened them; the
+        /// first is the turn above the loaded lines.
+        var turnEnds: [GrokToolCall.TurnEnd?] = [nil]
+        /// The call that started each background task, and each subagent.
+        var taskCalls: [String: String] = [:]
+        var subagentCalls: [String: String] = [:]
 
-        init(activity: ChatAgentActivity) {
+        init(activity: ChatAgentActivity, directory: String?) {
             self.activity = activity
+            self.directory = directory
         }
 
         mutating func read(_ record: GrokUpdateRecord) {
@@ -183,8 +228,26 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
                 readChunk(record, chunk, isReasoning: false)
             case .agentThought(let chunk):
                 readChunk(record, chunk, isReasoning: true)
-            case .toolCall, .toolUpdate:
+            case .toolCall(let tool):
                 noteOutput(record)
+                if let tool { readTool(record, tool, isCall: true) }
+            case .toolUpdate(let tool):
+                noteOutput(record)
+                if let tool { readTool(record, tool, isCall: false) }
+            case .taskBackgrounded(let task):
+                if let callID = task.callID, calls[callID] != nil {
+                    if let taskID = task.taskID { taskCalls[taskID] = callID }
+                    calls[callID]?.sentToBackground = true
+                }
+            case .taskCompleted(let end):
+                readTaskEnd(record, end)
+            case .subagentSpawned(let spawned):
+                readSpawn(spawned)
+            case .subagentFinished(let finished):
+                if let id = finished.subagentID, let callID = subagentCalls[id] {
+                    calls[callID]?.subagentEnd = finished
+                    calls[callID]?.subagentEndLine = Self.line(record)
+                }
             case .turnCompleted(let end):
                 readEnd(record, end)
             case .compactionCheckpoint:
@@ -208,7 +271,7 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
                     kind: .system, title: notes.count > 1 ? "Images not sent" : "Image not sent",
                     detail: notes.isEmpty ? nil : notes.joined(separator: "\n"))
                 addNotice(notice, record)
-            case .taskBackgrounded, .taskCompleted, .subagentSpawned, .subagentFinished, .rewind, .skipped:
+            case .rewind, .skipped:
                 break
             case .unknown(let type):
                 transcript.diagnostics.unknownRecordTypes.insert(type)
@@ -216,6 +279,7 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
         }
 
         mutating func finish() -> ChatTranscript {
+            resolveTools()
             // Ctrl+C before the first output takes the prompt out of Grok's
             // conversation and puts its text back in the input box; Grok
             // writes no end for the turn. Working, the reply may still come.
@@ -263,6 +327,8 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
                         transcript.turns[turn].ending = .interrupted
                     }
                 }
+                endTurn(.replaced)
+                turnEnds.append(nil)
                 open = OpenTurn(
                     promptIndex: chunk.promptIndex, openerOffset: record.offset, opener: nil, turn: nil,
                     promptMilliseconds: record.agentTimestampMs, promptSeconds: record.timestamp)
@@ -400,6 +466,96 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
                 transcript.precedingTurnEnd = ChatTurnEnd(
                     ending: ending, endedAt: record.agentTimestampMs.map(Self.date))
             }
+            switch end.stopReason {
+            case "cancelled": endTurn(end.cancellationCategory == "PermissionRejected" ? .rejected : .cancelled)
+            case "error": endTurn(.failed)
+            default: endTurn(.completed)
+            }
+        }
+
+        /// Records how the latest turn ended, unless it already had.
+        private mutating func endTurn(_ end: GrokToolCall.TurnEnd) {
+            guard let last = turnEnds.indices.last, turnEnds[last] == nil else { return }
+            turnEnds[last] = end
+        }
+
+        // MARK: Tools
+
+        /// One record of a tool call. The call's row shows from its first
+        /// record on; `finish()` builds it.
+        private mutating func readTool(_ record: GrokUpdateRecord, _ tool: GrokUpdateRecord.Tool, isCall: Bool) {
+            let id = tool.callID
+            if calls[id] == nil {
+                let entryID = ChatEntryID("grok:tool:\(id)")
+                calls[id] = GrokToolCall(id: id, entryID: entryID, turn: turnEnds.count - 1)
+                callOrder.append(id)
+                let placeholder = ChatToolActivity(kind: .other, name: "", title: "", status: .running, callID: id)
+                place(.tool(placeholder), id: entryID, record)
+            }
+            calls[id]?.merge(tool, isCall: isCall, line: Self.line(record), isTruncated: record.isTruncated)
+            if let taskID = tool.output?.taskID { taskCalls[taskID] = id }
+        }
+
+        /// A background task ended: its call's row says how, and a notice
+        /// marks when.
+        private mutating func readTaskEnd(_ record: GrokUpdateRecord, _ end: GrokUpdateRecord.TaskCompleted) {
+            if let taskID = end.taskID, let callID = taskCalls[taskID] ?? (calls[taskID] == nil ? nil : taskID) {
+                calls[callID]?.taskEnd = end
+                calls[callID]?.taskEndLine = Self.line(record)
+            }
+            var detail = end.command.map { [$0] } ?? []
+            if end.wasKilled || end.signal == "killed" {
+                detail.append("Killed")
+            } else if let signal = end.signal {
+                detail.append("Signal \(signal)")
+            } else if let code = end.exitCode {
+                detail.append("Exit code \(code)")
+            }
+            let isCommand = end.taskKind == nil || end.taskKind == "bash"
+            addNotice(
+                ChatNotice(
+                    kind: .taskNotification,
+                    title: isCommand ? "Background command finished" : "Background task finished",
+                    detail: detail.isEmpty ? nil : detail.joined(separator: " · ")), record)
+        }
+
+        /// A subagent started: it belongs to the spawn call that describes it
+        /// the same way, else to the first spawn still without one. Grok can
+        /// write it before the spawn's input update.
+        private mutating func readSpawn(_ spawned: GrokUpdateRecord.SubagentSpawned) {
+            guard let subagentID = spawned.subagentID, subagentCalls[subagentID] == nil else { return }
+            let unattached = callOrder.filter { calls[$0]?.isSpawn == true && calls[$0]?.subagentID == nil }
+            let described = spawned.description.flatMap { description in
+                unattached.first { calls[$0]?.input?.description == description }
+            }
+            guard let callID = described ?? unattached.first else { return }
+            subagentCalls[subagentID] = callID
+            calls[callID]?.subagentID = subagentID
+            calls[callID]?.subagentType = spawned.subagentType
+            calls[callID]?.subagentDescription = spawned.description
+        }
+
+        /// Builds each call's row in its placeholder's place, and offers a
+        /// call that waits for approval to the Blocked card.
+        private mutating func resolveTools() {
+            guard !callOrder.isEmpty else { return }
+            var positions: [ChatEntryID: Int] = [:]
+            for (index, entry) in transcript.entries.enumerated() {
+                positions[entry.id] = index
+            }
+            for id in callOrder {
+                guard let call = calls[id], let index = positions[call.entryID] else { continue }
+                let turnEnd = turnEnds.indices.contains(call.turn) ? turnEnds[call.turn] : nil
+                let tool = call.activity(directory: directory, turnEnd: turnEnd, agent: activity)
+                transcript.entries[index].content = .tool(tool)
+                if tool.status == .awaitingApproval {
+                    transcript.pendingRequests.append(call.pendingRequest(for: tool))
+                }
+            }
+        }
+
+        private static func line(_ record: GrokUpdateRecord) -> ChatOutputReference {
+            ChatOutputReference(offset: record.offset, length: record.length)
         }
 
         // MARK: Entries

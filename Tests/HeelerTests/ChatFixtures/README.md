@@ -29,6 +29,11 @@ None came from a personal session.
 | `grok/compaction.jsonl` | Lines 1–6 are lines 139–144 of an earlier capture of `core-turns.jsonl`'s session (2026-10-19): a turn, then a manual `/compact` (`compaction_checkpoint` and `auto_compact_completed`). Lines 7–12 are written for the test in the same session, from event number 606 on: an automatic compaction inside the next turn, recorded as Grok Build's source writes one |
 | `grok/dispatch-order.jsonl` | The same (2026-10-19), lines 1–4 of a session dispatched from Grok's dashboard: its prompt is written before herdr's `session_start` record |
 | `grok/agent-turns-and-errors.jsonl` | Written for the test, not captured: a skill, a prompt of text, image and text chunks with an `image_dropped` notice, an interjection and a thought written after its turn's end, a retry that gave up and an expired sign-in (each ending its turn with an error), a shell-mode command, a hidden prompt Grok wrote for itself after a background command, fork and resume context wrappers, an unknown record kind, and a cancelled and a failed automatic compaction. The records take the captures' shapes, or Grok Build's source where no capture shows one |
+| `grok/reject-and-edit.jsonl` | The same Grok Build and herdr (2026-10-19), lines 97–116 of a scratch session's capture: a `run_terminal_command` call the user rejected, which ended the turn (`PermissionRejected`), a `search_replace` call that created `notes.txt`, and one that changed a line of it, its result carrying the edit's details. No hook records fall in these lines |
+| `grok/subagent-todo-question.jsonl` | The same (2026-10-19), lines 18–20, 22–24, 26–28, 35–37, 39, 41–44, 46, 48–49, 51, 53–55, 57, 59–60, 62, 64 and 77 of another scratch session's capture, four turns: a subagent whose `subagent_spawned` and `subagent_finished` records come before the spawn's input update, a `todo_write` call and the `plan` snapshot after it, an `ask_user_question` call answered with its first option, and a `write` call that created `note.txt`. The dropped lines are the developer's hook records, a turn that wrote its plan as prose, two thoughts, and git calls with a message that names the commit |
+| `grok/pending-permission.jsonl` | The same (2026-10-19), lines 90–92 of a capture taken while Grok waited for permission to run a command: herdr's `session_start` record, the prompt, and the bare `tool_call` |
+| `grok/background-tasks.jsonl` | Written for the test, not captured: a command started in the background, a command Grok moved to the background while it ran, and a subagent spawned in the background, with their `task_backgrounded` and `subagent_spawned` records, then the commands' `task_completed` records (one exited 0, one was killed) and the subagent's `subagent_finished`. The records take the shapes Grok Build's source writes |
+| `grok/failed-tools.jsonl` | Written for the test, not captured: one turn of failed calls, a `tool_execution_failed` error, the tagged failures `FileNotFound`, `FileTooLarge`, `NotADirectory`, `NotFound`, `NoMatchesFound`, `MultipleMatchesFound` and `InvalidInput`, and an MCP call that returned an error. The records take the shapes a census of real failures found; some carry no content |
 
 ## Scrubbing
 
@@ -64,6 +69,9 @@ these replacements:
   `total_bytes` still holds.
 - The scratch directory the probes ran in becomes `/Users/developer/scratch/`,
   plain and percent-encoded.
+- In `subagent-todo-question.jsonl`, the question and options the model
+  wrote in Chinese become English scratch text, in the call, its input
+  update and the answer. Those three lines are shorter than captured.
 
 The developer's own hook records (`global/settings:` runs) are dropped, except
 the one `cancel-takeover.jsonl` keeps under a renamed run; herdr's
