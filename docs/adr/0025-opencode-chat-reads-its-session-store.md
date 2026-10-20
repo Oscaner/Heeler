@@ -73,6 +73,11 @@ Cards and the cache work as described there.
   512 KiB up to 2 MiB, at most 8 MiB per search. Output cut at the 2 MiB cap
   halves the budget, at most twice; then the conversation is reported as too
   large to read in one query.
+- Sessions OpenCode imported from 1.x are read in `session_v2` like any
+  other. They keep their 1.x `version` and have no `idle` rows, and 1.x took
+  no steers, so until an `idle` row shows such a session going on in
+  OpenCode 2, each prompt opens a turn and the turn before it ends with its
+  last step.
 
 ### Polling and changes
 

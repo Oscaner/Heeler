@@ -36,7 +36,8 @@ struct OpenCodeSession: Decodable, Sendable {
     /// The id of the session this one is a subagent of.
     var parent: String?
     var title: String?
-    /// The OpenCode version that wrote the session.
+    /// The OpenCode version that created the session. One OpenCode 2
+    /// imported from 1.x keeps its 1.x version.
     var version: String?
     /// The boundary message of a staged `/undo`.
     var revertMessage: String?
@@ -50,6 +51,11 @@ struct OpenCodeSession: Decodable, Sendable {
         version = container.lenient(String.self, "version")
         revertMessage = container.lenient(String.self, "revertMessage")
         revertSeq = container.lenient(Int64.self, "revertSeq")
+    }
+
+    /// The major version of `version`.
+    var majorVersion: Int? {
+        version?.split(separator: ".").first.flatMap { Int($0) }
     }
 }
 

@@ -107,6 +107,41 @@ struct OpenCodeTranscriptReducerTests {
         #expect(ended.turns.first?.endedAt == Self.date(1_800_000_100_095))
     }
 
+    /// OpenCode 2 imports a 1.x session without `idle` rows, keeping its
+    /// version. Each prompt opens its own turn, and the turn before ends
+    /// with its last step.
+    @Test func anImportedSessionOpensATurnPerPrompt() throws {
+        let transcript = Self.project(Self.imported)
+        Self.expectNoMalformedLines(transcript)
+        #expect(transcript.turns.map(\.firstEntryID) == [0, 3, 5, 7].map { ChatEntryID("oc:msg_u\($0)") })
+        #expect(transcript.turns.map(\.ending) == [.completed, .interrupted, .failed, nil])
+        #expect(
+            transcript.turns.map(\.endedAt) == [
+                Self.date(1_800_000_100_102), Self.date(1_800_000_100_104), Self.date(1_800_000_100_106), nil,
+            ])
+        #expect(Self.prompts(transcript).allSatisfy { !$0.wasQueued })
+        #expect(transcript.entries.contains { $0.content == .notice(ChatNotice(kind: .error, title: "Rate limited")) })
+    }
+
+    /// An imported session OpenCode 2 goes on with: its first new prompt
+    /// opens a turn, and once an `idle` row arrives, steers stay in the
+    /// turn they steer.
+    @Test func anImportedSessionThatGoesOnInOpenCode2KeepsItsSteers() throws {
+        let continued = Self.imported + [
+            Self.prompt(9), Self.step(10, items: [Self.text(0, "Five.")], fields: #""finish":"stop""#),
+            Self.idle(11), Self.prompt(12),
+            Self.step(13, items: [Self.tool(0, name: "shell", status: "completed")], fields: #""finish":"tool-calls""#),
+            Self.prompt(14), Self.step(15, items: [Self.text(0, "Six.")], fields: #""finish":"stop""#), Self.idle(16),
+        ]
+        let transcript = Self.project(continued)
+        Self.expectNoMalformedLines(transcript)
+        #expect(transcript.turns.map(\.firstEntryID) == [0, 3, 5, 7, 9, 12].map { ChatEntryID("oc:msg_u\($0)") })
+        #expect(transcript.turns.map(\.ending) == [.completed, .interrupted, .failed, .completed, .completed, .completed])
+        try #require(transcript.turns.count == 6)
+        #expect(transcript.turns[3].endedAt == Self.date(1_800_000_100_108))
+        #expect(Self.prompts(transcript).map(\.wasQueued) == [false, false, false, false, false, false, true])
+    }
+
     @Test func escStopEndsTheTurnInterruptedAndKeepsPartialText() throws {
         let transcript = try Self.transcript("esc-stop")
         #expect(transcript.turns.map(\.ending) == [.interrupted])
@@ -836,6 +871,34 @@ struct OpenCodeTranscriptReducerTests {
         let readOffset = UInt64(max(records.eventSeq ?? 0, 0)) + 1
         return [records.sessionLine, records.inboxLine].compactMap { $0 }.map { ChatLine(offset: readOffset, data: $0) }
             + records.rows.map { ChatLine(offset: UInt64($0.seq), data: $0.line) }
+    }
+
+    /// A session OpenCode 2 imported from 1.x, as its importer writes one:
+    /// the 1.x version, `seq` from 0, and no `idle` rows. Its turns end
+    /// with a stop, an Esc stop and a provider error, and the last never
+    /// ends.
+    private static let imported: [ChatLine] = [
+        session(title: "Imported", version: "1.3.10"),
+        prompt(0),
+        step(1, items: [tool(0, name: "bash", status: "completed")], fields: #""finish":"tool-calls""#),
+        step(2, items: [text(0, "One.")], fields: #""finish":"stop","time":{"completed":1800000100102}"#),
+        prompt(3),
+        step(
+            4, items: [text(0, "Partial")],
+            fields: #""error":{"type":"aborted","message":"The operation was aborted."},"time":{"completed":1800000100104}"#),
+        prompt(5),
+        step(
+            6, items: [],
+            fields: #""finish":"error","error":{"type":"provider.error","message":"Rate limited"},"time":{"completed":1800000100106}"#),
+        prompt(7),
+        step(8, items: [text(0, "Four.")], fields: #""finish":"stop","time":{"completed":1800000100108}"#),
+    ]
+
+    private static func prompts(_ transcript: ChatTranscript) -> [ChatUserMessage] {
+        transcript.entries.compactMap { entry -> ChatUserMessage? in
+            guard case .user(let message) = entry.content else { return nil }
+            return message
+        }
     }
 
     private static func tools(_ transcript: ChatTranscript) -> [ChatToolActivity] {

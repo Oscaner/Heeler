@@ -11,6 +11,11 @@ import Foundation
 /// declined permission or a dismissed question ends a turn with no `idle`
 /// row, so the reducer ends it at that step while the step is the turn's
 /// last: OpenCode may resume the turn after a restart.
+///
+/// A session OpenCode 2 imported from 1.x keeps its 1.x version and has no
+/// `idle` rows, and 1.x took no steers. Until an `idle` row shows the
+/// session going on in OpenCode 2, each of its prompts opens a turn, and
+/// the turn before ends with its last step.
 struct OpenCodeTranscriptReducer: ChatTranscriptReducer {
     static let revision = 1
 
@@ -57,14 +62,12 @@ struct OpenCodeTranscriptReducer: ChatTranscriptReducer {
     }
 
     var unsupportedFormat: String? {
-        guard let version = session?.version, let major = version.split(separator: ".").first.flatMap({ Int($0) }),
-            major > 2
-        else { return nil }
+        guard let version = session?.version, let major = session?.majorVersion, major > 2 else { return nil }
         return "OpenCode session version \(version)"
     }
 
     func transcript(_ context: ChatProjectionContext) -> ChatTranscript {
-        var projection = Projection(context: context)
+        var projection = Projection(context: context, isImported: session?.majorVersion.map { $0 < 2 } ?? false)
         projection.transcript.title = Self.title(session?.title)
         projection.transcript.diagnostics = diagnostics
         // A staged `/undo` hides its rows, as OpenCode's own screen does:
@@ -156,6 +159,8 @@ private struct Projection {
         var decline: Decline?
         /// The error the run's last failed step showed.
         var failure: String?
+        /// How the run ends if it ends at its newest step.
+        var lastStep: ChatTurnEnd?
         /// Tool entries still running, oldest first.
         var runningTools: [Int] = []
 
@@ -172,10 +177,15 @@ private struct Projection {
 
     var transcript = ChatTranscript()
     let context: ChatProjectionContext
+    /// The session was imported from OpenCode 1.x.
+    let isImported: Bool
+    /// An `idle` row was read: an imported session went on in OpenCode 2.
+    var sawIdle = false
     var run: Run
 
-    init(context: ChatProjectionContext) {
+    init(context: ChatProjectionContext, isImported: Bool) {
         self.context = context
+        self.isImported = isImported
         transcript.needsOlderHistory = context.windowStart > 0
         run = context.windowStart > 0 ? Run(place: .above(seen: false)) : Run(place: .loose, isEnded: true)
     }
@@ -187,6 +197,7 @@ private struct Projection {
         case .assistant(let step):
             addStep(row, step, length: length)
         case .idle(let idle):
+            sawIdle = true
             // A run its declined step ended is already over: this idle,
             // such as the one `/redo` writes, closes nothing.
             settleDecline()
@@ -357,6 +368,15 @@ private struct Projection {
         if step.finish == "error", step.tools.contains(where: Self.isDeclined) {
             run.decline = Run.Decline(endedAt: OpenCodeTranscriptReducer.date(step.completed ?? row.updated))
         }
+        let ending: ChatTurn.Ending =
+            if step.error?.type == "aborted" {
+                .interrupted
+            } else if step.error != nil || step.finish == "error" {
+                .failed
+            } else {
+                .completed
+            }
+        run.lastStep = ChatTurnEnd(ending: ending, endedAt: OpenCodeTranscriptReducer.date(step.completed ?? row.updated))
     }
 
     private mutating func addNote(_ row: OpenCodeRow, _ note: OpenCodeNote) {
@@ -389,11 +409,17 @@ private struct Projection {
     // MARK: Turns
 
     /// Places a prompt or `/compact`: it steers a turn still running, and
-    /// otherwise opens one. Returns whether it steered.
+    /// otherwise opens one. Returns whether it steered. In a session
+    /// imported from 1.x, until an `idle` row, it always opens one, and the
+    /// run before ends with its last step.
     @discardableResult
     private mutating func open(_ row: OpenCodeRow, id: ChatEntryID) -> Bool {
         settleDecline()
-        if run.takesSteers { return true }
+        if isImported, !sawIdle {
+            if let last = run.lastStep { end(last.ending, at: last.endedAt) }
+        } else if run.takesSteers {
+            return true
+        }
         endQuietly()
         transcript.turns.append(ChatTurn(firstEntryID: id, startedAt: OpenCodeTranscriptReducer.date(row.created)))
         run = Run(place: .turn(transcript.turns.count - 1))
