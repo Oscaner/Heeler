@@ -8,8 +8,9 @@ import Foundation
 /// panel Ctrl+C opens while subagents run. Any other card with options
 /// holds sending as an excerpt without numbers, so the generic card offers
 /// only its key pad: the rewind confirmation, the fork question (every
-/// answer forks, which leaves herdr's session stale), several questions at
-/// once, and the cards not captured yet.
+/// answer forks, which leaves herdr's session stale), the approval before a
+/// subagent starts (its once row reads `Yes, send once`; 1.0.62, live),
+/// several questions at once, and the cards not captured yet.
 ///
 /// The cursor's row lies on a band of another background, or in reverse
 /// video under the terminal theme, its label bold. On a permission and on
