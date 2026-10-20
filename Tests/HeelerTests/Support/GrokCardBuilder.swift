@@ -178,6 +178,10 @@ enum GrokCards {
             // Esc parked the keyboard in the scrollback: no band, and the
             // footer offers the card back, in words no capture shows yet.
             permission(columns: 120, focused: false)
+        case "synthetic-permission-cursor-on-always-approve":
+            permission(columns: 120, cursor: 1)
+        case "synthetic-permission-cursor-on-never-allow":
+            permission(columns: 120, cursor: 5)
         case "synthetic-question-40":
             // The cursor's answer wraps its label and description at 25
             // cells; the other answer shows one row, its description cut.
@@ -228,6 +232,15 @@ enum GrokCards {
                     Row("z (○) Type your answer here", band: true), .blank, Row("↑/↓ navigate · y copy"),
                 ],
                 hints: questionHints)
+        case "synthetic-question-cursor-unseen":
+            // The card has the keyboard, but no row shows the cursor.
+            GrokCardBuilder(
+                status: "Waiting on answers for Which fruit?",
+                rows: [
+                    .bold("Which fruit?"), .blank, .blank, .option("1 (○) Apple"), .option("2 (○) Pear"),
+                    .option("z (○) Type your answer here"), .blank, Row("↑/↓ navigate · y copy"),
+                ],
+                hints: questionHints)
         case "synthetic-question-ten-answers":
             // The tenth answer's key is `a`.
             GrokCardBuilder(
@@ -260,33 +273,50 @@ enum GrokCards {
                 ],
                 hints: ["Enter:accept / toggle", "d:decline", "Ctrl+c:cancel", "Tab:next field", "Esc:scrollback"])
         case "synthetic-subagents-40":
-            GrokCardBuilder(
-                columns: 40,
-                rows: [
-                    .bold("Subagents are still running. Stop them?"), Row("1 subagent running"), .blank,
-                    .option("1 (●) Stop running", cursor: true), .option("2 (○) Continue to run"),
-                    .option("3 (○) Always stop"), .option("4 (○) Always continue"),
-                ],
-                hints: ["1/4:select", "Tab:next choice", "Enter:confirm", "Esc:keep running"])
+            subagents(columns: 40)
+        case "synthetic-subagents-cursor-on-always-stop":
+            subagents(columns: 120, cursor: 3)
         default:
             nil
         }
     }
 
-    /// A command's permission like grok-12's. At 40 columns the
-    /// always-approve and reject rows stop at the card's edge.
+    /// A command's permission like grok-12's, the cursor on the row keyed
+    /// `cursor`. At 40 columns the always-approve and reject rows stop at
+    /// the card's edge.
     private static func permission(
-        columns: Int, focused: Bool = true, terminalTheme: Bool = false
+        columns: Int, focused: Bool = true, cursor: Int = 3, terminalTheme: Bool = false
     ) -> GrokCardBuilder {
-        GrokCardBuilder(
+        let labels = [
+            "Yes, and don't ask again for anything (always-approve mode)", "Always allow: ls -l", "Yes, proceed",
+            "No, reject (type to add feedback)", "Never allow: ls",
+        ]
+        return GrokCardBuilder(
             columns: columns, status: "List the files… 0.1s",
             rows: [
                 Row("›  List the files", boldFrom: 3), Row("│ ls -l"), Row("← → narrow scope  ·  e edit pattern"),
                 .blank,
-                .option("1 (○) Yes, and don't ask again for anything (always-approve mode)"),
-                .option("2 (○) Always allow: ls -l"), .option("3 (●) Yes, proceed", cursor: true, band: focused),
-                .option("4 (○) No, reject (type to add feedback)"), .option("5 (○) Never allow: ls"),
-            ],
+            ] + options(labels, cursor: cursor, band: focused),
             hints: focused ? permissionHints : ["Tab/Space:permission"], terminalTheme: terminalTheme)
+    }
+
+    /// The panel Ctrl+C opens while a subagent runs, like grok-16's, the
+    /// cursor on the row keyed `cursor`.
+    private static func subagents(columns: Int, cursor: Int = 1) -> GrokCardBuilder {
+        GrokCardBuilder(
+            columns: columns,
+            rows: [.bold("Subagents are still running. Stop them?"), Row("1 subagent running"), .blank]
+                + options(["Stop running", "Continue to run", "Always stop", "Always continue"], cursor: cursor),
+            hints: ["1/4:select", "Tab:next choice", "Enter:confirm", "Esc:keep running"])
+    }
+
+    /// Rows keyed from `1`, `(●)` and the bold label marking the cursor's,
+    /// which lies on the band while the card has the keyboard.
+    private static func options(_ labels: [String], cursor: Int, band: Bool = true) -> [Row] {
+        labels.enumerated().map { offset, label in
+            let key = offset + 1
+            return Row.option(
+                "\(key) (\(key == cursor ? "●" : "○")) \(label)", cursor: key == cursor, band: key == cursor && band)
+        }
     }
 }

@@ -8,7 +8,9 @@ import Foundation
 /// unanswered; Ctrl+O, `e`, ← and →, which change the rule or the mode; or
 /// a letter on a permission, which opens the reject row's feedback field.
 /// Grok records no approval and herdr stays Blocked a moment after a key,
-/// so the card leaving the screen confirms it.
+/// so the card leaving the screen confirms it. A key selects its row
+/// wherever the cursor is, so only a question, where the cursor may sit on
+/// the answer field, needs to see it.
 struct GrokDialogPlanner {
     let dialog: BlockedDialog
     /// Ignored: no Grok Build record answers a card.
@@ -16,15 +18,16 @@ struct GrokDialogPlanner {
 
     func plan(_ action: DialogAction) throws(DialogPlanError) -> DialogActionPlan {
         guard dialog.program == .grok else { throw Self.notGrok }
-        // Esc left the keyboard in the scrollback, where keys miss the card.
-        guard let focused = dialog.focus.focusedOrdinal else {
+        // Esc left the keyboard in the scrollback, or a field of the card
+        // has it, where keys miss the options.
+        guard !dialog.focus.keysMissOptions else {
             throw .unsupported("Grok Build's card doesn't have focus. Answer it in the terminal.")
         }
         switch dialog.kind {
         case .grokPermission:
             return try permission(action)
         case .grokQuestion:
-            return try question(action, focused: focused)
+            return try question(action)
         case .grokCancelTurn:
             return try cancelPanel(action)
         case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFileRead, .claudeFetch, .claudePlan,
@@ -59,11 +62,16 @@ struct GrokDialogPlanner {
     /// An answer's key: `1` to `9`, then `a` to `f`. With the cursor on the
     /// answer field, a key would be typed into it, and Heeler types nothing
     /// into a question.
-    private func question(_ action: DialogAction, focused: Int) throws(DialogPlanError) -> DialogActionPlan {
+    private func question(_ action: DialogAction) throws(DialogPlanError) -> DialogActionPlan {
         switch action {
         case .choose(let ordinal):
             guard let option = dialog.option(ordinal) else { throw .noSuchOption(ordinal) }
             guard option.role == .answer else { throw Self.typedAnswer }
+            guard let focused = dialog.focus.focusedOrdinal else {
+                throw .unsupported(
+                    "Heeler can't see Grok Build's cursor, which may be on the answer field, where a key would be "
+                        + "typed. Answer in the terminal.")
+            }
             guard dialog.option(focused)?.role != .otherText else {
                 throw .unsupported(
                     "Grok Build's cursor is on its answer field, where a key would be typed. Answer in the terminal.")

@@ -155,10 +155,15 @@ struct DialogFocusState: Sendable, Hashable {
     /// Oh My Pi: the prompt below the question holds a draft, so keys go
     /// into the draft rather than to the question.
     var composerDraftGuard: Bool
+    /// Grok Build: the footer shows none of the card's hints, so the
+    /// scrollback or one of the card's fields has the keyboard, and keys
+    /// would miss the options.
+    var keysMissOptions: Bool
 
     init(
         focusedOrdinal: Int? = nil, checked: Set<Int> = [], inputText: String? = nil,
-        notesText: String? = nil, feedbackOrdinal: Int? = nil, composerDraftGuard: Bool = false
+        notesText: String? = nil, feedbackOrdinal: Int? = nil, composerDraftGuard: Bool = false,
+        keysMissOptions: Bool = false
     ) {
         self.focusedOrdinal = focusedOrdinal
         self.checked = checked
@@ -166,6 +171,7 @@ struct DialogFocusState: Sendable, Hashable {
         self.notesText = notesText
         self.feedbackOrdinal = feedbackOrdinal
         self.composerDraftGuard = composerDraftGuard
+        self.keysMissOptions = keysMissOptions
     }
 }
 

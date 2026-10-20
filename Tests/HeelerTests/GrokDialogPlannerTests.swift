@@ -148,6 +148,40 @@ struct GrokDialogPlannerTests {
         #expect(throws: DialogPlanError.self) { try plan(.dismiss, on: dialog) }
     }
 
+    /// A key selects its row wherever the cursor is: with the cursor on
+    /// the always-approve row, a `Never allow:` row or an `Always` row,
+    /// which Chat leaves to the terminal, each row Chat offers still goes
+    /// by its own key.
+    @Test(arguments: [
+        ("synthetic-permission-cursor-on-always-approve", ["2", "3", "4"]),
+        ("synthetic-permission-cursor-on-never-allow", ["2", "3", "4"]),
+        ("synthetic-subagents-cursor-on-always-stop", ["1", "2"]),
+    ])
+    func answersWhereverTheCursorIs(stem: String, keys: [String]) throws {
+        let dialog = try GrokCards.dialog(stem)
+        #expect(dialog.focus.focusedOrdinal == nil)
+
+        let plans = try dialog.options.map { option in try plan(.choose(ordinal: option.ordinal), on: dialog) }
+
+        #expect(plans.map(\.steps) == keys.map { [DialogStep.keys([$0])] })
+        if dialog.kind == .grokPermission {
+            #expect(try plan(.dismiss, on: dialog).keys == ["4"])
+        }
+    }
+
+    /// With no row showing the cursor, it may be on the answer field, so
+    /// the answers wait for the terminal.
+    @Test func refusesAnAnswerWhileTheCursorIsUnseen() throws {
+        let dialog = try GrokCards.dialog("synthetic-question-cursor-unseen")
+        #expect(dialog.focus == DialogFocusState())
+
+        #expect(
+            throws: DialogPlanError.unsupported(
+                "Heeler can't see Grok Build's cursor, which may be on the answer field, where a key would be "
+                    + "typed. Answer in the terminal.")
+        ) { try plan(.choose(ordinal: 1), on: dialog) }
+    }
+
     /// Esc left the keyboard in the scrollback: keys would miss the card.
     @Test func refusesAnUnfocusedCard() throws {
         for stem in ["synthetic-unfocused-permission", "synthetic-unfocused-question"] {

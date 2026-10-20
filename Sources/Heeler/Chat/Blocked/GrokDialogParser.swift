@@ -17,8 +17,11 @@ import Foundation
 /// chosen answer. Esc hands the keyboard to the scrollback and leaves the
 /// card drawn without its band (`key_owner.rs`), and a key would then miss
 /// the card, so the cursor counts only while the footer shows the card's
-/// hints. A row too long for the card stops at its edge, and a label cut
-/// there still names the option it begins.
+/// hints. A row's key selects that row wherever the cursor is, a row Heeler
+/// leaves to the terminal included (`interactions.rs`), so the hints, not
+/// the cursor, say whether keys reach the card. A row too long for the
+/// card stops at its edge, and a label cut there still names the option it
+/// begins.
 enum GrokDialogParser {
     static func parse(_ screen: ANSIScreen) -> DialogParseResult {
         let grok = GrokScreen(screen)
@@ -106,7 +109,7 @@ enum GrokDialogParser {
             fingerprint: DialogFingerprint(
                 program: .grok, kind: .grokPermission, title: title, sourceSuffix: nil, body: body, progress: nil,
                 options: options),
-            focus: DialogFocusState(focusedOrdinal: options.first(where: \.isFocused)?.ordinal), subject: subject)
+            focus: card.focus(of: options), subject: subject)
     }
 
     private enum PermissionRow {
@@ -212,7 +215,7 @@ enum GrokDialogParser {
             fingerprint: DialogFingerprint(
                 program: .grok, kind: .grokQuestion, title: question, sourceSuffix: nil, body: body, progress: nil,
                 options: options),
-            focus: DialogFocusState(focusedOrdinal: options.first(where: \.isFocused)?.ordinal), subject: subject)
+            focus: card.focus(of: options), subject: subject)
     }
 
     private struct Answer {
@@ -297,8 +300,7 @@ enum GrokDialogParser {
             fingerprint: DialogFingerprint(
                 program: .grok, kind: .grokCancelTurn, title: title, sourceSuffix: nil, body: body, progress: nil,
                 options: options),
-            focus: DialogFocusState(focusedOrdinal: options.first(where: \.isFocused)?.ordinal),
-            subject: DialogSubject())
+            focus: card.focus(of: options), subject: DialogSubject())
     }
 
     private static let cancelTitle = "Subagents are still running. Stop them?"
@@ -379,6 +381,8 @@ private struct GrokCard {
 
     let rows: Range<Int>
     let lines: [Line]
+    /// The footer shows the card's hints, so the card has the keyboard.
+    let hasKeyboard: Bool
     /// The line of the cursor's option, while the card has the keyboard.
     let cursor: Int?
 
@@ -389,13 +393,19 @@ private struct GrokCard {
         let edge = (rows.map { screen.rows[$0].width }.max() ?? 0) - 4
         let lines = rows.map { Line(screen.rows[$0], edge: edge) }
         self.lines = lines
-        cursor = Self.cursor(in: lines, footer: footer)
+        hasKeyboard = footer.map(Self.showsCardHints) ?? false
+        cursor = hasKeyboard ? Self.cursor(in: lines) : nil
+    }
+
+    /// The focus of the card's `options`: the cursor's, which may lie on a
+    /// row the card doesn't offer.
+    func focus(of options: [DialogOption]) -> DialogFocusState {
+        DialogFocusState(focusedOrdinal: options.first(where: \.isFocused)?.ordinal, keysMissOptions: !hasKeyboard)
     }
 
     /// The banded option; where a hovered row is banded too, the one with
     /// a bold label; with no band, the `(●)` row.
-    private static func cursor(in lines: [Line], footer: String?) -> Int? {
-        guard let footer, showsCardHints(footer) else { return nil }
+    private static func cursor(in lines: [Line]) -> Int? {
         let options = lines.indices.filter { lines[$0].option != nil }
         let banded = options.filter { lines[$0].hasBand }
         if banded.count > 1 {

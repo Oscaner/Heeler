@@ -155,12 +155,27 @@ struct GrokDialogParserTests {
         let question = try GrokCards.dialog("synthetic-unfocused-question")
 
         #expect(permission.kind == .grokPermission)
-        #expect(permission.focus.focusedOrdinal == nil)
+        #expect(permission.focus == DialogFocusState(keysMissOptions: true))
         #expect(permission.options.filter(\.isFocused).isEmpty)
         #expect(question.kind == .grokQuestion)
-        #expect(question.focus.focusedOrdinal == nil)
+        #expect(question.focus == DialogFocusState(keysMissOptions: true))
         // The same card with the keyboard reads its cursor.
-        #expect(try GrokCards.dialog("synthetic-question-ten-answers").focus.focusedOrdinal == 1)
+        #expect(try GrokCards.dialog("synthetic-question-ten-answers").focus == DialogFocusState(focusedOrdinal: 1))
+    }
+
+    /// A row's key selects it wherever the cursor is, so the cursor on a
+    /// row Chat leaves to the terminal leaves the keys on the card: no
+    /// option Chat offers has focus, and the keys still reach them.
+    @Test(arguments: [
+        "synthetic-permission-cursor-on-always-approve", "synthetic-permission-cursor-on-never-allow",
+        "synthetic-subagents-cursor-on-always-stop",
+    ])
+    func theCursorOnARowLeftToTheTerminalKeepsTheKeysOnTheCard(stem: String) throws {
+        let dialog = try GrokCards.dialog(stem)
+
+        #expect(dialog.focus == DialogFocusState())
+        #expect(dialog.options.filter(\.isFocused).isEmpty)
+        #expect(dialog.options.map(\.number) == (dialog.kind == .grokPermission ? [2, 3, 4] : [1, 2]))
     }
 
     /// Phone widths (synthetic): rows stop at the card's edge, so a label
