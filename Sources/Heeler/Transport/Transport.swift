@@ -281,6 +281,13 @@ protocol Transport: Sendable {
     /// `.hostFileTimedOut`, like the file operations.
     func hostHomeDirectory() async throws -> String
 
+    /// Reads one OpenCode session from OpenCode's own database on the Host
+    /// (ADR 0025): one read-only script over one exec, one query at a time
+    /// per connection. A query past its deadline throws `.hostFileTimedOut`
+    /// and never redials the Host; a reader failure that is no store problem
+    /// Chat can name throws `.hostStoreUnreadable`.
+    func queryOpenCode(_ query: OpenCodeQuery) async throws -> OpenCodeQueryResponse
+
     /// The Host's operating system family, known once the transport has
     /// resolved the remote environment.
     func hostPlatform() async throws -> HostPlatform
@@ -387,6 +394,10 @@ extension Transport {
     }
 
     func hostHomeDirectory() async throws -> String {
+        throw TransportError.hostFeatureUnavailable(feature: "Chat")
+    }
+
+    func queryOpenCode(_ query: OpenCodeQuery) async throws -> OpenCodeQueryResponse {
         throw TransportError.hostFeatureUnavailable(feature: "Chat")
     }
 
@@ -1123,6 +1134,10 @@ indirect enum TransportError: Error, Sendable, Equatable {
     /// The Host refused a Chat transcript operation with an SFTP status other
     /// than "no such file", such as permission denied.
     case hostFileUnreadable(status: UInt64)
+    /// OpenCode's database answered a Chat query with a failure that is not
+    /// a store problem Chat names on its own: it is busy, it cannot be
+    /// opened, or the reader failed. `detail` is one sentence for the user.
+    case hostStoreUnreadable(detail: String)
     /// The request's task was cancelled before completing. Resource cleanup
     /// may outlive the caller; a dispatched git exec waits for its bounded
     /// remote exit instead of abandoning the channel.
@@ -1162,7 +1177,7 @@ indirect enum TransportError: Error, Sendable, Equatable {
             .socketNotFound, .herdrBinaryNotFound, .herdrLauncherNotFound,
             .protocolVersionMismatch,
             .streamLocalOpenFailed, .gitTimedOut, .hostFileTimedOut, .hostFileUnreadable,
-            .hostFeatureUnavailable,
+            .hostStoreUnreadable, .hostFeatureUnavailable,
             .homeDirectoryUnresolvable, .invalidDirectoryPath,
             .eventsChannelAlreadyOpen,
             .terminalChannelAlreadyOpen, .malformedResponse:

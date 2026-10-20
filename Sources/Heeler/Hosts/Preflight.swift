@@ -164,7 +164,7 @@ struct PreflightReport: Equatable, Sendable {
             // Preflight never reads Changes; keep the closed taxonomy total.
             check = .connection
             hint = "Reading Changes timed out."
-        case .hostFileTimedOut, .hostFileUnreadable:
+        case .hostFileTimedOut, .hostFileUnreadable, .hostStoreUnreadable:
             // Preflight never reads transcripts; keep the closed taxonomy total.
             check = .connection
             hint = "Reading a Host file failed."

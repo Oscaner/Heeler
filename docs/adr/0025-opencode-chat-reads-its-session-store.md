@@ -118,13 +118,16 @@ The query shows nothing it cannot account for:
   replace OpenCode's background service, and every OpenCode process that
   opens the database migrates it.
 - The only Host effect is read marks in an existing `-shm`. Heeler never
-  creates side files and never opens with `immutable=1` or read-write; a
-  closed store reads as closed. A read-only open of a WAL database fails while
-  its `-wal` and `-shm` files are absent, as they are on Linux once OpenCode's
-  last connection has closed. Chat then keeps the saved messages, says the
-  database is closed, and checks again. `immutable=1` would open such a file,
-  but it assumes no writer: if OpenCode starts writing mid-read, the reader
-  can return torn pages.
+  opens with `immutable=1` or read-write, and never starts a reader while the
+  store's `-wal` or `-shm` file is absent, as both are on Linux once
+  OpenCode's last connection has closed: such a store reads as closed. A
+  read-only open of it fails with Apple's SQLite, but stock SQLite (3.22 and
+  later) creates both files to open it. A store that closes between the check
+  and the open can still be left with both files, which SQLite reuses on the
+  next open. Chat then keeps the saved messages, says the database is closed,
+  and checks again. `immutable=1` would open such a file, but it assumes no
+  writer: if OpenCode starts writing mid-read, the reader can return torn
+  pages.
 
 ### One query at a time
 
@@ -195,7 +198,7 @@ its Done status until the first prompt of the new session.
   reads, but committed data can sit in the WAL, whose frames would need
   validating, and checkpoints rewrite database pages while a copy runs.
 - **`immutable=1`.** Torn pages when OpenCode writes mid-read, and it opens a
-  store that read-only opens report as closed.
+  store that Chat reports as closed.
 - **A read-write open.** It creates side files and may checkpoint on close,
   which writes the database.
 - **OpenCode's CLI** (`opencode session export`, `opencode api`). It may start

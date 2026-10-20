@@ -329,6 +329,9 @@ actor HeelerSSHTransport: Transport {
     private let requestTimeout: Duration
     private let gitExecTimeout: Duration
     private let chatQueryTimeout: Duration
+    /// One OpenCode query at a time (ADR 0025). A query past its deadline
+    /// keeps the lane until its exec drains, so polls never stack execs.
+    private let chatQueryLane = GitExecGate()
     private let wakeCommand: String
     private let sessionListCommand: String
     private let agentDiscoveryCommand: String
@@ -2487,6 +2490,28 @@ actor HeelerSSHTransport: Transport {
             stdout: result.stdout, stderr: result.stderr, nonce: nonce, request: request)
     }
 
+    func queryOpenCode(_ query: OpenCodeQuery) async throws -> OpenCodeQueryResponse {
+        try await queryOpenCode(query, reader: .automatic)
+    }
+
+    /// The remote watchdog ends the script two seconds before the local
+    /// deadline, so a slow read usually ends with its own marker and the
+    /// exec has drained by the time the caller hears of it.
+    func queryOpenCode(
+        _ query: OpenCodeQuery, reader: OpenCodeProbe.Reader
+    ) async throws -> OpenCodeQueryResponse {
+        let nonce = OpenCodeProbe.makeNonce()
+        let result = try await runBoundedScript(
+            OpenCodeProbe.script(query, nonce: nonce, reader: reader), feature: "Chat",
+            deadline: chatQueryTimeout,
+            remoteSeconds: max(1, chatQueryTimeout.components.seconds - 2),
+            timeoutMarkerPrefix: "__HEELER_OC_TIMEOUT_", timedOut: .hostFileTimedOut,
+            lane: chatQueryLane)
+        return try OpenCodeProbe.parse(
+            stdout: result.stdout, stderr: result.stderr, exitStatus: result.exitStatus,
+            nonce: nonce, query: query)
+    }
+
     /// Internal plumbing for the purpose-built Changes reads. The script
     /// owns POSIX quoting, locale, output caps and completeness markers.
     func runGitScript(_ script: Data) async throws -> GitExecResult {
@@ -2505,10 +2530,11 @@ actor HeelerSSHTransport: Transport {
     /// Cancelling package exec while that group is alive can exhaust channel
     /// cleanup and invalidate Events and every Attach. Past the deadline, or
     /// when the watchdog reports the feature's marker, the run throws the
-    /// feature's `timedOut`.
+    /// feature's `timedOut`. With a `lane`, a run waits for the previous one
+    /// to drain, its wait counted against its own deadline.
     func runBoundedScript(
         _ script: Data, feature: String, deadline: Duration, remoteSeconds: Int64,
-        timeoutMarkerPrefix: String, timedOut: TransportError
+        timeoutMarkerPrefix: String, timedOut: TransportError, lane: GitExecGate? = nil
     ) async throws -> GitExecResult {
         try await requirePOSIXHost(feature: feature)
         do {
@@ -2520,7 +2546,7 @@ actor HeelerSSHTransport: Transport {
             // This is resource reclamation time, not the caller's read budget.
             let exchangeTimeout = Duration.seconds(remoteSeconds)
                 + max(requestTimeout, SSHTransportSettings.defaultRequestTimeout)
-            return try await AsyncDeadline.run(for: deadline) {
+            return try await Self.runInLane(deadline: deadline, lane: lane) {
                 try await self.channelAdmission.withChannel(.ordinarySession) {
                     try Task.checkCancellation()
                     // Awaiting an unstructured task does not forward cancellation.
@@ -2549,6 +2575,21 @@ actor HeelerSSHTransport: Transport {
             throw timedOut
         } catch is CancellationError {
             throw TransportError.cancelled
+        }
+    }
+
+    /// Runs `operation` under `deadline`, inside `lane` when given. The
+    /// caller gets `AsyncDeadlineError.timedOut` at the deadline, whether
+    /// `operation` was waiting for the lane or running; the lane is held
+    /// until `operation` returns, which for a detached exec is when the
+    /// remote process has drained. A waiter that times out leaves the lane.
+    static func runInLane<Value: Sendable>(
+        deadline: Duration, lane: GitExecGate?,
+        _ operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        try await AsyncDeadline.run(for: deadline) {
+            guard let lane else { return try await operation() }
+            return try await lane.run(operation)
         }
     }
 

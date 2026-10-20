@@ -152,3 +152,83 @@ Scrubbing replaced the account name as above and the shell prompt's
 `user@host` with `developer@probe-host-placeholder-01`, both with
 replacements of the same length. These screens are not part of
 `ScreenFixture.all`, which the dialog and input-box suites walk.
+
+## OpenCode stores
+
+`opencode/` holds OpenCode session stores for the store query tests
+(ADR 0025). They come from OpenCode 2.0.32 sessions on herdr 0.9.5, captured
+on 2026-10-19 and 2026-10-20 in scratch projects with scratch prompts. None
+came from a personal session.
+
+- `schema.sql` is the DDL of the four tables the query reads (`session_v2`,
+  `session_message`, `event_sequence` and `session_inbox`), with OpenCode
+  2.0.32's column order, types and indexes, the unique `(session_id, seq)`
+  index included. Foreign keys are left out.
+- `store-<scenario>.json` is one store: `session`, `event_seq`, `rows` and
+  `inbox` as the tables hold them, JSON columns as compact JSON text, and
+  `otherSessions` for further sessions in the same database.
+  `Support/OpenCodeSQLiteHarness.swift` builds an SQLite database from one.
+- `rows-<scenario>.jsonl` is what the query prints for that store's tail with
+  a 512 KiB budget: the session line, the inbox line, then the rows oldest
+  first.
+
+| Scenario | Source |
+|---|---|
+| `pong` | A one-word reply |
+| `approve`, `reject` | A `read` permission approved, then the same read declined |
+| `esc-stop` | A shell command stopped with Esc |
+| `patch` | Two `patch` calls: a file added, then edited |
+| `compact` | `/compact` and its summary |
+| `steer`, `steer-queued` | A message sent while a shell command ran. `steer` is the finished exchange. `steer-queued` is derived, not captured: the store when the message was sent, rebuilt from the session's poll log, with the shell call still running and the message waiting in the inbox |
+| `subagent` | A `subagent` call; its child session is under `otherSessions` |
+| `question-blocked`, `question-answered` | A `question` call waiting for its answer, then answered. The waiting store takes its rows from a dump taken while the call waited and their ids and creation times from the answered dump; its event counter (111) is set between the two dumps' |
+| `undo-before`, `undo-staged`, `undo-committed` | `/undo` in a second session: before it, with the revert staged, and after the next prompt committed it |
+| `two-sessions` | Written for the tests: a second session in the same store, with its own rows and inbox, which no query may read |
+| `v1-names` | Written for the tests: OpenCode 1.x tool names (`bash`, `task`, `apply_patch`, `todowrite`, `edit`) and their `diff`, `filediff` and `files` metadata |
+| `odd-types` | Written for the tests: a string tool error and input, numeric times, an attached file, content parts with an unknown type or none, and an inbox item whose text is a number and whose files are a string |
+| `row-types` | Written for the tests: rows of the other types (`shell`, `synthetic`, `system`, `skill`, `location-switched` and `model-switched`), an unknown type, a running shell command, compaction and assistant row, and an assistant row of the wrong shape |
+
+The tests build three stores in place rather than from files: one with
+OpenCode 1.x tables only, a staged revert carrying 3 MiB of patch text, and
+an inbox of 20 long items.
+
+Together the files are about 116 KB: 71 KB of stores, 42 KB of rows and the
+schema.
+
+### Scrubbing
+
+A script outside the repository derived the stores from the captures, in
+this order:
+
+1. The scratch project paths became `work/heeler-tmp-chat/opencode-a/project`
+   and `work/heeler-tmp-chat/opencode-b/project`, the account name
+   `developer`, and the capture's job directory, scratch directory names and
+   host name same-length placeholders.
+2. `ses_`, `msg_`, `prt_` and `sh_` ids became synthetic ids of the same
+   shape (12 hex digits, then 14 base62 characters), consistently across a
+   scenario's stores; the session under test is
+   `ses_0a1b2c3d4e5fK2mN8pQ4rT6vX9` in each. `call_` ids became `call_` and
+   24 base62 characters, and project ids hashes of fixed strings.
+3. Assistant text in Chinese became English, the compaction summary
+   included. User text is the scratch prompts only.
+4. `providerState`, `providerResultState`, `itemId`,
+   `reasoningEncryptedContent`, `responseId`, `snapshot`, `files[].data` and
+   `metadata.diagnostics` were dropped.
+5. Times moved so each scenario's earliest is `1800000000000`, keeping the
+   gaps between them. Model names, token counts and costs are as captured.
+
+Before committing a change here, check that searching `opencode/` finds none
+of the account, host or scratch directory names, no `/Users/` other than
+`/Users/developer`, no `ghp_`, `Bearer`, `sk-` keys or e-mail addresses, no
+CJK text, and none of the real ids the script replaced (it lists them in a
+file outside the repository).
+
+### Regenerating the rows
+
+`OpenCodeStoreQueryTests/rowFixturesMatchTheProbeOutput()` fails when the
+query's output drifts from `rows-*.jsonl`. After an intended change, run that
+test with `HEELER_WRITE_OPENCODE_ROWS` naming a directory outside the
+repository (`TEST_RUNNER_HEELER_WRITE_OPENCODE_ROWS` through `xcodebuild`):
+it writes the files there instead of comparing. Review them, copy them in,
+and run the test again. It compares parsed JSON, since SQLite versions may
+escape text differently.
