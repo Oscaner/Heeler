@@ -722,6 +722,7 @@
 		EC91591D99561FA25E693806 /* FakeQuestionTUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8203CA1CA93BD39B4115F678 /* FakeQuestionTUI.swift */; };
 		ED24AA39EBC4BC6B7341EEFB /* TransportError+Presentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8133B7654CEFC5533DCDCC5A /* TransportError+Presentation.swift */; };
 		ED78C30BC1FC7F679D392EDF /* ConsoleHostSectionHeaderPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C85214981DECFA178F08F06F /* ConsoleHostSectionHeaderPresentation.swift */; };
+		EE4C4556B4E0C0756197ACB4 /* OpenCodeStopGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D805E9B00D2AD2F488D8686 /* OpenCodeStopGuard.swift */; };
 		EF663876192D96DA70D28A97 /* TerminalListPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0EAAEDF57252FEA74A93C6A /* TerminalListPresentationTests.swift */; };
 		F026663C7CE25CC2D3D09170 /* OpenCodeFileChanges.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20A277881B2B40C1C029BA71 /* OpenCodeFileChanges.swift */; };
 		F0A24E42E4C6010BB5A483C1 /* ChatImagePreviewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9B02C82B59FFA986258EBA9 /* ChatImagePreviewController.swift */; };
@@ -1156,6 +1157,7 @@
 		6CA18FC9DB67FF92D19A1C29 /* NewTerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewTerminalView.swift; sourceTree = "<group>"; };
 		6CAC72199BF308E484F37439 /* HostTelemetryPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostTelemetryPresentation.swift; sourceTree = "<group>"; };
 		6D3352349B5173FBF435E3CA /* CodexPaginatedReducer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexPaginatedReducer.swift; sourceTree = "<group>"; };
+		6D805E9B00D2AD2F488D8686 /* OpenCodeStopGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeStopGuard.swift; sourceTree = "<group>"; };
 		6D83F0739372AE699009E238 /* ConsoleAgent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleAgent.swift; sourceTree = "<group>"; };
 		6DB45FDC4521D47E5B758B68 /* DemoChatSampleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoChatSampleTests.swift; sourceTree = "<group>"; };
 		6EB7F8E3CF7CB7532CD1D60B /* FileDiffViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDiffViewTests.swift; sourceTree = "<group>"; };
@@ -2324,6 +2326,7 @@
 				F2C684EB04A88DB074CEA765 /* OpenCodeRecordSource.swift */,
 				F6FD833968D29927690BE622 /* OpenCodeSendRules.swift */,
 				99EBD8B21A9AC2995D568BAF /* OpenCodeSessionID.swift */,
+				6D805E9B00D2AD2F488D8686 /* OpenCodeStopGuard.swift */,
 				685D6B107AF17212EA0FC0D1 /* OpenCodeToolSummary.swift */,
 				B939955A4C35E06974573291 /* OpenCodeTranscriptReducer.swift */,
 			);
@@ -3221,6 +3224,7 @@
 				1A21DFD3B8459A602196C5FE /* OpenCodeScreenReader.swift in Sources */,
 				D3D8920D0AB8F8330B643ACE /* OpenCodeSendRules.swift in Sources */,
 				8CD88CE3DABBEB63AC4EA1F6 /* OpenCodeSessionID.swift in Sources */,
+				EE4C4556B4E0C0756197ACB4 /* OpenCodeStopGuard.swift in Sources */,
 				BB4D1DFBAF16E50AF25F3F4C /* OpenCodeToolSummary.swift in Sources */,
 				7555D2F687F17FB912B68076 /* OpenCodeTranscriptReducer.swift in Sources */,
 				8623CDF717A3B34747A2DFC6 /* OverlayActivityButton.swift in Sources */,

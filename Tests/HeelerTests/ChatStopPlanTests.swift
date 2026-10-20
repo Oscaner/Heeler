@@ -148,7 +148,100 @@ struct ChatStopPlanTests {
         #expect(recorder.contextCalls == 0)
     }
 
+    // MARK: OpenCode
+
+    /// OpenCode's first Esc arms its interrupt and the second interrupts,
+    /// so both go in one request once the guard reads a running turn.
+    @Test func openCodePressesEscTwiceInOneRequest() async throws {
+        let plan = ChatStopPlan.standard(for: .opencode)
+        #expect(plan.keys == ["esc", "esc"])
+        #expect(plan.screenGuard != nil)
+        #expect(
+            plan.wait
+                == AgentStopWait(window: .seconds(3), unconfirmedNotice: OpenCodeStopCopy.notice, minimumGap: .zero))
+        #expect(plan.accessibilityHint == "Presses Esc twice to interrupt OpenCode")
+
+        let recorder = StopRecorder()
+        let interrupt = plan.composerInterrupt(
+            context: Self.context(recorder, screen: try ScreenFixture.screen("opencode-08-working-180")),
+            agentKeys: Self.agentKeys(recorder))
+        #expect(interrupt.wait == plan.wait)
+        #expect(interrupt.accessibilityHint == plan.accessibilityHint)
+
+        let outcome = await interrupt.perform()
+
+        #expect(outcome == .sent)
+        #expect(recorder.contextCalls == 1)
+        #expect(recorder.sent == [["esc", "esc"]])
+    }
+
+    /// The footer shows a turn running, at either width, whether or not
+    /// one Esc already armed the interrupt, and with a prompt queued.
+    @Test(arguments: [
+        "opencode-08-working-180", "opencode-09-armed-180", "opencode-35-working-62", "opencode-36-armed-62",
+        "opencode-43-queued-dock-62",
+    ])
+    func openCodeStopPressesOnARunningTurn(stem: String) throws {
+        #expect(try Self.openCodeVerdict(stem) == .press)
+    }
+
+    /// Where Esc would reject a permission, dismiss a question, close a
+    /// menu or leave shell mode, or where no turn of this conversation
+    /// runs, Stop presses nothing and says why.
+    @Test(arguments: [
+        ("opencode-10-permission-180", OpenCodeStopCopy.answer), ("opencode-13-question-180", OpenCodeStopCopy.answer),
+        ("opencode-25-reject-feedback-180", OpenCodeStopCopy.answer),
+        ("opencode-37-permission-long-62", OpenCodeStopCopy.answer),
+        ("opencode-38-question-long-62", OpenCodeStopCopy.answer),
+        ("opencode-04-slash-popup-180", OpenCodeStopCopy.menu), ("opencode-06-at-popup-180", OpenCodeStopCopy.menu),
+        ("opencode-14-session-picker-180", OpenCodeStopCopy.menu),
+        ("opencode-39-slash-popup-62", OpenCodeStopCopy.menu),
+        ("opencode-07-shell-mode-180", OpenCodeStopCopy.shell), ("opencode-40-shell-mode-62", OpenCodeStopCopy.shell),
+        ("opencode-15-subagent-panel-180", OpenCodeStopCopy.elsewhere),
+        ("opencode-41-subagent-panel-62", OpenCodeStopCopy.elsewhere),
+        ("opencode-01-home-empty-180", OpenCodeStopCopy.elsewhere),
+        ("opencode-30-home-empty-62", OpenCodeStopCopy.elsewhere),
+        ("opencode-21-done-interrupted-180", OpenCodeStopCopy.idle),
+        ("opencode-32-session-empty-62", OpenCodeStopCopy.idle),
+    ])
+    func openCodeStopRefusesWhereEscWouldDoSomethingElse(stem: String, reason: String) throws {
+        #expect(try Self.openCodeVerdict(stem) == .refuse(reason))
+    }
+
+    /// herdr's status says whether the turn runs: a running footer on
+    /// screen doesn't make Stop press while herdr reports anything else.
+    @Test(arguments: [ChatAgentActivity.idle, .blocked, .unknown])
+    func openCodeStopRefusesWhenHerdrIsNotWorking(activity: ChatAgentActivity) async throws {
+        let recorder = StopRecorder()
+        let interrupt = ChatStopPlan.standard(for: .opencode).composerInterrupt(
+            context: Self.context(
+                recorder, screen: try ScreenFixture.screen("opencode-08-working-180"), activity: activity),
+            agentKeys: Self.agentKeys(recorder))
+
+        let outcome = await interrupt.perform()
+
+        #expect(outcome == .failed(OpenCodeStopCopy.ended))
+        #expect(recorder.contextCalls == 1)
+        #expect(recorder.sent.isEmpty)
+    }
+
+    /// Ctrl+C exits OpenCode when its input is empty, and Ctrl+D exits it
+    /// too: only Esc goes.
+    @Test func openCodeStopNeverSendsControlKeysThatQuit() {
+        let keys = ChatStopPlan.standard(for: .opencode).keys
+
+        #expect(!keys.isEmpty)
+        #expect(keys.allSatisfy { $0 == "esc" }, "\(keys)")
+        #expect(!keys.contains { $0.lowercased().hasPrefix("ctrl") || $0.lowercased().hasPrefix("c-") })
+    }
+
     // MARK: Helpers
+
+    /// What OpenCode's guard says on a capture while herdr reports Working.
+    private static func openCodeVerdict(_ stem: String) throws -> ChatStopVerdict {
+        let screenGuard = try #require(ChatStopPlan.standard(for: .opencode).screenGuard)
+        return screenGuard(ChatStopContext(screen: try ScreenFixture.screen(stem), activity: .working))
+    }
 
     /// A real keys store over `recorder`. The first request waits on
     /// `gate` when one is given; with `requestsFail`, every request throws.
@@ -203,4 +296,22 @@ private final class StopRecorder {
 /// check, on the main actor.
 private final class SeenContexts: @unchecked Sendable {
     var contexts: [ChatStopContext] = []
+}
+
+/// What OpenCode's Stop says after its keys showed no effect, and where it
+/// presses nothing.
+private enum OpenCodeStopCopy {
+    static let notice =
+        "Esc went twice, but OpenCode still shows Working. If a message was waiting during this turn, OpenCode runs "
+        + "it after a stop; tap Stop again to stop that too. In the terminal, use Esc, not Ctrl+C, which exits "
+        + "OpenCode when its input is empty."
+    static let ended = "The turn already ended, so Stop pressed nothing."
+    static let answer =
+        "OpenCode is asking for an answer, and Esc would reject it. Answer the card, or stop in the terminal."
+    static let elsewhere =
+        "OpenCode isn't showing this conversation's prompt, so Stop pressed nothing. Stop it in the terminal."
+    static let menu =
+        "A menu is open over OpenCode's prompt, and Esc would only close it. Close it in the terminal first."
+    static let shell = "OpenCode's prompt is in shell mode, where Esc only leaves it. Stop it in the terminal."
+    static let idle = "OpenCode's screen shows no running turn, so Stop pressed nothing."
 }
