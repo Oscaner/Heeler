@@ -1381,6 +1381,10 @@
             DemoChatSample.read(range)
         }
 
+        func queryOpenCode(_ query: OpenCodeQuery) async throws -> OpenCodeQueryResponse {
+            DemoOpenCodeChatSample.response(query)
+        }
+
         func agentInfo(_ target: AgentTarget) async throws -> Agent {
             guard let agent = profile.snapshot.agents.first(where: { $0.paneID == target.target })
             else {

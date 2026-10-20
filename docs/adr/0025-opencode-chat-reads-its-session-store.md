@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Chat reads OpenCode's session store through a bounded Host query

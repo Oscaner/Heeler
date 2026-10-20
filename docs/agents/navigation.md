@@ -86,7 +86,7 @@ over the session herdr reports. Host files come through
 recorded in [Claude Code transcripts](../research/claude-code-transcript-format.md)
 and [Codex rollouts](../research/codex-rollout-format.md), and herdr's behavior
 in [the compatibility notes](herdr-compatibility.md).
-[ADR 0025](../adr/0025-opencode-chat-reads-its-session-store.md) (proposed) records how Chat reads OpenCode's session store instead of a transcript.
+[ADR 0025](../adr/0025-opencode-chat-reads-its-session-store.md) records how Chat reads OpenCode's session store instead of a transcript.
 
 | Task | Owner | Focused coverage |
 | --- | --- | --- |

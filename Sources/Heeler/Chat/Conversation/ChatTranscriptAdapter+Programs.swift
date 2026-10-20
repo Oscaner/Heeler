@@ -41,9 +41,8 @@ extension ChatTranscriptAdapter {
                 identity: { PiTranscriptLocator.sessionID(inHead: $0) },
                 echoesByEntry: true)
         case .opencode:
-            // Read by query from OpenCode's session store (ADR 0025) through
-            // `openCode`, which Chat does not offer yet.
-            nil
+            // Read by query from OpenCode's session store (ADR 0025).
+            openCode
         }
     }
 
