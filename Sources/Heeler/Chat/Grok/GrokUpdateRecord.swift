@@ -466,8 +466,11 @@ extension GrokUpdateRecord {
                 self.type = type
                 self.signal = signal
                 self.isBackgrounded = isBackgrounded
+                // A search keeps ripgrep's exit code too, 1 when nothing
+                // matched; only a command's says how the call ended.
                 exitCode =
-                    signal == nil ? GrokUpdateRecord.integer(raw?["exit_code"]).flatMap { Int(exactly: $0) } : nil
+                    type == "Bash" && signal == nil
+                    ? GrokUpdateRecord.integer(raw?["exit_code"]).flatMap { Int(exactly: $0) } : nil
                 taskID = type == "BackgroundTaskStarted" ? raw?["task_id"]?.stringValue : nil
                 command = raw?["command"]?.stringValue
                 path = raw?["EditsApplied"]?["absolute_path"]?.stringValue

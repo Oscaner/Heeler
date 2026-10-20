@@ -238,6 +238,29 @@ struct GrokToolActivityTests {
         #expect(failed.preview == Self.preview("1 failed\n"))
     }
 
+    /// What ripgrep exits with when a search finds nothing: 1 when nothing
+    /// matched, 2 when it reported an error, -1 when it never finished.
+    @Test(arguments: [1, 2, -1])
+    func searchesSucceedWhateverRipgrepExitsWith(exitCode: Int) throws {
+        // Grok completes every search and keeps ripgrep's exit code.
+        let transcript = Self.transcript(
+            Self.lines([
+                try Self.prompt("Find the TODOs.", index: 0, event: 1),
+                Self.call(name: "grep", kind: "search", input: #""pattern":"TODO","path":"src""#, event: 2),
+                Self.result(
+                    content: try Self.text("found 0 matches"),
+                    rawOutput:
+                        #""type":"GrepSearch","stdout":[],"stderr":[],"exit_code":\#(exitCode),"match_count":0,"file_matches":[]"#,
+                    event: 3),
+            ]))
+
+        let tool = try Self.tool(transcript, Self.callID)
+        #expect(tool.kind == .search)
+        #expect(tool.status == .succeeded)
+        #expect(tool.exitCode == nil)
+        #expect(tool.preview == Self.preview("found 0 matches"))
+    }
+
     struct Failure: Sendable, CustomTestStringConvertible {
         let variant: String
         /// The call's line in `failed-tools.jsonl`; its result follows.
