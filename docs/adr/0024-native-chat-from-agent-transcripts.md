@@ -326,7 +326,14 @@ Answered rows.
 OpenCode draws a permission or question in its input box's place. A
 permission's options sit in a row: Allow once has focus and takes Enter,
 Always allow, when offered, is one checked Right step and Enter, and Reject
-presses Esc. OpenCode draws its subagents' requests there too, and Esc on one
+presses Esc. Always allow saves a project rule that can reach past the
+request (every read, or every command starting with the same words), and
+the card says so. A shell command's permission has no action row and a
+subagent's names only the agent, so the fingerprint also covers the lines
+about the request (`$ git status`). While Always allow has focus OpenCode
+shows the rule in their place, so a card answers only a screen showing the
+lines it shows, and the checks between and after its keys accept either
+set. OpenCode draws its subagents' requests there too, and Esc on one
 of them asks what to do differently instead of rejecting, so the card
 rejects only a request it matches to a pending call of the conversation it
 follows and otherwise says to reject in the terminal, where that feedback
