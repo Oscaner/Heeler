@@ -513,7 +513,7 @@ struct GrokScreen: Sendable {
     private static let sessionLinePattern = "^Session\(uuid)(\\(forkedfrom\(uuid)\\))?(,use/|foundlocally)"
 
     /// Minimal mode draws its prompt flush left, with `minimal · … /help`
-    /// above it while idle (the 1.0.45 source; not captured). The
+    /// above it while idle (1.0.62, live; the 1.0.45 source). The
     /// full-screen view indents every row, its past prompts by five.
     private static func showsMinimalPrompt(_ rows: [ScreenRow]) -> Bool {
         rows.dropFirst(rows.count * 2 / 3).contains { row in

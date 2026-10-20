@@ -349,8 +349,7 @@ struct GrokInputBoxDetectorTests {
         #expect(GrokInputBoxDetector.detect(top.screen) == .disabled(editing))
     }
 
-    /// Minimal mode draws a flush-left prompt with no box (the 1.0.45
-    /// source; not captured).
+    /// Minimal mode draws a flush-left prompt with no box (1.0.62, live).
     @Test func minimalModeHolds() {
         let minimal =
             "Grok Build is in minimal mode, which Chat can't read. Switch back with /fullscreen in the terminal."

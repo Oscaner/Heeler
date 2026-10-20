@@ -229,7 +229,7 @@ struct GrokStopGuardTests {
         #expect(Self.verdict(screen) == .refuse(Self.unfocused))
     }
 
-    /// Minimal mode draws no box (the 1.0.45 source; not captured), and
+    /// Minimal mode draws no box (1.0.62, live), and by the 1.0.45 source
     /// Ctrl+C on its idle prompt quits at once.
     @Test func refusesInMinimalMode() {
         let screen = ScreenFixture.synthetic(
