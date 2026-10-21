@@ -187,6 +187,16 @@ of hosted SwiftUI rows with its own single-column layout: it opens at the
 newest row and keeps the reader's place while rows above it measure, which
 needs anchoring in the same main-thread turn.
 
+Earlier history loads by itself as the reader nears the top of the list. Each
+request reads pages until it brings the start of a turn not shown before,
+since a page that ends inside a turn adds only steps its fold hides, or until
+it reaches the start of the file or has read 32 MiB. A request the list makes
+by itself reads at most 4 MiB, far more than ordinary turns take. When those
+4 MiB end inside one turn, as in a Grok Build turn whose `read_file` results
+filled 34 MB, the list stops asking. Load Earlier Messages reads on as
+before, and the list loads by itself again once a tap brings a turn's start
+or the conversation opens again.
+
 Tool activity is one row per call, and two or more calls in a row share a
 group row (see Turns and tool groups). Decoding keeps a preview of at most
 40 lines or 8 KiB; expanding a row reads its record again, at most 1 MiB, and
@@ -488,6 +498,13 @@ the answer rather than unfolding the turn. Opening a fold opens none of the rows
 it; the model's text there reads in the secondary color. Fold Finished
 Turns in Settings turns folding off.
 
+Rows above the first loaded turn belong to a turn whose start is further up,
+and show as they load while earlier history still loads by itself. Once it
+waits for Load Earlier Messages (see Reading and caching), they read as a
+finished turn as far as they are loaded: the end the loaded lines record
+closes it, and its header shows the time that end gives, Grok Build's
+`elapsed_ms`, or "Details".
+
 Two or more consecutive tool calls show as one group row: the first call's
 symbol, what the calls did ("Ran 2 commands, Edited 2 files", files counted
 once per path, a write over an existing file as an edit, a write that records
@@ -614,6 +631,11 @@ no Attach at all.
   rollouts, whose turns fold under "Details". Claude Code's own `durationMs` can be far
   shorter than a turn's wall time, so "Worked for" can read longer than the
   program's figure.
+- Earlier history loads by itself at most 4 MiB a request, counting saved
+  rows it reads from the Host again. Inside a longer turn, or above more
+  saved rows than that, it waits for Load Earlier Messages, and the turn it
+  stopped in reads "Details" unless its end record gives the time, as Grok
+  Build's does.
 - Conversation text now rests on the device, in the protected cache that
   [PRIVACY.md](../../PRIVACY.md) describes.
 - Not in this version:
