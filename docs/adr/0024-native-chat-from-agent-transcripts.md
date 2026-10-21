@@ -450,9 +450,10 @@ lasting rule Grok Build cut to fit with `…`, as at 40 columns, since the cut
 hides how far it reaches; the card then says to widen the terminal to see
 it. Grok Build asks the same way before a subagent starts, under the card's
 own question, `Allow <description>?`, and there Yes, send once approves that
-subagent alone. The Agent wrote that question, so the card's title shows it
-in full and only once, also where Grok Build cut it with `…`. The stop
-panel offers Stop running and Continue to run,
+subagent alone. The Agent wrote that question, so the card's title shows
+all of the question Grok Build drew, with no line limit, and the card does
+not repeat it, also where Grok Build cut it with `…`. The stop panel offers
+Stop running and Continue to run,
 which ends the turn while the subagents go on; Always stop and Always
 continue write the config and stay out. The worktree question `/fork` asks
 gets its own card: Yes and No, each of which forks; Always worktree and
