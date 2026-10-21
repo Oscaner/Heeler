@@ -773,6 +773,46 @@ struct OpenCodeTranscriptReducerTests {
         #expect(!echoed.entries.contains { $0.id == ChatEntryID("oc:msg_echo") })
     }
 
+    /// OpenCode tells the model it entered or left Plan mode with a
+    /// `synthetic` row of only text, and its own screen draws no such row,
+    /// so Chat shows the agent switch alone. The rows are the in-app
+    /// check's switch to Plan and back.
+    @Test func planModeRemindersAreHidden() {
+        let transcript = Self.project([
+            Self.row("msg_a450", "agent-switched", seq: 450, #"{"agent":"plan","previous":"build"}"#),
+            Self.synthetic(454, text: Self.planReminder),
+            Self.prompt(455), Self.step(456, items: [Self.text(0, "plum")], fields: #""finish":"stop""#),
+            Self.idle(461),
+            Self.row("msg_a473", "agent-switched", seq: 473, #"{"agent":"build","previous":"plan"}"#),
+            Self.synthetic(477, text: Self.buildReminder),
+            Self.prompt(478), Self.step(479, items: [Self.text(0, "apple")], fields: #""finish":"stop""#),
+            Self.idle(484),
+        ])
+        #expect(
+            transcript.entries.map(\.content) == [
+                .notice(ChatNotice(kind: .modelChange, title: "Agent: plan")),
+                .user(ChatUserMessage(text: "Go.")), .assistant(ChatAssistantMessage(text: "plum")),
+                .notice(ChatNotice(kind: .modelChange, title: "Agent: build")),
+                .user(ChatUserMessage(text: "Go.")), .assistant(ChatAssistantMessage(text: "apple")),
+            ])
+        #expect(transcript.turns.map(\.ending) == [.completed, .completed])
+
+        // A description or metadata keeps the notice; a blank description
+        // is none.
+        let metadata =
+            #"{"source":null,"childID":null,"state":null,"exit":null,"notice":null,"jobID":null,"shellID":null,"truncated":null}"#
+        let notes = Self.project([
+            Self.synthetic(1, text: "Instructions from: AGENTS.md", description: "Loaded AGENTS.md"),
+            Self.synthetic(2, text: "For the model.", metadata: metadata),
+            Self.synthetic(3, text: "For the model alone.", description: " "),
+        ])
+        #expect(
+            notes.entries.map(\.content) == [
+                .notice(ChatNotice(kind: .system, title: "Loaded AGENTS.md", detail: "Instructions from: AGENTS.md")),
+                .notice(ChatNotice(kind: .system, title: "Note", detail: "For the model.")),
+            ])
+    }
+
     @Test func unexpectedValueTypesCostOnlyTheirField() throws {
         let transcript = try Self.transcript("odd-types")
         #expect(
@@ -866,6 +906,24 @@ struct OpenCodeTranscriptReducerTests {
 
     /// The id the steer in `rows-steer` carries, queued and promoted.
     private static let steerID = ChatEntryID("oc:msg_0a1b2c3d4e30c6n5ci7hO7j2rp")
+
+    /// The reminders OpenCode 2.0.32 writes on a switch to Plan mode and
+    /// back, as captured.
+    private static let planReminder = """
+        <system-reminder>
+        You are in Plan mode. Discuss the plan with the user directly in the conversation. Do not create or update plan files unless the user explicitly asks you to; when they do, write them only in:
+        /Users/developer/.opencode/plan
+
+        Do not modify any other files or ask a subagent to do so.
+
+        You remain in Plan mode until the user switches agents. If the user asks you to implement changes, do not do so. Tell them they need to switch agents.
+        </system-reminder>
+        """
+    private static let buildReminder = """
+        <system-reminder>
+        You are NO LONGER in Plan mode. The previous Plan restrictions no longer apply. Any Plan mode instructions from earlier in this conversation are no longer active.
+        </system-reminder>
+        """
 
     /// `rows-<scenario>.jsonl` projected, with no malformed line among it.
     /// `invalidRows` counts rows the fixture holds whose data is not JSON.
@@ -975,6 +1033,17 @@ struct OpenCodeTranscriptReducerTests {
 
     private static func idle(_ seq: Int64) -> ChatLine {
         row("msg_i\(seq)", "idle", seq: seq, #"{"outcome":"succeeded"}"#)
+    }
+
+    /// A `synthetic` row as the query prints it: `metadata` is the object it
+    /// keeps, or null when the row has none.
+    private static func synthetic(
+        _ seq: Int64, text: String, description: String? = nil, metadata: String = "null"
+    ) -> ChatLine {
+        let described = description.map(json) ?? "null"
+        return row(
+            "msg_n\(seq)", "synthetic", seq: seq,
+            #"{"text":\#(json(text)),"n":\#(text.unicodeScalars.count),"description":\#(described),"metadata":\#(metadata)}"#)
     }
 
     /// An assistant row with `items`, plus `fields` (JSON members) beside

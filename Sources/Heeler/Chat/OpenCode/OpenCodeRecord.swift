@@ -471,6 +471,8 @@ struct OpenCodeNote: Decodable, Sendable {
     /// The first 16 Ki characters of the model-facing text.
     var text: String?
     var description: String?
+    /// Whether the row carries metadata at all.
+    var hasMetadata: Bool
     /// `subagent` or `shell` for a background completion.
     var source: String?
     /// The background shell job a `shell` completion reports.
@@ -486,6 +488,7 @@ struct OpenCodeNote: Decodable, Sendable {
         text = container.lenient(String.self, "text")
         description = container.lenient(String.self, "description")
         let metadata = container.object("metadata")
+        hasMetadata = metadata != nil
         source = metadata?.lenient(String.self, "source")
         jobID = metadata?.lenient(String.self, "jobID")
         notice = metadata?.lenient(String.self, "notice")

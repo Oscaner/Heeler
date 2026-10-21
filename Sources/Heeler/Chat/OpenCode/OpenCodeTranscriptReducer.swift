@@ -388,6 +388,10 @@ private struct Projection {
             // OpenCode tells the model about a command the user ran in its
             // shell mode, which the command's own row shows.
             if note.source == "shell", note.jobID == nil, note.description == nil { return }
+            // Text with neither metadata nor a description is for the model
+            // alone, such as Plan mode's reminders: OpenCode's own screen
+            // never draws it.
+            if !note.hasMetadata, Self.trimmed(note.description ?? "").isEmpty { return }
             resume()
             if note.notice == "restart" {
                 add(row, .notice(ChatNotice(kind: .system, title: "Continuing after a restart")))

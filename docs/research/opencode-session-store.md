@@ -154,6 +154,20 @@ Build wrote another pair ("You are NO LONGER in Plan mode. …"). The
 terminal showed "Switched agent from Build to Plan" above the prompt and
 never the reminders.
 
+OpenCode's session view draws no `synthetic` row without a description (a
+blank one counts as none), whether it builds the transcript or the row
+arrives live, and its web timeline draws one only with a description or an
+error in its metadata **(source,
+`tui/src/routes/session/rows.ts:254-259, 267-270, 383`;
+`session-ui/src/timeline/projection.ts:1050-1056`;
+`session-ui/src/timeline/detail.ts:111-121`)**. The Plan plugin writes both
+reminders with only text (`core/src/plugin/plan.ts:14-25, 57-96`), as do
+the request to move running work to the background and the 1.x importer
+for a message's synthetic text **(source, `core/src/session.ts:442-458`;
+`core/src/database/v1-migration.bun.ts:337-370`)**. Chat likewise shows no
+`synthetic` row with neither metadata nor a description, and keeps the
+`agent-switched` row's notice.
+
 A `shell` row was seen in the in-app check: `running` with no `output` while
 the command ran, then `exited` with `exit` and `output`. That `output` is
 not the text but an object with OpenCode's `Shell.Output` fields
