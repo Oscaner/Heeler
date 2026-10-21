@@ -137,8 +137,14 @@ herdr reports no session. Such a hold reads the Agent's record again, so a
 between that screen read and the prompt. At 20 rows or fewer Grok Build
 draws the user's messages without their `❯`, so there the screen shows no
 newest message, and unless a `Session <id>` line for another session shows,
-only the read after a send catches a message another session took. After a
-send, Chat reads what Grok Build added to the folder's
+only the read after a send catches a message another session took. In the
+dashboard's view of one agent nothing on screen can then prove the
+conversation, so Chat holds every send there whenever it recognizes that
+view at that size, even while it shows this conversation; no capture shows
+whether the view keeps its `‹ i/n ›` header and `Ctrl+\:dashboard` footer at
+20 rows. The way out is to show the terminal with the keyboard down, which
+gives the pane more than 20 rows (41 on the phone measured), or to restart
+Grok Build. After a send, Chat reads what Grok Build added to the folder's
 `prompt_history.jsonl` since just before the send, up to 64 KiB:
 two seconds after a message delivered while herdr reported the Agent neither
 Working nor Blocked, and again when the message would go overdue. When no line
