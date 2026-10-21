@@ -1607,6 +1607,9 @@ password_config="$fixture_dir/sshd-password.conf"
 # DEBUG1 logs each channel request as sshd handles it, timestamped by the
 # filter in start_unprivileged_sshd. The full logs go to the diagnostics
 # artifact; the console tail is only an excerpt.
+# Key-only fixtures run as the invoking user, not as a system login service.
+# PAM credential/session setup can stall after public-key authentication and
+# consume the first channel's deadline. Only the real-password fixture uses PAM.
 write_common_config() {
     local port=$1
     local host_key=$2
@@ -1622,7 +1625,7 @@ write_common_config() {
         "PubkeyAuthentication yes" \
         "PubkeyAcceptedAlgorithms ssh-ed25519,rsa-sha2-512" \
         "AuthorizedKeysFile $fixture_dir/authorized_keys" \
-        "UsePAM yes" \
+        "UsePAM no" \
         "PermitRootLogin no" \
         "AllowUsers $fixture_username" \
         "StrictModes no" \
@@ -1729,7 +1732,7 @@ write_pairing_config() {
         "KbdInteractiveAuthentication no" \
         "PubkeyAuthentication yes" \
         "AuthorizedKeysFile $pairing_authorized_keys" \
-        "UsePAM yes" \
+        "UsePAM no" \
         "PermitRootLogin no" \
         "AllowUsers $pairing_username" \
         "StrictModes no" \

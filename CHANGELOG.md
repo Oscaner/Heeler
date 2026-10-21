@@ -28,6 +28,8 @@ Entries reference the pull request that made the change.
 
 ### Fixed
 
+- Prevent a freeze when returning from a Shell Terminal to the Agent while
+  the outgoing terminal surface is still updating. (#481)
 - Center the subagent glyph on its Chat row's title instead of riding
   above it. (#480)
 - Stop Chat freezing, then closing, when the keyboard comes up under a
