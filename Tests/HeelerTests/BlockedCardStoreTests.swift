@@ -972,7 +972,8 @@ struct BlockedRequestMatchTests {
     /// neither a command nor a file, so it matches none of these.
     @Test(arguments: [
         "grok-12-permission-command", "grok-13-permission-compound", "grok-14-permission-edit", "grok-15-question",
-        "grok-16-subagent-panel", "grok-35-permission-subagent-62",
+        "grok-16-subagent-panel", "grok-35-permission-subagent-62", "grok-36-permission-command-40",
+        "grok-37-permission-command-62",
     ])
     func grokCardsMatchTheirCall(stem: String) throws {
         let question = "How should we handle the README rename plan?"
@@ -987,7 +988,8 @@ struct BlockedRequestMatchTests {
         ]
         let expected = [
             "grok-12-permission-command": "command", "grok-13-permission-compound": "compound",
-            "grok-14-permission-edit": "write", "grok-15-question": "ask",
+            "grok-14-permission-edit": "write", "grok-15-question": "ask", "grok-36-permission-command-40": "command",
+            "grok-37-permission-command-62": "command",
         ]
 
         #expect(BlockedRequestMatch.request(for: try dialog(stem), in: requests)?.callID == expected[stem])

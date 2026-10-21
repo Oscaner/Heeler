@@ -248,6 +248,9 @@ struct BlockedDialog: Sendable, Hashable {
     let fingerprint: DialogFingerprint
     let focus: DialogFocusState
     let subject: DialogSubject
+    /// Heeler's own line under the options, about a choice the card leaves
+    /// to the terminal: Grok Build's lasting rule cut short to fit.
+    var note: String? = nil
 
     /// The option at a 1-based ordinal.
     func option(_ ordinal: Int) -> DialogOption? {

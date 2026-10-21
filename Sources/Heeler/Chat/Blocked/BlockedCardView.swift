@@ -276,6 +276,11 @@ private struct BlockedDialogCard: View {
             }
             .disabled(dialog.answersHeldByDraft)
         }
+        if let note = dialog.note {
+            Text(verbatim: note)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
         switch dialog.kind {
         case .codexAsyncCollapsed:
             Button {

@@ -189,6 +189,19 @@ enum GrokCards {
             // The dashboard shows another agent's card; the switcher in
             // the header is all that tells.
             permission(columns: 120, header: "master ~/s/cap-grok-b/proj  ‹ 2/3 › │ [Dashboard]")
+        case "synthetic-edit-permission-session-cut":
+            // No capture or source shows Grok cutting this fixed label
+            // with `…`; the card checks that a session rule cut that way
+            // would stay in the terminal like a cut `Always allow:`.
+            GrokCardBuilder(
+                columns: 40, status: "Edit notes.txt 0.1s",
+                rows: [Row("›  Allow Edit to notes.txt?", boldFrom: 3), .blank]
+                    + options(
+                        [
+                            "Yes, and don't ask again for anything (always-approve mode)", "Yes, allow all edits du…",
+                            "Yes", "No, reject (type to add feedback)",
+                        ], cursor: 3),
+                hints: ["1/4:select", "Tab:next option", "Ctrl+o:always-approve", "Ctrl+c:cancel", "Esc:scrollback"])
         case "synthetic-question-40":
             // The cursor's answer wraps its label and description at 25
             // cells; the other answer shows one row, its description cut.

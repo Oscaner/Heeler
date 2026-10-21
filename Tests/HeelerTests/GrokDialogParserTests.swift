@@ -80,6 +80,49 @@ struct GrokDialogParserTests {
         #expect(dialog.rows == 31..<38)
     }
 
+    /// grok-36, derived from a read at 40 columns: Grok cut the rule's
+    /// scope to fit, `Always allow: chmod 644…`, which hides how far the
+    /// rule reaches. Chat leaves the rule to the terminal, keeps Yes and
+    /// No, and says how to see it. The description is cut too, so the
+    /// command stands for the card on its own.
+    @Test func withholdsALastingRuleGrokCutToFit() throws {
+        let dialog = try GrokCards.dialog("grok-36-permission-command-40")
+
+        #expect(dialog.kind == .grokPermission)
+        #expect(dialog.title == "Allow Command")
+        #expect(dialog.subject.command == "chmod 644 README.md")
+        #expect(dialog.subject.commandDescription == nil)
+        #expect(dialog.options.map(\.label) == ["Yes, proceed", Self.reject])
+        #expect(dialog.options.map(\.number) == [3, 4])
+        #expect(dialog.options.map(\.role) == [.approve, .decline])
+        #expect(dialog.focus == DialogFocusState(focusedOrdinal: 1))
+        #expect(dialog.body.contains("Always allow: chmod 644…"))
+        #expect(dialog.note == "Widen the terminal to see the lasting rule.")
+    }
+
+    /// grok-37: the same card at the phone's 62 columns shows the rule in
+    /// full, so Chat offers it.
+    @Test func offersALastingRuleShownInFull() throws {
+        let dialog = try GrokCards.dialog("grok-37-permission-command-62")
+
+        #expect(dialog.subject.commandDescription == "Set README.md permissions to 644")
+        #expect(dialog.options.map(\.label) == ["Always allow: chmod 644 README.md", "Yes, proceed", Self.reject])
+        #expect(dialog.options.map(\.number) == [2, 3, 4])
+        #expect(dialog.options.map(\.role) == [.approvePersistent, .approve, .decline])
+        #expect(dialog.note == nil)
+    }
+
+    /// The session's edit rule, were Grok to cut it with `…`, stays in the
+    /// terminal the same way (synthetic).
+    @Test func withholdsASessionRuleCutToFit() throws {
+        let dialog = try GrokCards.dialog("synthetic-edit-permission-session-cut")
+
+        #expect(dialog.title == "Allow Edit")
+        #expect(dialog.options.map(\.label) == ["Yes", Self.reject])
+        #expect(dialog.options.map(\.number) == [3, 4])
+        #expect(dialog.note == "Widen the terminal to see the lasting rule.")
+    }
+
     /// Always-approve mode and `Never allow:` stay on screen and in the
     /// body, never among the options, cut at the card's edge or not.
     @Test func neverOffersAlwaysApproveOrNeverAllow() throws {

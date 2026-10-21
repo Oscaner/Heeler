@@ -52,13 +52,16 @@ enum GrokDialogParser {
     /// `›  <description>`, the command on `│` rows, the scope hint, then the
     /// options, recognised by the reject row. A digit selects its row and
     /// submits it (`interactions.rs`). Always-approve mode and `Never
-    /// allow:` stay on screen and in the body, never among the options.
-    /// Before a subagent starts, Grok asks `Allow <description>?` alone,
-    /// and `Yes, send once` approves that subagent (1.0.62, live).
+    /// allow:` stay on screen and in the body, never among the options, as
+    /// does a lasting rule Grok cut to fit with `…`, whose reach the card
+    /// then hides; the note says how to see it. Before a subagent starts,
+    /// Grok asks `Allow <description>?` alone, and `Yes, send once`
+    /// approves that subagent (1.0.62, live).
     private static func permission(_ card: GrokCard) -> BlockedDialog? {
         guard let first = card.lines.firstIndex(where: { $0.option != nil }) else { return nil }
         var options: [DialogOption] = []
         var withheld: [String] = []
+        var hidesRule = false
         for index in first..<card.lines.count {
             let line = card.lines[index]
             guard let option = line.option else {
@@ -74,6 +77,9 @@ enum GrokDialogParser {
             switch row {
             case .withheld(let label):
                 withheld.append(label)
+            case .cutRule(let label):
+                withheld.append(label)
+                hidesRule = true
             case .offered(let label, let role):
                 options.append(
                     DialogOption(
@@ -100,7 +106,8 @@ enum GrokDialogParser {
         if !command.isEmpty {
             title = "Allow Command"
             subject.command = command
-            subject.commandDescription = description
+            // Cut to fit, the description gives way to the command.
+            subject.commandDescription = description?.hasSuffix("…") == true ? nil : description
         } else if let description, options.contains(where: { $0.label == sendOnce }) {
             // The subagent's own words, which may read like an edit's.
             title = description.hasSuffix("?") ? String(description.dropLast()) : description
@@ -121,12 +128,14 @@ enum GrokDialogParser {
             fingerprint: DialogFingerprint(
                 program: .grok, kind: .grokPermission, title: title, sourceSuffix: nil, body: body, progress: nil,
                 options: options),
-            focus: card.focus(of: options), subject: subject)
+            focus: card.focus(of: options), subject: subject, note: hidesRule ? cutRuleNote : nil)
     }
 
     private enum PermissionRow {
         case offered(label: String, role: DialogOptionRole)
         case withheld(label: String)
+        /// A lasting rule cut to fit with `…`.
+        case cutRule(label: String)
     }
 
     /// A permission's row by its label, whole or as far as the card's edge
@@ -140,8 +149,13 @@ enum GrokDialogParser {
             return .offered(label: known.0, role: known.1)
         }
         if option.names(alwaysApprove) { return .withheld(label: alwaysApprove) }
-        // The rule's scope follows the colon, cut to fit with `…`.
-        if option.begins(with: "Always allow:") { return .offered(label: option.label, role: .approvePersistent) }
+        // The rule's scope follows the colon, cut to fit with `…`, and a
+        // cut scope hides how far the rule reaches.
+        if option.begins(with: "Always allow:") {
+            return option.label.hasSuffix("…")
+                ? .cutRule(label: option.label) : .offered(label: option.label, role: .approvePersistent)
+        }
+        if option.shortens(sessionEdits) { return .cutRule(label: option.label) }
         if option.begins(with: "Never allow:") { return .withheld(label: option.label) }
         return nil
     }
@@ -150,6 +164,7 @@ enum GrokDialogParser {
     private static let sendOnce = "Yes, send once"
     private static let sessionEdits = "Yes, allow all edits during this session"
     private static let alwaysApprove = "Yes, and don't ask again for anything (always-approve mode)"
+    private static let cutRuleNote = "Widen the terminal to see the lasting rule."
 
     // MARK: Question
 
@@ -342,6 +357,12 @@ private struct GrokCard {
 
         func begins(with stem: String) -> Bool {
             label.hasPrefix(stem) || (isCut && label.count >= 8 && stem.hasPrefix(label))
+        }
+
+        /// `known` cut short with `…`.
+        func shortens(_ known: String) -> Bool {
+            let shown = label.dropLast()
+            return label.hasSuffix("…") && shown.count >= 8 && known.hasPrefix(shown)
         }
     }
 

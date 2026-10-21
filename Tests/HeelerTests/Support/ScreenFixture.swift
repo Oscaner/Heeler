@@ -71,7 +71,7 @@ enum ScreenFixture {
         "grok-24-restored-draft", "grok-25-fork-question", "grok-26-waiting-subagent", "grok-27-compacting",
         "grok-28-welcome-62", "grok-29-welcome-40", "grok-30-idle-62x20", "grok-31-scrollback-62x20",
         "grok-32-working-62x20", "grok-33-working-scrollback-62x20", "grok-34-working-draft-62",
-        "grok-35-permission-subagent-62",
+        "grok-35-permission-subagent-62", "grok-36-permission-command-40", "grok-37-permission-command-62",
     ]
 
     /// The Claude and Codex captures that the dialog and input-box suites walk.

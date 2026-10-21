@@ -14,7 +14,8 @@ struct GrokDialogPlannerTests {
 
     private static let cards = [
         "grok-12-permission-command", "grok-13-permission-compound", "grok-14-permission-edit", "grok-15-question",
-        "grok-16-subagent-panel", "grok-35-permission-subagent-62", "synthetic-permission-40",
+        "grok-16-subagent-panel", "grok-35-permission-subagent-62", "grok-36-permission-command-40",
+        "grok-37-permission-command-62", "synthetic-edit-permission-session-cut", "synthetic-permission-40",
         "synthetic-permission-40-terminal-theme", "synthetic-question-40", "synthetic-question-62",
         "synthetic-question-ten-answers", "synthetic-question-cursor-on-field", "synthetic-subagents-40",
     ]
@@ -33,7 +34,8 @@ struct GrokDialogPlannerTests {
     /// confirms it.
     @Test(arguments: [
         ("grok-12-permission-command", "3"), ("grok-13-permission-compound", "2"), ("grok-14-permission-edit", "3"),
-        ("grok-35-permission-subagent-62", "2"), ("synthetic-permission-40", "3"),
+        ("grok-35-permission-subagent-62", "2"), ("grok-36-permission-command-40", "3"),
+        ("grok-37-permission-command-62", "3"), ("synthetic-permission-40", "3"),
     ])
     func approvesWithTheProceedRowsKey(stem: String, key: String) throws {
         let dialog = try GrokCards.dialog(stem)
@@ -54,7 +56,8 @@ struct GrokDialogPlannerTests {
     @Test func deniesWithTheRejectRowsKey() throws {
         for (stem, key) in [
             ("grok-12-permission-command", "4"), ("grok-13-permission-compound", "3"), ("grok-14-permission-edit", "4"),
-            ("grok-35-permission-subagent-62", "3"),
+            ("grok-35-permission-subagent-62", "3"), ("grok-36-permission-command-40", "4"),
+            ("grok-37-permission-command-62", "4"),
         ] {
             let dialog = try GrokCards.dialog(stem)
 
@@ -74,11 +77,13 @@ struct GrokDialogPlannerTests {
     }
 
     /// The rows Chat leaves to the terminal, such as always-approve mode,
-    /// one Up press from a subagent's `Yes, send once`, and `Never allow:`:
-    /// no action presses their keys.
+    /// one Up press from a subagent's `Yes, send once`, `Never allow:`, and
+    /// a lasting rule Grok cut to fit: no action presses their keys.
     @Test(arguments: [
         ("grok-12-permission-command", ["1", "5"]), ("grok-13-permission-compound", ["1"]),
         ("grok-14-permission-edit", ["1"]), ("grok-35-permission-subagent-62", ["1"]),
+        ("grok-36-permission-command-40", ["1", "2", "5"]), ("grok-37-permission-command-62", ["1", "5"]),
+        ("synthetic-edit-permission-session-cut", ["1", "2"]),
     ])
     func neverPressesARowLeftToTheTerminal(stem: String, withheld: [String]) throws {
         let dialog = try GrokCards.dialog(stem)
