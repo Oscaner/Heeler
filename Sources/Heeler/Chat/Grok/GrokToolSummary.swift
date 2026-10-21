@@ -278,8 +278,11 @@ struct GrokToolCall: Sendable {
         switch turnEnd {
         case nil:
             switch activity {
-            // Until the user approves it, Grok has written only the call.
-            case .blocked: return (hasStarted ? .running : .awaitingApproval, nil)
+            // Until the user approves it, Grok has written only the call. An
+            // approved spawn can show nothing more for as long as its
+            // subagent runs, except the `subagent_spawned` Grok writes as it
+            // starts, also while the Agent waits on the next card.
+            case .blocked: return (hasStarted || subagentID != nil ? .running : .awaitingApproval, nil)
             case .working, .unknown: return (.running, nil)
             case .idle: return (.notCompleted, nil)
             }

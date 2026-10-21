@@ -880,6 +880,27 @@ struct GrokToolActivityTests {
         return lines(rows)
     }
 
+    /// Two parallel spawns wait for approval one card at a time. Grok
+    /// writes `subagent_spawned` as an approved spawn starts and holds its
+    /// input update back, so while the Agent is Blocked on the second
+    /// card, the first runs and only the second waits.
+    @Test func aSpawnWhoseSubagentStartedRunsWhileTheNextWaits() throws {
+        let second = "call-01900000-0000-7000-8000-000000000011-2"
+        let calls = [
+            try Self.prompt("Audit the dependencies with two subagents.", index: 0, event: 1),
+            Self.spawn(Self.callID, type: "explore", background: false, event: 2),
+            Self.spawn(second, type: "explore", background: false, event: 3),
+        ]
+
+        let waiting = Self.transcript(Self.lines(calls), activity: .blocked)
+        #expect(waiting.pendingRequests.map(\.callID) == [Self.callID, second])
+
+        let started = Self.transcript(Self.lines(calls + [Self.spawned(event: 4)]), activity: .blocked)
+        #expect(try Self.tool(started, Self.callID).status == .running)
+        #expect(try Self.tool(started, second).status == .awaitingApproval)
+        #expect(started.pendingRequests.map(\.callID) == [second])
+    }
+
     @Test func backgroundedCommandsSayTheyWentToTheBackground() throws {
         let lines = try Self.lines("background-tasks.jsonl")
         let server = "call-01900000-0000-7000-8000-00000000003e-0"
