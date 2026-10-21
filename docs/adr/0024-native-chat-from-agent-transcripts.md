@@ -386,7 +386,12 @@ Three seconds without effect shows a hint, and nothing is resent: the card's
 answers stay disabled while the same dialog shows and no call that waited
 has resolved, so a second tap cannot send the key again, and Stop and the
 terminal stay available (the open card shows Stop then, even beside a
-decline option). Codex
+decline option). Grok Build draws identical cards for parallel subagents
+with one description, with herdr Blocked between them, so there a call that
+waited when the keys went out starting also brings the answers back and
+drops the hint: Grok Build writes a call's start only once it runs, while
+the other programs read an open call as waiting or running from herdr's
+status alone. Codex
 0.160.1 holds an answer to its asynchronous question until its next tool call,
 so the card confirms it by Codex's queued-messages notice and shows it as
 Queued. Codex 0.162.1 delivers the answer at once (a waiting `write_stdin`
