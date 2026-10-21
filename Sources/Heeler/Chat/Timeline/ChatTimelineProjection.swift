@@ -51,7 +51,8 @@ enum ChatTimelineProjection {
         var body: [ChatRow] = []
         var record: ChatTurn?
         /// How the turn opened above the loaded rows ended, for the rows
-        /// above the first loaded opener.
+        /// above the first loaded opener once earlier messages wait for the
+        /// user.
         var precedingEnd: ChatTurnEnd?
 
         /// How the loaded records say the turn ended; nil while none does.
@@ -94,8 +95,9 @@ enum ChatTimelineProjection {
                 segments.append(Segment(head: row))
             } else if segments.isEmpty {
                 // Rows above the first loaded opener belong to a turn whose
-                // start is further up.
-                segments.append(Segment(body: [row], precedingEnd: precedingTurnEnd))
+                // start is further up. The end the loaded lines record for
+                // it counts once earlier messages wait for the user.
+                segments.append(Segment(body: [row], precedingEnd: signals.olderAwaitsUser ? precedingTurnEnd : nil))
             } else {
                 segments[segments.count - 1].body.append(row)
             }

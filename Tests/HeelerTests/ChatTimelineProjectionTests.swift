@@ -353,6 +353,22 @@ struct ChatTimelineProjectionTests {
         #expect(Self.ids(running) == ["older", "[group c1]", "a0"])
     }
 
+    /// Until earlier messages wait for the user, which only Grok Build's
+    /// can, the record that ends the turn above the loaded rows changes
+    /// nothing: they show as they load, and with the file's start loaded
+    /// they fold as before.
+    @Test func rowsAboveTheFirstLoadedTurnIgnoreTheirEndUntilEarlierMessagesWait() {
+        let older = ChatRow(id: .olderHistory, content: .olderHistory(.available), revision: 1, topSpacing: 0)
+        let loading = [older, Self.tool("c0"), Self.tool("c1")]
+        let ended = Self.project(
+            loading, turns: [], precedingTurnEnd: ChatTurnEnd(ending: .completed), signals: Self.working)
+        #expect(Self.ids(ended) == Self.ids(Self.project(loading, turns: [], signals: Self.working)))
+
+        let loaded = [Self.tool("c0"), Self.tool("c1"), Self.text("a0")]
+        let interrupted = Self.project(loaded, turns: [], precedingTurnEnd: ChatTurnEnd(ending: .interrupted))
+        #expect(Self.ids(interrupted) == Self.ids(Self.project(loaded, turns: [])))
+    }
+
     @Test func aTurnOpenedByARowThatIsNotAPromptStillFolds() {
         let rows = [Self.text("n1"), Self.tool("c1"), Self.text("a1")]
         #expect(Self.ids(Self.project(rows, turns: [Self.turn("n1")])) == ["[turn a1]", "a1"])
