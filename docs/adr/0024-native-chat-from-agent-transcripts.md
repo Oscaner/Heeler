@@ -215,8 +215,10 @@ request, under rules that stand in for the screen the user cannot see:
   send Chat also reads the Agent's record again and compares the terminal
   title with the conversation's title (ADR 0025). It sends nothing, and says
   why, when herdr now reports another conversation, which Chat then switches
-  to, when OpenCode is on its home screen, when the title names another
-  conversation, or when the check itself fails.
+  to, when Chat already shows that OpenCode is on its home screen, when the
+  title names another conversation, or when the check itself fails. Right
+  after `/new`, before Chat shows that, the screen read above finds the home
+  screen and holds the send instead.
 - Three seconds after the acknowledgement the screen is read again. Text left
   in the box marks the message Not delivered. Chat never resends.
 
