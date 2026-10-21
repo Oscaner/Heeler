@@ -407,13 +407,15 @@ are never pressed. The permission card offers Yes, proceed (Yes on an
 edit), `Always allow: <command>` and Yes, allow all edits during this
 session, each persistent row with a caption saying what Grok Build keeps,
 and Deny, which presses the reject row and ends the turn; the always-approve
-mode and Never allow rows stay in the terminal. The stop panel offers Stop
-running and Continue to run, which ends the turn while the subagents go on;
-Always stop and Always continue write the config and stay out. Neither the
-question nor the stop panel offers Stop, since Esc there only moves Grok
-Build's focus or keeps the turn running. After Esc, Grok Build's focus
-rests in its scrollback, where keys miss the card, so the card then answers
-nothing and says to answer in the terminal. Grok Build's
+mode and Never allow rows stay in the terminal. Grok Build asks the same way
+before a subagent starts, under the card's own question, `Allow
+<description>?`, and there Yes, send once approves that subagent alone. The
+stop panel offers Stop running and Continue to run, which ends the turn
+while the subagents go on; Always stop and Always continue write the config
+and stay out. Neither the question nor the stop panel offers Stop, since Esc
+there only moves Grok Build's focus or keeps the turn running. After Esc,
+Grok Build's focus rests in its scrollback, where keys miss the card, so the
+card then answers nothing and says to answer in the terminal. Grok Build's
 other cards, such as the rewind confirmation and the fork question, get the
 generic card without numbered answers. Multi-select questions,
 option notes and typed answers stay in the terminal. A dialog the parsers

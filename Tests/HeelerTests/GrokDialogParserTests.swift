@@ -62,11 +62,32 @@ struct GrokDialogParserTests {
                 == "Grok Build won't ask about edits again in this session.")
     }
 
+    /// grok-35: the approval Grok asks before a subagent starts, at the
+    /// phone's grid. `Yes, send once` approves this one subagent and the
+    /// reject row denies it, as on a command; the title is the card's own
+    /// question.
+    @Test func readsTheSubagentApprovalCard() throws {
+        let dialog = try GrokCards.dialog("grok-35-permission-subagent-62")
+
+        #expect(dialog.kind == .grokPermission)
+        #expect(dialog.title == "Allow Sleep 60 then reply done")
+        #expect(dialog.subject == DialogSubject())
+        #expect(dialog.options.map(\.label) == ["Yes, send once", Self.reject])
+        #expect(dialog.options.map(\.number) == [2, 3])
+        #expect(dialog.options.map(\.role) == [.approve, .decline])
+        #expect(dialog.options.map(\.detail) == [nil, "Ends the turn"])
+        #expect(dialog.focus == DialogFocusState(focusedOrdinal: 1))
+        #expect(dialog.rows == 31..<38)
+    }
+
     /// Always-approve mode and `Never allow:` stay on screen and in the
-    /// body, never among the options.
+    /// body, never among the options, cut at the card's edge or not.
     @Test func neverOffersAlwaysApproveOrNeverAllow() throws {
         let alwaysApprove = "Yes, and don't ask again for anything (always-approve mode)"
-        for stem in ["grok-12-permission-command", "grok-13-permission-compound", "grok-14-permission-edit"] {
+        for stem in [
+            "grok-12-permission-command", "grok-13-permission-compound", "grok-14-permission-edit",
+            "grok-35-permission-subagent-62",
+        ] {
             let dialog = try GrokCards.dialog(stem)
             let labels = dialog.options.map(\.label)
 

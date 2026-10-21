@@ -4,13 +4,13 @@ import Foundation
 /// rows behind a `┃` bar on a lighter background, each option a row
 /// `<key> (○) <label>` with any description two spaces or more after the
 /// label, and the card's own hints in the footer. Heeler knows three: a
-/// permission, a single question the agent asks during its turn, and the
-/// panel Ctrl+C opens while subagents run. Any other card with options
-/// holds sending as an excerpt without numbers, so the generic card offers
-/// only its key pad: the rewind confirmation, the fork question (every
-/// answer forks, which leaves herdr's session stale), the approval before a
-/// subagent starts (its once row reads `Yes, send once`; 1.0.62, live),
-/// several questions at once, and the cards not captured yet.
+/// permission, which also asks before a subagent starts, a single question
+/// the agent asks during its turn, and the panel Ctrl+C opens while
+/// subagents run. Any other card with options holds sending as an excerpt
+/// without numbers, so the generic card offers only its key pad: the
+/// rewind confirmation, the fork question (every answer forks, which leaves
+/// herdr's session stale), several questions at once, and the cards not
+/// captured yet.
 ///
 /// The cursor's row lies on a band of another background, or in reverse
 /// video under the terminal theme, its label bold. On a permission and on
@@ -53,6 +53,8 @@ enum GrokDialogParser {
     /// options, recognised by the reject row. A digit selects its row and
     /// submits it (`interactions.rs`). Always-approve mode and `Never
     /// allow:` stay on screen and in the body, never among the options.
+    /// Before a subagent starts, Grok asks `Allow <description>?` alone,
+    /// and `Yes, send once` approves that subagent (1.0.62, live).
     private static func permission(_ card: GrokCard) -> BlockedDialog? {
         guard let first = card.lines.firstIndex(where: { $0.option != nil }) else { return nil }
         var options: [DialogOption] = []
@@ -99,6 +101,9 @@ enum GrokDialogParser {
             title = "Allow Command"
             subject.command = command
             subject.commandDescription = description
+        } else if let description, options.contains(where: { $0.label == sendOnce }) {
+            // The subagent's own words, which may read like an edit's.
+            title = description.hasSuffix("?") ? String(description.dropLast()) : description
         } else if let description, let target = description.wholeMatch(of: /Allow (\S+) to (.+)/) {
             // `Allow Edit to <path>?`. The card's edge can cut the path,
             // and then its `?` is gone.
@@ -128,7 +133,8 @@ enum GrokDialogParser {
     /// let it show. A known label reads in full even where it was cut.
     private static func permissionRow(_ option: GrokCard.Option) -> PermissionRow? {
         let offered: [(String, DialogOptionRole)] = [
-            ("Yes, proceed", .approve), ("Yes", .approve), (sessionEdits, .approvePersistent), (reject, .decline),
+            ("Yes, proceed", .approve), ("Yes", .approve), (sendOnce, .approve), (sessionEdits, .approvePersistent),
+            (reject, .decline),
         ]
         if let known = offered.first(where: { option.names($0.0) }) {
             return .offered(label: known.0, role: known.1)
@@ -141,6 +147,7 @@ enum GrokDialogParser {
     }
 
     private static let reject = "No, reject (type to add feedback)"
+    private static let sendOnce = "Yes, send once"
     private static let sessionEdits = "Yes, allow all edits during this session"
     private static let alwaysApprove = "Yes, and don't ask again for anything (always-approve mode)"
 

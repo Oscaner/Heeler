@@ -968,10 +968,11 @@ struct BlockedRequestMatchTests {
     }
 
     /// A command by its start, a file by its name, a question by its text.
-    /// The subagent panel has no call.
+    /// The subagent panel has no call, and a subagent's approval names
+    /// neither a command nor a file, so it matches none of these.
     @Test(arguments: [
         "grok-12-permission-command", "grok-13-permission-compound", "grok-14-permission-edit", "grok-15-question",
-        "grok-16-subagent-panel",
+        "grok-16-subagent-panel", "grok-35-permission-subagent-62",
     ])
     func grokCardsMatchTheirCall(stem: String) throws {
         let question = "How should we handle the README rename plan?"

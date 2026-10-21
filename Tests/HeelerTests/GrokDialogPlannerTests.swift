@@ -14,9 +14,9 @@ struct GrokDialogPlannerTests {
 
     private static let cards = [
         "grok-12-permission-command", "grok-13-permission-compound", "grok-14-permission-edit", "grok-15-question",
-        "grok-16-subagent-panel", "synthetic-permission-40", "synthetic-permission-40-terminal-theme",
-        "synthetic-question-40", "synthetic-question-62", "synthetic-question-ten-answers",
-        "synthetic-question-cursor-on-field", "synthetic-subagents-40",
+        "grok-16-subagent-panel", "grok-35-permission-subagent-62", "synthetic-permission-40",
+        "synthetic-permission-40-terminal-theme", "synthetic-question-40", "synthetic-question-62",
+        "synthetic-question-ten-answers", "synthetic-question-cursor-on-field", "synthetic-subagents-40",
     ]
 
     private func plan(_ action: DialogAction, on dialog: BlockedDialog) throws(DialogPlanError) -> DialogActionPlan {
@@ -27,12 +27,13 @@ struct GrokDialogPlannerTests {
         try #require(dialog.options.first { $0.role == role }?.ordinal)
     }
 
-    /// The digit of `Yes, proceed` or `Yes`, whatever the card's shape. herdr
-    /// stays Blocked a moment after the approval, and Grok records none, so
-    /// the card leaving the screen confirms it.
+    /// The digit of `Yes, proceed`, `Yes` or a subagent's `Yes, send once`,
+    /// whatever the card's shape. herdr stays Blocked a moment after the
+    /// approval, and Grok records none, so the card leaving the screen
+    /// confirms it.
     @Test(arguments: [
         ("grok-12-permission-command", "3"), ("grok-13-permission-compound", "2"), ("grok-14-permission-edit", "3"),
-        ("synthetic-permission-40", "3"),
+        ("grok-35-permission-subagent-62", "2"), ("synthetic-permission-40", "3"),
     ])
     func approvesWithTheProceedRowsKey(stem: String, key: String) throws {
         let dialog = try GrokCards.dialog(stem)
@@ -53,6 +54,7 @@ struct GrokDialogPlannerTests {
     @Test func deniesWithTheRejectRowsKey() throws {
         for (stem, key) in [
             ("grok-12-permission-command", "4"), ("grok-13-permission-compound", "3"), ("grok-14-permission-edit", "4"),
+            ("grok-35-permission-subagent-62", "3"),
         ] {
             let dialog = try GrokCards.dialog(stem)
 
@@ -68,6 +70,30 @@ struct GrokDialogPlannerTests {
     @Test func dismissPressesTheRejectRow() throws {
         #expect(try plan(.dismiss, on: try GrokCards.dialog("grok-12-permission-command")).keys == ["4"])
         #expect(try plan(.dismiss, on: try GrokCards.dialog("grok-13-permission-compound")).keys == ["3"])
+        #expect(try plan(.dismiss, on: try GrokCards.dialog("grok-35-permission-subagent-62")).keys == ["3"])
+    }
+
+    /// The rows Chat leaves to the terminal, such as always-approve mode,
+    /// one Up press from a subagent's `Yes, send once`, and `Never allow:`:
+    /// no action presses their keys.
+    @Test(arguments: [
+        ("grok-12-permission-command", ["1", "5"]), ("grok-13-permission-compound", ["1"]),
+        ("grok-14-permission-edit", ["1"]), ("grok-35-permission-subagent-62", ["1"]),
+    ])
+    func neverPressesARowLeftToTheTerminal(stem: String, withheld: [String]) throws {
+        let dialog = try GrokCards.dialog(stem)
+        var actions: [DialogAction] = [.dismiss, .skipQuestion, .expandQuestions, .approvePlan(note: "go")]
+        for option in dialog.options {
+            actions += [
+                .choose(ordinal: option.ordinal), .amend(ordinal: option.ordinal, note: "note"),
+                .respond(ordinal: option.ordinal, text: "text"),
+            ]
+        }
+
+        let pressed = actions.compactMap { try? plan($0, on: dialog) }.flatMap(\.keys)
+
+        #expect(Set(pressed) == Set(dialog.options.compactMap { $0.number.map(String.init) }))
+        #expect(Set(pressed).isDisjoint(with: withheld))
     }
 
     /// Esc parks focus or keeps a cancelled turn running, Ctrl+C cancels

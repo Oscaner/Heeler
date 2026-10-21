@@ -205,7 +205,8 @@ private struct BlockedDialogCard: View {
     }
 
     /// A command under its description; a file by itself, since the title
-    /// names the tool; else the card's own words.
+    /// names the tool; else the card's own words, unless the title already
+    /// asks them, as before a subagent starts.
     @ViewBuilder
     private var grokPermission: some View {
         let subject = dialog.subject
@@ -216,7 +217,7 @@ private struct BlockedDialogCard: View {
             BlockedCodeBox(text: card.request?.summary ?? command)
         } else if let path = subject.filePath {
             BlockedCodeBox(text: card.request?.summary ?? path)
-        } else if let description = dialog.body.first {
+        } else if let description = dialog.body.first, description != "\(dialog.title)?" {
             BlockedCardText(description)
         }
     }

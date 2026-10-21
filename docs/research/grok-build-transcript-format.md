@@ -600,7 +600,9 @@ has a lighter background and a bold label.
   `3 (○) No, reject (type to add feedback)`, and the footer `1/3:select │
   Tab:next option │ Ctrl+o:always-approve │ Ctrl+c:cancel │
   Esc:scrollback`. herdr reported it Blocked, and Enter or `2` approved
-  once (live, 2026-10-20).
+  once (live, 2026-10-20). At the phone's 62 columns row 1 ends
+  `(always-a` and the footer stops after `Ctrl+o:always-approve` (live,
+  2026-10-20).
 - Ctrl+C while subagents run opens a stop panel, `Subagents are still
   running. Stop them?`, with `1 (●) Stop running`, `2 Continue to run`,
   `3 Always stop` and `4 Always continue`, and the footer `1/4:select │
