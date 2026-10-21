@@ -424,9 +424,9 @@ struct AgentComposerView: View {
         .accessibilityIdentifier("composer.notice")
     }
 
-    /// Why a send was refused or Stop pressed nothing, then what to do. Six
-    /// lines hold the longest notices whole on a phone at the default text
-    /// size.
+    /// Why a send was refused, or why Stop pressed nothing or the Agent
+    /// still shows Working, then what to do. Six lines hold the longest
+    /// notices whole on a phone at the default text size.
     private func noticeLabel(_ text: String) -> some View {
         Label(text, systemImage: "exclamationmark.bubble")
             .font(.footnote)

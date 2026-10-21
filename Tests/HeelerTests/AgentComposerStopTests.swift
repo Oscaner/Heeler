@@ -568,20 +568,21 @@ struct AgentComposerFoldHostedTests {
         }
     }
 
-    /// A notice shows the lines past its third that Grok Build's longer
-    /// holds wrap to at a phone's width, whether it says why a send was
-    /// refused or why Stop pressed nothing.
-    @Test func aLongNoticeShowsItsFourthLine() async throws {
+    /// A notice shows the six lines that the longest notices wrap to at a
+    /// phone's width, such as Grok Build's holds at a larger text size and
+    /// OpenCode's unconfirmed Stop, whether it says why a send was refused
+    /// or why Stop pressed nothing.
+    @Test func aLongNoticeShowsItsSixthLine() async throws {
         for kind in NoticeKind.allCases {
             var heights: [CGFloat] = []
-            for count in 1...4 {
+            for count in 1...6 {
                 heights.append(try await Self.height(showing: Self.notice(lines: count), as: kind))
             }
             let line = heights[1] - heights[0]
             #expect(line > 8, "a second line should add one to the \(kind) notice: \(heights)")
             #expect(
-                abs(heights[3] - heights[2] - line) < 1,
-                "the \(kind) notice should show its fourth line as it does its second: \(heights)")
+                abs(heights[5] - heights[4] - line) < 1,
+                "the \(kind) notice should show its sixth line as it does its second: \(heights)")
         }
     }
 
