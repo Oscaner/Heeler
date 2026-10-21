@@ -13,6 +13,8 @@ struct GrokStopGuardTests {
         "Heeler can't see Grok Build working, so Stop pressed nothing. Stop it in the terminal with Ctrl+C."
     private static let otherView =
         "Grok Build is showing a menu or another view, so Stop pressed nothing. Close it in the terminal first."
+    private static let agentView =
+        "Grok Build is showing an agent from its dashboard, so Stop pressed nothing. Stop it in the terminal with Ctrl+C."
     private static let asking =
         "Grok Build is asking something, so Stop pressed nothing. Answer it in Chat or the terminal."
     private static let unfocused =
@@ -160,13 +162,21 @@ struct GrokStopGuardTests {
     }
 
     /// On the dashboard's view of an agent, Ctrl+C would cancel that
-    /// agent's turn, whichever conversation it is.
-    @Test func refusesOnTheDashboardsViewOfAnAgent() {
-        let screen = GrokScreenBuilder(
+    /// agent's turn, whichever conversation it is. Grok Build kept the view
+    /// until it restarted (1.0.62, live), so there is nothing to close.
+    /// grok-41 shows this conversation there, where a send from Chat goes,
+    /// with a turn running: grok-34's status row, also at 62 columns.
+    @Test func refusesOnTheDashboardsViewOfAnAgent() throws {
+        var rows = try ScreenFixture.text("grok-41-agent-view-this-62").components(separatedBy: "\r\n")
+        rows[33] = try ScreenFixture.text("grok-34-working-draft-62").components(separatedBy: "\r\n")[33]
+        let thisConversation = ANSIScreenDecoder.decode(rows.joined(separator: "\r\n"))
+        let wide = GrokScreenBuilder(
             status: .init(label: "Thinking…"), hints: ["Ctrl+\\:dashboard", "Ctrl+x:stop"] + Self.workingHints
         ).screen
 
-        #expect(Self.verdict(screen) == .refuse(Self.otherView))
+        #expect(GrokScreen(thisConversation).statusRow?.label == "Sleep for 60 seconds…")
+        #expect(Self.verdict(thisConversation) == .refuse(Self.agentView))
+        #expect(Self.verdict(wide) == .refuse(Self.agentView))
         // The same turn on the conversation's own view.
         let own = GrokScreenBuilder(status: .init(label: "Thinking…"), hints: Self.workingHints)
         #expect(Self.verdict(own.screen) == .press)

@@ -14,8 +14,16 @@ enum GrokStopGuard {
         // moment after it shows.
         if context.activity == .blocked || grok.card != nil { return .refuse(asking) }
         guard context.activity == .working else { return .refuse(notWorking) }
+        // The dashboard's view of an agent passes Ctrl+C to whichever agent
+        // it shows, and it stayed until Grok Build restarted (1.0.62, live),
+        // so the reason names Ctrl+C in the terminal, not closing the view.
+        if grok.isDashboardOverlay {
+            return .refuse(
+                "Grok Build is showing an agent from its dashboard, so Stop pressed nothing. Stop it in the terminal with Ctrl+C."
+            )
+        }
         // Minimal mode draws no box either.
-        let showsConversation = grok.overlay == nil && !grok.isDashboard && !grok.isDashboardOverlay && !grok.isWelcome
+        let showsConversation = grok.overlay == nil && !grok.isDashboard && !grok.isWelcome
         guard let composer = grok.composer, composer.mode == .prompt, showsConversation else {
             return .refuse(
                 "Grok Build is showing a menu or another view, so Stop pressed nothing. Close it in the terminal first.")
