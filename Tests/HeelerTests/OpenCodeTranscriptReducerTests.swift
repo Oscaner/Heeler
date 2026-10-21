@@ -353,6 +353,13 @@ struct OpenCodeTranscriptReducerTests {
             ])
         #expect(stopped.turns.map(\.ending) == [.interrupted])
 
+        // Another message, written for the test, titles the notice.
+        let byUser =
+            #"{"status":"failed","reason":"manual","summary":null,"error":{"type":"aborted","message":"Stopped by the user"},"time":null}"#
+        #expect(
+            Self.project([Self.row("msg_c1", "compaction", seq: 1, byUser)]).entries.last?.content
+                == .notice(ChatNotice(kind: .system, title: "Stopped by the user")))
+
         // Without a message, the notice keeps OpenCode's word for a stop.
         for message in ["null", #"" ""#] {
             let data =
