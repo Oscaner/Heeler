@@ -145,9 +145,9 @@ conversation, so Chat holds every send there whenever it recognizes that
 view at that size, even while it shows this conversation; no capture shows
 whether the view keeps its `‹ i/n ›` header and `Ctrl+\:dashboard` footer at
 20 rows. The way out is to show the terminal with the keyboard down, which
-gives the pane more than 20 rows (41 on the phone measured), or to restart
-Grok Build. After a send, Chat reads what Grok Build added to the folder's
-`prompt_history.jsonl` since just before the send, up to 64 KiB:
+gives the pane more than 20 rows (41 rows on the phone, as measured), or to
+restart Grok Build. After a send, Chat reads what Grok Build added to the
+folder's `prompt_history.jsonl` since just before the send, up to 64 KiB:
 two seconds after a message delivered while herdr reported the Agent neither
 Working nor Blocked, and again when the message would go overdue. When no line
 with the message's text names this session and exactly one names another, the
