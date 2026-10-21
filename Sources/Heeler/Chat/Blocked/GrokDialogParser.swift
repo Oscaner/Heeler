@@ -10,7 +10,7 @@ import Foundation
 /// panel Ctrl+C opens while subagents run. Any other card with options
 /// holds sending as an excerpt without numbers, so the generic card offers
 /// only its key pad: the rewind confirmation, several questions at once,
-/// and the cards not captured yet.
+/// the fork question too narrow to read, and the cards not captured yet.
 ///
 /// The cursor's row lies on a band of another background, or in reverse
 /// video under the terminal theme, its label bold. On a permission and on
@@ -34,8 +34,20 @@ enum GrokDialogParser {
         if let dialog = cancelPanel(card) ?? permission(card) ?? question(card, on: screen) ?? fork(card) {
             return .dialog(dialog)
         }
+        return .unrecognized(card.excerpt(genericReason(card)))
+    }
+
+    /// Why a card stays generic: `/fork`'s worktree question that `fork`
+    /// can't read, with or without its lasting rows in view, a question
+    /// Heeler doesn't answer, or a card it doesn't know.
+    private static func genericReason(_ card: GrokCard) -> String {
+        if answerSheet(card)?.question == forkQuestion {
+            let lasting = forkRows.filter { !$0.offered }.map { $0.label }
+            let shown = lasting.allSatisfy { label in card.lines.contains { $0.option?.names(label) == true } }
+            return shown ? forkReason : forkHiddenRowsReason
+        }
         let asks = card.lines.contains { $0.option?.key == freeTextKey }
-        return .unrecognized(card.excerpt(asks ? questionReason : unknownReason))
+        return asks ? questionReason : unknownReason
     }
 
     private static let unknownReason =
@@ -46,6 +58,13 @@ enum GrokDialogParser {
     private static let questionReason =
         "Heeler answers only a single question Grok Build asks during its turn. Answer this one with these keys "
         + "or in the terminal."
+    private static let forkReason =
+        "Grok Build's /fork asks this, and every answer forks. Always worktree and Never worktree also save a "
+        + "lasting choice. Answer in the terminal or with these keys."
+    private static let forkHiddenRowsReason =
+        "Grok Build's /fork asks this, and every answer forks. Always worktree and Never worktree, which this "
+        + "width hides, also save a lasting choice. Answer in the terminal, where every row shows, or with these "
+        + "keys."
 
     // MARK: Permission
 
@@ -268,10 +287,11 @@ enum GrokDialogParser {
     /// `4 Never worktree` also save the choice in Grok's config, so they
     /// stay on screen and in the body, never among the options, as a
     /// typed answer stays in the terminal. A narrow card scrolls its later
-    /// rows out of view, and one without both Yes and No stays generic. A
-    /// key selects its row wherever the cursor is, except on the answer
-    /// field, where it is typed, so with the keyboard on the card the
-    /// cursor must show (1.0.62, live).
+    /// rows out of view, and one without both Yes and No stays generic,
+    /// saying that every answer forks and that rows out of view save a
+    /// lasting choice. A key selects its row wherever the cursor is, except
+    /// on the answer field, where it is typed, so with the keyboard on the
+    /// card the cursor must show (1.0.62, live).
     private static func fork(_ card: GrokCard) -> BlockedDialog? {
         guard let sheet = answerSheet(card), sheet.question == forkQuestion, sheet.description.isEmpty,
             card.cursor != nil || !card.hasKeyboard, sheet.answers.count >= 2, sheet.answers.count <= forkRows.count

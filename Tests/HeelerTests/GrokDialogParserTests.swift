@@ -236,6 +236,28 @@ struct GrokDialogParserTests {
         #expect(BlockedDialogParser.parse(screen, program: .grok) == result)
     }
 
+    /// `/fork`'s worktree question left generic says it is `/fork`'s, that
+    /// every answer forks and that two rows save a lasting choice, then
+    /// where to answer: at 40 columns, where Grok scrolls those rows out of
+    /// view, and with every row in view but the cursor unseen. The key pad
+    /// stays.
+    @Test func explainsTheForkQuestionItLeavesGeneric() throws {
+        let narrow = try #require(try GrokCards.parse("grok-39-fork-question-40").excerpt)
+        let unseen = try #require(try GrokCards.parse("synthetic-fork-cursor-unseen").excerpt)
+
+        #expect(
+            narrow.reason
+                == "Grok Build's /fork asks this, and every answer forks. Always worktree and Never worktree, which "
+                + "this width hides, also save a lasting choice. Answer in the terminal, where every row shows, or "
+                + "with these keys.")
+        #expect(
+            unseen.reason
+                == "Grok Build's /fork asks this, and every answer forks. Always worktree and Never worktree also "
+                + "save a lasting choice. Answer in the terminal or with these keys.")
+        #expect(narrow.numbered.isEmpty)
+        #expect(unseen.numbered.isEmpty)
+    }
+
     /// Esc parks the keyboard in the scrollback with the card still drawn.
     /// The cursor keeps its `(●)` and bold label, but the band goes and
     /// the footer offers the card back, and digits would miss it.
