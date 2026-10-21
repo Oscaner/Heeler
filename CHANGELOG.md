@@ -47,6 +47,8 @@ Entries reference the pull request that made the change.
 - Show five whole lines of a long Composer draft, with the line being
   typed clear of the edge, instead of the last line cut off; the draft
   fades out at the edge it scrolls past. (#480)
+- Show long Composer notices whole, up to five lines, instead of cutting
+  them after three, which could hide what to do next.
 
 ## [0.1.15] - 2026-10-19
 
