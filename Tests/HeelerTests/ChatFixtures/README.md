@@ -195,7 +195,7 @@ replacements of the same length. These screens are not part of
 herdr 0.9.5 (2026-10-19), kept as herdr returned them apart from the
 scrubbing below: CRLF rows, SGR styling only. Two Agents ran in scratch
 projects under the developer's account, `cap-grok-a` and `cap-grok-b`; every
-screen is 47 rows of 181 or 182 columns, except `grok-28` to `grok-43` (below).
+screen is 47 rows of 181 or 182 columns, except `grok-28` to `grok-44` (below).
 Screens whose header shows
 `/U/d/s/cap-grok-a/proj` ran with `HOME` pointed at a scratch directory, where
 Grok asks before running a tool; the developer's own settings put it in
@@ -222,9 +222,10 @@ prompts in Chinese, and its replies stay as captured.
 | `grok-38-fork-question-62`, `grok-39-fork-question-40` | The worktree question `/fork` asks, at the phone's 62×41 grid with every row in view, and at 40×30, where the card scrolls all but `1` and `z` out of view |
 | `grok-40-agent-view-other-62`, `grok-41-agent-view-this-62`, `grok-42-agent-view-dispatched-62` | The dashboard's view of an agent at the phone's 62×41 grid, its footer cut at `Ctrl+x:`: another session opened from the dashboard while herdr reported the first; the first after `/resume` back to it, which kept the view; the first again after Esc from a dispatch that moved herdr to the new agent |
 | `grok-43-resumed-from-welcome-120` | At 120×40, the session a `/resume` typed on the Welcome screen put on screen, its newest message one Chat sent there, while herdr reported the empty session the typed command started first |
+| `grok-44-permission-second-subagent-120` | At 120×40, the second of two spawn cards for parallel subagents with one description, `Allow Sleep 90 then done?`, read 2.6 s after `2` approved the first, while its subagent ran and herdr stayed Blocked: only the status row's timers differ from the first card |
 
 Captures not marked `cap-grok-b` come from `cap-grok-a`, except `grok-28` to
-`grok-43`, which come from later Agents (2026-10-20) in the scratch project
+`grok-44`, which come from later Agents (2026-10-20) in the scratch project
 `/tmp/hcl/proj-grok`, with nothing to scrub. They are kept as read, except
 `grok-36-permission-command-40`, which is derived, not captured: that read
 took the pane's ANSI a moment before Grok drew the card and its text just

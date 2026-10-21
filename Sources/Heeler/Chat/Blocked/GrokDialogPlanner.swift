@@ -8,9 +8,12 @@ import Foundation
 /// unanswered; Ctrl+O, `e`, ← and →, which change the rule or the mode; or
 /// a letter on a permission, which opens the reject row's feedback field.
 /// Grok records no approval and herdr stays Blocked a moment after a key,
-/// so the card leaving the screen confirms it. A key selects its row
-/// wherever the cursor is, so only a question and the fork question, where
-/// the cursor may sit on the answer field, need to see it.
+/// so the card leaving the screen confirms it. Where the next card looks
+/// the same, as for parallel subagents with one description, a call that
+/// waited starting brings the card's answers back (`BlockedCardStore`). A
+/// key selects its row wherever the cursor is, so only a question and the
+/// fork question, where the cursor may sit on the answer field, need to see
+/// it.
 struct GrokDialogPlanner {
     let dialog: BlockedDialog
     /// Ignored: no Grok Build record answers a card.

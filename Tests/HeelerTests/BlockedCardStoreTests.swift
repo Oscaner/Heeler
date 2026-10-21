@@ -713,6 +713,110 @@ struct BlockedCardStoreTests {
         }
     }
 
+    /// Parallel subagents with one description get identical cards, one
+    /// after the other, and herdr stays Blocked between them, so approving
+    /// the first shows no effect on screen. Grok Build writes
+    /// `subagent_spawned` as the approved subagent starts, which can come
+    /// in while the key's effect is checked: the second card's answers stay
+    /// on. grok-44 is the second card as Grok drew it after the first's
+    /// approval, its subagent running.
+    @Test(arguments: [
+        ("grok-35-permission-subagent-62", "Sleep 60 then reply done"),
+        ("grok-44-permission-second-subagent-120", "Sleep 90 then done"),
+    ])
+    func aGrokSubagentStartingKeepsTheNextIdenticalCardAnswerable(stem: String, description: String) async throws {
+        let first = Self.grokSpawn("call-1", description)
+        let second = Self.grokSpawn("call-2", description)
+        let pane = FakePane(try ScreenFixture.screen(stem))
+        let box = StoreBox()
+        let store = BlockedCardStore(
+            program: .grok,
+            io: BlockedScreenIO(
+                readScreen: { await pane.read() },
+                sendKeys: { keys in
+                    await pane.send(keys)
+                    await MainActor.run {
+                        box.store?.update(transcript: Self.transcript(pending: [second], running: [first]))
+                    }
+                },
+                paste: { await pane.paste($0) }),
+            clock: ManualClock().clock)
+        box.store = store
+        store.update(transcript: Self.transcript(pending: [first, second]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        let approve = try #require(card.dialog.options.first { $0.role == .approve }?.ordinal)
+        #expect(card.dialog.options.contains { $0.role == .decline })
+
+        await store.perform(.choose(ordinal: approve))
+
+        #expect(await pane.keys == [["2"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        // The second card's Approve goes, as its Deny would.
+        await store.perform(.choose(ordinal: approve))
+        #expect(await pane.keys == [["2"], ["2"]])
+    }
+
+    /// Without a start the same answer stays unconfirmed, and a call that
+    /// only starts waiting, as Grok writes the second spawn's call once the
+    /// first runs, proves nothing. The first subagent starting later still
+    /// brings the answers back.
+    @Test func aGrokAnswerStaysUnconfirmedUntilACallThatWaitedStarts() async throws {
+        let first = Self.grokSpawn("call-1", "Sleep 60 then reply done")
+        let second = Self.grokSpawn("call-2", "Sleep 60 then reply done")
+        let pane = FakePane(try ScreenFixture.screen("grok-35-permission-subagent-62"))
+        let store = Self.store(.grok, pane: pane)
+        store.update(transcript: Self.transcript(pending: [first]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        let approve = try #require(card.dialog.options.first { $0.role == .approve }?.ordinal)
+
+        await store.perform(.choose(ordinal: approve))
+
+        #expect(await pane.keys == [["2"]])
+        #expect(store.progress == .unconfirmed)
+        #expect(store.notice == "The Agent hasn't responded yet. Answer in the terminal if it stays.")
+        store.update(transcript: Self.transcript(pending: [first, second]))
+        await store.refresh()
+        #expect(store.progress == .unconfirmed)
+        await store.perform(.choose(ordinal: approve))
+        #expect(await pane.keys == [["2"]])
+
+        store.update(transcript: Self.transcript(pending: [second], running: [first]))
+
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        await store.perform(.choose(ordinal: approve))
+        #expect(await pane.keys == [["2"], ["2"]])
+    }
+
+    /// Only Grok Build writes a call's start once its card is answered.
+    /// Claude Code's open calls read waiting or running from herdr's status
+    /// alone, so one that reads running brings nothing back.
+    @Test func outsideGrokBuildACallThatReadsRunningLeavesTheAnswerUnconfirmed() async throws {
+        let pane = FakePane(try ScreenFixture.screen("claude-02-c1-bash-blocked"))
+        let store = Self.store(.claude, pane: pane)
+        let waiting = Self.bash("toolu_x", "echo other")
+        store.update(transcript: Self.transcript(pending: [waiting]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        await store.perform(.choose(ordinal: 1))
+        #expect(store.progress == .unconfirmed)
+
+        store.update(transcript: Self.transcript(running: [waiting]))
+
+        #expect(store.progress == .unconfirmed)
+    }
+
     // MARK: Helpers
 
     private static let fruit = FakeQuestionTUI.Question(
@@ -742,6 +846,13 @@ struct BlockedCardStoreTests {
             entryID: ChatEntryID(id), callID: id, kind: .command, toolName: "run_terminal_command", summary: command)
     }
 
+    /// A subagent's spawn while its card waits: its title is the
+    /// description the card asks about.
+    private static func grokSpawn(_ id: String, _ description: String) -> ChatPendingRequest {
+        ChatPendingRequest(
+            entryID: ChatEntryID(id), callID: id, kind: .agent, toolName: "spawn_subagent", summary: description)
+    }
+
     private static func ompBash(_ id: String, _ command: String) -> ChatPendingRequest {
         ChatPendingRequest(entryID: ChatEntryID(id), callID: id, kind: .command, toolName: "bash", summary: command)
     }
@@ -766,10 +877,12 @@ struct BlockedCardStoreTests {
             entryID: ChatEntryID(id), callID: id, kind: .command, toolName: "Bash", summary: command)
     }
 
+    /// Calls waiting for approval, running past it, and resolved.
     private static func transcript(
-        pending: [ChatPendingRequest] = [], resolved: [ChatPendingRequest] = []
+        pending: [ChatPendingRequest] = [], running: [ChatPendingRequest] = [], resolved: [ChatPendingRequest] = []
     ) -> ChatTranscript {
         let entries = (pending.map { ($0, ChatToolActivity.Status.awaitingApproval) }
+            + running.map { ($0, ChatToolActivity.Status.running) }
             + resolved.map { ($0, ChatToolActivity.Status.succeeded) }).enumerated().map { index, item in
                 ChatEntry(
                     id: item.0.entryID, sourceOffset: UInt64(index),

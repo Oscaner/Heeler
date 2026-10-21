@@ -42,7 +42,7 @@ struct BlockedCard: Equatable, Sendable {
 /// shown for a moment, sends the plan's keys while checking each of its
 /// expectations, then watches for the effect. Nothing is ever resent: a
 /// dialog that does not respond keeps its answers off until the screen
-/// shows something else.
+/// shows something else or the transcript shows the answer took.
 @MainActor
 @Observable
 final class BlockedCardStore {
@@ -82,8 +82,8 @@ final class BlockedCardStore {
         /// Keys are going out; every control waits.
         case acting
         /// The keys went out and the Agent has not shown their effect. Only
-        /// Stop acts until a read shows another screen or a waiting call
-        /// resolves: the keys may still land.
+        /// Stop acts until a read shows another screen, a waiting call
+        /// resolves, or on Grok Build one starts: the keys may still land.
         case unconfirmed
     }
 
@@ -110,6 +110,10 @@ final class BlockedCardStore {
     @ObservationIgnored private var activity: ChatAgentActivity = .unknown
     @ObservationIgnored private var pendingRequests: [ChatPendingRequest] = []
     @ObservationIgnored private var resolvedToolUseIDs: Set<String> = []
+    /// Calls the transcript shows past their approval: running or resolved.
+    @ObservationIgnored private var startedToolUseIDs: Set<String> = []
+    /// The calls that waited for approval when an action's keys went out.
+    @ObservationIgnored private var waitingWhenSent: Set<String> = []
     @ObservationIgnored private var isVisible = false
     @ObservationIgnored private var isSuspended = false
     @ObservationIgnored private var watcher: Task<Void, Never>?
@@ -174,15 +178,18 @@ final class BlockedCardStore {
     }
 
     /// The conversation as last read: requests a card can match, and calls
-    /// whose results confirm an answer.
+    /// whose results confirm an answer or, on Grok Build, whose starts show
+    /// it took.
     func update(transcript: ChatTranscript) {
         let waiting = Set(pendingRequests.compactMap(\.callID))
         pendingRequests = transcript.pendingRequests
         var resolved: Set<String> = []
+        var started: Set<String> = []
         for entry in transcript.entries {
             switch entry.content {
             case .tool(let tool):
                 if let id = tool.callID, !Self.isOpen(tool.status) { resolved.insert(id) }
+                if let id = tool.callID, tool.status != .awaitingApproval { started.insert(id) }
             case .plan(let plan):
                 if let id = plan.callID, !Self.isOpen(plan.status) { resolved.insert(id) }
             default:
@@ -198,6 +205,8 @@ final class BlockedCardStore {
             unconfirmedFingerprint = nil
         }
         resolvedToolUseIDs = resolved
+        startedToolUseIDs = started
+        releaseIfAWaitingCallStarted()
         // An idle Claude's question reads only while its call is open.
         if !readsScreen, progress != .acting, content != .none { clear() }
         updateWatching()
@@ -292,6 +301,7 @@ final class BlockedCardStore {
         }
         let toolUseID = shown.request?.callID
         await waitOutGrace(for: page)
+        waitingWhenSent = Set(pendingRequests.compactMap(\.callID))
         for index in form.questions.indices {
             let stopped =
                 "Heeler stopped at question \(index + 1): the dialog didn't respond the way it expected. "
@@ -420,6 +430,22 @@ final class BlockedCardStore {
         unconfirmedFingerprint = nil
     }
 
+    /// Grok Build can follow an answered card with one just like it, as for
+    /// parallel subagents with one description, and herdr stays Blocked
+    /// between them, so the answer shows no effect on screen. Grok writes a
+    /// call's start only once it runs, after any approval, so a call that
+    /// waited when the keys went out and has started or resolved since
+    /// shows they took. The other programs' open calls read waiting or
+    /// running from herdr's status alone, so their answers wait for a call
+    /// to resolve or the screen to change.
+    private func releaseIfAWaitingCallStarted() {
+        guard program == .grok, progress == .unconfirmed, !waitingWhenSent.isDisjoint(with: startedToolUseIDs)
+        else { return }
+        progress = .ready
+        unconfirmedFingerprint = nil
+        notice = nil
+    }
+
     // MARK: Acting
 
     /// Whether the plan's effect showed.
@@ -447,6 +473,7 @@ final class BlockedCardStore {
             return false
         }
         await waitOutGrace(for: shown, kind: fresh.result.dialog?.kind)
+        waitingWhenSent = Set(pendingRequests.compactMap(\.callID))
         guard case .sent = await send(plan.steps, to: shown) else { return false }
         return await confirm(plan, on: shown)
     }
@@ -515,6 +542,8 @@ final class BlockedCardStore {
             progress = .unconfirmed
             unconfirmedFingerprint = fingerprint
             notice = "The Agent hasn't responded yet. Answer in the terminal if it stays."
+            // A start the transcript showed while the effect was checked.
+            releaseIfAWaitingCallStarted()
             return false
         }
         progress = .ready
@@ -615,6 +644,7 @@ final class BlockedCardStore {
         if content != .none { content = .none }
         if progress != .ready { progress = .ready }
         unconfirmedFingerprint = nil
+        waitingWhenSent = []
         if notice != nil { notice = nil }
         isCollapsed = false
         firstSeen = nil
