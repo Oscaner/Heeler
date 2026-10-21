@@ -156,7 +156,42 @@ struct OpenCodeTranscriptReducerTests {
         let shell = try #require(Self.tools(transcript).first)
         #expect(shell.title == "sleep 30; echo done")
         #expect(shell.status == .interrupted)
-        #expect(!transcript.entries.contains { Self.isNotice($0) })
+        // The aborted step is no failure: the stop shows once, at its end.
+        #expect(transcript.entries.filter { Self.isNotice($0) }.count == 1)
+        #expect(
+            transcript.entries.last
+                == ChatEntry(
+                    id: ChatEntryID("oc:msg_0a1b2c3d4e30m2eiCL86VTGcGZ"), sourceOffset: 159,
+                    content: .notice(ChatNotice(kind: .interrupted, title: "Interrupted"))))
+    }
+
+    /// OpenCode ends a stopped turn with an `interrupted` idle row, and the
+    /// turn says so where OpenCode's own screen reads `· interrupted`: after
+    /// the partial reply, or after the prompt when the stop came before any
+    /// text. A turn that succeeded says nothing. The rows are those of the
+    /// in-app check's Stop during a reply and Stop before any text.
+    @Test func aStoppedTurnSaysItWasInterrupted() {
+        let aborted = #""finish":"error","error":{"type":"aborted","message":"Step interrupted"}"#
+        let interrupted = #"{"outcome":"interrupted"}"#
+        let transcript = Self.project([
+            Self.prompt(82), Self.step(83, items: [Self.text(0, "lime")], fields: #""finish":"stop""#), Self.idle(88),
+            Self.prompt(92), Self.step(93, items: [Self.text(0, "1\n2\n3\n")], fields: aborted),
+            Self.row("msg_i98", "idle", seq: 98, interrupted),
+            Self.prompt(163), Self.step(165, items: [], fields: aborted),
+            Self.row("msg_i167", "idle", seq: 167, interrupted),
+        ])
+        #expect(
+            transcript.entries.map(\.id.rawValue) == [
+                "oc:msg_u82", "oc:msg_s83:0", "oc:msg_u92", "oc:msg_s93:0", "oc:msg_i98", "oc:msg_u163",
+                "oc:msg_i167",
+            ])
+        let stop = ChatEntry.Content.notice(ChatNotice(kind: .interrupted, title: "Interrupted"))
+        #expect(
+            transcript.entries.filter { Self.isNotice($0) } == [
+                ChatEntry(id: ChatEntryID("oc:msg_i98"), sourceOffset: 98, content: stop),
+                ChatEntry(id: ChatEntryID("oc:msg_i167"), sourceOffset: 167, content: stop),
+            ])
+        #expect(transcript.turns.map(\.ending) == [.completed, .interrupted, .interrupted])
     }
 
     @Test func anUpdatedRowReplacesItsEntriesInPlace() throws {

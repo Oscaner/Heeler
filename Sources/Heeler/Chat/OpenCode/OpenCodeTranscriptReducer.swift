@@ -214,6 +214,9 @@ private struct Projection {
             end(ending, at: OpenCodeTranscriptReducer.date(row.created))
             if ending == .failed, !isSaid {
                 add(row, .notice(ChatNotice(kind: .error, title: message)))
+            } else if ending == .interrupted {
+                // A stop says so, as OpenCode's own screen does.
+                add(row, .notice(ChatNotice(kind: .interrupted, title: "Interrupted")))
             }
         case .compaction(let compaction):
             if compaction.reason == "manual" {
