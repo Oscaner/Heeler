@@ -466,7 +466,8 @@ struct GrokTranscriptReducer: ChatTranscriptReducer {
                 self.open = nil
             } else if !sawCountedPrompt, transcript.precedingTurnEnd == nil {
                 transcript.precedingTurnEnd = ChatTurnEnd(
-                    ending: ending, endedAt: record.agentTimestampMs.map(Self.date))
+                    ending: ending, endedAt: record.agentTimestampMs.map(Self.date),
+                    duration: end.elapsedMilliseconds.map { TimeInterval($0) / 1_000 })
             }
             switch end.stopReason {
             case "cancelled": endTurn(end.cancellationCategory == "PermissionRejected" ? .rejected : .cancelled)

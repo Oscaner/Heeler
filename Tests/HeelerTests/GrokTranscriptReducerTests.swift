@@ -487,7 +487,10 @@ struct GrokTranscriptReducerTests {
         let transcript = try Self.fixture("core-turns.jsonl", lines: 12...18)
 
         #expect(transcript.turns.isEmpty)
-        #expect(transcript.precedingTurnEnd == ChatTurnEnd(ending: .completed, endedAt: Self.at(1_792_421_907_652)))
+        // The turn's end gives how long it ran, which no loaded line starts.
+        #expect(
+            transcript.precedingTurnEnd
+                == ChatTurnEnd(ending: .completed, endedAt: Self.at(1_792_421_907_652), duration: 5.992))
         #expect(Self.ids(Self.shown(transcript)) == ["grok:5853", "grok:10999", "grok:11607"])
         #expect(transcript.recordedPrompts.isEmpty)
         #expect(transcript.needsOlderHistory)
@@ -529,7 +532,9 @@ struct GrokTranscriptReducerTests {
         let transcript = try Self.fixture("rewind.jsonl", lines: 3...11)
 
         #expect(Self.ids(transcript.entries) == ["grok:765", "grok:4054", "grok:4456"])
-        #expect(transcript.precedingTurnEnd == ChatTurnEnd(ending: .completed, endedAt: Self.at(1_792_421_803_262)))
+        #expect(
+            transcript.precedingTurnEnd
+                == ChatTurnEnd(ending: .completed, endedAt: Self.at(1_792_421_803_262), duration: 12.852))
         #expect(transcript.turns.map(\.firstEntryID) == [ChatEntryID("grok:4054")])
     }
 
