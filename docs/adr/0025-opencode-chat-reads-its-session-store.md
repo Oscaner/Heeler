@@ -201,9 +201,9 @@ its Done status until the first prompt of the new session.
   stale session's own title, or Retry finds a session on screen. After
   `/new` Chat says so at the next idle recheck, within about 10 seconds (1.0
   to 7.3 s in three samples). Until then a send is still held, by the screen
-  read before each send (the delivery check, ADR 0024), which finds
-  OpenCode's home screen; the confirmation below lets it through, since the
-  title `OpenCode` says nothing, and Chat says OpenCode has left the
+  read before each send (ADR 0024), which finds OpenCode's home
+  screen; the confirmation below lets it through, since the title
+  `OpenCode` says nothing, and Chat says OpenCode has left the
   conversation only at that recheck. The Console's record counts only when
   it changes: a session picked in OpenCode's terminal while herdr reports it
   idle changes no status, so no snapshot follows, and that record can name
