@@ -182,6 +182,29 @@ struct GrokStopGuardTests {
         #expect(Self.verdict(own.screen) == .press)
     }
 
+    /// On the dashboard's view of an agent, as on the conversation's own
+    /// view, Ctrl+C in the terminal would confirm a pending quit, quit
+    /// while a cancel is pending, or only clear a draft, so those reasons
+    /// come before the view's.
+    @Test func namesAPendingPressACancelOrADraftOnTheDashboardsViewOfAnAgent() {
+        let header = "master ~/s/cap-grok-a/proj │ ‹ 2/3 › │ [Dashboard]"
+        let hints = ["Ctrl+\\:dashboard", "Ctrl+x:stop"] + Self.workingHints
+        var quitArmed = Self.running(footer: "Ctrl+c:press again to quit")
+        quitArmed.header = header
+        let cancelling = GrokScreenBuilder(status: .init(label: "Cancelling…"), hints: hints, header: header)
+        let draft = GrokScreenBuilder(
+            status: .init(label: "Thinking…"), typed: "fix the tests", hints: hints, header: header)
+        let cases = [
+            (quitArmed, "Grok Build is waiting for a second key press to quit, so Stop pressed nothing."),
+            (cancelling, "Grok Build is already cancelling the turn."), (draft, Self.draft),
+        ]
+
+        for (builder, reason) in cases {
+            #expect(GrokScreen(builder.screen).isDashboardOverlay)
+            #expect(Self.verdict(builder.screen) == .refuse(reason))
+        }
+    }
+
     /// Shell and remember modes draw their own glyph and label in the box,
     /// where Ctrl+C would clear the text or leave the mode while the turn
     /// runs on.

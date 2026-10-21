@@ -16,8 +16,11 @@ enum GrokStopGuard {
         guard context.activity == .working else { return .refuse(notWorking) }
         // The dashboard's view of an agent passes Ctrl+C to whichever agent
         // it shows, and it stayed until Grok Build restarted (1.0.62, live),
-        // so the reason names Ctrl+C in the terminal, not closing the view.
+        // so the reason names Ctrl+C in the terminal, not closing the view,
+        // unless Ctrl+C there would quit Grok Build or only clear a draft.
         if grok.isDashboardOverlay {
+            if let reason = pendingRefusal(grok) { return .refuse(reason) }
+            if grok.composer?.draft.isEmpty == false { return .refuse(draft) }
             return .refuse(
                 "Grok Build is showing an agent from its dashboard, so Stop pressed nothing. Stop it in the terminal with Ctrl+C."
             )
@@ -28,24 +31,14 @@ enum GrokStopGuard {
             return .refuse(
                 "Grok Build is showing a menu or another view, so Stop pressed nothing. Close it in the terminal first.")
         }
-        // Ctrl+C may confirm a pending quit, and while a cancel is pending
-        // it maps to Quit (`app/agent_view/input.rs`).
-        if let press = grok.pendingDoublePress {
-            return .refuse(
-                press.contains("press again to quit")
-                    ? "Grok Build is waiting for a second key press to quit, so Stop pressed nothing."
-                    : "Grok Build is waiting for a second key press, so Stop pressed nothing.")
-        }
-        if grok.isCancelling { return .refuse("Grok Build is already cancelling the turn.") }
+        if let reason = pendingRefusal(grok) { return .refuse(reason) }
         // Grok offers the cancel in every pane while a turn runs.
         let offersCancel = grok.footer?.contains("Ctrl+c:cancel") == true
         guard grok.statusRow != nil || offersCancel else { return .refuse(notWorking) }
         // Ghost text is not a draft: with nothing typed, Ctrl+C cancels. A
         // draft's own hints lead the footer and push the focus hints past a
         // phone's 62 columns, so the draft is checked before focus.
-        guard composer.draft.isEmpty else {
-            return .refuse("Grok Build's input box has text, and Ctrl+C would only clear it. Stop it in the terminal.")
-        }
+        guard composer.draft.isEmpty else { return .refuse(draft) }
         guard grok.promptHasFocus || offersCancel else {
             return .refuse(
                 "Grok Build's input box doesn't have focus, so Stop pressed nothing. Stop it in the terminal.")
@@ -53,8 +46,22 @@ enum GrokStopGuard {
         return .press
     }
 
+    /// Why Stop presses nothing while Grok Build waits for a second press
+    /// or a cancel: Ctrl+C may confirm a pending quit, and while a cancel
+    /// is pending it maps to Quit (`app/agent_view/input.rs`).
+    private static func pendingRefusal(_ grok: GrokScreen) -> String? {
+        if let press = grok.pendingDoublePress {
+            return press.contains("press again to quit")
+                ? "Grok Build is waiting for a second key press to quit, so Stop pressed nothing."
+                : "Grok Build is waiting for a second key press, so Stop pressed nothing."
+        }
+        return grok.isCancelling ? "Grok Build is already cancelling the turn." : nil
+    }
+
     private static let asking =
         "Grok Build is asking something, so Stop pressed nothing. Answer it in Chat or the terminal."
     private static let notWorking =
         "Heeler can't see Grok Build working, so Stop pressed nothing. Stop it in the terminal with Ctrl+C."
+    private static let draft =
+        "Grok Build's input box has text, and Ctrl+C would only clear it. Stop it in the terminal."
 }
