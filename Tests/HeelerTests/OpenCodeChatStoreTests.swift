@@ -5,8 +5,11 @@ import Testing
 
 /// OpenCode keeps reporting a conversation after `/new` leaves it for the
 /// home screen (ADR 0025). Its Chat watches for that screen, and checks
-/// herdr's record and the terminal's title before each send, so a message
-/// never lands in a conversation other than the one Chat shows.
+/// herdr's record and the terminal's title before each send. The check
+/// narrows, but cannot close, the gap until herdr pastes: a conversation
+/// the terminal switches to within it still receives the message. Right
+/// after `/new`, until the watch finds the home screen, the screen read
+/// before each send holds a message instead.
 @MainActor
 @Suite("OpenCode Chat store")
 struct OpenCodeChatStoreTests {
