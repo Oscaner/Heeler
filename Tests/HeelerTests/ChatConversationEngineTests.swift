@@ -593,6 +593,33 @@ struct ChatConversationEngineTests {
         #expect(snapshot.older == .reachedStart)
     }
 
+    /// Once a bounded request leaves earlier messages to the user, a fresh
+    /// tail lets Chat load by itself again: here the program rewrites the
+    /// file shorter, keeping its start, and the poll reloads it.
+    @Test func aFreshTailLetsAutomaticRequestsReadAgain() async throws {
+        var limits = Self.limits
+        limits.automaticOlderSearch = 96
+        let fixture = Fixture(limits: limits)
+        let first = NumberedChatReducer.prompt("a") + Self.lines(0..<6) + NumberedChatReducer.turnEnd
+        func text(silent: Int) -> String {
+            first + NumberedChatReducer.prompt("b") + String(repeating: NumberedChatReducer.end("none"), count: silent)
+                + Self.lines(6..<10)
+        }
+        await fixture.files.write(text(silent: 40), at: Self.claudePath)
+        let engine = fixture.makeEngine()
+        _ = await fixture.open(engine)
+        var snapshot = await fixture.loadOlder(engine, automatic: true)
+        try #require(snapshot.olderAwaitsUser)
+
+        await fixture.files.write(text(silent: 20), at: Self.claudePath)
+        snapshot = await fixture.poll(engine)
+        #expect(!snapshot.olderAwaitsUser)
+
+        await fixture.files.clearRecords()
+        snapshot = await fixture.loadOlder(engine, automatic: true)
+        #expect(await fixture.bytesRead() > 0)
+    }
+
     @Test func turnsOpenedAboveALaterWindowComeFromTheSavedDocument() async throws {
         let fixture = Fixture()
         await fixture.files.write(NumberedChatReducer.prompt("a") + Self.lines(0..<6), at: Self.claudePath)
