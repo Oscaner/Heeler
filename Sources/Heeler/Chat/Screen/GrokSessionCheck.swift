@@ -16,7 +16,7 @@ import Foundation
 /// conversation.
 enum GrokSessionCheck {
     static let welcomeReason =
-        "Grok Build is on its welcome screen, where a message starts a new session. Go back to this conversation in the terminal, or start the new one there."
+        "Grok Build is on its welcome screen, where a message starts a new session. Go back with Resume session (Ctrl+R) in the terminal, or start the new one there."
     static let sessionLineReason =
         "Grok Build's screen shows another session. If you just ran /new or /clear, Chat follows it in a moment; send again then. Otherwise switch back to this conversation in the terminal first."
     static let unknownPromptReason =
