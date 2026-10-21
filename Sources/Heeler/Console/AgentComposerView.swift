@@ -317,10 +317,7 @@ struct AgentComposerView: View {
                 noticeRow(notice)
             }
             if status == .working, let stopNotice = store.stop.notice {
-                Label(stopNotice, systemImage: "exclamationmark.bubble")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
+                noticeLabel(stopNotice)
                     .accessibilityIdentifier("composer.stop-notice")
             }
             if !isCollapsed {
@@ -416,10 +413,7 @@ struct AgentComposerView: View {
 
     private func noticeRow(_ notice: ComposerNotice) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label(notice.refusal.message, systemImage: "exclamationmark.bubble")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .lineLimit(3)
+            noticeLabel(notice.refusal.message)
             if notice.refusal.suggestsTerminal, let openAgentTerminal {
                 Button("Open in Terminal", action: openAgentTerminal)
                     .buttonStyle(.bordered)
@@ -428,6 +422,16 @@ struct AgentComposerView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("composer.notice")
+    }
+
+    /// Why a send was refused or Stop pressed nothing, then what to do. Five
+    /// lines hold the longest refusals whole on a phone at the default text
+    /// size.
+    private func noticeLabel(_ text: String) -> some View {
+        Label(text, systemImage: "exclamationmark.bubble")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .lineLimit(5)
     }
 
     private var actionRow: some View {
