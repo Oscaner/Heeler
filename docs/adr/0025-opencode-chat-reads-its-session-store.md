@@ -200,14 +200,16 @@ its Done status until the first prompt of the new session.
   herdr reports another session, the screen shows a session again under the
   stale session's own title, or Retry finds a session on screen. After
   `/new` Chat says so at the next idle recheck, within about 10 seconds (1.0
-  to 7.3 s in three samples); a send before then is held by the confirmation
-  below, and its read of the record says so at once. The Console's record
-  counts only when it changes: a session picked in
-  OpenCode's terminal while herdr reports it idle changes no status, so no
-  snapshot follows, and that record can name the session before it. The
-  title alone cannot decide: OpenCode titles its home screen, an untitled
-  session and a session with a fallback title all `OpenCode`, and sets no
-  title at all while its title setting is off.
+  to 7.3 s in three samples). Until then a send is still held, by the screen
+  read before each send (the delivery check, ADR 0024), which finds
+  OpenCode's home screen; the confirmation below lets it through, since the
+  title `OpenCode` says nothing, and Chat says OpenCode has left the
+  conversation only at that recheck. The Console's record counts only when
+  it changes: a session picked in OpenCode's terminal while herdr reports it
+  idle changes no status, so no snapshot follows, and that record can name
+  the session before it. The title alone cannot decide: OpenCode titles its
+  home screen, an untitled session and a session with a fallback title all
+  `OpenCode`, and sets no title at all while its title setting is off.
 - **The confirmation before each send.** Before every send, Chat reads the
   Agent's record again and compares the terminal title with the session's
   title. It refuses the send, and says why, when herdr now reports another
