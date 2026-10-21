@@ -338,8 +338,10 @@ of them asks what to do differently instead of rejecting, so the card
 rejects only a request it matches to a pending call of the conversation it
 follows and otherwise says to reject in the terminal, where that feedback
 page stays. A single question's digit picks its answer and submits it, and
-Dismiss presses Esc for a matched call; several questions, multi-select
-questions and typed answers stay in the terminal. herdr also reports
+Dismiss presses Esc for a matched call. The card names Esc there as
+OpenCode's footer does (`esc dismiss`), open or folded, though dismissing
+also ends OpenCode's turn, as it does in the terminal. Several questions,
+multi-select questions and typed answers stay in the terminal. herdr also reports
 OpenCode Blocked with no dialog on screen, as for a failed turn, and there
 the generic card's keys would act on OpenCode's prompt: Up recalls the last
 prompt for Enter to send again, Down opens the subagent panel, and Enter on

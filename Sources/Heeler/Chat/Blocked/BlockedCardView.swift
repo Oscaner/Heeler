@@ -88,13 +88,18 @@ private struct BlockedDialogCard: View {
             // keyboard it raises.
             textEntry
                 .disabled(!isReady)
-            // While an answer is unconfirmed its options wait, decline too,
-            // so Stop shows as the way out.
             BlockedCardFooter(
-                notice: store.notice,
-                stopTitle: dialog.stopsFromCard || (dialog.canStop && store.progress == .unconfirmed) ? "Stop" : nil,
-                isReady: isReady, canStop: store.canStop, stop: { perform(.dismiss) })
+                notice: store.notice, stopTitle: stopTitle, isReady: isReady, canStop: store.canStop,
+                stop: { perform(.dismiss) })
         }
+    }
+
+    /// Esc, named for what it does when no option sends it. While an answer
+    /// is unconfirmed the options wait, decline too, so Esc shows as the
+    /// way out; it says Stop then, rather than repeat the declining option.
+    private var stopTitle: String? {
+        if dialog.stopsFromCard { return dialog.stopTitle }
+        return dialog.canStop && store.progress == .unconfirmed ? "Stop" : nil
     }
 
     /// Who asked, when a subagent did.
@@ -530,14 +535,16 @@ private extension BlockedDialog {
     /// only on Codex's asynchronous question.
     var canStop: Bool { kind != .codexAsyncQuestion }
 
-    /// What Esc does, for the folded card: it quits Claude Code on the
-    /// trust dialog, only denies an Oh My Pi approval and rejects an
-    /// OpenCode permission.
+    /// What Esc does, for the folded card and an open card whose options
+    /// don't send it: it quits Claude Code on the trust dialog, only denies
+    /// an Oh My Pi approval, rejects an OpenCode permission and dismisses an
+    /// OpenCode question, as OpenCode's `esc dismiss` says.
     var stopTitle: String {
         switch kind {
         case .claudeWorkspaceTrust: "Exit Claude Code"
         case .ompApproval: "Deny"
         case .openCodePermission: "Reject"
+        case .openCodeQuestion: "Dismiss"
         default: "Stop"
         }
     }

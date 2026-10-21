@@ -1,5 +1,7 @@
 import Foundation
+import SwiftUI
 import Testing
+import UIKit
 
 @testable import Heeler
 
@@ -1234,6 +1236,86 @@ private actor FakePane {
 
     func paste(_ text: String) {
         pastes.append(text)
+    }
+}
+
+/// The card hosted in a window, read as VoiceOver reads it: what its Esc
+/// button says.
+@MainActor
+@Suite("Blocked card, hosted", .serialized, .timeLimit(.minutes(1)))
+struct BlockedCardHostedTests {
+    /// OpenCode's question footer says `esc dismiss`, and so does the
+    /// card's Esc, open or folded.
+    @Test func anOpenCodeQuestionsEscSaysDismiss() async throws {
+        let store = try await Self.store(
+            "opencode-13-question-180",
+            pending: ChatPendingRequest(
+                entryID: ChatEntryID("call_q"), callID: "call_q", kind: .question, toolName: "question",
+                summary: "Do you prefer red or blue?"))
+        try await Self.host(store) { controller in
+            #expect(await Self.eventually { Self.labels(in: controller).contains("Dismiss") })
+            #expect(!Self.labels(in: controller).contains("Stop"))
+            store.isCollapsed = true
+            #expect(await Self.eventually { Self.labels(in: controller).isSuperset(of: ["Dismiss", "Show"]) })
+        }
+    }
+
+    /// An answer that showed no effect leaves the options waiting, Reject
+    /// too, and Esc as the way out. It says Stop, so the open card shows no
+    /// second Reject.
+    @Test func anUnconfirmedOpenCodePermissionOffersStopBesideItsReject() async throws {
+        let store = try await Self.store(
+            "opencode-10-permission-180",
+            pending: ChatPendingRequest(
+                entryID: ChatEntryID("call_r"), callID: "call_r", kind: .fileRead, toolName: "read",
+                summary: "/Users/developer/work/heeler-tmp-chat/opencode-a/project/.env"))
+        await store.perform(.choose(ordinal: 1))
+        try #require(store.progress == .unconfirmed)
+        try await Self.host(store) { controller in
+            #expect(await Self.eventually { Self.labels(in: controller).isSuperset(of: ["Reject", "Stop"]) })
+        }
+    }
+
+    /// An OpenCode card for the dialog on `stem`, matched to `pending`.
+    private static func store(_ stem: String, pending: ChatPendingRequest) async throws -> BlockedCardStore {
+        let pane = FakePane(try ScreenFixture.screen(stem))
+        let store = BlockedCardStore(
+            program: .opencode,
+            io: BlockedScreenIO(
+                readScreen: { await pane.read() },
+                sendKeys: { await pane.send($0) },
+                paste: { await pane.paste($0) }),
+            clock: ManualClock().clock)
+        store.update(transcript: ChatTranscript(entries: [], pendingRequests: [pending]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        return store
+    }
+
+    private static func host(
+        _ store: BlockedCardStore, _ body: @MainActor (UIViewController) async throws -> Void
+    ) async throws {
+        let controller = UIHostingController(rootView: BlockedCardView(store: store, maxHeight: 600, openTerminal: {}))
+        try await withTestWindow(
+            frame: CGRect(x: 0, y: 0, width: 402, height: 874), rootViewController: controller
+        ) { _ in
+            try await body(controller)
+        }
+    }
+
+    private static func labels(in controller: UIViewController) -> Set<String> {
+        controller.view.layoutIfNeeded()
+        return AgentSurfaceReplacementTests.accessibilityLabels(in: controller.view)
+    }
+
+    private static func eventually(_ condition: () -> Bool) async -> Bool {
+        var budget = PollBudget(.seconds(5))
+        while budget.hasTimeLeft {
+            if condition() { return true }
+            try? await Task.sleep(for: .milliseconds(10))
+            budget.charge()
+        }
+        return condition()
     }
 }
 
