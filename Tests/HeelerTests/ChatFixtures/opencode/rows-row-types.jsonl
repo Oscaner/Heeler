@@ -9,5 +9,5 @@
 {"k":"row","id":"msg_0a1b2c3d4e70R5t6Y7u8I9o0P1","type":"model-switched","seq":16,"tc":1800000001000,"tu":1800000001000,"f":true,"d":{"model":{"id":"gpt-6-astra","providerID":"openai","variant":"high"},"time":{"created":1800000001000}}}
 {"k":"row","id":"msg_0a1b2c3d4e80A2s3D4f5G6h7J8","type":"future-kind","seq":18,"tc":1800000001100,"tu":1800000001100,"f":true,"d":{"time":{"created":1800000001100}}}
 {"k":"row","id":"msg_0a1b2c3d4e90K9l0Z1x2C3v4B5","type":"assistant","seq":20,"tc":1800000001200,"tu":1800000001200,"f":true,"d":{"k":"invalid"}}
-{"k":"row","id":"msg_0a1b2c3d4ea0N6m7Q8w9E0r1T2","type":"compaction","seq":22,"tc":1800000001300,"tu":1800000001300,"f":false,"d":{"status":"running","reason":"auto","summary":null,"time":{"created":1800000001300}}}
+{"k":"row","id":"msg_0a1b2c3d4ea0N6m7Q8w9E0r1T2","type":"compaction","seq":22,"tc":1800000001300,"tu":1800000001300,"f":false,"d":{"status":"running","reason":"auto","summary":null,"error":null,"time":{"created":1800000001300}}}
 {"k":"row","id":"msg_0a1b2c3d4eb0Y3u4I5o6P7a8S9","type":"assistant","seq":24,"tc":1800000001400,"tu":1800000001500,"f":false,"d":{"time":{"created":1800000001400,"completed":null},"agent":"build","model":{"id":"gpt-6-astra","providerID":"openai","variant":"high"},"content":[{"_i":0,"type":"text","text":"Still working.","n":14,"phase":"commentary"}]}}

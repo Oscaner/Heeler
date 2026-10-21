@@ -255,7 +255,9 @@ extension OpenCodeProbe {
         """
 
     /// The row's data, cut to what Chat shows. A row that is not JSON reads
-    /// as `{"k":"invalid"}`. A step keeps its items from `slim_items`.
+    /// as `{"k":"invalid"}`. A step keeps its items from `slim_items`, and a
+    /// failed compaction its error's type and the first 16 Ki characters of
+    /// its message.
     private static let slim = """
         CASE WHEN json_valid(m.data) THEN CASE
           WHEN m.type = 'assistant' THEN \(assistant)
@@ -263,6 +265,9 @@ extension OpenCodeProbe {
           WHEN m.type = 'compaction' THEN json_object('status', json_extract(m.data, '$.status'),
               'reason', json_extract(m.data, '$.reason'),
               'summary', substr(json_extract(m.data, '$.summary'), 1, 65536),
+              'error', json(CASE WHEN json_type(m.data, '$.error') = 'object' THEN json_object(
+                'type', json_extract(m.data, '$.error.type'),
+                'message', substr(json_extract(m.data, '$.error.message'), 1, 16384)) END),
               'time', json_extract(m.data, '$.time'))
           WHEN m.type = 'shell' THEN json_object('command', json_extract(m.data, '$.command'),
               'status', json_extract(m.data, '$.status'), 'exit', json_extract(m.data, '$.exit'),

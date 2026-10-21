@@ -260,6 +260,33 @@ struct OpenCodeStoreQueryTests {
         #expect(try Self.data(plain)["output"] as? String == "fatal: not a git repository\n")
     }
 
+    /// OpenCode 2.0.32 records a `/compact` with nothing to compact as a
+    /// failed compaction with its error (seq 363 as captured, its time
+    /// moved). The slim row keeps the error's type and message, the message
+    /// cut as a note's text is; a compaction that did not fail keeps none.
+    @Test func aFailedCompactionKeepsItsError() throws {
+        let (harness, session) = try Self.store("compact")
+        try Self.insertRow(harness, session, seq: 363, type: "compaction", data: #"""
+            {"time":{"created":1800000100363},"status":"failed","reason":"manual",
+             "error":{"type":"compaction.unavailable","message":"Nothing to compact yet"}}
+            """#)
+        try Self.insertRow(harness, session, seq: 364, type: "compaction", data: """
+            {"time":{"created":1800000100364},"status":"failed","reason":"auto",
+             "error":{"type":"provider.transport","message":"\(String(repeating: "e", count: 20_000))"}}
+            """)
+
+        let rows = try harness.records(Self.tail(session)).rows
+        let refused = try Self.data(#require(rows.first { $0.seq == 363 }))
+        #expect(refused["status"] as? String == "failed")
+        let error = refused["error"] as? NSDictionary
+        #expect(error == ["type": "compaction.unavailable", "message": "Nothing to compact yet"])
+        let failed = try Self.data(#require(rows.first { $0.seq == 364 }))
+        let long = try #require(failed["error"] as? [String: Any])
+        #expect(long["type"] as? String == "provider.transport")
+        #expect((long["message"] as? String)?.count == 16_384)
+        #expect(try Self.data(#require(rows.first { $0.seq == 210 }))["error"] is NSNull)
+    }
+
     @Test func nestedArraysDecodeAsArrays() throws {
         let (harness, session) = try Self.store("odd-types")
         try harness.insert(into: "session_inbox", [

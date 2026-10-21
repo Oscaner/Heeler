@@ -17,6 +17,7 @@ extension HeelerSSHTransportBehaviorE2ETests {
         // The harness's connection stays open, so the store has its side
         // files, as a running OpenCode's does.
         let harness = try OpenCodeSQLiteHarness(fixture, journal: .wal)
+        try OpenCodeScratchStore.addRefusedCompaction(to: harness, session: tail.session)
         let files = try harness.storeFiles()
         try #require(Set(files.keys) == ["opencode.db", "opencode.db-wal", "opencode.db-shm"])
         try await OpenCodeScratchStore.with(files, environment: environment) { store in
@@ -30,6 +31,7 @@ extension HeelerSSHTransportBehaviorE2ETests {
                 return
             }
             try OpenCodeScratchStore.expect(records, matches: harness.records(tail))
+            try OpenCodeScratchStore.expectRefusedCompaction(in: records)
             let cursor = OpenCodePollCursor(
                 eventSeq: records.eventSeq, lowSeq: try #require(records.rows.first?.seq),
                 highSeq: try #require(records.rows.last?.seq), knownInWindow: records.rows.count,
@@ -80,6 +82,7 @@ extension HeelerSSHTransportBehaviorE2ETests {
         let tail = OpenCodeQuery(session: session, kind: .tail(budget: 524_288))
         let row = OpenCodeQuery(session: session, kind: .row(seq: 92, outputLimit: 262_144))
         let harness = try OpenCodeSQLiteHarness(fixture, journal: .wal)
+        try OpenCodeScratchStore.addRefusedCompaction(to: harness, session: session)
         let files = try harness.storeFiles()
         try await OpenCodeScratchStore.with(files, environment: environment) { store in
             let transport = try await HeelerSSHTransport.connect(settings: environment.directSettings())
@@ -96,6 +99,7 @@ extension HeelerSSHTransportBehaviorE2ETests {
                 return
             }
             try OpenCodeScratchStore.expect(records, matches: harness.records(tail))
+            try OpenCodeScratchStore.expectRefusedCompaction(in: records)
             let fetched = try await transport.queryOpenCode(row, reader: .pythonOnly)
             guard case .records(let single) = fetched else {
                 Issue.record("expected the row, read \(fetched)")
@@ -193,6 +197,31 @@ private struct OpenCodeScratchStore {
         return Snapshot(
             names: String(decoding: listing.stdout, as: UTF8.self).split(separator: "\n").map(String.init).sorted(),
             database: database, wal: wal)
+    }
+
+    /// Where `addRefusedCompaction` puts its row: past every fixture's rows.
+    private static let refusedCompactionSeq: Int64 = 363
+
+    /// Adds the row OpenCode 2.0.32 records for a `/compact` with nothing
+    /// to compact, as captured (its time moved).
+    static func addRefusedCompaction(to harness: OpenCodeSQLiteHarness, session: OpenCodeSessionID) throws {
+        try harness.insert(into: "session_message", [
+            "id": .text("msg_refused_compaction"), "session_id": .text(session.rawValue),
+            "type": .text("compaction"), "seq": .integer(refusedCompactionSeq),
+            "time_created": .integer(1_800_000_100_363), "time_updated": .integer(1_800_000_100_363),
+            "data": .text(
+                #"{"time":{"created":1800000100363},"status":"failed","reason":"manual","#
+                    + #""error":{"type":"compaction.unavailable","message":"Nothing to compact yet"}}"#),
+        ])
+    }
+
+    /// The Host's reader keeps that row's error in its slim row.
+    static func expectRefusedCompaction(in records: OpenCodeRecords) throws {
+        let row = try #require(records.rows.first { $0.seq == refusedCompactionSeq })
+        let line = try #require(try JSONSerialization.jsonObject(with: row.line) as? [String: Any])
+        let data = try #require(line["d"] as? [String: Any])
+        let error = data["error"] as? NSDictionary
+        #expect(error == ["type": "compaction.unavailable", "message": "Nothing to compact yet"])
     }
 
     /// The Host's reader and the in-process one print the same records. JSON
