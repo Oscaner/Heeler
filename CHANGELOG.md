@@ -20,8 +20,10 @@ Entries reference the pull request that made the change.
   sends prompts and skills, stops a turn with Ctrl+C while Grok Build shows
   it working, answers its permission and single-choice question cards, and
   holds a message, with the reason, when Grok Build shows a draft, a menu,
-  its dashboard or another session. A message Grok Build recorded in another
-  session says so, and Chat holds later ones until you switch back.
+  its dashboard or another session. In an agent opened from the dashboard,
+  Chat sends only when the screen shows this conversation's newest message.
+  A message Grok Build recorded in another session says so, and Chat holds
+  later ones until you switch back.
 
 ### Changed
 
