@@ -136,11 +136,15 @@ message reads "Sent, but the Agent recorded it in another session.", and every
 later send is held until this conversation records a prompt, a send's screen
 check finds this conversation's newest message (not one that reads the same as
 a message recorded elsewhere), that message is recorded here after all, or
-herdr reports another session. A `/resume` to a session already open writes
-nothing until its next prompt, so only that read tells, after the send. A
-session filed under another directory's group, such as a worktree fork,
-records its prompts in that group's file, so a message sent to it only goes
-overdue. Chat doesn't watch the screen between sends.
+herdr reports another session. That message's echo leaves when this
+conversation records a later prompt, which also ends the hold, rather than
+stay below the turns after it. A prompt with the same text recorded here is
+matched to that message only when no other message from Chat takes it, so the
+text sent again from Chat is matched to the new message. A `/resume` to a
+session already open writes nothing until its next prompt, so only that read
+tells, after the send. A session filed under another directory's group, such
+as a worktree fork, records its prompts in that group's file, so a message
+sent to it only goes overdue. Chat doesn't watch the screen between sends.
 
 ## Entry and the terminal
 
