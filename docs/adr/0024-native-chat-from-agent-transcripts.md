@@ -236,7 +236,11 @@ can open the program's own history menus, so Stop shows a spinner until Agent
 Status leaves Working. After three seconds it works again and says the Agent
 still shows Working; background agents and shells, which Esc does not end,
 can keep it there. OpenCode's interrupt resumes with a message that waited
-during the turn, so its notice says Stop may need a second tap for that. A
+during the turn: OpenCode records the stopped turn as interrupted and starts
+that message within milliseconds, and herdr 0.9.5 reports idle for about
+105 ms before Working again. That idle ends Stop's wait, so Stop is ready
+again at once, and a second tap stops the resumed run. OpenCode's notice,
+which mentions such a message, remains for a stop that does not take effect. A
 failed request may still have pressed the keys, so Stop then says so and works
 again at once. The wait belongs to the Agent's Composer, not to a surface:
 switching between Chat and the terminal, or a rebuilt detail, keeps it. With
