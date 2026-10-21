@@ -414,13 +414,17 @@ private struct Projection {
     }
 
     /// OpenCode records a `/compact` with nothing new to compact as a
-    /// failed compaction whose error says so ("Nothing to compact yet").
-    /// Nothing failed, so Chat shows those words as a notice. Any other
-    /// failure, or one without a message, is "Compaction failed", with the
-    /// message as its detail.
+    /// failed compaction whose error says so ("Nothing to compact yet"),
+    /// and a `/compact` the user stopped as one whose `aborted` error says
+    /// "Compaction cancelled". Nothing failed, so Chat shows those words as
+    /// a notice; a stop's own "Interrupted" comes from its `idle` row. Any
+    /// other failure, or a refusal without a message, is "Compaction
+    /// failed", with the message as its detail.
     private mutating func addFailedCompaction(_ row: OpenCodeRow, _ error: OpenCodeError?) {
         let message = error?.message.flatMap { Self.trimmed($0).isEmpty ? nil : $0 }
-        if error?.type == "compaction.unavailable", let message {
+        if error?.type == "aborted" {
+            add(row, .notice(ChatNotice(kind: .system, title: message ?? "Compaction cancelled")), ":notice")
+        } else if error?.type == "compaction.unavailable", let message {
             add(row, .notice(ChatNotice(kind: .system, title: message)), ":notice")
         } else {
             add(row, .notice(ChatNotice(kind: .error, title: "Compaction failed", detail: message)), ":error")

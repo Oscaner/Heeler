@@ -458,8 +458,8 @@ struct OpenCodeCompaction: Decodable, Sendable {
     var reason: String?
     var summary: String?
     /// Why it failed: `compaction.unavailable` when there was nothing new
-    /// to compact. The source keeps the first 16 Ki characters of its
-    /// message.
+    /// to compact, `aborted` when the user stopped a `/compact`. The source
+    /// keeps the first 16 Ki characters of its message.
     var error: OpenCodeError?
 
     init(from decoder: any Decoder) throws {

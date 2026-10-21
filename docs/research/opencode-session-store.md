@@ -264,6 +264,7 @@ every durable event of the session.
 | `/undo` | no row change; `session_v2.revert` is set |
 | The next prompt after `/undo` | rows from the boundary on are deleted, then the new `user` row is inserted |
 | `/compact` | `compaction(running)`, updated in place to `completed`, then `idle(succeeded)`; no `user` row. With nothing new since the last compaction, `compaction(failed)` with `error{compaction.unavailable, "Nothing to compact yet"}`, then `idle(succeeded)` (2026-10-21) |
+| Esc twice during `/compact` | the compaction row updated in place to `failed` with `error{aborted, "Compaction cancelled"}`, then `idle(interrupted)` **(source, `core/src/session/runner/llm.ts:150-157`, `core/src/session/message-updater.ts:147-148`, `core/test/session-runner.test.ts:3018-3043`)** |
 | Provider failure (a refused connection, retried) | while OpenCode retries, the step's open `assistant` row carries `retry` and no other row is written; then the step `finish: error` with `error{provider.transport, …}` and no content, and `idle(failed)` with the same error (2026-10-21) |
 | Background service restart during a turn | a `synthetic` row with `description` "Continuing after restart" and `metadata.notice` `restart`, then the turn resumes; after 10 attempts it fails with "Execution was interrupted repeatedly…" **(source, `core/src/session/execution/restart.ts:15-33, 77-99, 193-228`; F1)** |
 
@@ -508,7 +509,7 @@ row. A modal's title ends in `esc`, with no box edge under it.
 | Question | `Questions`, the question, numbered options with their descriptions, `N. Type your own answer`, and the footer `↑↓ select  enter submit  esc dismiss` | focused option text `#fab283` |
 | Session picker | `Sessions for <project>`, `esc`, `Today`; the footer `pin/unpin ctrl+f  delete ctrl+d  rename ctrl+r  all projects ctrl+a` | |
 | Subagent panel | `Subagents  Shell  Terminals`, `General: <description>  Running`, and the footer `interrupt ctrl+d  show inactive ctrl+a  tabs ←/→`; no box edge | |
-| Compaction | a `──── ⠋ Compaction ────` divider, its spinner frame changing, and the working footer; once failed, `──── ✗ Compaction ────` with the reason (`Nothing to compact yet`) under it (2026-10-21) | failed divider and `✗` `#e06c75`, the reason `#eeeeee` |
+| Compaction | a `──── ⠋ Compaction ────` divider, its spinner frame changing, and the working footer; once failed, `──── ✗ Compaction ────` with the reason (`Nothing to compact yet`) under it (2026-10-21); once stopped, `──── Compaction · cancelled ────` in the muted colour, with no `✗` and no reason **(source, `tui/src/routes/session/index.tsx:2038-2073`)** | failed divider and `✗` `#e06c75`, the reason `#eeeeee` |
 | Finished step | `Build · GPT-6 Astra · 13.8s · 0.4 tok/s`, with `· interrupted` after a stop, a rejection or a dismissed question; a dismissed question leaves `→ Asked 1 question` above it (2026-10-21) | |
 | Retrying step (2026-10-21) | `⚠ Retrying in <n>s · attempt <n> · <error>` above the step's `Build · <model>` line (no duration yet), the seconds counting down, and the working footer | |
 | Failed turn (2026-10-21) | `Error: <error>` above `Build · <model> · <duration>`, the box empty and no dialog; a `Session failed` toast with the error and an `x` covered the top rows in the captures 1 to 5 s after the failure | |

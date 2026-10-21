@@ -287,8 +287,9 @@ struct OpenCodeTranscriptReducerTests {
     /// OpenCode 2.0.32 records a `/compact` with nothing to compact as a
     /// failed compaction whose error says so, then an idle row (seq 363 and
     /// 365 as captured, their times moved). Nothing failed, so Chat shows
-    /// OpenCode's words as a notice. Any other failure, or one without a
-    /// message, stays "Compaction failed", with the message as its detail.
+    /// OpenCode's words as a notice. Any other failure but a stop (below),
+    /// or a refusal without a message, stays "Compaction failed", with the
+    /// message as its detail.
     @Test func aCompactionWithNothingToCompactSaysSo() {
         let refused = Self.project([
             Self.row(
@@ -322,6 +323,42 @@ struct OpenCodeTranscriptReducerTests {
         #expect(outcome(#"{"type":"compaction.unavailable","message":" "}"#) == failed)
         #expect(outcome(#"{"type":"provider.transport","message":null}"#) == failed)
         #expect(outcome("null") == failed)
+    }
+
+    /// OpenCode 2.0.32 records a `/compact` the user stopped as a failed
+    /// compaction whose `aborted` error says "Compaction cancelled", then an
+    /// `interrupted` idle row, and its own screen shows a muted
+    /// "Compaction · cancelled". Nothing failed: Chat shows OpenCode's words
+    /// as a notice, and the stop once, at its end. Not seen live: the
+    /// compaction row is the one OpenCode's own test expects
+    /// (`core/test/session-runner.test.ts:3018-3043`).
+    @Test func aStoppedCompactionSaysItWasCancelled() {
+        let cancelled = ChatEntry.Content.notice(ChatNotice(kind: .system, title: "Compaction cancelled"))
+        let stopped = Self.project([
+            Self.row(
+                "msg_c40", "compaction", seq: 40,
+                #"{"status":"failed","reason":"manual","summary":null,"error":{"type":"aborted","message":"Compaction cancelled"},"time":{"created":1800000100040}}"#
+            ),
+            Self.row("msg_i41", "idle", seq: 41, #"{"outcome":"interrupted"}"#),
+        ])
+        #expect(
+            stopped.entries == [
+                ChatEntry(
+                    id: ChatEntryID("oc:msg_c40"), sourceOffset: 40,
+                    content: .notice(ChatNotice(kind: .command, title: "/compact"))),
+                ChatEntry(id: ChatEntryID("oc:msg_c40:notice"), sourceOffset: 40, content: cancelled),
+                ChatEntry(
+                    id: ChatEntryID("oc:msg_i41"), sourceOffset: 41,
+                    content: .notice(ChatNotice(kind: .interrupted, title: "Interrupted"))),
+            ])
+        #expect(stopped.turns.map(\.ending) == [.interrupted])
+
+        // Without a message, the notice keeps OpenCode's word for a stop.
+        for message in ["null", #"" ""#] {
+            let data =
+                #"{"status":"failed","reason":"manual","summary":null,"error":{"type":"aborted","message":\#(message)},"time":null}"#
+            #expect(Self.project([Self.row("msg_c1", "compaction", seq: 1, data)]).entries.last?.content == cancelled)
+        }
     }
 
     // MARK: Tools
