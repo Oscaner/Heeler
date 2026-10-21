@@ -409,7 +409,10 @@ struct GrokScreen: Sendable {
     private static let optionRow = #"^┃\s+[0-9a-z]+\s+\([●○]\)(?:\s|$)"#
 
     /// See `promptHasFocus`. With text in the box, a compact footer or the
-    /// dashboard view's leaves focus unknown, so it reads as unfocused.
+    /// dashboard view's leaves focus unknown, so it reads as unfocused. For
+    /// the dashboard's view the empty-box rule rests on 62×41 captures with
+    /// the prompt focused; none shows that view without focus, or at 40 or
+    /// 120 columns.
     private static func promptHasFocus(footer: String?, composer: Composer?) -> Bool {
         guard let footer else { return false }
         if footer.contains("Shift+Tab:mode") || footer.contains("accept suggestion") { return true }

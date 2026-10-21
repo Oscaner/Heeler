@@ -560,7 +560,12 @@ restart did: Esc out of the dashboard showed the last opened agent in that
 view, not the session shown before, and `/resume` to the earlier session
 and Ctrl+\ twice kept the view's chrome. In every capture of the view its
 scrollback marked the user's messages with `❯` at the plain view's indent,
-and its empty box drew no placeholder (live, 2026-10-20). A card there
+and its empty box drew no placeholder (live, 2026-10-20). Each of those
+captures was 62×41 with the prompt focused; none shows the view without
+prompt focus, at 40 or 120 columns, or at 20 rows or fewer. So reading an
+empty box there without `Build anything` as focused rests on the plain
+view's placeholder (live) and the 1.0.45 source, and whether compact mode
+keeps the view's `‹ i/n ›` and `Ctrl+\:dashboard` is unknown. A card there
 replaces the footer's hints with its own (source).
 
 Cards replace the input box with a panel of rows starting `┃`. Options read
