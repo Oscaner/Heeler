@@ -72,8 +72,9 @@ enum ConfirmationRule: Sendable, Hashable {
     case fingerprintChange
     /// Codex: the dialog left the screen, or herdr reports the Agent idle
     /// or working. Grok Build can draw the next card just like the last
-    /// while herdr stays Blocked, so there a call that waited starting also
-    /// releases an answer that showed no effect.
+    /// while herdr stays Blocked, so there a call the card could be
+    /// answering that waited starting or resolving also releases an answer
+    /// that showed no effect (`BlockedCardStore.waitingCalls(answering:)`).
     case fingerprintChangeOrUnblocked
     /// Codex asynchronous answers: the queued-messages notice lists an
     /// answer to this question, or the question left the screen. Codex

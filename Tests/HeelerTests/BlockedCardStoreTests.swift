@@ -805,11 +805,12 @@ struct BlockedCardStoreTests {
     }
 
     /// Only a call the card could be answering shows its answer took. The
-    /// previous card's call can start late, read after the next card's
-    /// keys went out, which shows nothing about them; the next card's own
-    /// call starting does. grok-44 follows grok-35 here as the card for
-    /// another subagent.
-    @Test func aGrokAnswerIgnoresThePreviousCardsCallStartingLate() async throws {
+    /// previous card's call can start late, or read as already done, after
+    /// the next card's keys went out, which shows nothing about them; the
+    /// next card's own call starting does. grok-44 follows grok-35 here as
+    /// the card for another subagent.
+    @Test(arguments: [false, true])
+    func aGrokAnswerIgnoresThePreviousCardsCallStartingLate(alreadyResolved: Bool) async throws {
         let first = Self.grokSpawn("call-1", "Sleep 60 then reply done")
         let second = Self.grokSpawn("call-2", "Sleep 90 then done")
         let pane = FakePane(try ScreenFixture.screen("grok-35-permission-subagent-62"))
@@ -834,13 +835,41 @@ struct BlockedCardStoreTests {
         await store.perform(.choose(ordinal: approve))
         #expect(await pane.keys == [["2"], ["2"]])
         #expect(store.progress == .unconfirmed)
-        store.update(transcript: Self.transcript(pending: [second], running: [first]))
+        store.update(
+            transcript: alreadyResolved
+                ? Self.transcript(pending: [second], resolved: [first])
+                : Self.transcript(pending: [second], running: [first]))
 
         #expect(store.progress == .unconfirmed)
         #expect(store.notice == "The Agent hasn't responded yet. Answer in the terminal if it stays.")
         await store.perform(.choose(ordinal: approve))
         #expect(await pane.keys == [["2"], ["2"]])
         store.update(transcript: Self.transcript(running: [first, second]))
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+    }
+
+    /// A card that matches no waiting call, as when the transcript records
+    /// its command otherwise, still has its answer brought back by any
+    /// call that waited starting, as before calls were matched to cards.
+    @Test func aGrokCardMatchingNoCallWaitsOnAnyCallThatWaited() async throws {
+        let other = Self.grokCommand("call-1", "ls -la")
+        let pane = FakePane(try ScreenFixture.screen("grok-12-permission-command"))
+        let store = Self.store(.grok, pane: pane)
+        store.update(transcript: Self.transcript(pending: [other]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.subject.command == "chmod 644 README.md")
+        let approve = try #require(card.dialog.options.first { $0.role == .approve }?.ordinal)
+        await store.perform(.choose(ordinal: approve))
+        #expect(store.progress == .unconfirmed)
+
+        store.update(transcript: Self.transcript(running: [other]))
+
         #expect(store.progress == .ready)
         #expect(store.notice == nil)
     }

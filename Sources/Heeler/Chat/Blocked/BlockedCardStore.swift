@@ -82,9 +82,9 @@ final class BlockedCardStore {
         /// Keys are going out; every control waits.
         case acting
         /// The keys went out and the Agent has not shown their effect. Only
-        /// Stop acts until a read shows another screen, a waiting call
-        /// resolves, or on Grok Build one the card could be answering
-        /// starts: the keys may still land.
+        /// Stop acts until a read shows another screen or a waiting call
+        /// resolves (on Grok Build, one the card could be answering starts
+        /// or resolves): the keys may still land.
         case unconfirmed
     }
 
@@ -204,8 +204,13 @@ final class BlockedCardStore {
         // Two identical dialogs in a row look unchanged on screen, so an
         // answer that showed no effect took once a call that waited
         // resolves. A call that only starts waiting proves nothing: the
-        // transcript can catch up with the dialog answered.
-        if progress == .unconfirmed, !waiting.isDisjoint(with: resolved.subtracting(resolvedToolUseIDs)) {
+        // transcript can catch up with the dialog answered. On Grok Build
+        // the release above counts a resolved call too, and only one the
+        // card could be answering: the previous card's call can resolve in
+        // a late read.
+        if program != .grok, progress == .unconfirmed,
+            !waiting.isDisjoint(with: resolved.subtracting(resolvedToolUseIDs))
+        {
             progress = .ready
             unconfirmedFingerprint = nil
         }
@@ -438,12 +443,12 @@ final class BlockedCardStore {
     /// between them, so the answer shows no effect on screen. Grok writes a
     /// call's start only once it runs, after any approval, so a call the
     /// card could be answering that waited when the keys went out and has
-    /// started or resolved since shows they took. Another call's start
-    /// shows nothing: the previous card's call read late, or a call that
-    /// needs no approval, which reads as waiting until it starts while
-    /// herdr reports Blocked. The other programs' open calls read waiting
-    /// or running from herdr's status alone, so their answers wait for a
-    /// call to resolve or the screen to change.
+    /// started or resolved since shows they took. Another call starting or
+    /// resolving shows nothing: the previous card's call read late, or a
+    /// call that needs no approval, which reads as waiting until it starts
+    /// while herdr reports Blocked. The other programs' open calls read
+    /// waiting or running from herdr's status alone, so their answers wait
+    /// for a call to resolve or the screen to change.
     private func releaseIfAWaitingCallStarted() {
         guard program == .grok, progress == .unconfirmed, !waitingWhenSent.isDisjoint(with: startedToolUseIDs)
         else { return }
