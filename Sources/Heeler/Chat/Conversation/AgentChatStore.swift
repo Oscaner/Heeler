@@ -100,12 +100,12 @@ final class AgentChatStore {
         case refused(String)
         /// Unrecorded, and the program's prompt log names one other session
         /// as the one that took it (`ChatTranscriptAdapter.sendWitness`). A
-        /// recorded copy still wins.
+        /// recorded copy, such as one the terminal sent, still wins.
         case misdirected
         /// Unrecorded and no longer worth an echo: it went into an earlier
         /// conversation, was sent before this store was watching, or was
-        /// discarded or refused and the transcript has recorded a prompt
-        /// since.
+        /// discarded, refused or misdirected and the transcript has recorded
+        /// a prompt since.
         case abandoned
     }
 
@@ -1043,14 +1043,15 @@ final class AgentChatStore {
     /// the send. A send that went into an earlier conversation, such as the
     /// first prompt that makes Codex report a session, may match anywhere in
     /// the current one, as may one sent before the file was rewritten; an
-    /// entry already showing at the send never matches it. A discarded send
-    /// takes only a prompt no other send matches, so sending its text again
-    /// settles the new send; a returned send the user added to in the box
-    /// takes a prompt that contains it. Conservative on purpose: a wrong match would
-    /// hide a prompt that never arrived. A discarded or refused send that
-    /// any prompt recorded after it overtakes, unmatched or matched by a
-    /// later send, is abandoned: it is no longer the conversation's latest
-    /// message. A send from before it recorded late does not overtake it.
+    /// entry already showing at the send never matches it. A discarded or
+    /// misdirected send takes only a prompt no other send matches, so
+    /// sending its text again settles the new send; a returned send the user
+    /// added to in the box takes a prompt that contains it. Conservative on
+    /// purpose: a wrong match would hide a prompt that never arrived. A
+    /// discarded, refused or misdirected send that any prompt recorded after
+    /// it overtakes, unmatched or matched by a later send, is abandoned: it
+    /// is no longer the conversation's latest message. A send from before it
+    /// recorded late does not overtake it.
     private func matchSends() {
         let byEntry = source.adapter.echoesByEntry
         let layout = conversation.layoutGeneration
@@ -1089,7 +1090,8 @@ final class AgentChatStore {
         if case .unavailable(.awaitingFirstMessage) = conversation.phase { isUnwritten = true }
         var statuses: [UUID: SendStatus] = [:]
         var becameOverdue = false
-        let ordered = sends.filter { !discardedSends.contains($0.id) } + sends.filter { discardedSends.contains($0.id) }
+        let matchedLast = discardedSends.union(misdirectedSends)
+        let ordered = sends.filter { !matchedLast.contains($0.id) } + sends.filter { matchedLast.contains($0.id) }
         for send in ordered {
             if sendStatuses[send.id] == .recorded {
                 statuses[send.id] = .recorded
@@ -1146,7 +1148,8 @@ final class AgentChatStore {
                 claimedPrompts[match.claim] = deliveredAt
                 statuses[send.id] = .recorded
             } else if misdirectedSends.contains(send.id) {
-                statuses[send.id] = send.generation == conversationGeneration ? .misdirected : .abandoned
+                statuses[send.id] =
+                    send.generation == conversationGeneration && !isOvertaken ? .misdirected : .abandoned
             } else if returnedSends.contains(send.id), send.generation == conversationGeneration {
                 statuses[send.id] = .returned
             } else if discardedSends.contains(send.id), send.generation == conversationGeneration {

@@ -2713,6 +2713,29 @@ struct AgentChatStoreTests {
         #expect(store.sessionConcern == nil)
     }
 
+    /// The misdirected text sent again from Chat once the terminal is back
+    /// in this conversation: the copy recorded here is the resend's, which
+    /// leaves no echo waiting, and the misdirected echo leaves as it would
+    /// for any later prompt.
+    @Test func aResendOfAMisdirectedMessageIsTheOneRecorded() async throws {
+        let text = "Reply with exactly the word ping. "
+        let (files, store, clock, id) = try await Self.misdirectedGrokSend(text)
+        clock.now = clock.now.addingTimeInterval(60)
+        let resend = UUID()
+        store.updateSends([Self.sent(id, text), Self.sent(resend, text, delivered: false)])
+        await store.witnessMarksSettled()
+        #expect(store.sendConcern(for: text, after: Self.pongScreen) == nil)
+        store.updateSends([Self.sent(id, text), Self.sent(resend, text)])
+        #expect(store.sendStatuses[id] == .misdirected)
+
+        await files.append(try Self.grokLines("core-turns.jsonl", 8...8), to: Self.grokPath)
+        await store.step()
+
+        #expect(store.sendStatuses[resend] == .recorded)
+        #expect(store.sendStatuses[id] == .abandoned)
+        #expect(store.sessionConcern == nil)
+    }
+
     /// herdr reports another session: Chat follows the one the Agent is
     /// in now.
     @Test func aNewSessionReportClearsTheConcern() async throws {
@@ -2726,17 +2749,20 @@ struct AgentChatStoreTests {
     }
 
     /// A prompt the transcript records since, such as one typed in the
-    /// terminal, shows the terminal is back in this conversation.
-    @Test func aPromptRecordedHereClearsTheConcern() async throws {
+    /// terminal, shows the terminal is back in this conversation. The
+    /// misdirected echo has said where its send went by then, and leaves
+    /// with the concern rather than stay below the turns after it.
+    @Test func aPromptRecordedHereClearsTheConcernAndTheEcho() async throws {
         let (files, store, _, id) = try await Self.misdirectedGrokSend("Reply with the word kiwi. ")
         await store.step()
         #expect(store.sessionConcern != nil)
+        #expect(store.sendStatuses[id] == .misdirected)
 
         await files.append(try Self.grokLines("core-turns.jsonl", 5...5), to: Self.grokPath)
         await store.step()
 
         #expect(store.sessionConcern == nil)
-        #expect(store.sendStatuses[id] == .misdirected)
+        #expect(store.sendStatuses[id] == .abandoned)
     }
 
     @Test func theScreenShowingThisSessionClearsTheConcern() async throws {
