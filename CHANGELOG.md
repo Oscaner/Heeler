@@ -35,6 +35,9 @@ Entries reference the pull request that made the change.
   Collapse, so the header covers less output. (#480)
 - Chat's Collapse Steps and Jump to Latest buttons are glass icons like the
   detail header's, and Collapse Steps uses a clearer collapse glyph. (#480)
+- Chat stops loading earlier messages by itself after about 4 MB inside one
+  long turn and folds the part of that turn it loaded. Load Earlier Messages
+  reads on from there.
 
 ### Fixed
 
