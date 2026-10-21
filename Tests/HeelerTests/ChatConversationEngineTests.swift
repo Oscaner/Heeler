@@ -620,6 +620,46 @@ struct ChatConversationEngineTests {
         #expect(await fixture.bytesRead() > 0)
     }
 
+    /// A program that doesn't bound what Chat loads by itself passes the
+    /// follower no limit, so the timeline's request reads back past a line
+    /// longer than the largest page to the opener above it, as the user's
+    /// does. A limit there would stop every pass at that line without
+    /// moving the window; the read budget fails such a loop instead of
+    /// letting it hang.
+    @Test func automaticRequestsReadPastALineLongerThanAPage() async throws {
+        try #require(Self.limits.automaticOlderSearch == nil)
+        // 201 bytes, more than the 128-byte largest page, just above the
+        // tail window.
+        let long = #"{"pad":""# + String(repeating: "x", count: 190) + "\"}\n"
+        let text = NumberedChatReducer.prompt("a") + Self.lines(0..<2) + long + Self.lines(2..<8)
+        let automatic = Fixture()
+        let user = Fixture()
+        await automatic.files.write(text, at: Self.claudePath)
+        await user.files.write(text, at: Self.claudePath)
+        let byItself = automatic.makeEngine()
+        let asked = user.makeEngine()
+        let opened = await automatic.open(byItself)
+        _ = await user.open(asked)
+        try #require(Self.numbers(opened) == Self.ids(2..<8))
+        await automatic.files.clearRecords()
+        await user.files.clearRecords()
+        // Several times what the request reads.
+        await automatic.files.setReadBudget(64)
+
+        let snapshot = await automatic.loadOlder(byItself, automatic: true)
+        let expected = await user.loadOlder(asked)
+
+        #expect(
+            snapshot.transcript.turns.map(\.firstEntryID.rawValue) == ["p-0"],
+            "\(String(describing: snapshot.readFailure))")
+        #expect(Self.numbers(snapshot) == Self.numbers(expected))
+        #expect(snapshot.transcript.turns == expected.transcript.turns)
+        #expect(snapshot.older == expected.older)
+        #expect(!snapshot.olderAwaitsUser)
+        let userReads = await user.files.reads
+        #expect(await automatic.files.reads == userReads)
+    }
+
     @Test func turnsOpenedAboveALaterWindowComeFromTheSavedDocument() async throws {
         let fixture = Fixture()
         await fixture.files.write(NumberedChatReducer.prompt("a") + Self.lines(0..<6), at: Self.claudePath)

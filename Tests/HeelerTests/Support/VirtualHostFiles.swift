@@ -12,6 +12,9 @@ actor VirtualHostFiles {
         case status, list, read, home
     }
 
+    /// Thrown by every read past the budget `setReadBudget(_:)` sets.
+    struct ReadBudgetSpent: Error {}
+
     private enum Node {
         case file(Data)
         case directory
@@ -26,6 +29,7 @@ actor VirtualHostFiles {
     /// Faults for one path, taken before any for the operation as a whole.
     private var pathFaults: [Operation: [(path: String, error: any Error)]] = [:]
     private var readLimit: Int?
+    private var readBudget: Int?
 
     private(set) var reads: [RemoteFileRange] = []
     private(set) var listings: [RemoteFileListingRequest] = []
@@ -99,6 +103,13 @@ actor VirtualHostFiles {
         readLimit = bytes
     }
 
+    /// Lets `count` more reads through, then fails every read, so code
+    /// that would read without end fails its test instead of hanging it.
+    /// Nil lifts the budget.
+    func setReadBudget(_ count: Int?) {
+        readBudget = count
+    }
+
     func failNext(_ operation: Operation, with error: any Error, count: Int = 1) {
         faults[operation, default: []] += Array(repeating: error, count: count)
     }
@@ -151,6 +162,10 @@ actor VirtualHostFiles {
 
     func readRange(_ range: RemoteFileRange) throws -> RemoteFileSlice {
         try throwFault(.read, path: range.path)
+        if let readBudget {
+            guard readBudget > 0 else { throw ReadBudgetSpent() }
+            self.readBudget = readBudget - 1
+        }
         reads.append(range)
         guard let (_, node) = resolve(range.path), case .file(let data) = node else {
             return RemoteFileSlice(data: Data(), length: nil)
