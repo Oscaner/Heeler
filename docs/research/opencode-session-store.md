@@ -508,7 +508,7 @@ row. A modal's title ends in `esc`, with no box edge under it.
 | Question | `Questions`, the question, numbered options with their descriptions, `N. Type your own answer`, and the footer `↑↓ select  enter submit  esc dismiss` | focused option text `#fab283` |
 | Session picker | `Sessions for <project>`, `esc`, `Today`; the footer `pin/unpin ctrl+f  delete ctrl+d  rename ctrl+r  all projects ctrl+a` | |
 | Subagent panel | `Subagents  Shell  Terminals`, `General: <description>  Running`, and the footer `interrupt ctrl+d  show inactive ctrl+a  tabs ←/→`; no box edge | |
-| Compaction | a `──── ⠋ Compaction ────` divider, its spinner frame changing, and the working footer; once failed, `──── ✗ Compaction ────` with the reason (`Nothing to compact yet`) under it (2026-10-21) | |
+| Compaction | a `──── ⠋ Compaction ────` divider, its spinner frame changing, and the working footer; once failed, `──── ✗ Compaction ────` with the reason (`Nothing to compact yet`) under it (2026-10-21) | failed divider and `✗` `#e06c75`, the reason `#eeeeee` |
 | Finished step | `Build · GPT-6 Astra · 13.8s · 0.4 tok/s`, with `· interrupted` after a stop, a rejection or a dismissed question; a dismissed question leaves `→ Asked 1 question` above it (2026-10-21) | |
 | Retrying step (2026-10-21) | `⚠ Retrying in <n>s · attempt <n> · <error>` above the step's `Build · <model>` line (no duration yet), the seconds counting down, and the working footer | |
 | Failed turn (2026-10-21) | `Error: <error>` above `Build · <model> · <duration>`, the box empty and no dialog; a `Session failed` toast with the error and an `x` covered the top rows in the captures 1 to 5 s after the failure | |

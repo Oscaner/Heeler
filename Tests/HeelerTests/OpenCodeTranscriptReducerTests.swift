@@ -284,6 +284,46 @@ struct OpenCodeTranscriptReducerTests {
         #expect(auto.recordedPrompts.map(\.text) == ["Go."])
     }
 
+    /// OpenCode 2.0.32 records a `/compact` with nothing to compact as a
+    /// failed compaction whose error says so, then an idle row (seq 363 and
+    /// 365 as captured, their times moved). Nothing failed, so Chat shows
+    /// OpenCode's words as a notice. Any other failure, or one without a
+    /// message, stays "Compaction failed", with the message as its detail.
+    @Test func aCompactionWithNothingToCompactSaysSo() {
+        let refused = Self.project([
+            Self.row(
+                "msg_c363", "compaction", seq: 363,
+                #"{"status":"failed","reason":"manual","summary":null,"error":{"type":"compaction.unavailable","message":"Nothing to compact yet"},"time":{"created":1800000100363}}"#
+            ),
+            Self.row("msg_i365", "idle", seq: 365, #"{"time":{"created":1800000100365},"outcome":"succeeded"}"#),
+        ])
+        #expect(
+            refused.entries == [
+                ChatEntry(
+                    id: ChatEntryID("oc:msg_c363"), sourceOffset: 363,
+                    content: .notice(ChatNotice(kind: .command, title: "/compact"))),
+                ChatEntry(
+                    id: ChatEntryID("oc:msg_c363:notice"), sourceOffset: 363,
+                    content: .notice(ChatNotice(kind: .system, title: "Nothing to compact yet"))),
+            ])
+        #expect(refused.turns.map(\.ending) == [.completed])
+
+        // The entry a failed compaction with `error` gives.
+        func outcome(_ error: String) -> ChatEntry.Content? {
+            let data = #"{"status":"failed","reason":"auto","summary":null,"error":\#(error),"time":null}"#
+            return Self.project([Self.row("msg_c1", "compaction", seq: 1, data)]).entries.last?.content
+        }
+        // Another type, written for the test.
+        #expect(
+            outcome(#"{"type":"provider.transport","message":"Unable to connect."}"#)
+                == .notice(ChatNotice(kind: .error, title: "Compaction failed", detail: "Unable to connect.")))
+        let failed = ChatEntry.Content.notice(ChatNotice(kind: .error, title: "Compaction failed"))
+        #expect(outcome(#"{"type":"compaction.unavailable","message":null}"#) == failed)
+        #expect(outcome(#"{"type":"compaction.unavailable","message":" "}"#) == failed)
+        #expect(outcome(#"{"type":"provider.transport","message":null}"#) == failed)
+        #expect(outcome("null") == failed)
+    }
+
     // MARK: Tools
 
     @Test func patchFilesBecomeFileChanges() throws {

@@ -230,7 +230,7 @@ private struct Projection {
             }
             switch compaction.status {
             case "completed": add(row, .divider(.compaction(summary: compaction.summary)), ":divider")
-            case "failed": add(row, .notice(ChatNotice(kind: .error, title: "Compaction failed")), ":error")
+            case "failed": addFailedCompaction(row, compaction.error)
             default: break
             }
         case .note(let note):
@@ -410,6 +410,20 @@ private struct Projection {
             add(row, .notice(ChatNotice(kind: .command, title: name)))
         default:
             add(row, .notice(ChatNotice(kind: .system, title: note.description ?? "Instructions updated")))
+        }
+    }
+
+    /// OpenCode records a `/compact` with nothing new to compact as a
+    /// failed compaction whose error says so ("Nothing to compact yet").
+    /// Nothing failed, so Chat shows those words as a notice. Any other
+    /// failure, or one without a message, is "Compaction failed", with the
+    /// message as its detail.
+    private mutating func addFailedCompaction(_ row: OpenCodeRow, _ error: OpenCodeError?) {
+        let message = error?.message.flatMap { Self.trimmed($0).isEmpty ? nil : $0 }
+        if error?.type == "compaction.unavailable", let message {
+            add(row, .notice(ChatNotice(kind: .system, title: message)), ":notice")
+        } else {
+            add(row, .notice(ChatNotice(kind: .error, title: "Compaction failed", detail: message)), ":error")
         }
     }
 

@@ -457,12 +457,17 @@ struct OpenCodeCompaction: Decodable, Sendable {
     /// `manual` for `/compact`, `auto` for one OpenCode started.
     var reason: String?
     var summary: String?
+    /// Why it failed: `compaction.unavailable` when there was nothing new
+    /// to compact. The source keeps the first 16 Ki characters of its
+    /// message.
+    var error: OpenCodeError?
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: OpenCodeKey.self)
         status = container.lenient(String.self, "status")
         reason = container.lenient(String.self, "reason")
         summary = container.lenient(String.self, "summary")
+        error = container.lenient(OpenCodeError.self, "error")
     }
 }
 
