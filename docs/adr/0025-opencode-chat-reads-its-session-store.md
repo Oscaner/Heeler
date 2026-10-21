@@ -198,8 +198,11 @@ its Done status until the first prompt of the new session.
   title reads the screen once. OpenCode's home screen there marks the report
   stale: Chat shows no conversation and says OpenCode has left it, until
   herdr reports another session, the screen shows a session again under the
-  stale session's own title, or Retry finds a session on screen. The
-  Console's record counts only when it changes: a session picked in
+  stale session's own title, or Retry finds a session on screen. After
+  `/new` Chat says so at the next idle recheck, within about 10 seconds (1.0
+  to 7.3 s in three samples); a send before then is held by the confirmation
+  below, and its read of the record says so at once. The Console's record
+  counts only when it changes: a session picked in
   OpenCode's terminal while herdr reports it idle changes no status, so no
   snapshot follows, and that record can name the session before it. The
   title alone cannot decide: OpenCode titles its home screen, an untitled
