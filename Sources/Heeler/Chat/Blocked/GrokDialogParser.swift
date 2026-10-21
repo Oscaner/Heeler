@@ -63,8 +63,7 @@ enum GrokDialogParser {
         + "lasting choice. Answer in the terminal or with these keys."
     private static let forkHiddenRowsReason =
         "Grok Build's /fork asks this, and every answer forks. Always worktree and Never worktree, which this "
-        + "width hides, also save a lasting choice. Answer in the terminal, where every row shows, or with these "
-        + "keys."
+        + "width hides, also save a lasting choice. Answer in the terminal or with these keys."
 
     // MARK: Permission
 
