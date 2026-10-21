@@ -97,7 +97,8 @@ herdr replaces a Grok Agent's session only when SessionStart's `source` is
   while the text was still in the box. The message ran in the new session
   (its user record and `prompt_history.jsonl` line name it), and herdr's
   report, polled about every 0.13 s, showed that session within 107 ms of
-  the hook record. A `/resume <id>` sent there also started a new session,
+  the hook record; the user record came 84 ms after the hook record, 23 ms
+  before that report. A `/resume <id>` sent there also started a new session,
   holding only the hook record, which herdr's report showed within 62 ms
   of that record and kept, while the resume put the other session on
   screen. The Welcome screen's own resume picker (Ctrl+R, then Enter)
@@ -105,9 +106,13 @@ herdr replaces a Grok Agent's session only when SessionStart's `source` is
   (`dispatch/session/lifecycle.rs`), a send from the Welcome screen first
   runs `leave_welcome_for_session`, which switches to the home session
   Grok created in the background at start, if one is still unused, and
-  otherwise calls `dispatch_new_session`; the input runs after that. At
-  Grok's start, the first message went to the session herdr already
-  reported (two captures, live, 2026-10-20).
+  otherwise calls `dispatch_new_session`; the input runs after that. So
+  whatever is typed there, a command included, starts a session herdr
+  adopts, and after a typed `/resume` herdr keeps that empty session, as it
+  never follows `/resume`, while the screen shows the resumed one; the
+  picker is the way back that starts none. At Grok's start, the first
+  message went to the session herdr already reported (two captures, live,
+  2026-10-20).
 
 The two `Session` lines sit outside any box at the scrollback's
 five-column indent, and a pane narrower than the line wraps it: `/new`'s

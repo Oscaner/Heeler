@@ -115,23 +115,27 @@ dashboard, but keeps the earlier session after `/resume`, `/fork` and going
 back from the dashboard, and Chat follows herdr. At Grok Build's start a
 message from the Welcome screen went to the session herdr reported, but on
 the Welcome screen `/welcome` opens later, text sent there started a new
-session first, which herdr then reported (1.0.62): a message then ran in
-it, and a `/resume` left herdr on it, empty, while the screen showed the
-resumed session. So the screen read that checks the input box before a send
-also holds the message when it shows a `Session <id>` line for another
-session, a newest message the conversation doesn't have (only once herdr
-reports the Agent idle and a transcript read since then has landed), or the
-Welcome screen of a conversation that already has messages. Once the
-dashboard opened an agent, Grok Build kept the dashboard's view of one agent,
-also after `/resume` and leaving the dashboard, until it restarted (1.0.62);
-that view takes a message only when the check finds this conversation's
-newest message there, and holds it otherwise, also while herdr reports no
-session. Such a hold reads the Agent's record again, so a `/new` herdr has
-just reported is followed. Nothing is read from the Host between that screen
-read and the prompt. At 20 rows or fewer Grok Build draws the user's messages
-without their `❯`, so there the screen shows no newest message, and after
-such a `/resume` the conversation Chat follows has no message to compare it
-with; in both cases, unless a `Session <id>` line for another session shows,
+session first, which herdr then reported (1.0.62): a message then ran in it,
+and a `/resume` left herdr on it, empty, while the screen showed the resumed
+session. The Welcome screen's Resume session picker (Ctrl+R) started no
+session, so the hold there names it as the way back. The screen read that
+checks the input box before a send therefore also holds the message when it
+shows a `Session <id>` line for another session, a newest message the
+conversation doesn't have (only once herdr reports the Agent idle and a
+transcript read since then has landed), or the Welcome screen of a
+conversation that already has messages. A conversation with no message yet
+has none of its own on screen, so there any message shown, a command or a
+chip aside, holds the send; herdr can report a new session before Grok Build
+writes its first prompt, and a send in between holds until a read finds that
+prompt. Once the dashboard opened an agent, Grok Build kept the dashboard's
+view of one agent, also after `/resume` and leaving the dashboard, until it
+restarted (1.0.62); that view takes a message only when the check finds this
+conversation's newest message there, and holds it otherwise, also while
+herdr reports no session. Such a hold reads the Agent's record again, so a
+`/new` herdr has just reported is followed. Nothing is read from the Host
+between that screen read and the prompt. At 20 rows or fewer Grok Build
+draws the user's messages without their `❯`, so there the screen shows no
+newest message, and unless a `Session <id>` line for another session shows,
 only the read after a send catches a message another session took. After a
 send, Chat reads what Grok Build added to the folder's
 `prompt_history.jsonl` since just before the send, up to 64 KiB:
