@@ -134,8 +134,9 @@ struct ChatTranscriptAdapter: Sendable {
     /// time herdr reports neither rather than on the time since delivery.
     var echoClockStopsWhileWorking = false
     /// Reads the Agent's screen before a send, for a program whose screen
-    /// can move to another session without herdr reporting it.
-    var sessionCheck: (@Sendable (ANSIScreen, ChatSessionCheckInput) -> ChatScreenSessionVerdict)? = nil
+    /// can move to another session without herdr reporting it. The input
+    /// is nil while herdr reports no session Chat follows.
+    var sessionCheck: (@Sendable (ANSIScreen, ChatSessionCheckInput?) -> ChatScreenSessionVerdict)? = nil
     /// The program's log of the prompts it submits, which names the
     /// session that took each one.
     var sendWitness: ChatSendWitness? = nil

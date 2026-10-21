@@ -204,31 +204,52 @@ struct GrokInputBoxDetectorTests {
                 ))
     }
 
-    /// The dashboard's view of an agent (synthetic, by the 1.0.45 source)
-    /// shows that agent's own box, so a message would reach it, whichever
-    /// conversation it is. Grok sets `Ctrl+\:dashboard` first in the
-    /// footer, and `‹ i/n ›` in the header while there are other agents to
-    /// cycle to, which a pending press leaves alone.
-    @Test func theDashboardsViewOfAnAgentHoldsTheSend() {
-        let overlay =
-            "Grok Build is showing an agent from its dashboard, which may not be this conversation. Go back to the conversation in the terminal first."
-        let header = "master ~/s/cap-grok-a/proj  ‹ 1/2 › │ [Dashboard]"
-        let alone = GrokScreenBuilder(hints: ["Ctrl+\\:dashboard", "Ctrl+x:stop", "Shift+Tab:mode", "Ctrl+.:shortcuts"])
-        let cycling = GrokScreenBuilder(
-            hints: [
-                "Ctrl+\\:dashboard", "Ctrl+[/Ctrl+]:prev/next agent", "Ctrl+x:stop", "Shift+Tab:mode",
-                "Ctrl+.:shortcuts",
-            ],
-            header: header)
-        let working = GrokScreenBuilder(
-            status: .init(label: "Thinking…"), typed: "Reply with the word lime.",
-            hints: ["Ctrl+\\:dashboard", "Ctrl+x:stop", "Shift+Tab:mode", "Ctrl+c:cancel", "Ctrl+.:shortcuts"])
-        let pending = GrokScreenBuilder(footer: "Ctrl+c:press again to quit", header: header)
+    /// The dashboard's view of an agent shows that agent's own box, read
+    /// as the conversation's own view is; whether the agent is this
+    /// conversation is the session check's to say. At the phone's 62
+    /// columns the footer stops before `Shift+Tab:mode` (grok-40 to
+    /// grok-42, 1.0.62, live), so an empty box without the placeholder has
+    /// prompt focus.
+    @Test(arguments: [
+        "grok-40-agent-view-other-62", "grok-41-agent-view-this-62", "grok-42-agent-view-dispatched-62",
+    ])
+    func theDashboardsViewOfAnAgentReadsItsBox(stem: String) throws {
+        let screen = try ScreenFixture.screen(stem)
 
-        for builder in [alone, cycling, working, pending] {
+        #expect(GrokScreen(screen).isDashboardOverlay)
+        #expect(GrokInputBoxDetector.detect(screen) == .empty(placeholder: nil))
+    }
+
+    /// Synthetic, by the 1.0.45 source and the captures' chrome: the view
+    /// holds what the conversation's own view holds. Grok sets
+    /// `Ctrl+\:dashboard` first in the footer and `‹ i/n ›` in the header
+    /// while there are other agents to cycle to, which a pending press
+    /// leaves alone, and draws the same placeholder without focus.
+    @Test func theDashboardsViewOfAnAgentHoldsWhatTheOwnViewHolds() {
+        let header = "Se… │ main /p/t/hcl/pr… 22K / 256K │ ‹ 1/3 › │ [Dashboard]"
+        let hints = [
+            "Ctrl+\\:dashboard", "Ctrl+[/]:prev/next agent", "Ctrl+x:stop", "Shift+Tab:mode", "Ctrl+.:shortcuts",
+        ]
+        let unfocused = GrokScreenBuilder(columns: 62, placeholder: "Build anything", hints: hints, header: header)
+        let typed = GrokScreenBuilder(columns: 62, typed: "Reply with the word lime.", hints: hints, header: header)
+        let working = GrokScreenBuilder(
+            columns: 62, status: .init(label: "Thinking…"), typed: "Reply with the word lime.", hints: hints,
+            header: header)
+        let wide = GrokScreenBuilder(hints: hints, header: header)
+        let pending = GrokScreenBuilder(columns: 62, footer: "Ctrl+c:press again to quit", header: header)
+
+        for builder in [unfocused, typed, working, wide, pending] {
             #expect(GrokScreen(builder.screen).isDashboardOverlay)
-            #expect(GrokInputBoxDetector.detect(builder.screen) == .noComposer(overlay))
         }
+        #expect(GrokInputBoxDetector.detect(unfocused.screen) == .disabled(Self.unfocused))
+        #expect(GrokInputBoxDetector.detect(typed.screen) == .text("Reply with the word lime."))
+        #expect(GrokInputBoxDetector.detect(working.screen) == .text("Reply with the word lime."))
+        #expect(GrokInputBoxDetector.detect(wide.screen) == .empty(placeholder: nil))
+        #expect(
+            GrokInputBoxDetector.detect(pending.screen)
+                == .disabled(
+                    "Grok Build is waiting for a second key press (\u{201C}Ctrl+c:press again to quit\u{201D}). Wait a second, then send again."
+                ))
         // The conversation's own view, its header without the switcher.
         let own = GrokScreenBuilder(header: "master ~/s/cap-grok-a/proj  26K / 256K │ [Dashboard]")
         #expect(!GrokScreen(own.screen).isDashboardOverlay)

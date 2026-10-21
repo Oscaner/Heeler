@@ -195,7 +195,7 @@ replacements of the same length. These screens are not part of
 herdr 0.9.5 (2026-10-19), kept as herdr returned them apart from the
 scrubbing below: CRLF rows, SGR styling only. Two Agents ran in scratch
 projects under the developer's account, `cap-grok-a` and `cap-grok-b`; every
-screen is 47 rows of 181 or 182 columns, except `grok-28` to `grok-39` (below).
+screen is 47 rows of 181 or 182 columns, except `grok-28` to `grok-42` (below).
 Screens whose header shows
 `/U/d/s/cap-grok-a/proj` ran with `HOME` pointed at a scratch directory, where
 Grok asks before running a tool; the developer's own settings put it in
@@ -220,9 +220,10 @@ prompts in Chinese, and its replies stay as captured.
 | `grok-35-permission-subagent-62` | The phone's 62×41 grid: the card Grok asks before a subagent starts, `Allow Sleep 60 then reply done?`, its always-approve row cut at the card's edge |
 | `grok-36-permission-command-40`, `grok-37-permission-command-62` | A command's card at 40×30, where Grok cut the rule to `Always allow: chmod 644…` and the description with `…` (derived, below); the same card at the phone's 62×41 grid, where both read in full |
 | `grok-38-fork-question-62`, `grok-39-fork-question-40` | The worktree question `/fork` asks, at the phone's 62×41 grid with every row in view, and at 40×30, where the card scrolls all but `1` and `z` out of view |
+| `grok-40-agent-view-other-62`, `grok-41-agent-view-this-62`, `grok-42-agent-view-dispatched-62` | The dashboard's view of an agent at the phone's 62×41 grid, its footer cut at `Ctrl+x:`: another session opened from the dashboard while herdr reported the first; the first after `/resume` back to it, which kept the view; the first again after Esc from a dispatch that moved herdr to the new agent |
 
 Captures not marked `cap-grok-b` come from `cap-grok-a`, except `grok-28` to
-`grok-39`, which come from later Agents (2026-10-20) in the scratch project
+`grok-42`, which come from later Agents (2026-10-20) in the scratch project
 `/tmp/hcl/proj-grok`, with nothing to scrub. They are kept as read, except
 `grok-36-permission-command-40`, which is derived, not captured: that read
 took the pane's ANSI a moment before Grok drew the card and its text just

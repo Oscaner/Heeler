@@ -547,7 +547,7 @@ final class AgentChatStore {
     /// and the paste.
     func sendConcern(for outgoing: String, after screen: ANSIScreen) -> String? {
         var verdict = ChatScreenSessionVerdict.unknown
-        if let check = source.adapter.sessionCheck, let input = sessionCheckInput { verdict = check(screen, input) }
+        if let check = source.adapter.sessionCheck { verdict = check(screen, sessionCheckInput) }
         switch verdict {
         case .thisSession:
             sessionConcern = nil

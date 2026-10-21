@@ -10,7 +10,10 @@ import Foundation
 /// empty, while the screen shows the resumed session. Three readings run in
 /// order, and the first verdict wins: the Welcome screen, a Session line,
 /// and the newest message on screen. Each says nothing when unsure; the
-/// post-send witness catches what they miss.
+/// post-send witness catches what they miss. The dashboard's view of an
+/// agent stays on whichever agent the dashboard opened last (1.0.62,
+/// live), so there a send goes only when the readings find this
+/// conversation.
 enum GrokSessionCheck {
     static let welcomeReason =
         "Grok Build is on its welcome screen, where a message starts a new session. Go back to this conversation in the terminal, or start the new one there."
@@ -18,9 +21,20 @@ enum GrokSessionCheck {
         "Grok Build's screen shows another session. If you just ran /new or /clear, Chat follows it in a moment; send again then. Otherwise switch back to this conversation in the terminal first."
     static let unknownPromptReason =
         "Grok Build's screen shows a message this conversation doesn't have. It may be in another session, or the terminal may be scrolled up. Check the terminal, then send again."
+    static let agentViewReason =
+        "Grok Build is showing an agent from its dashboard, which may not be this conversation. Go back to the conversation in the terminal first."
 
-    static func verdict(_ screen: ANSIScreen, _ input: ChatSessionCheckInput) -> ChatScreenSessionVerdict {
+    /// The verdict on `screen` for the session `input` names. Without one,
+    /// while herdr reports no session Chat follows, only the dashboard's
+    /// view of an agent holds.
+    static func verdict(_ screen: ANSIScreen, _ input: ChatSessionCheckInput?) -> ChatScreenSessionVerdict {
         let grok = GrokScreen(screen)
+        let verdict = input.map { readings(grok, $0) } ?? .unknown
+        if grok.isDashboardOverlay, verdict != .thisSession { return .otherSession(agentViewReason) }
+        return verdict
+    }
+
+    private static func readings(_ grok: GrokScreen, _ input: ChatSessionCheckInput) -> ChatScreenSessionVerdict {
         let transcript = input.transcript
         // At Grok's start the session has no prompt yet, and a message from
         // the Welcome screen is its first. A transcript restored from the

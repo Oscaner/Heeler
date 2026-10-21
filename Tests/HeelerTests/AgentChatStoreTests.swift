@@ -2875,6 +2875,56 @@ struct AgentChatStoreTests {
         #expect(store.sendConcern(for: "Reply with the word kiwi. ", after: screen) == nil)
     }
 
+    /// The dashboard's view of an agent, as grok-40 to grok-42 draw it at
+    /// the phone's 62 columns, its newest message `rows`' last.
+    private static func grokAgentView(_ rows: [String]) -> ANSIScreen {
+        GrokScreenBuilder(
+            columns: 62, scrollback: rows, hints: ["Ctrl+\\:dashboard", "Ctrl+[/]:prev/next agent", "Ctrl+x:stop"],
+            header: "Se… │ main /p/t/hcl/pr… 21K / 256K │ ‹ 2/3 › │ [Dashboard]"
+        ).screen
+    }
+
+    /// Once the dashboard opened an agent, Grok Build keeps that view, also
+    /// after `/resume` back to this conversation (1.0.62, live). A send from
+    /// Chat goes there only when the newest message is this conversation's.
+    @Test func theDashboardsViewOfAnAgentTakesASendOnlyForThisConversation() async throws {
+        let (_, store, _) = try await Self.grokStore(through: 4, status: .idle)
+        func preflight(_ screen: ANSIScreen) async throws -> ComposerRefusal? {
+            let check = try #require(
+                ComposerDeliveryPolicy.chat(
+                    rules: ChatSendRules(program: .grok, commands: []), activity: { .idle }, readScreen: { screen },
+                    sendConcern: { store.sendConcern(for: $0, after: $1) }
+                ).preflight)
+            return await check("Reply with the word kiwi.")
+        }
+
+        #expect(try await preflight(Self.grokAgentView(["❯ Reply with exactly the word pong.", "", "pong"])) == nil)
+        #expect(
+            try await preflight(try ScreenFixture.screen("grok-40-agent-view-other-62"))
+                == .inputNotReady(GrokSessionCheck.agentViewReason))
+        #expect(
+            try await preflight(Self.grokAgentView(["❯ Reply with exactly the word pong.", "", "❯ /compact"]))
+                == .inputNotReady(GrokSessionCheck.agentViewReason))
+    }
+
+    /// While herdr reports no session, Chat can't tell whose agent the
+    /// dashboard's view shows; the conversation's own view says nothing.
+    @Test func theDashboardsViewOfAnAgentHoldsWhileChatFollowsNoSession() async throws {
+        let agent = Self.agent(session: nil, status: .idle, program: .grok)
+        let store = AgentChatStore(
+            agentID: ConsoleAgent.ID(hostID: Self.host, paneID: agent.paneID), agent: agent, program: .grok,
+            source: AgentChatSource(
+                hostID: Self.host, socketLocation: .defaultSession, files: VirtualHostFiles().hostFiles(),
+                agentInfo: { agent }, cache: VolatileChatTranscriptCache(), adapter: .grok),
+            timing: AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)))
+        await store.step()
+        #expect(store.conversation.phase == .unavailable(.noSession(.grok)))
+        let agentView = try ScreenFixture.screen("grok-41-agent-view-this-62")
+
+        #expect(store.sendConcern(for: "Reply with the word kiwi. ", after: agentView) == GrokSessionCheck.agentViewReason)
+        #expect(store.sendConcern(for: "Reply with the word kiwi. ", after: Self.pongScreen) == nil)
+    }
+
     /// Grok Build may rewrite its history through a rename when a session
     /// starts: a log shorter than the mark says nothing.
     @Test func aRewrittenHistoryFileSaysNothing() async throws {

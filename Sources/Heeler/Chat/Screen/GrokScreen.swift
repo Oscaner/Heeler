@@ -96,7 +96,9 @@ struct GrokScreen: Sendable {
     /// both past a 62-column edge (1.0.62, live), so callers read the draft
     /// before focus. In compact mode, which Grok forces at 20 rows or fewer
     /// (as at a phone's 62×20 grid with the keyboard up), the footer is
-    /// `Ctrl+.:shortcuts` whatever has focus (1.0.62, live). Then only the
+    /// `Ctrl+.:shortcuts` whatever has focus (1.0.62, live), and the
+    /// dashboard's view of an agent sets its own hints first, which stop
+    /// before `Shift+Tab:mode` at 62 columns (1.0.62, live). Then only the
     /// box tells: Grok draws its placeholder in an empty box without focus
     /// (`views/prompt_widget`), so an empty box with no placeholder has it.
     let promptHasFocus: Bool
@@ -126,8 +128,10 @@ struct GrokScreen: Sendable {
     /// agent's own view, with `Ctrl+\:dashboard` first in the footer, and
     /// `‹ i/n ›` in the header while there are other agents to cycle to
     /// (`agent_view/render.rs`). A message or Ctrl+C reaches that agent,
-    /// which may not be this conversation. A card's hints replace the
-    /// footer's, so under a card only the header shows the view.
+    /// which may not be this conversation. Once the dashboard opened an
+    /// agent, the view stayed, also after `/resume` (1.0.62, live). A
+    /// card's hints replace the footer's, so under a card only the header
+    /// shows the view.
     let isDashboardOverlay: Bool
     /// The Welcome view Grok opens on, whose composer sends.
     let isWelcome: Bool
@@ -404,12 +408,13 @@ struct GrokScreen: Sendable {
     /// mark (herdr's Blocked rule for Grok Build).
     private static let optionRow = #"^┃\s+[0-9a-z]+\s+\([●○]\)(?:\s|$)"#
 
-    /// See `promptHasFocus`. With text in the box, a compact footer leaves
-    /// focus unknown, so it reads as unfocused.
+    /// See `promptHasFocus`. With text in the box, a compact footer or the
+    /// dashboard view's leaves focus unknown, so it reads as unfocused.
     private static func promptHasFocus(footer: String?, composer: Composer?) -> Bool {
         guard let footer else { return false }
         if footer.contains("Shift+Tab:mode") || footer.contains("accept suggestion") { return true }
-        return footer == "Ctrl+.:shortcuts" && composer?.draft.isEmpty == true
+        let onlyTheBoxTells = footer == "Ctrl+.:shortcuts" || footer.hasPrefix("Ctrl+\\:dashboard")
+        return onlyTheBoxTells && composer?.draft.isEmpty == true
     }
 
     /// The Welcome menu lists `Resume session … ctrl+r` and `Quit … ctrl+q`

@@ -310,4 +310,81 @@ struct GrokSessionCheckTests {
 
         #expect(Self.verdict(screen, Self.input(Self.transcript([]))) == .unknown)
     }
+
+    // MARK: The dashboard's view of an agent
+
+    /// S1, the conversation herdr reports in grok-40 and grok-41, and S3,
+    /// the agent a dispatch from the dashboard moved herdr to in grok-42
+    /// (live, 2026-10-20).
+    private static let s1 = transcript([
+        "# Reply with the word cherry", "Reply with the word fig", "Reply with the word mango",
+    ])
+    private static let s3 = transcript(["Reply with the word quince"])
+
+    /// The view at the phone's 62 columns, as grok-40 to grok-42 draw it.
+    private static func agentView(_ rows: [String], status: GrokScreenBuilder.Status? = nil) -> ANSIScreen {
+        GrokScreenBuilder(
+            columns: 62, scrollback: rows, status: status,
+            hints: [
+                "Ctrl+\\:dashboard", "Ctrl+[/]:prev/next agent", "Ctrl+x:stop", "Shift+Tab:mode",
+                "Ctrl+.:shortcuts",
+            ],
+            header: "Se… │ main /p/t/hcl/pr… 21K / 256K │ ‹ 2/3 › │ [Dashboard]"
+        ).screen
+    }
+
+    /// The view stays after `/resume` back to the conversation herdr
+    /// reports (grok-41), where its newest message proves the screen.
+    @Test func theDashboardsViewOfThisConversationPasses() throws {
+        let screen = try ScreenFixture.screen("grok-41-agent-view-this-62")
+
+        #expect(GrokScreen(screen).isDashboardOverlay)
+        #expect(Self.verdict(screen, Self.input(Self.s1)) == .thisSession)
+    }
+
+    /// Another agent the dashboard opened (grok-40: S2, while herdr
+    /// reports S1), and this conversation's agent after a dispatch moved
+    /// herdr to the new one (grok-42: S1, while herdr reports S3).
+    @Test func theDashboardsViewOfAnotherAgentHolds() throws {
+        let other = try ScreenFixture.screen("grok-40-agent-view-other-62")
+        let dispatched = try ScreenFixture.screen("grok-42-agent-view-dispatched-62")
+
+        #expect(Self.verdict(other, Self.input(Self.s1)) == .otherSession(GrokSessionCheck.agentViewReason))
+        #expect(Self.verdict(dispatched, Self.input(Self.s3)) == .otherSession(GrokSessionCheck.agentViewReason))
+    }
+
+    /// Wherever the conversation's own view would say nothing, or name the
+    /// session, the dashboard's view holds with its own reason.
+    @Test func theDashboardsViewHoldsUnlessItsNewestMessageIsThisConversations() {
+        let mango = "❯ Reply with the word mango"
+        let unproven: [(ANSIScreen, ChatSessionCheckInput)] = [
+            (Self.agentView(["mango", "", "Worked for 11s"]), Self.input(Self.s1)),
+            (Self.agentView([mango, "", "mango", "", "❯ /compact"]), Self.input(Self.s1)),
+            (Self.agentView([mango, "", "mango", "", "❯ !ls"]), Self.input(Self.s1)),
+            (Self.agentView(["❯ Reply with the word fig", "", "fig"]), Self.input(Self.s1)),
+            (Self.agentView([mango], status: .init(label: "Thinking…")), Self.input(Self.s1)),
+            (Self.agentView([mango]), Self.input(Self.s1, activity: .working)),
+            (Self.agentView([mango]), Self.input(Self.s1, polledSinceIdle: false)),
+            (Self.agentView([mango]), Self.input(Self.s1, unrecorded: ["Reply with the word mango "])),
+            (
+                Self.agentView(["Session \(Self.other), use /dashboard to switch between sessions", ""]),
+                Self.input(Self.s1)
+            ),
+        ]
+
+        #expect(Self.verdict(Self.agentView([mango]), Self.input(Self.s1)) == .thisSession)
+        for (screen, input) in unproven {
+            #expect(Self.verdict(screen, input) == .otherSession(GrokSessionCheck.agentViewReason))
+        }
+    }
+
+    /// While herdr reports no session Chat follows, nothing proves whose
+    /// agent the view shows; the conversation's own view says nothing.
+    @Test func withoutAFollowedSessionOnlyTheDashboardsViewHolds() throws {
+        let agentView = try ScreenFixture.screen("grok-41-agent-view-this-62")
+        let own = Self.screen(["❯ Reply with the word mango"])
+
+        #expect(GrokSessionCheck.verdict(agentView, nil) == .otherSession(GrokSessionCheck.agentViewReason))
+        #expect(GrokSessionCheck.verdict(own, nil) == .unknown)
+    }
 }

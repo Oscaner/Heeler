@@ -1,20 +1,17 @@
 import Foundation
 
 /// Reads Grok Build's input box from a screen (ADR 0024). Only an empty
-/// composer with prompt focus on the conversation's own view, or under the
-/// Welcome view, reads `.empty`; ghost text never counts as typed. Every
-/// other state carries the reason Chat holds a message with.
+/// composer with prompt focus, or under the Welcome view, reads `.empty`;
+/// ghost text never counts as typed. Every other state carries the reason
+/// Chat holds a message with. The dashboard's view of an agent shows that
+/// agent's own box, read the same way; whose agent it is, the session
+/// check reads (`GrokSessionCheck`).
 enum GrokInputBoxDetector {
     static func detect(_ screen: ANSIScreen) -> InputBoxState {
         let grok = GrokScreen(screen)
         if grok.isDashboard {
             return .noComposer(
                 "Grok Build is showing its dashboard, where a message starts a new agent. Go back to the conversation in the terminal first."
-            )
-        }
-        if grok.isDashboardOverlay {
-            return .noComposer(
-                "Grok Build is showing an agent from its dashboard, which may not be this conversation. Go back to the conversation in the terminal first."
             )
         }
         if let overlay = grok.overlay { return .overlay(overlay) }

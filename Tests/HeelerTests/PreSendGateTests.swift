@@ -43,12 +43,15 @@ struct PreSendGateTests {
     /// Grok Build takes a message only into an empty composer with prompt
     /// focus, working or not, or under its Welcome view. herdr reports
     /// menus, pickers and the dashboard idle, so the screen holds those.
+    /// The dashboard's view of an agent passes here, and the session check
+    /// reads whose agent it shows.
     @Test("Grok Build sends only into a focused, empty composer", arguments: ScreenFixture.grok)
     func grokSendsOnlyIntoAFocusedEmptyComposer(stem: String) throws {
         let sendable: Set = [
             "grok-01-idle-empty", "grok-03-working", "grok-05-queued", "grok-06-esc-toast", "grok-17-session-new",
             "grok-18-session-fork", "grok-19-resumed-other", "grok-20-welcome", "grok-27-compacting",
             "grok-28-welcome-62", "grok-29-welcome-40", "grok-30-idle-62x20", "grok-32-working-62x20",
+            "grok-40-agent-view-other-62", "grok-41-agent-view-this-62", "grok-42-agent-view-dispatched-62",
         ]
         let screen = try ScreenFixture.screen(stem)
 
@@ -149,6 +152,25 @@ struct DeliveryCheckTests {
 
         #expect(
             DeliveryCheck.verdict(suggestion, program: .grok, activity: .idle, sent: "Fix the build ") == .delivered)
+    }
+
+    /// A send the dashboard's view of an agent took is checked in that
+    /// view's box (grok-41; synthetic, the send left behind).
+    @Test("Grok Build: the dashboard's view of an agent confirms a send")
+    func theDashboardsViewOfAGrokAgentConfirmsASend() throws {
+        let emptied = try ScreenFixture.screen("grok-41-agent-view-this-62")
+        let left = GrokScreenBuilder(
+            columns: 62, typed: "Reply with the word pear",
+            hints: ["Ctrl+\\:dashboard", "Ctrl+[/]:prev/next agent", "Ctrl+x:stop"],
+            header: "Se… │ main /p/t/hcl/pr… 21K / 256K │ ‹ 2/3 › │ [Dashboard]"
+        ).screen
+
+        #expect(
+            DeliveryCheck.verdict(emptied, program: .grok, activity: .idle, sent: "Reply with the word pear ")
+                == .delivered)
+        #expect(
+            DeliveryCheck.verdict(left, program: .grok, activity: .idle, sent: "Reply with the word pear ")
+                == .notDelivered("Reply with the word pear"))
     }
 
     @Test(
