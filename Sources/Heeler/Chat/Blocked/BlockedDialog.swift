@@ -265,6 +265,16 @@ struct BlockedDialog: Sendable, Hashable {
     var answersHeldByDraft: Bool {
         [.ompQuestion, .ompQuestionReview].contains(kind) && focus.composerDraftGuard
     }
+
+    /// A Grok Build permission titled with the card's own question, as
+    /// before a subagent starts, whether Grok showed it whole or cut it
+    /// at the card's edge with `…`. The Agent wrote the words, so the
+    /// card's header shows them in full and its content doesn't repeat
+    /// them.
+    var asksInTitle: Bool {
+        guard kind == .grokPermission, let description = body.first else { return false }
+        return description == title || description == "\(title)?"
+    }
 }
 
 /// A screen with something dialog-like the parsers could not name or trust.

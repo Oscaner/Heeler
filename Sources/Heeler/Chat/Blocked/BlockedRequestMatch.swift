@@ -10,6 +10,14 @@ enum BlockedRequestMatch {
         requests.first { matches($0, dialog) }
     }
 
+    /// Every request the dialog could be asking about, oldest first: those
+    /// it matches, and on a Grok Build subagent's card, which names neither
+    /// a command nor a file, the spawns its title names. A start of one of
+    /// these shows a Grok Build answer took (`BlockedCardStore`).
+    static func requests(answering dialog: BlockedDialog, in requests: [ChatPendingRequest]) -> [ChatPendingRequest] {
+        requests.filter { matches($0, dialog) || asksToStart($0, dialog) }
+    }
+
     private static func matches(_ request: ChatPendingRequest, _ dialog: BlockedDialog) -> Bool {
         let subject = dialog.subject
         switch dialog.kind {
@@ -57,6 +65,26 @@ enum BlockedRequestMatch {
         case .claudeWorkspaceTrust, .codexNetwork, .grokCancelTurn, .grokFork:
             return false
         }
+    }
+
+    /// Before a subagent starts, Grok Build's card asks `Allow
+    /// <description>?` and takes that question as its title, whole or as
+    /// far as the card's edge, where Grok cut it with `…`. A cut title
+    /// names every spawn whose question it starts. Runs of whitespace count
+    /// as one space.
+    private static func asksToStart(_ request: ChatPendingRequest, _ dialog: BlockedDialog) -> Bool {
+        guard request.kind == .agent, dialog.asksInTitle, dialog.subject.command == nil,
+            dialog.subject.filePath == nil
+        else { return false }
+        let asked = words("Allow " + request.summary)
+        let title = words(dialog.title)
+        guard title.hasSuffix("…") else { return asked == title }
+        return asked.hasPrefix(words(String(title.dropLast())))
+    }
+
+    /// `text` with each run of whitespace as one space, trimmed.
+    private static func words(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     /// The plan a Claude card shows: the call's Markdown when it agrees

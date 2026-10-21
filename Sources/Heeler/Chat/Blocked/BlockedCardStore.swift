@@ -83,7 +83,8 @@ final class BlockedCardStore {
         case acting
         /// The keys went out and the Agent has not shown their effect. Only
         /// Stop acts until a read shows another screen, a waiting call
-        /// resolves, or on Grok Build one starts: the keys may still land.
+        /// resolves, or on Grok Build one the card could be answering
+        /// starts: the keys may still land.
         case unconfirmed
     }
 
@@ -112,7 +113,9 @@ final class BlockedCardStore {
     @ObservationIgnored private var resolvedToolUseIDs: Set<String> = []
     /// Calls the transcript shows past their approval: running or resolved.
     @ObservationIgnored private var startedToolUseIDs: Set<String> = []
-    /// The calls that waited for approval when an action's keys went out.
+    /// The calls that waited for approval when an action's keys went out,
+    /// on Grok Build only those the card could be answering (see
+    /// `waitingCalls(answering:)`).
     @ObservationIgnored private var waitingWhenSent: Set<String> = []
     @ObservationIgnored private var isVisible = false
     @ObservationIgnored private var isSuspended = false
@@ -301,7 +304,7 @@ final class BlockedCardStore {
         }
         let toolUseID = shown.request?.callID
         await waitOutGrace(for: page)
-        waitingWhenSent = Set(pendingRequests.compactMap(\.callID))
+        waitingWhenSent = waitingCalls(answering: page)
         for index in form.questions.indices {
             let stopped =
                 "Heeler stopped at question \(index + 1): the dialog didn't respond the way it expected. "
@@ -433,17 +436,31 @@ final class BlockedCardStore {
     /// Grok Build can follow an answered card with one just like it, as for
     /// parallel subagents with one description, and herdr stays Blocked
     /// between them, so the answer shows no effect on screen. Grok writes a
-    /// call's start only once it runs, after any approval, so a call that
-    /// waited when the keys went out and has started or resolved since
-    /// shows they took. The other programs' open calls read waiting or
-    /// running from herdr's status alone, so their answers wait for a call
-    /// to resolve or the screen to change.
+    /// call's start only once it runs, after any approval, so a call the
+    /// card could be answering that waited when the keys went out and has
+    /// started or resolved since shows they took. Another call's start
+    /// shows nothing: the previous card's call read late, or a call that
+    /// needs no approval, which reads as waiting until it starts while
+    /// herdr reports Blocked. The other programs' open calls read waiting
+    /// or running from herdr's status alone, so their answers wait for a
+    /// call to resolve or the screen to change.
     private func releaseIfAWaitingCallStarted() {
         guard program == .grok, progress == .unconfirmed, !waitingWhenSent.isDisjoint(with: startedToolUseIDs)
         else { return }
         progress = .ready
         unconfirmedFingerprint = nil
         notice = nil
+    }
+
+    /// The waiting calls whose start would show an answer to `dialog`
+    /// took: on Grok Build those the card could be answering
+    /// (`BlockedRequestMatch.requests(answering:in:)`), or every waiting
+    /// call where it matches none, as on the other programs.
+    private func waitingCalls(answering dialog: BlockedDialog?) -> Set<String> {
+        let waiting = Set(pendingRequests.compactMap(\.callID))
+        guard program == .grok, let dialog else { return waiting }
+        let answering = Set(BlockedRequestMatch.requests(answering: dialog, in: pendingRequests).compactMap(\.callID))
+        return answering.isEmpty ? waiting : answering
     }
 
     // MARK: Acting
@@ -473,7 +490,7 @@ final class BlockedCardStore {
             return false
         }
         await waitOutGrace(for: shown, kind: fresh.result.dialog?.kind)
-        waitingWhenSent = Set(pendingRequests.compactMap(\.callID))
+        waitingWhenSent = waitingCalls(answering: fresh.result.dialog)
         guard case .sent = await send(plan.steps, to: shown) else { return false }
         return await confirm(plan, on: shown)
     }

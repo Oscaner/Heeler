@@ -547,15 +547,6 @@ private extension BlockedDialog {
         }
     }
 
-    /// A Grok Build permission titled with the card's own question, as
-    /// before a subagent starts, whether Grok showed it whole or cut it
-    /// at the card's edge with `…`. The Agent wrote the words, so the
-    /// header shows them in full and the content doesn't repeat them.
-    var asksInTitle: Bool {
-        guard kind == .grokPermission, let description = body.first else { return false }
-        return description == title || description == "\(title)?"
-    }
-
     /// Whether Stop does something a card can name: the planner refuses it
     /// on Codex's asynchronous question, and on Grok Build's questions and
     /// subagent panel, where Esc only parks the keyboard or keeps the turn

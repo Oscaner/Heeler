@@ -804,6 +804,103 @@ struct BlockedCardStoreTests {
         #expect(await pane.keys == [["2"], ["2"]])
     }
 
+    /// Only a call the card could be answering shows its answer took. The
+    /// previous card's call can start late, read after the next card's
+    /// keys went out, which shows nothing about them; the next card's own
+    /// call starting does. grok-44 follows grok-35 here as the card for
+    /// another subagent.
+    @Test func aGrokAnswerIgnoresThePreviousCardsCallStartingLate() async throws {
+        let first = Self.grokSpawn("call-1", "Sleep 60 then reply done")
+        let second = Self.grokSpawn("call-2", "Sleep 90 then done")
+        let pane = FakePane(try ScreenFixture.screen("grok-35-permission-subagent-62"))
+        await pane.react(to: ["2"], with: try ScreenFixture.screen("grok-44-permission-second-subagent-120"))
+        let store = Self.store(.grok, pane: pane)
+        store.update(transcript: Self.transcript(pending: [first, second]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        let approve = try #require(card.dialog.options.first { $0.role == .approve }?.ordinal)
+        await store.perform(.choose(ordinal: approve))
+        #expect(store.progress == .ready)
+        guard case .card(let next) = store.content else {
+            Issue.record("Expected the next card, got \(store.content)")
+            return
+        }
+        #expect(next.dialog.title == "Allow Sleep 90 then done")
+
+        await store.perform(.choose(ordinal: approve))
+        #expect(await pane.keys == [["2"], ["2"]])
+        #expect(store.progress == .unconfirmed)
+        store.update(transcript: Self.transcript(pending: [second], running: [first]))
+
+        #expect(store.progress == .unconfirmed)
+        #expect(store.notice == "The Agent hasn't responded yet. Answer in the terminal if it stays.")
+        await store.perform(.choose(ordinal: approve))
+        #expect(await pane.keys == [["2"], ["2"]])
+        store.update(transcript: Self.transcript(running: [first, second]))
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+    }
+
+    /// While herdr reports Blocked, a call Grok Build hasn't started reads
+    /// as waiting, also one that needs no approval, so a command starting
+    /// beside a subagent's card shows nothing about its answer. The spawn
+    /// starting does.
+    @Test func aGrokCommandStartingLeavesASubagentAnswerUnconfirmed() async throws {
+        let spawn = Self.grokSpawn("call-1", "Sleep 60 then reply done")
+        let command = Self.grokCommand("call-2", "git status")
+        let pane = FakePane(try ScreenFixture.screen("grok-35-permission-subagent-62"))
+        let store = Self.store(.grok, pane: pane)
+        store.update(transcript: Self.transcript(pending: [spawn, command]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        let approve = try #require(card.dialog.options.first { $0.role == .approve }?.ordinal)
+        await store.perform(.choose(ordinal: approve))
+        #expect(store.progress == .unconfirmed)
+
+        store.update(transcript: Self.transcript(pending: [spawn], running: [command]))
+
+        #expect(store.progress == .unconfirmed)
+        store.update(transcript: Self.transcript(running: [command, spawn]))
+        #expect(store.progress == .ready)
+    }
+
+    /// Where Grok Build cut the card's question at its edge with `…`, the
+    /// title still names its subagent by the description's start, with
+    /// each run of whitespace read as one space, so another subagent's
+    /// call starting leaves the answer unconfirmed.
+    @Test(arguments: ["Sleep 60 then reply done", "Sleep 60  then\nreply done"])
+    func aCutGrokSubagentCardWaitsOnItsOwnCall(description: String) async throws {
+        let spawn = Self.grokSpawn("call-1", description)
+        let other = Self.grokSpawn("call-2", "Sleep 90 then done")
+        let pane = FakePane(try GrokCards.screen("synthetic-subagent-permission-40"))
+        let store = Self.store(.grok, pane: pane)
+        store.update(transcript: Self.transcript(pending: [other, spawn]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.title == "Allow Sleep 60 then reply d…")
+        let approve = try #require(card.dialog.options.first { $0.role == .approve }?.ordinal)
+        await store.perform(.choose(ordinal: approve))
+        #expect(store.progress == .unconfirmed)
+
+        store.update(transcript: Self.transcript(pending: [spawn], running: [other]))
+
+        #expect(store.progress == .unconfirmed)
+        store.update(transcript: Self.transcript(running: [other, spawn]))
+        #expect(store.progress == .ready)
+    }
+
     /// Only Grok Build writes a call's start once its card is answered.
     /// Claude Code's open calls read waiting or running from herdr's status
     /// alone, so one that reads running brings nothing back.
