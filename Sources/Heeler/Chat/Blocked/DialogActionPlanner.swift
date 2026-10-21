@@ -323,7 +323,7 @@ private struct CodexDialogPlanner {
             try asyncQuestion(action)
         case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFileRead, .claudeFetch, .claudePlan,
             .claudeQuestion, .claudeQuestionReview, .claudeWorkspaceTrust, .ompApproval, .ompQuestion,
-            .ompQuestionReview, .grokPermission, .grokQuestion, .grokCancelTurn:
+            .ompQuestionReview, .grokPermission, .grokQuestion, .grokCancelTurn, .grokFork:
             throw .unsupported("Not a Codex dialog.")
         }
     }

@@ -399,31 +399,35 @@ by the next page. While Oh My Pi's prompt holds a draft, keys would go into
 it, so the card answers nothing but Stop and says to queue or clear the draft
 in the terminal. Stop on an Oh My Pi question presses Esc, which cancels the
 question and ends the turn, and the card says so. Grok Build's permission
-card, its single question and the stop panel Ctrl+C opens while subagents
-run get cards. Each answer presses its row's own key, a digit or a
-question's letter, which selects and submits at once; Esc, Ctrl+C and
-letters on a permission card, which open the reject row's feedback field,
-are never pressed. The permission card offers Yes, proceed (Yes on an
-edit), `Always allow: <command>` and Yes, allow all edits during this
-session, each persistent row with a caption saying what Grok Build keeps,
-and Deny, which presses the reject row and ends the turn; the always-approve
-mode and Never allow rows stay in the terminal. So does a lasting rule Grok
-Build cut to fit with `…`, as at 40 columns, since the cut hides how far it
-reaches; the card then says to widen the terminal to see it. Grok Build asks
-the same way before a subagent starts, under the card's own question,
-`Allow <description>?`, and there Yes, send once approves that subagent
-alone. The stop panel offers Stop running and Continue to run, which ends
-the turn while the subagents go on; Always stop and Always continue write the
-config and stay out. Neither the question nor the stop panel offers Stop,
-since Esc there only moves Grok Build's focus or keeps the turn running.
-After Esc, Grok Build's focus rests in its scrollback, where keys miss the
-card, so the card then answers nothing and says to answer in the terminal.
-Grok Build's other cards, such as the rewind confirmation and the fork
-question, get the generic card without numbered answers. Multi-select
-questions, option notes and typed answers stay in the terminal. A dialog
-the parsers do not know gets a generic card with the Agent controls.
-Answers the transcript does not record join the history as Allowed,
-Declined, Stopped and Answered rows.
+card, its single question, `/fork`'s worktree question and the stop panel
+Ctrl+C opens while subagents run get cards. Each answer presses its row's
+own key, a digit or a question's letter, which selects and submits at once;
+Esc, Ctrl+C and letters on a permission card, which open the reject row's
+feedback field, are never pressed. The permission card offers Yes, proceed
+(Yes on an edit), `Always allow: <command>` and Yes, allow all edits during
+this session, each persistent row with a caption saying what Grok Build
+keeps, and Deny, which presses the reject row and ends the turn; the
+always-approve mode and Never allow rows stay in the terminal. So does a
+lasting rule Grok Build cut to fit with `…`, as at 40 columns, since the cut
+hides how far it reaches; the card then says to widen the terminal to see
+it. Grok Build asks the same way before a subagent starts, under the card's
+own question, `Allow <description>?`, and there Yes, send once approves that
+subagent alone. The stop panel offers Stop running and Continue to run,
+which ends the turn while the subagents go on; Always stop and Always
+continue write the config and stay out. The worktree question `/fork` asks
+gets its own card: Yes and No, each of which forks; Always worktree and
+Never worktree, which save the choice, stay in the terminal. The card says
+that Chat stays with this conversation and holds messages until `/resume`
+switches back to it, since herdr keeps the parent session. Neither the
+questions nor the stop panel offers Stop, since Esc there only moves Grok
+Build's focus or keeps the turn running. After Esc, Grok Build's focus
+rests in its scrollback, where keys miss the card, so the card then answers
+nothing and says to answer in the terminal. Grok Build's other cards, such
+as the rewind confirmation, get the generic card without numbered answers.
+Multi-select questions, option notes and typed answers stay in the
+terminal. A dialog the parsers do not know gets a generic card with the
+Agent controls. Answers the transcript does not record join the history as
+Allowed, Declined, Stopped and Answered rows.
 
 ## Background Work
 

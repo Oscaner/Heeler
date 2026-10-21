@@ -189,12 +189,37 @@ struct GrokDialogParserTests {
         #expect(dialog.focus.focusedOrdinal == 1)
     }
 
-    /// The rewind confirmation, the fork question (every answer forks),
-    /// several questions at once and a card Heeler doesn't know hold
-    /// sending as excerpts. Without numbers the generic card offers only
-    /// its key pad.
+    /// `/fork`'s worktree question, at 181 columns and at the phone's
+    /// grid: Yes and No, each of which forks, by their keys. Always
+    /// worktree and Never worktree save the choice in Grok's config, so
+    /// they stay in the terminal, as does a typed answer. The title is the
+    /// question.
+    @Test(arguments: ["grok-25-fork-question", "grok-38-fork-question-62"])
+    func readsTheForkQuestion(stem: String) throws {
+        let dialog = try GrokCards.dialog(stem)
+        let question = "Run this fork in an isolated git worktree?"
+
+        #expect(dialog.kind == .grokFork)
+        #expect(dialog.program == .grok)
+        #expect(dialog.title == question)
+        #expect(dialog.body == [question, "Always worktree", "Never worktree"])
+        #expect(dialog.options.map(\.label) == ["Yes", "No", "Type your answer here"])
+        #expect(
+            dialog.options.map(\.detail) == ["Fork in a new isolated git worktree", "Fork in the current cwd", nil])
+        #expect(dialog.options.map(\.number) == [1, 2, nil])
+        #expect(dialog.options.map(\.shortcut) == ["1", "2", "z"])
+        #expect(dialog.options.map(\.role) == [.answer, .answer, .otherText])
+        #expect(dialog.focus == DialogFocusState(focusedOrdinal: 1))
+    }
+
+    /// The rewind confirmation, the fork question at 40 columns, where
+    /// Grok's card scrolls No out of view, or with its cursor out of view,
+    /// which may be on the answer field, several questions at once and a
+    /// card Heeler doesn't know hold sending as excerpts. Without numbers
+    /// the generic card offers only its key pad.
     @Test(arguments: [
-        "grok-23-rewind-confirm", "grok-25-fork-question", "synthetic-multi-question", "synthetic-unknown-card",
+        "grok-23-rewind-confirm", "grok-39-fork-question-40", "synthetic-fork-cursor-unseen",
+        "synthetic-multi-question", "synthetic-unknown-card",
     ])
     func leavesOtherCardsGenericWithoutNumbers(stem: String) throws {
         let screen = try GrokCards.screen(stem)

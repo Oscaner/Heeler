@@ -199,6 +199,10 @@ private struct BlockedDialogCard: View {
             if let count = dialog.body.first {
                 BlockedCardText(count)
             }
+        case .grokFork:
+            BlockedCardText(
+                "Either answer forks this conversation and moves Grok Build to the fork. Chat stays here and holds "
+                    + "messages until you switch back with /resume in the terminal.")
         case .codexNetwork:
             EmptyView()
         }
@@ -544,10 +548,10 @@ private extension BlockedDialog {
     }
 
     /// Whether Stop does something a card can name: the planner refuses it
-    /// on Codex's asynchronous question, and on Grok Build's question and
+    /// on Codex's asynchronous question, and on Grok Build's questions and
     /// subagent panel, where Esc only parks the keyboard or keeps the turn
     /// running.
-    var canStop: Bool { ![.codexAsyncQuestion, .grokQuestion, .grokCancelTurn].contains(kind) }
+    var canStop: Bool { ![.codexAsyncQuestion, .grokQuestion, .grokCancelTurn, .grokFork].contains(kind) }
 
     /// What Stop does, for the folded card: it quits Claude Code on the
     /// trust dialog, only denies an Oh My Pi approval, and presses a Grok

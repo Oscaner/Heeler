@@ -37,6 +37,9 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
     case grokQuestion
     /// The panel Ctrl+C opens while Grok Build's subagents run.
     case grokCancelTurn
+    /// The worktree question Grok Build's `/fork` asks, answered by a row's
+    /// key. Every answer forks.
+    case grokFork
 
     var program: ChatProgram {
         switch self {
@@ -48,7 +51,7 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
             .codex
         case .ompApproval, .ompQuestion, .ompQuestionReview:
             .omp
-        case .grokPermission, .grokQuestion, .grokCancelTurn:
+        case .grokPermission, .grokQuestion, .grokCancelTurn, .grokFork:
             .grok
         }
     }

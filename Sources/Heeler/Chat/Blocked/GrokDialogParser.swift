@@ -3,14 +3,14 @@ import Foundation
 /// Reads Grok Build's cards (1.0.62). A card takes the composer's place:
 /// rows behind a `┃` bar on a lighter background, each option a row
 /// `<key> (○) <label>` with any description two spaces or more after the
-/// label, and the card's own hints in the footer. Heeler knows three: a
+/// label, and the card's own hints in the footer. Heeler knows four: a
 /// permission, which also asks before a subagent starts, a single question
-/// the agent asks during its turn, and the panel Ctrl+C opens while
-/// subagents run. Any other card with options holds sending as an excerpt
-/// without numbers, so the generic card offers only its key pad: the
-/// rewind confirmation, the fork question (every answer forks, which leaves
-/// herdr's session stale), several questions at once, and the cards not
-/// captured yet.
+/// the agent asks during its turn, the worktree question `/fork` asks
+/// (every answer forks, and herdr's session stays on this one), and the
+/// panel Ctrl+C opens while subagents run. Any other card with options
+/// holds sending as an excerpt without numbers, so the generic card offers
+/// only its key pad: the rewind confirmation, several questions at once,
+/// and the cards not captured yet.
 ///
 /// The cursor's row lies on a band of another background, or in reverse
 /// video under the terminal theme, its label bold. On a permission and on
@@ -31,7 +31,7 @@ enum GrokDialogParser {
         // The card of an agent the dashboard shows, which may not be this
         // conversation's.
         if grok.isDashboardOverlay { return .unrecognized(card.excerpt(overlayReason)) }
-        if let dialog = cancelPanel(card) ?? permission(card) ?? question(card, on: screen) {
+        if let dialog = cancelPanel(card) ?? permission(card) ?? question(card, on: screen) ?? fork(card) {
             return .dialog(dialog)
         }
         let asks = card.lines.contains { $0.option?.key == freeTextKey }
@@ -172,15 +172,42 @@ enum GrokDialogParser {
     /// on, and the typed answer's `z` row last, under the turn's `◆ Waiting
     /// on answers for <question>` row. Several questions add a counter to
     /// the card's hint row, `[1/2] ↑/↓ navigate · ←/→ question`, and stay
-    /// generic, as does a question with no turn waiting on it, such as the
-    /// fork question. A key selects its answer and submits the question.
-    /// The footer's `Tab:next answer` and `Shift+x:dismiss` go while the
-    /// scrollback has the keyboard, so they mark only the cursor.
+    /// generic, as does a question with no turn waiting on it other than
+    /// the fork question. A key selects its answer and submits the
+    /// question. The footer's `Tab:next answer` and `Shift+x:dismiss` go
+    /// while the scrollback has the keyboard, so they mark only the cursor.
     private static func question(_ card: GrokCard, on screen: ANSIScreen) -> BlockedDialog? {
-        guard waitsOnAnswers(screen.rows, above: card.rows.lowerBound),
-            let first = card.lines.firstIndex(where: { $0.option != nil })
-        else { return nil }
-        // The question's text, then any description, above the answers.
+        guard waitsOnAnswers(screen.rows, above: card.rows.lowerBound), let sheet = answerSheet(card) else {
+            return nil
+        }
+        var options = sheet.answers.enumerated().map { offset, answer in
+            answer.option(ordinal: offset + 1, focused: answer.line == card.cursor)
+        }
+        options.append(freeTextOption(ordinal: options.count + 1, focused: sheet.field == card.cursor))
+        var subject = DialogSubject()
+        subject.question = sheet.question
+        let body = [sheet.question] + sheet.description
+        return BlockedDialog(
+            kind: .grokQuestion, title: sheet.question, sourceSuffix: nil, positionLabel: nil, body: body,
+            progress: nil, options: options, rows: card.rows,
+            fingerprint: DialogFingerprint(
+                program: .grok, kind: .grokQuestion, title: sheet.question, sourceSuffix: nil, body: body,
+                progress: nil, options: options),
+            focus: card.focus(of: options), subject: subject)
+    }
+
+    /// A question card's rows: the question's text, then any description,
+    /// above the answers keyed from `1` and the typed answer's `z` row.
+    private struct AnswerSheet {
+        var question: String
+        var description: [String]
+        var answers: [Answer]
+        /// The line of the `z` row.
+        var field: Int
+    }
+
+    private static func answerSheet(_ card: GrokCard) -> AnswerSheet? {
+        guard let first = card.lines.firstIndex(where: { $0.option != nil }) else { return nil }
         let head = card.lines[..<first].map(\.text).drop { $0.isEmpty }
         let text = head.prefix { !$0.isEmpty }
         let question = text.joined(separator: " ")
@@ -224,28 +251,56 @@ enum GrokDialogParser {
             }
         }
         guard let field else { return nil }
+        return AnswerSheet(question: question, description: Array(description), answers: answers, field: field)
+    }
 
-        var options = answers.enumerated().map { offset, answer in
-            DialogOption(
-                ordinal: offset + 1, number: Int(answer.key), label: answer.label.joined(separator: " "),
-                detail: answer.detail.isEmpty ? nil : answer.detail.joined(separator: " "), shortcut: answer.key,
-                role: .answer, isFocused: answer.line == card.cursor)
+    private static func freeTextOption(ordinal: Int, focused: Bool) -> DialogOption {
+        DialogOption(
+            ordinal: ordinal, number: nil, label: freeTextLabel, shortcut: freeTextKey, role: .otherText,
+            isFocused: focused, input: .placeholder(freeTextLabel))
+    }
+
+    // MARK: Fork question
+
+    /// `/fork`'s `Run this fork in an isolated git worktree?`, a question
+    /// card with no turn waiting on it. `1 Yes` and `2 No` each fork, into
+    /// a new worktree or the current directory. `3 Always worktree` and
+    /// `4 Never worktree` also save the choice in Grok's config, so they
+    /// stay on screen and in the body, never among the options, as a
+    /// typed answer stays in the terminal. A narrow card scrolls its later
+    /// rows out of view, and one without both Yes and No stays generic. A
+    /// key selects its row wherever the cursor is, except on the answer
+    /// field, where it is typed, so with the keyboard on the card the
+    /// cursor must show (1.0.62, live).
+    private static func fork(_ card: GrokCard) -> BlockedDialog? {
+        guard let sheet = answerSheet(card), sheet.question == forkQuestion, sheet.description.isEmpty,
+            card.cursor != nil || !card.hasKeyboard, sheet.answers.count >= 2, sheet.answers.count <= forkRows.count
+        else { return nil }
+        var options: [DialogOption] = []
+        var withheld: [String] = []
+        for (answer, row) in zip(sheet.answers, forkRows) {
+            guard answer.key == row.key, answer.label == [row.label] else { return nil }
+            if row.offered {
+                options.append(answer.option(ordinal: options.count + 1, focused: answer.line == card.cursor))
+            } else {
+                withheld.append(row.label)
+            }
         }
-        options.append(
-            DialogOption(
-                ordinal: options.count + 1, number: nil, label: freeTextLabel, shortcut: freeTextKey, role: .otherText,
-                isFocused: field == card.cursor, input: .placeholder(freeTextLabel)))
-        var subject = DialogSubject()
-        subject.question = question
-        let body = [question] + description
+        options.append(freeTextOption(ordinal: options.count + 1, focused: sheet.field == card.cursor))
+        let body = [sheet.question] + withheld
         return BlockedDialog(
-            kind: .grokQuestion, title: question, sourceSuffix: nil, positionLabel: nil, body: body, progress: nil,
+            kind: .grokFork, title: sheet.question, sourceSuffix: nil, positionLabel: nil, body: body, progress: nil,
             options: options, rows: card.rows,
             fingerprint: DialogFingerprint(
-                program: .grok, kind: .grokQuestion, title: question, sourceSuffix: nil, body: body, progress: nil,
+                program: .grok, kind: .grokFork, title: sheet.question, sourceSuffix: nil, body: body, progress: nil,
                 options: options),
-            focus: card.focus(of: options), subject: subject)
+            focus: card.focus(of: options), subject: DialogSubject())
     }
+
+    private static let forkQuestion = "Run this fork in an isolated git worktree?"
+    private static let forkRows: [(key: String, label: String, offered: Bool)] = [
+        ("1", "Yes", true), ("2", "No", true), ("3", "Always worktree", false), ("4", "Never worktree", false),
+    ]
 
     private struct Answer {
         var key: String
@@ -253,6 +308,13 @@ enum GrokDialogParser {
         var detail: [String]
         var line: Int
         var column: Int
+
+        func option(ordinal: Int, focused: Bool) -> DialogOption {
+            DialogOption(
+                ordinal: ordinal, number: Int(key), label: label.joined(separator: " "),
+                detail: detail.isEmpty ? nil : detail.joined(separator: " "), shortcut: key, role: .answer,
+                isFocused: focused)
+        }
     }
 
     /// The keys Grok draws on a question's answers, in order

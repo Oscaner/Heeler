@@ -292,6 +292,16 @@ enum GrokCards {
                     .option("2 (○) Decline"),
                 ],
                 hints: ["Enter:accept / toggle", "d:decline", "Ctrl+c:cancel", "Tab:next field", "Esc:scrollback"])
+        case "synthetic-fork-cursor-on-field":
+            // Any key but a space on this row goes into the field.
+            fork(cursor: "z")
+        case "synthetic-fork-cursor-on-always-worktree":
+            fork(cursor: "3")
+        case "synthetic-fork-cursor-unseen":
+            // The card has the keyboard, but no row shows the cursor.
+            fork(cursor: nil)
+        case "synthetic-unfocused-fork":
+            fork(cursor: "1", focused: false)
         case "synthetic-subagents-40":
             subagents(columns: 40)
         case "synthetic-subagents-cursor-on-always-stop":
@@ -319,6 +329,27 @@ enum GrokCards {
                 .blank,
             ] + options(labels, cursor: cursor, band: focused),
             hints: focused ? permissionHints : ["Tab/Space:permission"], terminalTheme: terminalTheme, header: header)
+    }
+
+    /// `/fork`'s worktree question like grok-25's, the cursor on the row
+    /// keyed `cursor`. Without the keyboard the cursor's row keeps its bold
+    /// label, not the band, and the footer offers the card back.
+    private static func fork(cursor: String?, focused: Bool = true) -> GrokCardBuilder {
+        let answers = [
+            "1 (○) Yes              Fork in a new isolated git worktree",
+            "2 (○) No               Fork in the current cwd",
+            "3 (○) Always worktree  Use worktree and stop asking (reset in config.toml)",
+            "4 (○) Never worktree   Skip worktree and stop asking (reset in config.toml)",
+        ]
+        let rows = answers.map { text in
+            let isCursor = text.hasPrefix("\(cursor ?? "") (")
+            return Row.option(text, cursor: isCursor, band: isCursor && focused)
+        }
+        let field = Row("z (○) Type your answer here", band: cursor == "z" && focused)
+        return GrokCardBuilder(
+            rows: [.bold("Run this fork in an isolated git worktree?"), .blank, .blank] + rows
+                + [field, .blank, Row("↑/↓ navigate · y copy")],
+            hints: focused ? questionHints : ["Tab/Space:question"])
     }
 
     /// The panel Ctrl+C opens while a subagent runs, like grok-16's, the

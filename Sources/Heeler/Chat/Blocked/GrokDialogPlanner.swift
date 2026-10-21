@@ -9,8 +9,8 @@ import Foundation
 /// a letter on a permission, which opens the reject row's feedback field.
 /// Grok records no approval and herdr stays Blocked a moment after a key,
 /// so the card leaving the screen confirms it. A key selects its row
-/// wherever the cursor is, so only a question, where the cursor may sit on
-/// the answer field, needs to see it.
+/// wherever the cursor is, so only a question and the fork question, where
+/// the cursor may sit on the answer field, need to see it.
 struct GrokDialogPlanner {
     let dialog: BlockedDialog
     /// Ignored: no Grok Build record answers a card.
@@ -30,6 +30,8 @@ struct GrokDialogPlanner {
             return try question(action)
         case .grokCancelTurn:
             return try cancelPanel(action)
+        case .grokFork:
+            return try fork(action)
         case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFileRead, .claudeFetch, .claudePlan,
             .claudeQuestion, .claudeQuestionReview, .claudeWorkspaceTrust, .codexExec, .codexPatch, .codexNetwork,
             .codexQuestion, .codexAsyncCollapsed, .codexAsyncQuestion, .ompApproval, .ompQuestion,
@@ -72,10 +74,7 @@ struct GrokDialogPlanner {
                     "Heeler can't see Grok Build's cursor, which may be on the answer field, where a key would be "
                         + "typed. Answer in the terminal.")
             }
-            guard dialog.option(focused)?.role != .otherText else {
-                throw .unsupported(
-                    "Grok Build's cursor is on its answer field, where a key would be typed. Answer in the terminal.")
-            }
+            guard dialog.option(focused)?.role != .otherText else { throw Self.cursorOnField }
             guard let key = option.shortcut, Self.answerKeys.contains(key) else {
                 throw .unsupported("Grok Build binds no key to this answer. Answer it in the terminal.")
             }
@@ -87,6 +86,27 @@ struct GrokDialogPlanner {
             throw .unsupported("Skip Grok Build's question in the terminal.")
         case .dismiss, .approvePlan, .submitSelection, .expandQuestions:
             throw .unsupported("The question has no such action.")
+        }
+    }
+
+    /// `1` forks into a new worktree, `2` in the current directory. With
+    /// the cursor on the answer field a key would be typed into it; on a
+    /// row Chat leaves to the terminal it still selects its own row. The
+    /// parser reads the fork question only with its cursor in view, so no
+    /// focused option means the cursor is on such a row.
+    private func fork(_ action: DialogAction) throws(DialogPlanError) -> DialogActionPlan {
+        switch action {
+        case .choose(let ordinal):
+            guard let option = dialog.option(ordinal) else { throw .noSuchOption(ordinal) }
+            guard option.role == .answer else { throw Self.typedAnswer }
+            if let focused = dialog.focus.focusedOrdinal, dialog.option(focused)?.role == .otherText {
+                throw Self.cursorOnField
+            }
+            return try press(option)
+        case .respond, .amend:
+            throw Self.typedAnswer
+        case .dismiss, .skipQuestion, .approvePlan, .submitSelection, .expandQuestions:
+            throw .unsupported("The fork question has no such action.")
         }
     }
 
@@ -114,4 +134,6 @@ struct GrokDialogPlanner {
 
     private static let typedAnswer = DialogPlanError.unsupported(
         "Heeler doesn't type into Grok Build's questions. Write your own answer in the terminal.")
+    private static let cursorOnField = DialogPlanError.unsupported(
+        "Grok Build's cursor is on its answer field, where a key would be typed. Answer in the terminal.")
 }

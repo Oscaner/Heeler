@@ -593,7 +593,10 @@ has a lighter background and a bold label.
   stop asking…` (both cut with `…` at 62 columns) and `z (○) Type your
   answer here`, and the question card's footer (live, 2026-10-20); 3 and 4
   write the config. At 40×30 only row 1 and `z` showed, and `2` still
-  answered No (live, 2026-10-20).
+  answered No (live, 2026-10-20). No turn waits on it, so no `◆ Waiting on
+  answers` row stands above it, and its answers carry a scrollbar of their
+  own, a `█` column at the card's right edge (live, 2026-10-19 and
+  2026-10-20).
 - Starting a subagent asks first, under the status row `◆ Waiting for
   subagent…`: `┃ ›  Allow <description>?` with `1 (○) Yes, and don't ask
   again for anything (always-approve mode)`, `2 (●) Yes, send once` and

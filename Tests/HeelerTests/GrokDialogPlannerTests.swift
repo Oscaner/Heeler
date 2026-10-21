@@ -14,8 +14,10 @@ struct GrokDialogPlannerTests {
 
     private static let cards = [
         "grok-12-permission-command", "grok-13-permission-compound", "grok-14-permission-edit", "grok-15-question",
-        "grok-16-subagent-panel", "grok-35-permission-subagent-62", "grok-36-permission-command-40",
-        "grok-37-permission-command-62", "synthetic-edit-permission-session-cut", "synthetic-permission-40",
+        "grok-16-subagent-panel", "grok-25-fork-question", "grok-35-permission-subagent-62",
+        "grok-36-permission-command-40", "grok-37-permission-command-62", "grok-38-fork-question-62",
+        "synthetic-edit-permission-session-cut", "synthetic-fork-cursor-on-always-worktree",
+        "synthetic-fork-cursor-on-field", "synthetic-permission-40",
         "synthetic-permission-40-terminal-theme", "synthetic-question-40", "synthetic-question-62",
         "synthetic-question-ten-answers", "synthetic-question-cursor-on-field", "synthetic-subagents-40",
     ]
@@ -83,7 +85,8 @@ struct GrokDialogPlannerTests {
         ("grok-12-permission-command", ["1", "5"]), ("grok-13-permission-compound", ["1"]),
         ("grok-14-permission-edit", ["1"]), ("grok-35-permission-subagent-62", ["1"]),
         ("grok-36-permission-command-40", ["1", "2", "5"]), ("grok-37-permission-command-62", ["1", "5"]),
-        ("synthetic-edit-permission-session-cut", ["1", "2"]),
+        ("synthetic-edit-permission-session-cut", ["1", "2"]), ("grok-38-fork-question-62", ["3", "4", "z"]),
+        ("synthetic-fork-cursor-on-always-worktree", ["3", "4", "z"]),
     ])
     func neverPressesARowLeftToTheTerminal(stem: String, withheld: [String]) throws {
         let dialog = try GrokCards.dialog(stem)
@@ -168,6 +171,44 @@ struct GrokDialogPlannerTests {
         ) { try plan(.choose(ordinal: 1), on: onField) }
     }
 
+    /// `/fork`'s question: `1` forks into a new worktree and `2` in the
+    /// current directory, each selecting and submitting its row, also with
+    /// the cursor on a row Chat leaves to the terminal. Nothing types into
+    /// the answer field, and the card has nothing to stop.
+    @Test(arguments: [
+        "grok-25-fork-question", "grok-38-fork-question-62", "synthetic-fork-cursor-on-always-worktree",
+    ])
+    func answersTheForkQuestionByItsRowKeys(stem: String) throws {
+        let dialog = try GrokCards.dialog(stem)
+        let field = try ordinal(of: .otherText, in: dialog)
+
+        #expect(try plan(.choose(ordinal: 1), on: dialog).steps == [.keys(["1"])])
+        #expect(try plan(.choose(ordinal: 2), on: dialog).steps == [.keys(["2"])])
+        #expect(try plan(.choose(ordinal: 2), on: dialog).confirmation == .fingerprintChangeOrUnblocked)
+        for action in [
+            DialogAction.choose(ordinal: field), .respond(ordinal: field, text: "a"), .amend(ordinal: 1, note: "a"),
+        ] {
+            #expect(throws: Self.typedAnswer, "\(stem) \(action)") { try plan(action, on: dialog) }
+        }
+        for action in [DialogAction.dismiss, .skipQuestion] {
+            #expect(throws: DialogPlanError.self, "\(stem) \(action)") { try plan(action, on: dialog) }
+        }
+    }
+
+    /// With the cursor on the fork question's answer field, a key would be
+    /// typed there, so Yes and No wait for the terminal.
+    @Test func refusesTheForkQuestionWithTheCursorOnItsField() throws {
+        let dialog = try GrokCards.dialog("synthetic-fork-cursor-on-field")
+        #expect(dialog.focus.focusedOrdinal == 3)
+
+        for ordinal in [1, 2] {
+            #expect(
+                throws: DialogPlanError.unsupported(
+                    "Grok Build's cursor is on its answer field, where a key would be typed. Answer in the terminal.")
+            ) { try plan(.choose(ordinal: ordinal), on: dialog) }
+        }
+    }
+
     /// `1` stops the turn and its subagents; `2` ends the turn and keeps
     /// them. Esc would keep the turn running, so nothing sends it.
     @Test func stopsOrKeepsSubagentsByTheirKeys() throws {
@@ -215,7 +256,7 @@ struct GrokDialogPlannerTests {
 
     /// Esc left the keyboard in the scrollback: keys would miss the card.
     @Test func refusesAnUnfocusedCard() throws {
-        for stem in ["synthetic-unfocused-permission", "synthetic-unfocused-question"] {
+        for stem in ["synthetic-unfocused-permission", "synthetic-unfocused-question", "synthetic-unfocused-fork"] {
             let dialog = try GrokCards.dialog(stem)
             for action in [DialogAction.choose(ordinal: 1), .choose(ordinal: 2), .dismiss] {
                 #expect(throws: Self.unfocused, "\(stem) \(action)") { try plan(action, on: dialog) }

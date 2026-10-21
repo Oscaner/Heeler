@@ -54,7 +54,7 @@ enum BlockedRequestMatch {
             return ["search_replace", "write"].contains(request.toolName) && sameFile(request.summary, subject.filePath)
         case .grokQuestion:
             return request.toolName == "ask_user_question" && asks(request, subject.question ?? dialog.title)
-        case .claudeWorkspaceTrust, .codexNetwork, .grokCancelTurn:
+        case .claudeWorkspaceTrust, .codexNetwork, .grokCancelTurn, .grokFork:
             return false
         }
     }
