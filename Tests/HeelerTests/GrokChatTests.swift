@@ -226,6 +226,8 @@ struct GrokChatTests {
         #expect(automatic <= ChatTranscriptAdapter.grok.limits.automaticOlderSearch)
         #expect(store.conversation.older == .available)
         #expect(store.conversation.olderAwaitsUser)
+        // The turn folds behind the time its end record gives.
+        #expect(store.conversation.transcript.precedingTurnEnd?.duration == 136.363)
 
         await files.clearRecords()
         let screen = GrokScreenBuilder(scrollback: ["done", "", "Worked for 2m16s"]).screen

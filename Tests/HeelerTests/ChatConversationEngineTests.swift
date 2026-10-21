@@ -618,6 +618,32 @@ struct ChatConversationEngineTests {
         #expect(snapshot.older == .reachedStart)
         #expect(snapshot.transcript.turns.map(\.firstEntryID.rawValue) == ["p-0", "p-\(second)"])
         #expect(snapshot.transcript.turns.map(\.ending) == [.completed, nil])
+        // The window's end closes a saved turn, not the rows above it.
+        #expect(snapshot.transcript.precedingTurnEnd == nil)
+    }
+
+    /// Saved rows above a later window that open no turn belong to the
+    /// turn the window opens inside, which the window's end still closes.
+    @Test func savedRowsAboveALaterWindowKeepTheEndOfTheirTurn() async throws {
+        let fixture = Fixture()
+        await fixture.files.write(Self.lines(0..<6), at: Self.claudePath)
+        let first = fixture.makeEngine()
+        let opened = await fixture.open(first)
+        try #require(opened.older == .reachedStart)
+        await first.save(force: true)
+
+        await fixture.files.append(
+            NumberedChatReducer.turnEnd + NumberedChatReducer.prompt("b") + Self.lines(8..<10), to: Self.claudePath)
+        let reopened = fixture.makeEngine()
+        _ = await reopened.restore()
+        let snapshot = await fixture.open(reopened)
+
+        // The tail window starts at the last saved row; the rest fill in.
+        #expect(snapshot.transcript.needsOlderHistory)
+        #expect(snapshot.older == .reachedStart)
+        #expect(Self.numbers(snapshot).prefix(6) == ArraySlice(Self.ids(0..<6)))
+        #expect(snapshot.transcript.turns.count == 1)
+        #expect(snapshot.transcript.precedingTurnEnd == ChatTurnEnd(ending: .completed))
     }
 
     @Test func savedEntriesShowBeforeTheHostAnswers() async throws {

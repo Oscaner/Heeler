@@ -14,6 +14,7 @@ final class ChatTimelineModel {
         let conversation: Int
         let input: ChatTimelineInput
         let turns: [ChatTurn]
+        let precedingTurnEnd: ChatTurnEnd?
         let signals: ChatTurnSignals
         let isReady: Bool
     }
@@ -25,12 +26,15 @@ final class ChatTimelineModel {
 
     /// Shows `input` as the conversation `conversation` numbers. Another
     /// conversation reloads the list at its end; `isReady` stays set within
-    /// one conversation once it is. `turns` and `signals` decide what folds.
+    /// one conversation once it is. `turns`, `precedingTurnEnd` and
+    /// `signals` decide what folds.
     func update(
-        conversation: Int, input: ChatTimelineInput, turns: [ChatTurn] = [], signals: ChatTurnSignals = ChatTurnSignals(),
-        isReady: Bool
+        conversation: Int, input: ChatTimelineInput, turns: [ChatTurn] = [], precedingTurnEnd: ChatTurnEnd? = nil,
+        signals: ChatTurnSignals = ChatTurnSignals(), isReady: Bool
     ) {
-        waiting = Request(conversation: conversation, input: input, turns: turns, signals: signals, isReady: isReady)
+        waiting = Request(
+            conversation: conversation, input: input, turns: turns, precedingTurnEnd: precedingTurnEnd,
+            signals: signals, isReady: isReady)
         guard worker == nil else { return }
         worker = Task { [weak self] in
             await self?.drain()
@@ -57,6 +61,7 @@ final class ChatTimelineModel {
             next.revision += 1
             next.rows = rows
             next.turns = request.turns
+            next.precedingTurnEnd = request.precedingTurnEnd
             next.signals = request.signals
             next.isReady = next.isReady || request.isReady
             state = next

@@ -211,15 +211,20 @@ struct ChatTurnSignals: Equatable, Sendable {
     /// device. Otherwise they read as last seen: no turn runs, and no call
     /// spins.
     var isLive: Bool
+    /// Earlier messages load only when the user asks
+    /// (`ChatConversationSnapshot.olderAwaitsUser`), so the turn whose start
+    /// they hold reads as finished as far as it is loaded.
+    var olderAwaitsUser: Bool
 
     init(
         activity: ChatAgentActivity = .unknown, isBackgroundWorkRunning: Bool = false, foldsFinishedTurns: Bool = true,
-        isLive: Bool = true
+        isLive: Bool = true, olderAwaitsUser: Bool = false
     ) {
         self.activity = activity
         self.isBackgroundWorkRunning = isBackgroundWorkRunning
         self.foldsFinishedTurns = foldsFinishedTurns
         self.isLive = isLive
+        self.olderAwaitsUser = olderAwaitsUser
     }
 
     /// Whether something live backs the rows: the Host is connected and the
@@ -242,6 +247,8 @@ struct ChatTimelineState: Sendable {
     var isReady: Bool
     /// The turns the transcript records, oldest first.
     var turns: [ChatTurn] = []
+    /// How the turn the rows open inside ended, when they record it.
+    var precedingTurnEnd: ChatTurnEnd?
     var signals = ChatTurnSignals()
 
     static let empty = ChatTimelineState(generation: 0, revision: 0, rows: [], isReady: false)

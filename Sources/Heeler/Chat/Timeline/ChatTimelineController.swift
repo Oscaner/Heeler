@@ -330,8 +330,8 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
     /// result what the list shows.
     private func projectedSnapshot() -> NSDiffableDataSourceSnapshot<Int, ChatRowID> {
         let output = ChatTimelineProjection.project(
-            applied?.rows ?? [], turns: applied?.turns ?? [], signals: applied?.signals ?? ChatTurnSignals(),
-            open: openHeaders)
+            applied?.rows ?? [], turns: applied?.turns ?? [], precedingTurnEnd: applied?.precedingTurnEnd,
+            signals: applied?.signals ?? ChatTurnSignals(), open: openHeaders)
         rowsByID = Dictionary(output.rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         owners = output.owners
         trajectories = output.trajectories

@@ -298,11 +298,13 @@ struct AgentChatSurfaceView: View {
             }
         }
         .onChange(of: timelineFeed, initial: true) { _, feed in
-            let entries = feed.history.marking(chat?.conversation.transcript.entries ?? [])
+            let transcript = chat?.conversation.transcript
+            let entries = feed.history.marking(transcript?.entries ?? [])
             timeline.update(
                 conversation: feed.generation,
                 input: ChatTimelineInput(entries: feed.outputs.marking(entries), pending: feed.pending, older: feed.older),
-                turns: chat?.conversation.transcript.turns ?? [], signals: feed.signals, isReady: feed.isReady)
+                turns: transcript?.turns ?? [], precedingTurnEnd: transcript?.precedingTurnEnd, signals: feed.signals,
+                isReady: feed.isReady)
         }
         .onChange(of: sentMessages, initial: true) { previous, messages in
             chat?.updateSends(messages)
@@ -635,7 +637,8 @@ struct AgentChatSurfaceView: View {
             activity: ChatAgentActivity(agent.agent.status),
             isBackgroundWorkRunning: chat.backgroundWork.rows.contains { $0.isRunning && !$0.isStale },
             foldsFinishedTurns: foldsFinishedTurns,
-            isLive: ChatTurnSignals.isLive(hostStatus: console.hostStatuses[agent.hostID], conversation: conversation))
+            isLive: ChatTurnSignals.isLive(hostStatus: console.hostStatuses[agent.hostID], conversation: conversation),
+            olderAwaitsUser: conversation.olderAwaitsUser)
         return TimelineFeed(
             generation: chat.conversationGeneration, revision: conversation.revision,
             older: conversation.older, pending: pending, history: chat.blocked.history, outputs: chat.outputs,

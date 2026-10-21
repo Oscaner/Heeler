@@ -50,10 +50,25 @@ enum ChatTimelineProjection {
         var head: ChatRow?
         var body: [ChatRow] = []
         var record: ChatTurn?
+        /// How the turn opened above the loaded rows ended, for the rows
+        /// above the first loaded opener.
+        var precedingEnd: ChatTurnEnd?
+
+        /// How the loaded records say the turn ended; nil while none does.
+        var ending: ChatTurn.Ending? { record?.ending ?? precedingEnd?.ending }
+
+        /// Wall time from the turn's start to its end on the Host's clock,
+        /// or what the record that ends a turn opened above the loaded rows
+        /// says.
+        var duration: TimeInterval? {
+            guard let start = record?.startedAt, let end = record?.endedAt else { return precedingEnd?.duration }
+            return max(0, end.timeIntervalSince(start))
+        }
     }
 
     static func project(
-        _ rows: [ChatRow], turns: [ChatTurn], signals: ChatTurnSignals, open: Set<ChatRowID>
+        _ rows: [ChatRow], turns: [ChatTurn], precedingTurnEnd: ChatTurnEnd? = nil, signals: ChatTurnSignals,
+        open: Set<ChatRowID>
     ) -> Output {
         var output = Output(rows: [], owners: [:])
         output.rows.reserveCapacity(rows.count)
@@ -80,16 +95,21 @@ enum ChatTimelineProjection {
             } else if segments.isEmpty {
                 // Rows above the first loaded opener belong to a turn whose
                 // start is further up.
-                segments.append(Segment(body: [row]))
+                segments.append(Segment(body: [row], precedingEnd: precedingTurnEnd))
             } else {
                 segments[segments.count - 1].body.append(row)
             }
         }
         for index in segments.indices {
-            let phase = index == segments.count - 1 ? newestPhase(segments[index].record, signals: signals) : .settled
+            let phase =
+                index == segments.count - 1 ? newestPhase(ending: segments[index].ending, signals: signals) : .settled
             // Rows of a turn whose start is still to load show as they
-            // arrive: folded, each page would add nothing to see.
-            let isPartial = index == 0 && segments[0].head == nil && segments[0].record == nil && hasOlder
+            // arrive: folded, each page would add nothing to see. Once
+            // earlier messages wait for the user, the turn reads as finished
+            // as far as it is loaded.
+            let isPartial =
+                index == 0 && segments[0].head == nil && segments[0].record == nil && hasOlder
+                && !signals.olderAwaitsUser
             let first = output.rows.count
             emit(segments[index], phase: phase, folds: !isPartial, signals: signals, open: open, into: &output)
             let shown = output.rows[first...]
@@ -111,11 +131,12 @@ enum ChatTimelineProjection {
         return output
     }
 
-    static func newestPhase(_ turn: ChatTurn?, signals: ChatTurnSignals) -> Phase {
+    /// The newest turn's phase, from how its records say it ended.
+    static func newestPhase(ending: ChatTurn.Ending?, signals: ChatTurnSignals) -> Phase {
         // A turn its records closed is over: any new work is a turn the
         // transcript does not show yet. Without a live Host, the rows are
         // as last seen, and a clock counting from them would read as work.
-        if turn?.ending == nil, signals.activity != .idle, signals.isLive { return .running }
+        if ending == nil, signals.activity != .idle, signals.isLive { return .running }
         return signals.isBackgroundWorkRunning ? .held : .settled
     }
 
@@ -140,14 +161,13 @@ enum ChatTimelineProjection {
         // Reasoning with no text says nothing, wherever it is.
         let body = coalescingSubagents(segment.body, owners: &output.owners).filter { !isBlank($0) }
 
-        if phase == .settled, folds, signals.foldsFinishedTurns, let fold = fold(of: body, record: segment.record) {
+        if phase == .settled, folds, signals.foldsFinishedTurns, let fold = fold(of: body, ending: segment.ending) {
             let steps = body[..<fold.answerStart]
             for row in steps where isPinned(row) { output.rows.append(row) }
             let folded = steps.filter { !isPinned($0) }
             let id = ChatRowID.turn(fold.answerID)
             let isOpen = open.contains(id)
-            let header = ChatTurnHeader(
-                state: .worked(duration(of: segment.record)), isOpen: isOpen, stepCount: folded.count)
+            let header = ChatTurnHeader(state: .worked(segment.duration), isOpen: isOpen, stepCount: folded.count)
             output.rows.append(
                 ChatRow(id: id, content: .turnHeader(header), revision: revision(header), topSpacing: 0))
             if isOpen {
@@ -214,8 +234,10 @@ enum ChatTimelineProjection {
     /// Where a finished turn's final answer starts: the model's text at its
     /// end, past the rows it pins. Nil when there is none, when nothing
     /// comes before it, or when the turn was interrupted or failed.
-    private static func fold(of body: [ChatRow], record: ChatTurn?) -> (answerStart: Int, answerID: ChatEntryID)? {
-        if record?.ending == .interrupted || record?.ending == .failed { return nil }
+    private static func fold(
+        of body: [ChatRow], ending: ChatTurn.Ending?
+    ) -> (answerStart: Int, answerID: ChatEntryID)? {
+        if ending == .interrupted || ending == .failed { return nil }
         var end = body.count
         while end > 0, isPinned(body[end - 1]) { end -= 1 }
         var start = end
@@ -315,12 +337,6 @@ enum ChatTimelineProjection {
         var hasher = Hasher()
         hasher.combine(header)
         return hasher.finalize()
-    }
-
-    /// Wall time from the turn's start to its end, on the Host's clock.
-    private static func duration(of turn: ChatTurn?) -> TimeInterval? {
-        guard let start = turn?.startedAt, let end = turn?.endedAt else { return nil }
-        return max(0, end.timeIntervalSince(start))
     }
 
     // MARK: Rows

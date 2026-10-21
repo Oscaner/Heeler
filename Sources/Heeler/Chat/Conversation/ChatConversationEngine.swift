@@ -747,6 +747,9 @@ actor ChatConversationEngine {
                 earlierTurns[last].ending = end.ending
                 earlierTurns[last].endedAt = end.endedAt ?? earlierTurns[last].endedAt
             }
+            // The window's end belongs to the rows above the first turn
+            // only when the saved rows above the window open none.
+            if joined.turns == nil || !earlierTurns.isEmpty { transcript.precedingTurnEnd = nil }
             transcript.turns = earlierTurns + transcript.turns
             if transcript.title == nil { transcript.title = joined.title }
             // Work launched above the window still runs, or ends in it.
