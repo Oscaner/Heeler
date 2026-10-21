@@ -577,7 +577,7 @@ struct BlockedCardHeader: View {
     let title: String
     let detail: String?
     let isActing: Bool
-    /// Nil for a title the Agent wrote, which shows in full.
+    /// Nil for a title the Agent wrote, which shows every line.
     var lineLimit: Int? = 2
     let collapse: () -> Void
 

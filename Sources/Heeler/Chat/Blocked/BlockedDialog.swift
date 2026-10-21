@@ -269,8 +269,8 @@ struct BlockedDialog: Sendable, Hashable {
     /// A Grok Build permission titled with the card's own question, as
     /// before a subagent starts, whether Grok showed it whole or cut it
     /// at the card's edge with `…`. The Agent wrote the words, so the
-    /// card's header shows them in full and its content doesn't repeat
-    /// them.
+    /// card's header shows all of them Grok drew, with no line limit, and
+    /// its content doesn't repeat them.
     var asksInTitle: Bool {
         guard kind == .grokPermission, let description = body.first else { return false }
         return description == title || description == "\(title)?"
