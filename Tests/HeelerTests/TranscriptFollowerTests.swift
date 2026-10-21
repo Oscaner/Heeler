@@ -296,6 +296,27 @@ struct TranscriptFollowerTests {
         #expect(!follower.hasOlder)
     }
 
+    @Test func aLimitedPageLeavesALongerLineUnread() async throws {
+        let long = #"{"blob":""# + String(repeating: "z", count: 100) + #""}"#
+        let text = Self.lines(0..<2) + long + "\n" + Self.lines(2..<4)
+        var (follower, files, opened) = try await Self.makeFollower(text)
+        #expect(Self.texts(opened) == Self.expected(2..<4))
+        let start = follower.windowStart
+        await files.clearRecords()
+
+        #expect(try await follower.loadOlder(files.hostFiles(), length: 32, limit: 64) == .beyondLimit)
+        #expect(follower.windowStart == start)
+        #expect(await files.reads.reduce(0) { $0 + $1.maxBytes } <= 64)
+
+        // Without a limit the page grows to the line's start.
+        guard case .lines(let page) = try await follower.loadOlder(files.hostFiles(), length: 32) else {
+            Issue.record("expected the long line")
+            return
+        }
+        #expect(page.last?.offset == 16)
+        #expect(page.last?.length == long.utf8.count)
+    }
+
     @Test func pagingNoticesBytesChangedBeforeTheWindow() async throws {
         var (follower, files, _) = try await Self.makeFollower(Self.lines(0..<30))
         let start = try #require(follower.windowStart)

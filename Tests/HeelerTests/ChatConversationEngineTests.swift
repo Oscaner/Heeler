@@ -69,8 +69,13 @@ struct ChatConversationEngineTests {
             await engine.poll(context: ChatProjectionContext(activity: .idle))
         }
 
-        func loadOlder(_ engine: ChatConversationEngine) async -> ChatConversationSnapshot {
-            await engine.loadOlder(context: ChatProjectionContext(activity: .idle))
+        func loadOlder(_ engine: ChatConversationEngine, automatic: Bool = false) async -> ChatConversationSnapshot {
+            await engine.loadOlder(context: ChatProjectionContext(activity: .idle), automatic: automatic)
+        }
+
+        /// The bytes read from the Host since the records were cleared.
+        func bytesRead() async -> Int {
+            await files.reads.reduce(0) { $0 + $1.maxBytes }
         }
 
         func savedDocument() async -> ChatCacheDocument? {
@@ -513,6 +518,78 @@ struct ChatConversationEngineTests {
 
         #expect(Self.numbers(snapshot) == opened)
         #expect(snapshot.older == .available)
+    }
+
+    /// Short turns bring an opener within what a request Chat makes by
+    /// itself may read, so it reads and shows what the user's would.
+    @Test func automaticRequestsLoadShortTurnsAsTheUsersDo() async throws {
+        var limits = Self.limits
+        limits.automaticOlderSearch = 160
+        let text = (0..<8).map { turn in
+            NumberedChatReducer.prompt("t\(turn)") + Self.lines((turn * 3)..<(turn * 3 + 3))
+                + NumberedChatReducer.turnEnd
+        }.joined()
+        let automatic = Fixture(limits: limits)
+        let user = Fixture(limits: limits)
+        await automatic.files.write(text, at: Self.claudePath)
+        await user.files.write(text, at: Self.claudePath)
+        let byItself = automatic.makeEngine()
+        let asked = user.makeEngine()
+        var snapshot = await automatic.open(byItself)
+        _ = await user.open(asked)
+
+        var pages = 0
+        while snapshot.older == .available, pages < 50 {
+            snapshot = await automatic.loadOlder(byItself, automatic: true)
+            let expected = await user.loadOlder(asked)
+            #expect(Self.numbers(snapshot) == Self.numbers(expected))
+            #expect(snapshot.transcript.turns == expected.transcript.turns)
+            #expect(snapshot.older == expected.older)
+            #expect(!snapshot.olderAwaitsUser)
+            pages += 1
+        }
+
+        #expect(pages > 3)
+        #expect(snapshot.older == .reachedStart)
+        let userReads = await user.files.reads
+        #expect(await automatic.files.reads == userReads)
+    }
+
+    /// A turn longer than a request Chat makes by itself may read: the
+    /// request stops at its limit and leaves the rest to the user, and the
+    /// next one reads nothing. The user's request reads on to the turn's
+    /// prompt, and then Chat loads by itself again.
+    @Test func automaticRequestsStopInsideATurnLongerThanTheirLimit() async throws {
+        var limits = Self.limits
+        limits.automaticOlderSearch = 96
+        let fixture = Fixture(limits: limits)
+        let first = NumberedChatReducer.prompt("a") + Self.lines(0..<6) + NumberedChatReducer.turnEnd
+        let silent = String(repeating: NumberedChatReducer.end("none"), count: 40)
+        await fixture.files.write(
+            first + NumberedChatReducer.prompt("b") + silent + Self.lines(6..<10), at: Self.claudePath)
+        let engine = fixture.makeEngine()
+        let opened = await fixture.open(engine)
+        try #require(opened.transcript.turns.isEmpty)
+        await fixture.files.clearRecords()
+
+        var snapshot = await fixture.loadOlder(engine, automatic: true)
+        #expect(await fixture.bytesRead() == 96)
+        #expect(snapshot.transcript.turns.isEmpty)
+        #expect(snapshot.older == .available)
+        #expect(snapshot.olderAwaitsUser)
+
+        await fixture.files.clearRecords()
+        snapshot = await fixture.loadOlder(engine, automatic: true)
+        #expect(await fixture.files.reads.isEmpty)
+        #expect(snapshot.olderAwaitsUser)
+
+        snapshot = await fixture.loadOlder(engine)
+        #expect(snapshot.transcript.turns.map(\.firstEntryID.rawValue) == ["p-\(first.utf8.count)"])
+        #expect(!snapshot.olderAwaitsUser)
+
+        snapshot = await fixture.loadOlder(engine, automatic: true)
+        #expect(Self.numbers(snapshot).first == "p-0")
+        #expect(snapshot.older == .reachedStart)
     }
 
     @Test func turnsOpenedAboveALaterWindowComeFromTheSavedDocument() async throws {

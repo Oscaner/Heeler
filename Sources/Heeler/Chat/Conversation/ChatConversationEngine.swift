@@ -81,6 +81,11 @@ struct ChatConversationSnapshot: Equatable, Sendable {
     /// them on this visit, or the file has since gone.
     var isFromCache = false
     var older: ChatOlderHistory = .reachedStart
+    /// Earlier messages load only when the user asks: a request the
+    /// timeline made by itself read its limit without reaching the opener
+    /// of the turn the window starts in. A request that brings an opener
+    /// clears it, and so does a fresh tail.
+    var olderAwaitsUser = false
     /// The last read failed this way. Whatever was read before still shows.
     var readFailure: TransportError?
     /// How far the transcript has been read. A prompt the program records
@@ -341,19 +346,29 @@ actor ChatConversationEngine {
     /// it brings the opener of a turn not shown before, the file's head or
     /// the saved entries are reached, or the search limit is read. A turn's
     /// steps fold under its header, so pages that end inside a turn would
-    /// add nothing to see.
-    func loadOlder(context: ChatProjectionContext) async -> ChatConversationSnapshot {
+    /// add nothing to see. A request the timeline makes by itself
+    /// (`automatic`) reads at most `automaticOlderSearch` bytes, and one
+    /// that reads them all inside a turn leaves earlier history to the
+    /// user's requests (`olderAwaitsUser`).
+    func loadOlder(context: ChatProjectionContext, automatic: Bool = false) async -> ChatConversationSnapshot {
         setContext(context)
-        guard let first = follower, first.hasOlder, !olderUnreadable else { return snapshot }
+        guard let first = follower, first.hasOlder, !olderUnreadable, !(automatic && snapshot.olderAwaitsUser)
+        else { return snapshot }
         update { $0.older = .loading }
         let oldestOpener = snapshot.transcript.turns.first?.firstEntryID
         let searchEnd = first.windowStart ?? 0
         // Each page projects everything loaded again, so a long search
         // reads larger pages.
         var pageLength = first.limits.olderPage
+        // What an automatic request may still read. Its pages read no more
+        // than their length, so this counts every byte, the lines page
+        // boundaries cut and read again included.
+        var allowance = automatic ? first.limits.automaticOlderSearch : nil
         while var follower {
+            let length = allowance.map { min(pageLength, $0) } ?? pageLength
+            allowance = allowance.map { $0 - length }
             do {
-                switch try await follower.loadOlder(files, length: pageLength) {
+                switch try await follower.loadOlder(files, length: length, limit: automatic ? length : nil) {
                 case .lines(let lines):
                     self.follower = follower
                     reducer?.prepend(lines)
@@ -361,6 +376,9 @@ actor ChatConversationEngine {
                     self.follower = follower
                 case .unreadable:
                     olderUnreadable = true
+                case .beyondLimit:
+                    // A line longer than this page; the next is larger.
+                    break
                 case .missing, .rewritten:
                     return await open(directories: directories, context: context)
                 }
@@ -380,6 +398,14 @@ actor ChatConversationEngine {
             guard snapshot.transcript.turns.first?.firstEntryID == oldestOpener, snapshot.older != .reachedStart,
                 self.follower?.hasOlder == true, !olderUnreadable, read < UInt64(first.limits.olderSearch)
             else { break }
+            if allowance == 0 {
+                // Further pages would only grow the turn's run of steps.
+                update { $0.olderAwaitsUser = true }
+                break
+            }
+        }
+        if snapshot.transcript.turns.first?.firstEntryID != oldestOpener {
+            update { $0.olderAwaitsUser = false }
         }
         projectIfNeeded()
         return snapshot
@@ -651,6 +677,8 @@ actor ChatConversationEngine {
             $0.phase = .following(path: follower.path)
             $0.readFailure = nil
             $0.isFromCache = false
+            // A fresh tail loads earlier messages by itself again.
+            $0.olderAwaitsUser = false
             if movedLayout { $0.layoutGeneration += 1 }
         }
     }

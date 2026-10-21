@@ -109,6 +109,14 @@ final class AgentChatStore {
         case abandoned
     }
 
+    /// Who asked for earlier messages.
+    private enum OlderRequest {
+        /// The timeline, as the reader neared the top.
+        case automatic
+        /// The user: Load Earlier Messages or Retry.
+        case user
+    }
+
     let agentID: ConsoleAgent.ID
     let program: ChatProgram
     /// The conversation as last read, or why there is none.
@@ -156,7 +164,9 @@ final class AgentChatStore {
     /// Agent queries and transcript reads recover independently.
     @ObservationIgnored private var agentRefreshFailure: TransportError?
     @ObservationIgnored private var transcriptReadFailure: TransportError?
-    @ObservationIgnored private var olderRequested = false
+    /// A page above the oldest message shown that waits for the loop, by
+    /// who asked for it.
+    @ObservationIgnored private var olderRequest: OlderRequest?
     /// Look for the transcript's file again before the next read: Codex
     /// continues an undone thread in a new file and leaves the old one
     /// unchanged, so following it alone never shows the new turns.
@@ -405,12 +415,17 @@ final class AgentChatStore {
         try await ChatImagePreviewReader.read(path: path, files: source.files)
     }
 
-    /// Reads one page above the oldest message shown.
-    func loadOlder() {
-        guard conversation.older == .available || isFailedOlder,
-            case .following = conversation.phase
-        else { return }
-        olderRequested = true
+    /// Reads one page above the oldest message shown, for the user or,
+    /// `automatic`, for the timeline as the reader nears the top.
+    func loadOlder(automatic: Bool = false) {
+        // The timeline never retries a failure, and stops asking once
+        // earlier messages wait for the user.
+        let canLoad =
+            automatic
+            ? conversation.older == .available && !conversation.olderAwaitsUser
+            : conversation.older == .available || isFailedOlder
+        guard canLoad, case .following = conversation.phase else { return }
+        olderRequest = automatic ? .automatic : .user
         conversation.older = .loading
         wake()
     }
@@ -642,9 +657,9 @@ final class AgentChatStore {
         let readStart = now()
         var polled = false
         var opened = false
-        if olderRequested {
-            olderRequested = false
-            snapshot = await engine.loadOlder(context: context)
+        if let request = olderRequest {
+            olderRequest = nil
+            snapshot = await engine.loadOlder(context: context, automatic: request == .automatic)
         } else if case .following = conversation.phase {
             if needsRelocate {
                 needsRelocate = false
@@ -839,7 +854,7 @@ final class AgentChatStore {
             conversation.phase = .unavailable(.noSession(program))
             conversation.isFromCache = !conversation.transcript.entries.isEmpty
             if conversation.older == .loading { conversation.older = .available }
-            olderRequested = false
+            olderRequest = nil
             appliedRevision = nil
             refreshBackgroundWork()
             return
@@ -879,7 +894,7 @@ final class AgentChatStore {
         engine = target.map(makeEngine)
         restored = false
         appliedRevision = nil
-        olderRequested = false
+        olderRequest = nil
         needsRelocate = false
         nextOpen = nil
         failedOpens = 0
@@ -932,7 +947,7 @@ final class AgentChatStore {
         var next = snapshot
         next.readFailure = transcriptReadFailure ?? agentRefreshFailure
         if isAwaitingSession { next.phase = .unavailable(.noSession(program)) }
-        if olderRequested, next.older == .available { next.older = .loading }
+        if olderRequest != nil, next.older == .available { next.older = .loading }
         conversation = next
         // A prompt the transcript recorded since: the terminal is back in
         // this conversation.

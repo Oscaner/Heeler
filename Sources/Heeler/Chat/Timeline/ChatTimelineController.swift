@@ -3,7 +3,11 @@ import UIKit
 
 /// What the timeline tells its owner.
 struct ChatTimelineActions {
+    /// The user asked for earlier history: Load Earlier Messages or Retry.
     var loadOlder: @MainActor () -> Void = {}
+    /// The list asks for earlier history by itself within a screen of its
+    /// top.
+    var loadOlderAutomatically: @MainActor () -> Void = {}
     /// Whether the list follows its newest row; drives Jump to Latest.
     var followingChanged: @MainActor (Bool) -> Void = { _ in }
     /// The first layout that shows content, positioned at its end.
@@ -891,7 +895,7 @@ final class ChatTimelineController: UIViewController, UICollectionViewDelegate {
         requestedOlderAtRowCount = count
         // An apply's offset restore scrolls too, inside a SwiftUI update.
         Task { @MainActor [weak self] in
-            self?.actions.loadOlder()
+            self?.actions.loadOlderAutomatically()
         }
     }
 

@@ -225,6 +225,27 @@ struct ChatTimelineControllerTests {
         }
     }
 
+    /// Near its top the list asks for earlier history by itself, which Chat
+    /// bounds; only Load Earlier Messages asks for the user.
+    @Test func theListAsksForEarlierHistoryByItselfNearItsTop() async throws {
+        var automatic = 0
+        var user = 0
+        let controller = ChatTimelineController(
+            actions: ChatTimelineActions(loadOlder: { user += 1 }, loadOlderAutomatically: { automatic += 1 }))
+        let rows = await ChatRowBuilder().rows(
+            for: ChatTimelineInput(entries: Self.entries(200..<260), older: .available))
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.apply(Self.state(rows))
+            await Self.settle(controller)
+            #expect(automatic == 0)
+
+            Self.drag(controller, to: controller.timeline.minOffsetY)
+            await Self.settle(controller)
+            #expect(automatic == 1)
+            #expect(user == 0)
+        }
+    }
+
     @Test func aLoadEarlierRowThatGrowsAtTheTopStaysInView() async throws {
         let controller = ChatTimelineController(actions: ChatTimelineActions())
         let builder = ChatRowBuilder()

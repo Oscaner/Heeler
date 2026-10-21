@@ -645,6 +645,7 @@ struct AgentChatSurfaceView: View {
     private var timelineActions: ChatTimelineActions {
         ChatTimelineActions(
             loadOlder: { chat?.loadOlder() },
+            loadOlderAutomatically: { chat?.loadOlder(automatic: true) },
             followingChanged: { isFollowing = $0 },
             firstPositionedLayout: { detailCrossfade?.contentDidAppear() },
             loadOutput: { chat?.loadOutput($0) },
