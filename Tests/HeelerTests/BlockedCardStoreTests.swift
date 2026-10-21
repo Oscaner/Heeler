@@ -764,9 +764,11 @@ struct BlockedCardStoreTests {
 
     /// Without a start the same answer stays unconfirmed, and a call that
     /// only starts waiting, as Grok writes the second spawn's call once the
-    /// first runs, proves nothing. The first subagent starting later still
-    /// brings the answers back.
-    @Test func aGrokAnswerStaysUnconfirmedUntilACallThatWaitedStarts() async throws {
+    /// first runs, proves nothing. The first call starting later brings the
+    /// answers back and drops the hint, also when the transcript shows it
+    /// already resolved, as a quick command's would be.
+    @Test(arguments: [false, true])
+    func aGrokAnswerStaysUnconfirmedUntilACallThatWaitedStarts(alreadyResolved: Bool) async throws {
         let first = Self.grokSpawn("call-1", "Sleep 60 then reply done")
         let second = Self.grokSpawn("call-2", "Sleep 60 then reply done")
         let pane = FakePane(try ScreenFixture.screen("grok-35-permission-subagent-62"))
@@ -791,7 +793,10 @@ struct BlockedCardStoreTests {
         await store.perform(.choose(ordinal: approve))
         #expect(await pane.keys == [["2"]])
 
-        store.update(transcript: Self.transcript(pending: [second], running: [first]))
+        store.update(
+            transcript: alreadyResolved
+                ? Self.transcript(pending: [second], resolved: [first])
+                : Self.transcript(pending: [second], running: [first]))
 
         #expect(store.progress == .ready)
         #expect(store.notice == nil)

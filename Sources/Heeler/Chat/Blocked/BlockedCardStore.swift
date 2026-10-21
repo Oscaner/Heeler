@@ -196,6 +196,8 @@ final class BlockedCardStore {
                 break
             }
         }
+        startedToolUseIDs = started
+        releaseIfAWaitingCallStarted()
         // Two identical dialogs in a row look unchanged on screen, so an
         // answer that showed no effect took once a call that waited
         // resolves. A call that only starts waiting proves nothing: the
@@ -205,8 +207,6 @@ final class BlockedCardStore {
             unconfirmedFingerprint = nil
         }
         resolvedToolUseIDs = resolved
-        startedToolUseIDs = started
-        releaseIfAWaitingCallStarted()
         // An idle Claude's question reads only while its call is open.
         if !readsScreen, progress != .acting, content != .none { clear() }
         updateWatching()
