@@ -3,13 +3,13 @@ import Testing
 
 @testable import Heeler
 
-/// OpenCode keeps reporting a conversation after `/new` leaves it for the
-/// home screen (ADR 0025). Its Chat watches for that screen, and checks
-/// herdr's record and the terminal's title before each send. The check
-/// narrows, but cannot close, the gap until herdr pastes: a conversation
-/// the terminal switches to within it still receives the message. Right
-/// after `/new`, until the watch finds the home screen, the screen read
-/// before each send holds a message instead.
+/// After `/new` leaves a conversation for OpenCode's home screen, herdr
+/// keeps reporting it (ADR 0025). Its Chat watches for that screen, and
+/// checks herdr's record and the terminal's title before each send. The
+/// check narrows, but cannot close, the gap until herdr pastes: a
+/// conversation the terminal switches to within it still receives the
+/// message. Right after `/new`, until the watch finds the home screen,
+/// the screen read before each send holds a message instead.
 @MainActor
 @Suite("OpenCode Chat store")
 struct OpenCodeChatStoreTests {
