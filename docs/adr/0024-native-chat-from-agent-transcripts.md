@@ -435,16 +435,18 @@ continue write the config and stay out. The worktree question `/fork` asks
 gets its own card: Yes and No, each of which forks; Always worktree and
 Never worktree, which save the choice, stay in the terminal. The card says
 that Chat stays with this conversation and holds messages until `/resume`
-switches back to it, since herdr keeps the parent session. Neither the
-questions nor the stop panel offers Stop, since Esc there only moves Grok
-Build's focus or keeps the turn running. After Esc, Grok Build's focus
-rests in its scrollback, where keys miss the card, so the card then answers
-nothing and says to answer in the terminal. Grok Build's other cards, such
-as the rewind confirmation, get the generic card without numbered answers.
-Multi-select questions, option notes and typed answers stay in the
-terminal. A dialog the parsers do not know gets a generic card with the
-Agent controls. Answers the transcript does not record join the history as
-Allowed, Declined, Stopped and Answered rows.
+switches back to it, since herdr keeps the parent session. A card too
+narrow to show No, as at 40 columns, stays generic with its key pad, and
+says that every answer forks and that the rows out of view save a lasting
+choice. Neither the questions nor the stop panel offers Stop, since Esc
+there only moves Grok Build's focus or keeps the turn running. After Esc,
+Grok Build's focus rests in its scrollback, where keys miss the card, so the
+card then answers nothing and says to answer in the terminal. Grok Build's
+other cards, such as the rewind confirmation, get the generic card without
+numbered answers. Multi-select questions, option notes and typed answers
+stay in the terminal. A dialog the parsers do not know gets a generic card
+with the Agent controls. Answers the transcript does not record join the
+history as Allowed, Declined, Stopped and Answered rows.
 
 ## Background Work
 
