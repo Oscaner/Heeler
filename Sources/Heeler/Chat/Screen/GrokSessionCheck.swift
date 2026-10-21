@@ -35,15 +35,9 @@ enum GrokSessionCheck {
     }
 
     private static func readings(_ grok: GrokScreen, _ input: ChatSessionCheckInput) -> ChatScreenSessionVerdict {
-        let transcript = input.transcript
         // At Grok's start the session has no prompt yet, and a message from
-        // the Welcome screen is its first. A transcript restored from the
-        // device's copy records no prompts, but keeps where the newest
-        // starts and the turns they open.
-        let hasMessages =
-            !transcript.recordedPrompts.isEmpty || transcript.latestPromptOffset != nil || !transcript.turns.isEmpty
-            || transcript.needsOlderHistory
-        if grok.isWelcome, hasMessages { return .otherSession(welcomeReason) }
+        // the Welcome screen is its first.
+        if grok.isWelcome, hasMessages(input.transcript) { return .otherSession(welcomeReason) }
         // Grok prints the line into the scrollback of the session it names
         // (`lifecycle.rs`, `load.rs`), so the screen shows that session,
         // whatever messages follow the line.
@@ -53,15 +47,26 @@ enum GrokSessionCheck {
         return newestMessage(grok, input)
     }
 
+    /// Whether the conversation has a message, read or not. A transcript
+    /// restored from the device's copy records no prompts, but keeps where
+    /// the newest starts and the turns they open.
+    private static func hasMessages(_ transcript: ChatTranscript) -> Bool {
+        !transcript.recordedPrompts.isEmpty || transcript.latestPromptOffset != nil || !transcript.turns.isEmpty
+            || transcript.needsOlderHistory
+    }
+
     /// The bottom-most user row against the transcript, once Chat's reading
     /// of it is complete: herdr reports Grok idle and its screen agrees, a
     /// poll that started since then has been applied, and the newest turn's
-    /// opener is loaded. A window that starts inside a long turn opens none.
+    /// opener is loaded, or the conversation has no message at all. A window
+    /// that starts inside a long turn opens none. A session with no message
+    /// has none of its own to show (`/new` shows only its Session line), so
+    /// a typed one is another session's, as after a `/resume` typed on the
+    /// Welcome screen, which leaves herdr on the new, empty session.
     private static func newestMessage(_ grok: GrokScreen, _ input: ChatSessionCheckInput) -> ChatScreenSessionVerdict {
         let transcript = input.transcript
         guard input.activity == .idle, grok.statusRow == nil, input.polledSinceIdle,
-            let opener = transcript.turns.last?.firstEntryID,
-            transcript.recordedPrompts.contains(where: { $0.entryID == opener }),
+            !hasMessages(transcript) || opensWithReadPrompt(transcript),
             // Never an older row: the terminal may be scrolled up.
             let row = grok.userRows.last,
             // A command, shell mode, or a paste or image chip: the
@@ -79,6 +84,12 @@ enum GrokSessionCheck {
             return misdirected ? .unknown : .thisSession
         }
         return prompts.contains { $0.hasPrefix(text) } ? .unknown : .otherSession(unknownPromptReason)
+    }
+
+    /// The newest turn opens with a prompt Chat has read.
+    private static func opensWithReadPrompt(_ transcript: ChatTranscript) -> Bool {
+        guard let opener = transcript.turns.last?.firstEntryID else { return false }
+        return transcript.recordedPrompts.contains { $0.entryID == opener }
     }
 
     /// What a row is compared on: its text without whitespace, which

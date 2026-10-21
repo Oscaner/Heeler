@@ -2875,6 +2875,25 @@ struct AgentChatStoreTests {
         #expect(store.sendConcern(for: "Reply with the word kiwi. ", after: screen) == nil)
     }
 
+    /// herdr reports a new session 60 to 110 ms after its first record, and
+    /// Grok Build wrote the first prompt of a session it started from its
+    /// Welcome screen 84 ms after that record (live, 2026-10-20). A read of
+    /// the session in between finds no message, so the one on screen holds
+    /// a send until a read finds it recorded.
+    @Test func anEmptyConversationHoldsUntilAReadFindsTheMessageOnScreen() async throws {
+        let (files, store, _) = try await Self.grokStore(through: 1, status: .idle)
+        #expect(store.conversation.transcript.turns.isEmpty)
+
+        #expect(
+            store.sendConcern(for: "Reply with the word kiwi. ", after: Self.pongScreen)
+                == GrokSessionCheck.unknownPromptReason)
+        await files.append(try Self.grokLines("core-turns.jsonl", 2...4), to: Self.grokPath)
+        await store.step()
+
+        #expect(store.sendConcern(for: "Reply with the word kiwi. ", after: Self.pongScreen) == nil)
+        #expect(store.sendConcern(for: "Reply with the word kiwi. ", after: Self.quietGrokScreen) == nil)
+    }
+
     /// The dashboard's view of an agent, as grok-40 to grok-42 draw it at
     /// the phone's 62 columns, its newest message `rows`' last.
     private static func grokAgentView(_ rows: [String]) -> ANSIScreen {

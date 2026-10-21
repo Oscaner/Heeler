@@ -250,6 +250,35 @@ struct GrokSessionCheckTests {
                 == .otherSession(GrokSessionCheck.unknownPromptReason))
     }
 
+    /// Typed on the Welcome screen, `/resume` first started a new session,
+    /// which herdr reported and kept, empty, while the screen showed the
+    /// resumed one (grok-43, live, 2026-10-20). A session with no message
+    /// has none of its own to show (`/new`'s screen, grok-17, shows only
+    /// its Session line), so a typed message there is another session's.
+    @Test func aTypedMessageOnAnEmptyConversationsScreenHolds() throws {
+        let screen = try ScreenFixture.screen("grok-43-resumed-from-welcome-120")
+        let empty = Self.transcript([])
+
+        #expect(GrokScreen(screen).userRows.last?.text == "Reply with the word kiwi")
+        #expect(Self.verdict(screen, Self.input(empty)) == .otherSession(GrokSessionCheck.unknownPromptReason))
+        // Only once Chat's reading is complete, and never for a send of its
+        // own still on its way.
+        #expect(Self.verdict(screen, Self.input(empty, polledSinceIdle: false)) == .unknown)
+        #expect(Self.verdict(screen, Self.input(empty, activity: .working)) == .unknown)
+        #expect(Self.verdict(screen, Self.input(empty, unrecorded: ["Reply with the word kiwi "])) == .unknown)
+        // A window inside a long turn, and a transcript restored from the
+        // device's copy, hold messages Chat hasn't read.
+        #expect(Self.verdict(screen, Self.input(Self.transcript([], needsOlderHistory: true))) == .unknown)
+        let restored = ChatTranscript(latestPromptOffset: 0, turns: [ChatTurn(firstEntryID: ChatEntryID("grok:0"))])
+        #expect(Self.verdict(screen, Self.input(restored)) == .unknown)
+    }
+
+    /// Commands, shell commands and chips say nothing there either.
+    @Test(arguments: ["❯ /resume \(other)", "❯ !ls", "❯ [Pasted text #1 +5 lines]"])
+    func anEmptyConversationSaysNothingOfCommandAndChipRows(row: String) {
+        #expect(Self.verdict(Self.screen([row]), Self.input(Self.transcript([]))) == .unknown)
+    }
+
     @Test(arguments: [
         "❯ Reply with the word kiwi.                                                            10:58 PM",
         "❯ Reply with the word kiwi.                                                    22:58:10 | Oct 19",
