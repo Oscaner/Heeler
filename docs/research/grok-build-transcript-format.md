@@ -612,7 +612,10 @@ has a lighter background and a bold label.
   Esc:scrollback`. herdr reported it Blocked, and Enter or `2` approved
   once (live, 2026-10-20). At the phone's 62 columns row 1 ends
   `(always-a` and the footer stops after `Ctrl+o:always-approve` (live,
-  2026-10-20).
+  2026-10-20). Two parallel subagents with one description asked one after
+  the other on identical cards, which differed only in the status row's
+  timers, and herdr stayed Blocked from the first card until 0.25 s after
+  the second's approval (live, 2026-10-20).
 - Ctrl+C while subagents run opens a stop panel, `Subagents are still
   running. Stop them?`, with `1 (●) Stop running`, `2 Continue to run`,
   `3 Always stop` and `4 Always continue`, and the footer `1/4:select │
