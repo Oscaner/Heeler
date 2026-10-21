@@ -372,9 +372,10 @@ struct AgentComposerStopOwnershipTests {
 }
 
 /// The hosted Composer: Chat folds it to one line without replacing its
-/// text view, and Stop presses Esc once until Agent Status moves.
+/// text view, Stop presses Esc once until Agent Status moves, and a long
+/// notice keeps its lines.
 @MainActor
-@Suite("Agent Composer fold and Stop, hosted", .serialized)
+@Suite("Agent Composer fold, Stop and notices, hosted", .serialized)
 struct AgentComposerFoldHostedTests {
     @Test func chatFoldsToOneLineUntilTheEditorTakesFocus() async throws {
         let harness = ComposerHarness(status: .idle)
@@ -567,10 +568,74 @@ struct AgentComposerFoldHostedTests {
         }
     }
 
+    /// A notice shows the lines past its third that Grok Build's longer
+    /// holds wrap to at a phone's width, whether it says why a send was
+    /// refused or why Stop pressed nothing.
+    @Test func aLongNoticeShowsItsFourthLine() async throws {
+        for kind in NoticeKind.allCases {
+            var heights: [CGFloat] = []
+            for count in 1...4 {
+                heights.append(try await Self.height(showing: Self.notice(lines: count), as: kind))
+            }
+            let line = heights[1] - heights[0]
+            #expect(line > 8, "a second line should add one to the \(kind) notice: \(heights)")
+            #expect(
+                abs(heights[3] - heights[2] - line) < 1,
+                "the \(kind) notice should show its fourth line as it does its second: \(heights)")
+        }
+    }
+
     // MARK: Helpers
+
+    private enum NoticeKind: CaseIterable {
+        /// Why a send was refused.
+        case refusal
+        /// Why Stop pressed nothing.
+        case stop
+    }
+
+    /// The narrowest iPhone's width, where a notice wraps to the most lines.
+    private static let phoneWidth: CGFloat = 375
 
     private static let longDraft = (1...12).map { "Line \($0) of a long draft" }
         .joined(separator: "\n")
+
+    /// A notice of `count` lines at any width.
+    private static func notice(lines count: Int) -> String {
+        (1...count).map { "Line \($0) of the notice." }.joined(separator: "\n")
+    }
+
+    /// The hosted Composer's height at `phoneWidth` while it shows `notice`.
+    private static func height(showing notice: String, as kind: NoticeKind) async throws -> CGFloat {
+        let policy = refusing(with: notice)
+        let harness: ComposerHarness
+        switch kind {
+        case .refusal:
+            harness = ComposerHarness(status: .idle)
+            harness.composer.replaceDraft(with: "Reply with the word fig")
+            await harness.composer.send(policy: policy)
+        case .stop:
+            harness = ComposerHarness(status: .working)
+            await harness.composer.stop.stop { .failed(notice) }?.value
+        }
+        let controller = UIHostingController(
+            rootView: ComposerHost(harness: harness, collapses: true, sendPolicy: policy))
+        var height: CGFloat = 0
+        try await withTestWindow(
+            frame: CGRect(x: 0, y: 0, width: phoneWidth, height: 812), rootViewController: controller
+        ) { _ in
+            controller.view.layoutIfNeeded()
+            height = Self.height(of: controller, width: phoneWidth)
+        }
+        return height
+    }
+
+    /// Chat's route, refusing every draft with `notice`.
+    private static func refusing(with notice: String) -> ComposerDeliveryPolicy {
+        ComposerDeliveryPolicy(
+            route: .chat, insertsIntoAttachWhenBlocked: false, outgoingText: { $0 },
+            validate: { _ in .inputNotReady(notice) }, preflight: nil, verify: nil)
+    }
 
     private static func editor(in root: UIView) -> UITextView? {
         if let textView = root as? UITextView, textView.accessibilityLabel == "Message the Agent" {
@@ -582,8 +647,8 @@ struct AgentComposerFoldHostedTests {
         return nil
     }
 
-    private static func height(of controller: UIHostingController<ComposerHost>) -> CGFloat {
-        controller.sizeThatFits(in: CGSize(width: 402, height: CGFloat.greatestFiniteMagnitude)).height
+    private static func height(of controller: UIHostingController<ComposerHost>, width: CGFloat = 402) -> CGFloat {
+        controller.sizeThatFits(in: CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)).height
     }
 
     private static func activate(labeled label: String, in root: UIView) async throws -> Bool {
@@ -726,6 +791,8 @@ private final class ComposerHarness {
 private struct ComposerHost: View {
     @Bindable var harness: ComposerHarness
     let collapses: Bool
+    /// Each route shows only the notices its own refusals leave.
+    var sendPolicy: ComposerDeliveryPolicy = .terminal
 
     var body: some View {
         AgentComposerView(
@@ -761,6 +828,7 @@ private struct ComposerHost: View {
             skills: nil,
             keyboardPresentation: $harness.keyboardPresentation,
             prepareKeyboardPresentation: { _ in },
+            sendPolicy: sendPolicy,
             collapsesWithoutKeyboard: collapses,
             interrupt: .escape { [harness] in
                 harness.escapes += 1
