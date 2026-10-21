@@ -105,10 +105,11 @@ Its dashboard, where a message starts a new agent, its pickers, popups and
 `/btw` panel, a pending second key press, `/multiline`, a queued message being
 edited, shell and remember modes, minimal mode, and a wait on a subagent or
 background task, which a message would cancel, all hold the message. A card
-the dashboard's view shows stays generic, and Stop presses nothing there. Grok
-Build can put a stashed draft back in the box right after it takes a message,
-so only text the message contains marks it Not delivered; other text holds the
-next send.
+the dashboard's view shows stays generic. Stop presses nothing in that view,
+which stays until Grok Build restarts, and says to stop the turn with Ctrl+C
+in the terminal. Grok Build can put a stashed draft back in the box right
+after it takes a message, so only text the message contains marks it Not
+delivered; other text holds the next send.
 
 herdr follows Grok Build's `/new`, `/clear` and a message sent from its
 dashboard, but keeps the earlier session after `/resume`, `/fork` and going
