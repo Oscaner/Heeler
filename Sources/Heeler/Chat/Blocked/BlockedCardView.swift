@@ -67,7 +67,7 @@ private struct BlockedDialogCard: View {
         VStack(alignment: .leading, spacing: 10) {
             BlockedCardHeader(
                 title: dialog.cardTitle, detail: dialog.positionLabel, isActing: store.progress == .acting,
-                collapse: { store.isCollapsed = true })
+                lineLimit: dialog.asksInTitle ? nil : 2, collapse: { store.isCollapsed = true })
             BlockedScrollingContent(maxHeight: maxHeight) {
                 VStack(alignment: .leading, spacing: 10) {
                     if let source {
@@ -221,7 +221,7 @@ private struct BlockedDialogCard: View {
             BlockedCodeBox(text: card.request?.summary ?? command)
         } else if let path = subject.filePath {
             BlockedCodeBox(text: card.request?.summary ?? path)
-        } else if let description = dialog.body.first, description != "\(dialog.title)?" {
+        } else if let description = dialog.body.first, !dialog.asksInTitle {
             BlockedCardText(description)
         }
     }
@@ -547,6 +547,15 @@ private extension BlockedDialog {
         }
     }
 
+    /// A Grok Build permission titled with the card's own question, as
+    /// before a subagent starts, whether Grok showed it whole or cut it
+    /// at the card's edge with `…`. The Agent wrote the words, so the
+    /// header shows them in full and the content doesn't repeat them.
+    var asksInTitle: Bool {
+        guard kind == .grokPermission, let description = body.first else { return false }
+        return description == title || description == "\(title)?"
+    }
+
     /// Whether Stop does something a card can name: the planner refuses it
     /// on Codex's asynchronous question, and on Grok Build's questions and
     /// subagent panel, where Esc only parks the keyboard or keeps the turn
@@ -577,6 +586,8 @@ struct BlockedCardHeader: View {
     let title: String
     let detail: String?
     let isActing: Bool
+    /// Nil for a title the Agent wrote, which shows in full.
+    var lineLimit: Int? = 2
     let collapse: () -> Void
 
     var body: some View {
@@ -586,7 +597,7 @@ struct BlockedCardHeader: View {
                 .accessibilityHidden(true)
             Text(verbatim: title)
                 .font(.headline)
-                .lineLimit(2)
+                .lineLimit(lineLimit)
                 .accessibilityAddTraits(.isHeader)
             if let detail {
                 Text(verbatim: detail)

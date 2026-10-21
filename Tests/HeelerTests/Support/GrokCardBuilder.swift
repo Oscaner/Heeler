@@ -202,6 +202,19 @@ enum GrokCards {
                             "Yes", "No, reject (type to add feedback)",
                         ], cursor: 3),
                 hints: ["1/4:select", "Tab:next option", "Ctrl+o:always-approve", "Ctrl+c:cancel", "Esc:scrollback"])
+        case "synthetic-subagent-permission-40":
+            // grok-35's card at 40 columns: Grok cuts the card's question
+            // at the edge with `…`, as it cuts a command's description
+            // there (grok-36), so the question's `?` is gone.
+            GrokCardBuilder(
+                columns: 40, status: "Waiting for subagent…",
+                rows: [Row(GrokScreenBuilder.cut("›  Allow Sleep 60 then reply done?", to: 40 - 9), boldFrom: 3), .blank]
+                    + options(
+                        [
+                            "Yes, and don't ask again for anything (always-approve mode)", "Yes, send once",
+                            "No, reject (type to add feedback)",
+                        ], cursor: 2),
+                hints: ["1/3:select", "Tab:next option", "Ctrl+o:always-approve", "Ctrl+c:cancel", "Esc:scrollback"])
         case "synthetic-question-40":
             // The cursor's answer wraps its label and description at 25
             // cells; the other answer shows one row, its description cut.
