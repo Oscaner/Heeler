@@ -7,7 +7,9 @@ import Foundation
 /// only paths to image, PDF or SVG files into attachments instead of text
 /// (`tui/src/component/prompt/local-attachment.ts`). Chat cannot tell from
 /// here which paths name such files, so it refuses every draft that is only
-/// paths, read the way OpenCode reads a paste, and says how to send one.
+/// paths, read the way OpenCode reads a paste, and says how to send one:
+/// with words first, since a draft that starts with an absolute path, as
+/// Add Image and Add File leave one, is refused as a command path (below).
 ///
 /// OpenCode names a command by its file's path under `commands/`, so
 /// `.opencode/commands/git/commit.md` is `/git/commit`, and a message whose
@@ -18,7 +20,8 @@ import Foundation
 enum OpenCodeSendRules {
     private static let pathOnlyRefusal = ComposerRefusal.unsafeText(
         "OpenCode can take a message that is only a file path as an attachment instead of text. "
-            + "Add a few words, such as what to do with the file, and OpenCode's agent can read it from its path.")
+            + "Start with a few words, such as what to do with the file, and OpenCode's agent can read it "
+            + "from its path.")
 
     /// The most paths OpenCode reads from one paste; more is text.
     private static let maximumPaths = 32

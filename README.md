@@ -143,7 +143,7 @@ running turn from the terminal. After `/new` in the terminal, Chat says
 OpenCode has left the conversation and shows none until you open one or send a
 first message there. Add Image and Add File put the file's path into the draft
 as text, and OpenCode can take a message that is only a path as an attachment,
-so add a few words about the file. See [how Chat reads OpenCode](docs/adr/0025-opencode-chat-reads-its-session-store.md).
+so add a few words before the path. See [how Chat reads OpenCode](docs/adr/0025-opencode-chat-reads-its-session-store.md).
 
 ### Codex shows “Waiting for Conversation”
 

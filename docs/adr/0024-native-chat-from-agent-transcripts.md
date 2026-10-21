@@ -181,7 +181,10 @@ request, under rules that stand in for the screen the user cannot see:
   shorthand), and 100 lines or more, which open its paste menu. OpenCode
   refuses Claude Code's words, which cover its own `exit`, `quit` and `:q`,
   and a draft that is only file paths, which OpenCode can take as
-  attachments instead of text; a few words beside the path send it as text.
+  attachments instead of text; a few words before the path send it as text.
+  The refusal says to start with them: with words only after an absolute
+  path, as Add Image and Add File leave one, the draft is refused as a
+  command path (below).
 - A leading `/` must name an entry of Chat's `/` menu: the Agent's skills from
   the existing Skills probe, and `/compact` while the Agent is idle. The menu
   offers no interactive or destructive program command. Every program shows

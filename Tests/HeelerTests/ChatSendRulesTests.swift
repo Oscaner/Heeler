@@ -457,19 +457,24 @@ struct ChatSendRulesTests {
 
     /// OpenCode attaches the files a paste of paths alone names, rather
     /// than sending the text: a quoted or escaped path with spaces, a
-    /// `file://` URL, several paths, or one with spaces left unquoted.
+    /// `file://` URL, several paths, or one with spaces left unquoted. The
+    /// refusal says to put words first, as words after a staged file's
+    /// absolute path would leave a command path leading.
     @Test(arguments: [
         "/home/dev/shot.png", "'/home/dev/My Shots/a.JPG'", "file:///home/dev/doc.pdf", "a.png b.webp", "shot.svg",
         "~/notes.txt", "./build.log", "../README.md", "/home/dev/notes.txt", "/home/dev/My\\ Shots/a.png",
         "/home/dev/My Great Shots/a.png",
     ])
     func openCodeRefusesADraftOfOnlyPaths(draft: String) {
+        let rules = Self.rules(.opencode)
+
         #expect(
-            Self.rules(.opencode).validate(draft)
+            rules.validate(draft)
                 == .unsafeText(
                     "OpenCode can take a message that is only a file path as an attachment instead of text. "
-                        + "Add a few words, such as what to do with the file, and OpenCode's agent can read it "
-                        + "from its path."))
+                        + "Start with a few words, such as what to do with the file, and OpenCode's agent can read "
+                        + "it from its path."))
+        #expect(rules.validate("what is in " + draft) == nil)
     }
 
     /// OpenCode names a command by its file's path under `commands/` and
