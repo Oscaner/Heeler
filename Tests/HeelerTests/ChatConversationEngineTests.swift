@@ -520,8 +520,9 @@ struct ChatConversationEngineTests {
         #expect(snapshot.older == .available)
     }
 
-    /// Short turns bring an opener within what a request Chat makes by
-    /// itself may read, so it reads and shows what the user's would.
+    /// Short turns bring an opener within what a bounded request Chat
+    /// makes by itself may read, so it reads and shows what the user's
+    /// would.
     @Test func automaticRequestsLoadShortTurnsAsTheUsersDo() async throws {
         var limits = Self.limits
         limits.automaticOlderSearch = 160
@@ -555,10 +556,10 @@ struct ChatConversationEngineTests {
         #expect(await automatic.files.reads == userReads)
     }
 
-    /// A turn longer than a request Chat makes by itself may read: the
-    /// request stops at its limit and leaves the rest to the user, and the
-    /// next one reads nothing. The user's request reads on to the turn's
-    /// prompt, and then Chat loads by itself again.
+    /// A turn longer than a bounded request Chat makes by itself may read:
+    /// the request stops at its limit and leaves the rest to the user, and
+    /// the next one reads nothing. The user's request reads on to the
+    /// turn's prompt, and then Chat loads by itself again.
     @Test func automaticRequestsStopInsideATurnLongerThanTheirLimit() async throws {
         var limits = Self.limits
         limits.automaticOlderSearch = 96
@@ -644,6 +645,50 @@ struct ChatConversationEngineTests {
         #expect(Self.numbers(snapshot).prefix(6) == ArraySlice(Self.ids(0..<6)))
         #expect(snapshot.transcript.turns.count == 1)
         #expect(snapshot.transcript.precedingTurnEnd == ChatTurnEnd(ending: .completed))
+    }
+
+    /// With Claude Code's limits, a request the list makes by itself reads
+    /// saved rows the Host sends again as the user's does: above more than
+    /// 4 MiB of short turns kept from an earlier visit, it reads on to the
+    /// next turn's prompt.
+    @Test func automaticRequestsReadPastSavedRowsAboveALaterWindow() async throws {
+        let claude = try #require(ChatTranscriptAdapter.standard(for: .claude))
+        try #require(claude.joinsCachedHistory)
+        let fixture = Fixture(limits: claude.limits)
+        // A 64 KiB line no program reads.
+        let filler = String(repeating: "x", count: (64 << 10) - 1) + "\n"
+        func turn(_ name: String, kib: Int) -> String {
+            NumberedChatReducer.prompt(name) + String(repeating: filler, count: kib / 64) + NumberedChatReducer.turnEnd
+        }
+        let early = turn("a", kib: 2_048)
+        await fixture.files.write(early + (0..<8).map { turn("b\($0)", kib: 768) }.joined(), at: Self.claudePath)
+        let first = fixture.makeEngine()
+        var snapshot = await fixture.open(first)
+        let oldestSaved = ChatEntryID("p-\(early.utf8.count)")
+        var pages = 0
+        while snapshot.transcript.turns.first?.firstEntryID != oldestSaved, pages < 20 {
+            snapshot = await fixture.loadOlder(first)
+            pages += 1
+        }
+        try #require(snapshot.transcript.turns.first?.firstEntryID == oldestSaved)
+        await first.save(force: true)
+        let saved = try #require(await fixture.savedDocument())
+
+        // Reopened one short turn later: the saved rows fill in above the
+        // tail window.
+        await fixture.files.append(turn("c", kib: 256), to: Self.claudePath)
+        let size = UInt64(await fixture.files.contents(of: Self.claudePath)?.count ?? 0)
+        try #require(size - UInt64(claude.limits.tailWindow) - saved.coverageStart > 4 << 20)
+        let reopened = fixture.makeEngine()
+        _ = await reopened.restore()
+        snapshot = await fixture.open(reopened)
+        try #require(snapshot.transcript.turns.first?.firstEntryID == oldestSaved)
+        try #require(snapshot.older == .available)
+
+        snapshot = await fixture.loadOlder(reopened, automatic: true)
+
+        #expect(snapshot.transcript.turns.first?.firstEntryID == ChatEntryID("p-0"))
+        #expect(!snapshot.olderAwaitsUser)
     }
 
     @Test func savedEntriesShowBeforeTheHostAnswers() async throws {

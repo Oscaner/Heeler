@@ -859,6 +859,39 @@ struct AgentChatStoreTests {
         #expect(Self.ids(fixture.store).last == "n-29")
     }
 
+    /// The list's own request reads a failed page again, as Retry does,
+    /// unless the program bounds what the list loads by itself, as Grok
+    /// Build's does: then only Retry reads it again.
+    @Test func theListRetriesAFailedPageUnlessItsProgramBoundsWhatItLoads() async throws {
+        let claude = try #require(ChatTranscriptAdapter.standard(for: .claude))
+        let programs = [
+            (claude.limits.automaticOlderSearch, true), (ChatTranscriptAdapter.grok.limits.automaticOlderSearch, false),
+        ]
+        for (bound, retries) in programs {
+            var limits = TranscriptFollower.Limits(
+                tailWindow: 64, readChunk: 16, pollBudget: 1_024, olderPage: 32,
+                maximumOlderPage: 128, lineStartSearch: 1_024, anchorLength: 8, headLength: 32,
+                lineCap: 4_096, prefixCap: 16)
+            limits.automaticOlderSearch = bound
+            let fixture = Fixture(session: Self.first, limits: limits)
+            await fixture.files.write(NumberedChatReducer.lines(0..<30), at: Self.path(Self.first))
+            await fixture.store.step()
+            let shown = Self.ids(fixture.store).count
+            await fixture.files.failNext(.read, path: Self.path(Self.first), with: TransportError.hostFileTimedOut)
+            fixture.store.loadOlder()
+            await fixture.store.step()
+            guard case .failed = fixture.store.conversation.older else {
+                Issue.record("expected a failed page, got \(fixture.store.conversation.older)")
+                continue
+            }
+
+            fixture.store.loadOlder(automatic: true)
+            await fixture.store.step()
+
+            #expect((Self.ids(fixture.store).count > shown) == retries)
+        }
+    }
+
     @Test func aMissingTranscriptIsLookedForAgainWithBackoff() async throws {
         let fixture = Fixture(session: Self.first)
         await fixture.store.step()

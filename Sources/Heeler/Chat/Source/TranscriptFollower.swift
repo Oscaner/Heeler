@@ -33,9 +33,10 @@ struct TranscriptFollower: Sendable {
         /// The largest page such a search reads at once.
         var olderSearchPage = 4 << 20
         /// The most one search the timeline makes by itself, as the reader
-        /// nears the top, reads; what lies further back loads when the
-        /// user asks.
-        var automaticOlderSearch = 4 << 20
+        /// nears the top, reads, for a program that bounds it; what lies
+        /// further back loads when the user asks. Nil: the timeline's
+        /// searches read as the user's do.
+        var automaticOlderSearch: Int? = nil
         /// How far that search goes before older history is reported
         /// unreadable.
         var lineStartSearch = 64 << 20

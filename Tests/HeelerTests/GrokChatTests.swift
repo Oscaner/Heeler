@@ -203,6 +203,7 @@ struct GrokChatTests {
         await files.write(session.text, at: path)
         await files.write(session.history, at: LongTurnSession.historyPath)
         let tailStart = UInt64(session.text.utf8.count - ChatTranscriptAdapter.grok.limits.tailWindow)
+        let bound = try #require(ChatTranscriptAdapter.grok.limits.automaticOlderSearch)
         let clock = Clock()
         let record = AgentRecord(Self.agent(session: LongTurnSession.id))
         let store = AgentChatStore(
@@ -223,7 +224,7 @@ struct GrokChatTests {
         await Self.requestOlderAutomatically(store)
         let automatic = await Self.bytesRead(files, from: path)
         #expect(automatic > 0)
-        #expect(automatic <= ChatTranscriptAdapter.grok.limits.automaticOlderSearch)
+        #expect(automatic <= bound)
         #expect(store.conversation.older == .available)
         #expect(store.conversation.olderAwaitsUser)
         // The turn folds behind the time its end record gives.

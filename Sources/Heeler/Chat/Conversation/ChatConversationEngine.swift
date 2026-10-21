@@ -82,9 +82,10 @@ struct ChatConversationSnapshot: Equatable, Sendable {
     var isFromCache = false
     var older: ChatOlderHistory = .reachedStart
     /// Earlier messages load only when the user asks: a request the
-    /// timeline made by itself read its limit without reaching the opener
-    /// of the turn the window starts in. A request that brings an opener
-    /// clears it, and so does a fresh tail.
+    /// timeline made by itself, for a program that bounds such requests
+    /// (`TranscriptFollower.Limits.automaticOlderSearch`), read its limit
+    /// without reaching the opener of the turn the window starts in. A
+    /// request that brings an opener clears it, and so does a fresh tail.
     var olderAwaitsUser = false
     /// The last read failed this way. Whatever was read before still shows.
     var readFailure: TransportError?
@@ -348,9 +349,10 @@ actor ChatConversationEngine {
     /// the saved entries are reached, or the search limit is read. A turn's
     /// steps fold under its header, so pages that end inside a turn would
     /// add nothing to see. A request the timeline makes by itself
-    /// (`automatic`) reads at most `automaticOlderSearch` bytes, and one
-    /// that reads them all inside a turn leaves earlier history to the
-    /// user's requests (`olderAwaitsUser`).
+    /// (`automatic`) reads as the user's does, unless the program bounds
+    /// it (`automaticOlderSearch`): then it reads at most that many bytes,
+    /// and one that reads them all inside a turn leaves earlier history to
+    /// the user's requests (`olderAwaitsUser`).
     func loadOlder(context: ChatProjectionContext, automatic: Bool = false) async -> ChatConversationSnapshot {
         setContext(context)
         guard let first = follower, first.hasOlder, !olderUnreadable, !(automatic && snapshot.olderAwaitsUser)
@@ -361,15 +363,15 @@ actor ChatConversationEngine {
         // Each page projects everything loaded again, so a long search
         // reads larger pages.
         var pageLength = first.limits.olderPage
-        // What an automatic request may still read. Its pages read no more
-        // than their length, so this counts every byte, the lines page
-        // boundaries cut and read again included.
+        // What a bounded automatic request may still read. Its pages read
+        // no more than their length, so this counts every byte, the lines
+        // page boundaries cut and read again included.
         var allowance = automatic ? first.limits.automaticOlderSearch : nil
         while var follower {
-            let length = allowance.map { min(pageLength, $0) } ?? pageLength
-            allowance = allowance.map { $0 - length }
+            let limit = allowance.map { min(pageLength, $0) }
+            allowance = allowance.map { $0 - (limit ?? 0) }
             do {
-                switch try await follower.loadOlder(files, length: length, limit: automatic ? length : nil) {
+                switch try await follower.loadOlder(files, length: limit ?? pageLength, limit: limit) {
                 case .lines(let lines):
                     self.follower = follower
                     reducer?.prepend(lines)

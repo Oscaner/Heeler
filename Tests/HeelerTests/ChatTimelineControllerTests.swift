@@ -226,7 +226,7 @@ struct ChatTimelineControllerTests {
     }
 
     /// Near its top the list asks for earlier history by itself, which Chat
-    /// bounds; only Load Earlier Messages asks for the user.
+    /// bounds for Grok Build; only Load Earlier Messages asks for the user.
     @Test func theListAsksForEarlierHistoryByItselfNearItsTop() async throws {
         var automatic = 0
         var user = 0

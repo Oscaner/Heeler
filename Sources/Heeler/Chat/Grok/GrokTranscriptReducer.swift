@@ -661,9 +661,14 @@ extension ChatTranscriptAdapter {
     /// herdr keeps the old session after `/resume`, `/fork` and going back
     /// from the dashboard, so a send first reads the screen for another
     /// session, then the folder's prompt history for the session that took it.
+    /// One turn's `read_file` results can fill tens of MB, so the timeline
+    /// reads at most 4 MiB of earlier history by itself.
     static var grok: ChatTranscriptAdapter {
-        ChatTranscriptAdapter(
+        var limits = TranscriptFollower.Limits()
+        limits.automaticOlderSearch = 4 << 20
+        return ChatTranscriptAdapter(
             revision: GrokTranscriptReducer.revision,
+            limits: limits,
             joinsCachedHistory: false,
             makeReducer: { GrokTranscriptReducer(transcriptPath: $0.path) },
             echoKey: { GrokTranscriptReducer.echoKey($0) },
