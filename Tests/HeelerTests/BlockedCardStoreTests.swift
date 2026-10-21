@@ -1058,12 +1058,12 @@ struct BlockedCardStoreTests {
                     + "Blocked, so continue in the terminal.")
         }
 
-        // A long error is cut.
+        // A long error is cut, and its ellipsis ends the sentence.
         store.update(transcript: Self.failedTurn(String(repeating: "x", count: 300)))
         await store.refresh()
         #expect(
             store.unreadableNote
-                == "OpenCode stopped with an error: \(String(repeating: "x", count: 200))…. herdr holds Chat's "
+                == "OpenCode stopped with an error: \(String(repeating: "x", count: 200))… herdr holds Chat's "
                 + "messages while it reports Blocked, so continue in the terminal.")
 
         // The next turn opened, and has shown no error.

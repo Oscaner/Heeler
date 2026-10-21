@@ -653,8 +653,9 @@ final class BlockedCardStore {
             return "OpenCode's subagent panel covers its request. Close the panel in the terminal to answer it."
         }
         if let latestFailure {
-            // A question or an exclamation ends the sentence by itself.
-            let end = latestFailure.hasSuffix("?") || latestFailure.hasSuffix("!") ? "" : "."
+            // A question, an exclamation or an ellipsis ends the sentence
+            // by itself.
+            let end = ["?", "!", "…"].contains { latestFailure.hasSuffix($0) } ? "" : "."
             return "OpenCode stopped with an error: \(latestFailure)\(end) herdr holds Chat's messages while it "
                 + "reports Blocked, so continue in the terminal."
         }
