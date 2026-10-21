@@ -189,7 +189,7 @@ struct GrokDialogParserTests {
         #expect(dialog.focus.focusedOrdinal == 1)
     }
 
-    /// `/fork`'s worktree question, at 181 columns and at the phone's
+    /// `/fork`'s worktree question, at 182 columns and at the phone's
     /// grid: Yes and No, each of which forks, by their keys. Always
     /// worktree and Never worktree save the choice in Grok's config, so
     /// they stay in the terminal, as does a typed answer. The title is the
