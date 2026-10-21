@@ -553,8 +553,10 @@ the footer `Ctrl+\:dashboard │ Ctrl+[/]:prev/next agent │ Ctrl+x:`. Once an
 agent had been opened, no key tried brought the plain view back, and a
 restart did: Esc out of the dashboard showed the last opened agent in that
 view, not the session shown before, and `/resume` to the earlier session
-and Ctrl+\ twice kept the view's chrome. A card there replaces the
-footer's hints with its own (source).
+and Ctrl+\ twice kept the view's chrome. In every capture of the view its
+scrollback marked the user's messages with `❯` at the plain view's indent,
+and its empty box drew no placeholder (live, 2026-10-20). A card there
+replaces the footer's hints with its own (source).
 
 Cards replace the input box with a panel of rows starting `┃`. Options read
 `┃ <key> (○|●) <label>`, `●` marking the preselected row; the focused row
