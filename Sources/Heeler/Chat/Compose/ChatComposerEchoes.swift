@@ -47,13 +47,18 @@ enum ChatComposerEchoes {
                 case .returned: state = .notDelivered
                 case .discarded: state = .discarded
                 case .refused(let refusal): state = .refused(refusal)
+                case .misdirected: state = .misdirected
                 case .awaiting, .recorded, .abandoned: state = .sent
                 }
             case .undelivered:
-                // The store's later look at the input box outranks the
-                // check after the send.
+                // The store's later look at the input box, or the program's
+                // own log of what it took, outranks the check after the send.
                 guard let status else { return nil }
-                state = status == .discarded ? .discarded : .notDelivered
+                switch status {
+                case .discarded: state = .discarded
+                case .misdirected: state = .misdirected
+                default: state = .notDelivered
+                }
             case .failed(let detail):
                 guard message.id == latest else { return nil }
                 state = .failed(detail)

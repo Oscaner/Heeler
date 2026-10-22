@@ -298,11 +298,13 @@ struct AgentChatSurfaceView: View {
             }
         }
         .onChange(of: timelineFeed, initial: true) { _, feed in
-            let entries = feed.history.marking(chat?.conversation.transcript.entries ?? [])
+            let transcript = chat?.conversation.transcript
+            let entries = feed.history.marking(transcript?.entries ?? [])
             timeline.update(
                 conversation: feed.generation,
                 input: ChatTimelineInput(entries: feed.outputs.marking(entries), pending: feed.pending, older: feed.older),
-                turns: chat?.conversation.transcript.turns ?? [], signals: feed.signals, isReady: feed.isReady)
+                turns: transcript?.turns ?? [], precedingTurnEnd: transcript?.precedingTurnEnd, signals: feed.signals,
+                isReady: feed.isReady)
         }
         .onChange(of: sentMessages, initial: true) { previous, messages in
             chat?.updateSends(messages)
@@ -635,7 +637,8 @@ struct AgentChatSurfaceView: View {
             activity: ChatAgentActivity(agent.agent.status),
             isBackgroundWorkRunning: chat.backgroundWork.rows.contains { $0.isRunning && !$0.isStale },
             foldsFinishedTurns: foldsFinishedTurns,
-            isLive: ChatTurnSignals.isLive(hostStatus: console.hostStatuses[agent.hostID], conversation: conversation))
+            isLive: ChatTurnSignals.isLive(hostStatus: console.hostStatuses[agent.hostID], conversation: conversation),
+            olderAwaitsUser: conversation.olderAwaitsUser)
         return TimelineFeed(
             generation: chat.conversationGeneration, revision: conversation.revision,
             older: conversation.older, pending: pending, history: chat.blocked.history, outputs: chat.outputs,
@@ -645,6 +648,7 @@ struct AgentChatSurfaceView: View {
     private var timelineActions: ChatTimelineActions {
         ChatTimelineActions(
             loadOlder: { chat?.loadOlder() },
+            loadOlderAutomatically: { chat?.loadOlder(automatic: true) },
             followingChanged: { isFollowing = $0 },
             firstPositionedLayout: { detailCrossfade?.contentDidAppear() },
             loadOutput: { chat?.loadOutput($0) },
@@ -692,21 +696,48 @@ struct AgentChatSurfaceView: View {
     }
 
     private var sendPolicy: ComposerDeliveryPolicy {
+        .chat(
+            rules: sendRules, activity: agentActivity, readScreen: readAgentScreen, sendConcern: sendConcern,
+            willReadScreen: registerSends)
+    }
+
+    /// Hands Chat the Composer's messages as a send's check starts, ahead
+    /// of the change that follows the next render, so a new send's witness
+    /// mark is on its way before the screen read.
+    private var registerSends: @MainActor () -> Void {
+        let chat = chat
+        let composer = composer
+        let rules = sendRules
+        return { chat?.updateSends(ChatComposerEchoes.sentMessages(composer.messages, rules: rules)) }
+    }
+
+    /// What holds a send the input box would take: a screen showing
+    /// another session, or a send the Agent recorded in another one.
+    private var sendConcern: @MainActor (String, ANSIScreen) -> String? {
+        let chat = chat
+        return { text, screen in chat?.sendConcern(for: text, after: screen) }
+    }
+
+    /// What herdr reports the Agent doing when asked, not when this view
+    /// last rendered.
+    private var agentActivity: @MainActor () -> ChatAgentActivity {
+        let agentID = agent.id
+        return { [console] in
+            ChatAgentActivity(console.agents.first { $0.id == agentID }?.agent.status)
+        }
+    }
+
+    /// The Agent's screen through `agent.read`, for a send and for Stop.
+    private var readAgentScreen: @MainActor () async throws -> ANSIScreen {
         let paneID = agent.agent.paneID
         let hostID = agent.hostID
-        let agentID = agent.id
         let chat = chat
-        return .chat(
-            rules: sendRules,
-            activity: { [console] in
-                ChatAgentActivity(console.agents.first { $0.id == agentID }?.agent.status)
-            },
-            readScreen: { [console] in
-                let screen = try await console.readAgentScreen(paneID, on: hostID)
-                // A steer shown as returned may since have left the box.
-                chat?.inputBoxWasRead(screen)
-                return screen
-            })
+        return { [console] in
+            let screen = try await console.readAgentScreen(paneID, on: hostID)
+            // A steer shown as returned may since have left the box.
+            chat?.inputBoxWasRead(screen)
+            return screen
+        }
     }
 
     private var composerChrome: some View {
@@ -735,13 +766,25 @@ struct AgentChatSurfaceView: View {
             inputReplacement: blockedCard,
             focusRequest: chat?.blocked.composerFocusRequest ?? 0,
             collapsesWithoutKeyboard: true,
-            // In line with the Agent page's keys, as typed keys would arrive.
-            interruptAgent: { [agentKeys] in
-                await agentKeys.deliver(.escape)
-                    ? .sent : .failed("Couldn't reach the Agent, so it may still be working.")
-            })
+            interrupt: stopInterrupt)
         .frame(maxWidth: ChatTimelineMetrics.maximumContentWidth)
         .frame(maxWidth: .infinity)
+    }
+
+    /// Chat's Stop: the program's Stop plan, in line with the Agent page's
+    /// keys, as typed keys would arrive.
+    private var stopInterrupt: AgentComposerInterrupt {
+        ChatStopPlan.standard(for: program).composerInterrupt(context: stopContext, agentKeys: agentKeys)
+    }
+
+    /// What a Stop guard reads: the screen, then herdr's status.
+    private var stopContext: @MainActor () async throws -> ChatStopContext {
+        let readScreen = readAgentScreen
+        let activity = agentActivity
+        return {
+            let screen = try await readScreen()
+            return ChatStopContext(screen: screen, activity: activity())
+        }
     }
 
     /// A Blocked Agent's dialog, answered in the Composer's place.

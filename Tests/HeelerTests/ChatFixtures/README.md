@@ -22,6 +22,18 @@ None came from a personal session.
 | `pi/auth-error-skill.jsonl` | Pi 0.85.1 session from the same probes: a provider authentication error and a `/skill:probe-hello world args` invocation recorded as its `<skill>` block |
 | `pi/provider-retry.jsonl` | Pi 0.85.1 session from a later 2026-10-15 probe against herdr 0.9.5: a `Connection error.` Pi retried on its own, the retry recorded as the error's reply |
 | `pi/summaries.jsonl` | Pi 0.85.1's `branch_summary` and `compaction` records from the 2026-10-17 E2E run (isolated root), summaries verbatim: Markdown headings, task checkboxes and a `<read-files>` block. The messages around them are written for the test |
+| `grok/fork-head.jsonl` | Grok Build 1.0.62 on herdr 0.9.5 (2026-10-19): the start of a scratch session made with `/fork` without a worktree, lines 1, 3–6 and 10 of the capture. The first five are the parent's records as the fork copied them, with the fork in `sessionId` and the parent's id still prefixing `eventId`; the last is the fork's own. The dropped lines are the developer's hook records, a copied `background_tasks` record and two more herdr `session_start` records |
+| `grok/core-turns.jsonl` | Grok Build 1.0.62 on herdr 0.9.5 (2026-10-19): a scratch session's first four turns, lines 1, 3–5, 7–9, 11–13, 15–17, 19 and 21–24 of the capture: herdr's `session_start` record, a one-line prompt, a three-line prompt, a prompt with the space Chat adds after it, and a turn with a `run_terminal_command` call (its start, input and result), reasoning and a reply in Chinese. The dropped lines are the developer's hook records |
+| `grok/cancel-takeover.jsonl` | The same Grok Build and herdr (2026-10-19), lines 1, 3–7, 9–12 and 14–17 of another scratch session's capture: a prompt stopped with Ctrl+C before any output, the prompt that took over its index, and a turn that spawned a subagent and was cancelled with Ctrl+C, the subagent's end written after the turn's. Line 3 is the developer's `user_prompt_submit` hook between the two prompts, its run renamed `project/probe:user_prompt_submit[0].hooks[0]`; the other hook records are dropped |
+| `grok/rewind.jsonl` | The same (2026-10-19), lines 1, 3, 5–6, 8–11, 13 and 15–16 of a scratch session's capture: two turns, a `rewind_marker` to prompt 1, and the prompt that reused index 1, the restored draft joined to it. The dropped lines are the developer's hook records and two reasoning records |
+| `grok/compaction.jsonl` | Lines 1–6 are lines 139–144 of an earlier capture of `core-turns.jsonl`'s session (2026-10-19): a turn, then a manual `/compact` (`compaction_checkpoint` and `auto_compact_completed`). Lines 7–12 are written for the test in the same session, from event number 606 on: an automatic compaction inside the next turn, recorded as Grok Build's source writes one |
+| `grok/dispatch-order.jsonl` | The same (2026-10-19), lines 1–4 of a session dispatched from Grok's dashboard: its prompt is written before herdr's `session_start` record |
+| `grok/agent-turns-and-errors.jsonl` | Written for the test, not captured: a skill, a prompt of text, image and text chunks with an `image_dropped` notice, an interjection and a thought written after its turn's end, a retry that gave up and an expired sign-in (each ending its turn with an error), a shell-mode command, a hidden prompt Grok wrote for itself after a background command, fork and resume context wrappers, an unknown record kind, and a cancelled and a failed automatic compaction. The records take the captures' shapes, or Grok Build's source where no capture shows one |
+| `grok/reject-and-edit.jsonl` | The same Grok Build and herdr (2026-10-19), lines 97–116 of a scratch session's capture: a `run_terminal_command` call the user rejected, which ended the turn (`PermissionRejected`), a `search_replace` call that created `notes.txt`, and one that changed a line of it, its result carrying the edit's details. No hook records fall in these lines |
+| `grok/subagent-todo-question.jsonl` | The same (2026-10-19), lines 18–20, 22–24, 26–28, 35–37, 39, 41–44, 46, 48–49, 51, 53–55, 57, 59–60, 62, 64 and 77 of another scratch session's capture, four turns: a subagent whose `subagent_spawned` and `subagent_finished` records come before the spawn's input update, a `todo_write` call and the `plan` snapshot after it, an `ask_user_question` call answered with its first option, and a `write` call that created `note.txt`. The dropped lines are the developer's hook records, a turn that wrote its plan as prose, two thoughts, and git calls with a message that names the commit |
+| `grok/pending-permission.jsonl` | The same (2026-10-19), lines 90–92 of a capture taken while Grok waited for permission to run a command: herdr's `session_start` record, the prompt, and the bare `tool_call` |
+| `grok/background-tasks.jsonl` | Written for the test, not captured: a command started in the background, a command Grok moved to the background while it ran, and a subagent spawned in the background, with their `task_backgrounded` and `subagent_spawned` records, then the commands' `task_completed` records (one exited 0, one was killed) and the subagent's `subagent_finished`; then a monitor, whose `task_backgrounded` comes before its input update, whose result holds no output, and whose output comes with a `task_completed` of kind `monitor`. The records take the shapes Grok Build's source writes |
+| `grok/failed-tools.jsonl` | Written for the test, not captured: one turn of failed calls, a `tool_execution_failed` error, the tagged failures `FileNotFound`, `FileTooLarge`, `NotADirectory`, `NotFound`, `NoMatchesFound`, `MultipleMatchesFound` and `InvalidInput`, and an MCP call that returned an error. The records take the shapes a census of real failures found; some carry no content |
 
 ## Scrubbing
 
@@ -43,6 +55,30 @@ The 2026-10-15 sessions were re-serialized as compact JSON without
 replaced as above; `pi/provider-retry.jsonl` also drops the encrypted
 `thinkingSignature`. Each keeps every line of its session, so tests address
 records by line number.
+
+Grok Build captures keep their chosen lines byte for byte, apart from
+these replacements:
+
+- Every id (session, prompt, tool call, compaction checkpoint, subagent)
+  becomes a synthetic UUIDv7-shaped id (`01900000-0000-7000-8000-0000000000NN`),
+  the same one wherever the real id appeared: in a call id's `call-<id>-0`,
+  in the `eventId` prefix a fork keeps from its parent, and, without its
+  dashes, in a subagent attempt's `at1.<id>`.
+- The account name becomes `developer`, also inside the byte arrays Grok
+  writes for a command's output. The name has the same length, so
+  `total_bytes` still holds.
+- The scratch directory the probes ran in becomes `/Users/developer/scratch/`,
+  plain and percent-encoded.
+- In `subagent-todo-question.jsonl`, the question and options the model
+  wrote in Chinese become English scratch text, in the call, its input
+  update and the answer. Those three lines are shorter than captured.
+
+The developer's own hook records (`global/settings:` runs) are dropped, except
+the one `cancel-takeover.jsonl` keeps under a renamed run; herdr's
+`session_start` records stay. The fixtures written for the tests use ids
+from the same range only. Searching `grok/` for a UUID outside that range, a
+`global/settings` run or the account name, in text or in a byte array, finds
+nothing.
 
 After adding a capture, check that searching this directory for `/Users/`
 (other than `/Users/developer`), `ghp_`, `Bearer` and e-mail addresses finds
@@ -152,3 +188,75 @@ Scrubbing replaced the account name as above and the shell prompt's
 `user@host` with `developer@probe-host-placeholder-01`, both with
 replacements of the same length. These screens are not part of
 `ScreenFixture.all`, which the dialog and input-box suites walk.
+
+### Grok Build screens
+
+`screens/grok/grok-*.ansi` are visible-screen reads from Grok Build 1.0.62 on
+herdr 0.9.5 (2026-10-19), kept as herdr returned them apart from the
+scrubbing below: CRLF rows, SGR styling only. Two Agents ran in scratch
+projects under the developer's account, `cap-grok-a` and `cap-grok-b`; every
+screen is 47 rows of 181 or 182 columns, except `grok-28` to `grok-45` (below).
+Screens whose header shows
+`/U/d/s/cap-grok-a/proj` ran with `HOME` pointed at a scratch directory, where
+Grok asks before running a tool; the developer's own settings put it in
+Auto-review, which draws no permission card. The model answered the scratch
+prompts in Chinese, and its replies stay as captured.
+
+| Fixtures | Captures |
+|---|---|
+| `grok-01-idle-empty`, `grok-02-idle-draft`, `grok-03-working` | `A11a-idle-empty`, `A11b-idle-draft`, `A8b-running` |
+| `grok-04-working-draft`, `grok-05-queued`, `grok-06-esc-toast` | `A9c-working-draft`; `A10-queued`, a follow-up `agent.prompt` queued during a turn; `A8b-after-esc-0.4s`, the toast Esc shows while the turn goes on |
+| `grok-07-slash-popup`, `grok-08-at-popup`, `grok-09-model-picker` | `A11c-slash-popup`, `A11d-at-popup`, `X17-model-picker` |
+| `grok-10-btw`, `grok-11-dashboard` | `X12-after-4s`, a `/btw` aside answering in a box above the composer; `X14-dashboard` |
+| `grok-12-permission-command`, `grok-13-permission-compound`, `grok-14-permission-edit` | `A4j-blocked`, `A5-blocked`, `A6a-blocked` |
+| `grok-15-question`, `grok-16-subagent-panel` | `cap-grok-b`'s `B9-question`; `cap-grok-b`'s `X8-after-ctrlc-subagent`, the question Ctrl+C asks while a subagent runs |
+| `grok-17-session-new`, `grok-18-session-fork`, `grok-19-resumed-other` | `cap-grok-b`'s `B2-after-new` and `X2-after-fork-no`; `X6-after-resume` |
+| `grok-20-welcome`, `grok-21-resume-picker`, `grok-22-rewind-picker` | `A1-after-start`; `cap-grok-b`'s `B5-picker`; `X8-picker` |
+| `grok-23-rewind-confirm`, `grok-24-restored-draft`, `grok-25-fork-question` | `X8-after-enter`; `X1-after-early-ctrlc-2s`, a prompt Ctrl+C stopped before any output, put back in the box; `cap-grok-b`'s `X2-after-fork`, the worktree question `/fork` asks |
+| `grok-26-waiting-subagent`, `grok-27-compacting` | `cap-grok-b`'s `B7-t6s`; `A12-t+1s`, a `/compact` a second in |
+| `grok-28-welcome-62`, `grok-29-welcome-40` | The Welcome screen at the phone's 62×41 grid and at 40×30, where Grok draws its menu without the box |
+| `grok-30-idle-62x20`, `grok-31-scrollback-62x20`, `grok-32-working-62x20`, `grok-33-working-scrollback-62x20` | The phone's 62×20 grid with the keyboard up, where Grok forces compact mode: idle, then the scrollback focused with Tab; a `sleep 15` turn running, then the scrollback focused |
+| `grok-34-working-draft-62` | The phone's 62×41 grid: a `sleep 60` turn running with `draft text` typed in the terminal, whose footer stops at `Enter:queue │ Shift+Enter/Opt+Enter:newline │` |
+| `grok-35-permission-subagent-62` | The phone's 62×41 grid: the card Grok asks before a subagent starts, `Allow Sleep 60 then reply done?`, its always-approve row cut at the card's edge |
+| `grok-36-permission-command-40`, `grok-37-permission-command-62` | A command's card at 40×30, where Grok cut the rule to `Always allow: chmod 644…` and the description with `…` (derived, below); the same card at the phone's 62×41 grid, where both read in full |
+| `grok-38-fork-question-62`, `grok-39-fork-question-40` | The worktree question `/fork` asks, at the phone's 62×41 grid with every row in view, and at 40×30, where the card scrolls all but `1` and `z` out of view |
+| `grok-40-agent-view-other-62`, `grok-41-agent-view-this-62`, `grok-42-agent-view-dispatched-62` | The dashboard's view of an agent at the phone's 62×41 grid, its footer cut at `Ctrl+x:`: another session opened from the dashboard while herdr reported the first; the first after `/resume` back to it, which kept the view; the first again after Esc from a dispatch that moved herdr to the new agent |
+| `grok-43-resumed-from-welcome-120` | At 120×40, the session a `/resume` typed on the Welcome screen put on screen, its newest message one Chat sent there, while herdr reported the empty session the typed command started first |
+| `grok-44-permission-second-subagent-120` | At 120×40, the second of two spawn cards for parallel subagents with one description, `Allow Sleep 90 then done?`, read 2.6 s after `2` approved the first, while its subagent ran and herdr stayed Blocked: only the status row's timers differ from the first card |
+| `grok-45-compaction-cancelled-62` | The phone's 62×41 grid after Chat's Stop cancelled a `/compact` (2026-10-22): `Compaction cancelled.` under the `Compacting conversation…` row, with only blank rows and the scrollbar's thumb between it and the box. Grok writes no record for it |
+
+Captures not marked `cap-grok-b` come from `cap-grok-a`, except `grok-28` to
+`grok-45`, which come from later Agents (2026-10-20 and 22) in the scratch project
+`/tmp/hcl/proj-grok`, with nothing to scrub. They are kept as read, except
+`grok-36-permission-command-40`, which is derived, not captured: that read
+took the pane's ANSI a moment before Grok drew the card and its text just
+after, so the fixture keeps every character and column of the text read and
+takes its styles from `grok-37`, the same card read at 62×41 a minute later,
+and from the 40×30 ANSI read for the header and the pinned prompt. Blank rows
+take the backgrounds those reads show, the scrollbar's track and thumb
+included. Replace it with a capture when one is taken.
+
+Scrubbing replaced the account name with `developer` and the scratch
+directory the probes ran in with `/Users/developer/scratch/`; the header's
+abbreviated forms follow (`/U/d/s/cap-grok-a/proj`, `~/s/cap-grok-b/proj`).
+These paths are shorter than captured, so the next run of two or more spaces
+after each, or the row's trailing spaces, takes up the difference: borders
+and right-aligned text keep their columns. The `Session <id>` lines carry
+synthetic ids from the range the Grok transcript fixtures use. In `grok-15`,
+the question and options the model wrote in Chinese became the English of
+`grok/subagent-todo-question.jsonl`, in the card and in the rows above it.
+Grok pads option labels by characters, not cells, so the two descriptions
+start two columns apart, as captured, where Grok would line up English
+labels.
+
+The tests also build synthetic screens, labelled synthetic, for states and
+widths no capture shows yet: `Support/GrokScreenBuilder.swift` lays rows out
+the way Grok's source does (the turn status row cut to fit, dock rows, the
+composer box, a footer whose hints stop at the right edge), and
+`ScreenFixture.synthetic` takes raw rows. They cover the 40- and 62-column
+working, queued and subagent-wait screens with cut footers, the other waits
+that a message would cancel, parked turns, footers that show another pane
+has focus, ghost text, Bash and Remember modes, `/multiline`, editing a
+queued message, a pending double press, and minimal mode. Replace each with
+a capture when one is taken. These screens are not part of
+`ScreenFixture.all` either.

@@ -198,11 +198,13 @@ Blocked: Send then inserts the draft into Attach without Enter, and the tools
 keyboard submits or cancels. Delivered means the Host accepted the text into
 the pane — whether the Agent queues or acts on it is the Agent's business,
 and the Composer never claims otherwise.
-While Agent Status is Working and the draft is blank, Send becomes Stop: one
-Esc in the Agent's program, then a wait of up to three seconds for the status
-to leave Working rather than a second Esc. The wait is per Agent, shared by
-Chat and the terminal. With text, Send still delivers, so a prompt can queue
-behind the turn.
+While Agent Status is Working and the draft is blank, Send becomes Stop: the
+program's Stop key (one Esc, or Ctrl+C in Grok Build, whose turns Esc doesn't
+stop), then a wait of up to three seconds for the status to leave Working
+rather than a second press. The wait is per Agent, shared by Chat and the
+terminal. Only Chat presses Ctrl+C, after reading Grok Build's screen; the
+terminal's Composer keeps Send for Grok Build. With text, Send still
+delivers, so a prompt can queue behind the turn.
 Composer remains the default authored-input path on Agent detail. Direct Input
 is an explicit, opt-in alternative that hides the Composer card without
 clearing or submitting the draft.
@@ -236,13 +238,17 @@ leaves the detail; a later session discovers whatever its terminal shows anew.
 _Avoid_: recent link, visible link, link history
 
 **Chat**:
-The native conversation a Claude Code, Codex, Pi or Oh My Pi Agent's detail can show in its
-terminal's place, read from the Agent's Transcript. Chat holds no Attach; its
+The native conversation a Claude Code, Codex, Pi, Oh My Pi or Grok Build
+Agent's detail can show in its terminal's place, read from the Agent's
+Transcript. Chat holds no Attach; its
 Composer and draft are the terminal's. Send is one `agent.prompt` request, made
 only after a screen read shows the program's input box empty, and refused for
 text the program would run rather than read. Its `/` menu offers the Agent's
 skills and `/compact`. Chat never resends: text left in the box after sending
-marks the message Not delivered. Stop presses Esc through `agent.send_keys`.
+marks the message Not delivered. Stop presses the program's Stop key through
+`agent.send_keys`: Esc, or Ctrl+C in Grok Build once its screen shows the
+turn running. For Grok Build, Chat holds a message when the Agent shows
+another session, and marks one Grok Build recorded elsewhere.
 The choice between Chat and the terminal is app-wide, Terminal by default. Not
 offered on native Windows Hosts.
 _Avoid_: chat mode, conversation view, Monitor (ADR 0012's removed surface)
@@ -250,10 +256,12 @@ _Avoid_: chat mode, conversation view, Monitor (ADR 0012's removed surface)
 **Transcript**:
 The file an Agent's program writes on its Host as its record of the
 conversation: Claude Code's session JSONL, with its subagents' files, or a
-Codex rollout, or a Pi/Oh My Pi v2-v3 tree JSONL. For Pi and Oh My Pi, herdr
+Codex rollout, or a Pi/Oh My Pi v2-v3 tree JSONL, or Grok Build's
+`updates.jsonl`. For Pi and Oh My Pi, herdr
 normally names the exact absolute file path; a UUID can also locate a session
-under that program's default sessions directory. The session herdr reports
-names it. Heeler only reads it, over
+under that program's default sessions directory. For Grok Build, herdr names
+the session id, whose folder Chat finds under `~/.grok/sessions`. The session
+herdr reports names it. Heeler only reads it, over
 SFTP, and keeps decoded entries, never tool output, in an on-device cache.
 _Avoid_: log, history file, session file
 

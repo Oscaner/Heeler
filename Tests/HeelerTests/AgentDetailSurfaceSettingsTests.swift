@@ -59,7 +59,9 @@ struct AgentChatAvailabilityTests {
         Agent(AgentInfo.fixture(paneID: "w1:p1", kind: kind))
     }
 
-    @Test(arguments: [("claude", ChatProgram.claude), ("codex", .codex), ("pi", .pi), ("omp", .omp)])
+    @Test(arguments: [
+        ("claude", ChatProgram.claude), ("codex", .codex), ("pi", .pi), ("omp", .omp), ("grok", .grok),
+    ])
     func supportedProgramsOfferChatOnPOSIXHosts(kind: String, program: ChatProgram) {
         #expect(AgentChatAvailability.program(for: agent(kind: kind), platform: .posix) == program)
         #expect(AgentChatAvailability.mayOfferChat(for: agent(kind: kind)))
@@ -69,6 +71,19 @@ struct AgentChatAvailabilityTests {
     func otherProgramsNeverOfferChat(kind: String) {
         #expect(AgentChatAvailability.program(for: agent(kind: kind), platform: .posix) == nil)
         #expect(!AgentChatAvailability.mayOfferChat(for: agent(kind: kind)))
+    }
+
+    /// A program whose case lands before its adapter is not offered yet.
+    @Test func aProgramWithoutAnAdapterNeverOffersChat() {
+        let hasAdapter: (ChatProgram) -> Bool = { $0 != .codex }
+
+        #expect(
+            AgentChatAvailability.program(for: agent(kind: "codex"), platform: .posix, hasAdapter: hasAdapter) == nil)
+        #expect(!AgentChatAvailability.mayOfferChat(for: agent(kind: "codex"), hasAdapter: hasAdapter))
+        #expect(
+            AgentChatAvailability.program(for: agent(kind: "claude"), platform: .posix, hasAdapter: hasAdapter)
+                == .claude)
+        #expect(AgentChatAvailability.mayOfferChat(for: agent(kind: "claude"), hasAdapter: hasAdapter))
     }
 
     /// Unknown is not POSIX: the entry stays hidden until the Host says.

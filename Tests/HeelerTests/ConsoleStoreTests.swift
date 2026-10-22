@@ -272,6 +272,41 @@ struct ConsoleStoreTests {
         store.setHosts([])
     }
 
+    /// Chat's availability asks the adapters the store reads with: a program
+    /// it has none for is not offered, and its Agents never ask for the
+    /// Host's platform.
+    @Test func aProgramTheStoreHasNoAdapterForIsNotOffered() async throws {
+        let host = Host.fixture()
+        let info = AgentInfo(
+            agentStatus: .idle, focused: false, paneID: "w1:p1", revision: 1,
+            tabID: "t1", terminalID: "term-1", workspaceID: "w1", agent: "claude",
+            agentSession: AgentSessionInfo(
+                agent: "claude", kind: .id, source: "herdr:claude", value: "e951205e-24af-4a5e-baa7-3ccbebd2de2c"),
+            cwd: "/home/dev/proj")
+        let transport = ScriptedTransport(snapshot: .fixture(agents: [info]))
+        let store = ConsoleStore(
+            snapshotRetryDelay: .milliseconds(10),
+            makeSession: { _, subscriptions in
+                EventsSession(
+                    subscriptions: subscriptions, connect: { transport },
+                    reconnectPolicy: Self.fastPolicy, keepalive: nil)
+            }, chatAdapter: { $0 == .claude ? nil : NumberedChatReducer.adapter() })
+        defer { store.setHosts([]) }
+
+        store.setHosts([host])
+        await store.resume()
+        try await waitUntil("the Claude Code Agent is listed") { store.agents.count == 1 }
+        let agent = try #require(store.agents.first)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(store.hostPlatforms[host.id] == nil, "no Agent on the Host may offer Chat")
+        #expect(store.chatProgram(for: agent) == nil)
+
+        await store.resolveHostPlatform(host.id)
+        #expect(store.hostPlatforms[host.id] == .posix)
+        #expect(store.chatProgram(for: agent) == nil)
+        #expect(await transport.chatAgentReads.isEmpty, "nor is it prefetched")
+    }
+
     /// The user can trust a replaced host key without editing the Host; the
     /// reconnect that follows must not hand the old machine's saved Chat
     /// binding to a live Agent that has not reported its session.

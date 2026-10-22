@@ -9,9 +9,10 @@ import Foundation
 /// in the terminal stops every plan that would send keys past it, since
 /// Heeler never clears it.
 enum DialogActionPlanner {
-    /// - Parameter toolUseID: The matched request's `tool_use` id, which
-    ///   lets a Claude card or an Oh My Pi question confirm by the request's
-    ///   result.
+    /// - Parameter toolUseID: The matched request's `tool_use` id. Each
+    ///   program's planner decides what it is for: a Claude card or an
+    ///   Oh My Pi question confirms by the request's result, and Codex
+    ///   and Grok Build ignore it.
     static func plan(
         _ action: DialogAction, for dialog: BlockedDialog, toolUseID: String? = nil
     ) throws(DialogPlanError) -> DialogActionPlan {
@@ -20,6 +21,7 @@ enum DialogActionPlanner {
         case .codex: try CodexDialogPlanner(dialog: dialog).plan(action)
         case .omp: try OMPDialogPlanner(dialog: dialog, toolUseID: toolUseID).plan(action)
         case .pi: throw .unsupported("Answer this dialog in the Agent terminal.")
+        case .grok: try GrokDialogPlanner(dialog: dialog, toolUseID: toolUseID).plan(action)
         }
     }
 
@@ -321,7 +323,7 @@ private struct CodexDialogPlanner {
             try asyncQuestion(action)
         case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFileRead, .claudeFetch, .claudePlan,
             .claudeQuestion, .claudeQuestionReview, .claudeWorkspaceTrust, .ompApproval, .ompQuestion,
-            .ompQuestionReview:
+            .ompQuestionReview, .grokPermission, .grokQuestion, .grokCancelTurn, .grokFork:
             throw .unsupported("Not a Codex dialog.")
         }
     }

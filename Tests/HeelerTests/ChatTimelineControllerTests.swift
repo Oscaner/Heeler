@@ -225,6 +225,27 @@ struct ChatTimelineControllerTests {
         }
     }
 
+    /// Near its top the list asks for earlier history by itself, which Chat
+    /// bounds for Grok Build; only Load Earlier Messages asks for the user.
+    @Test func theListAsksForEarlierHistoryByItselfNearItsTop() async throws {
+        var automatic = 0
+        var user = 0
+        let controller = ChatTimelineController(
+            actions: ChatTimelineActions(loadOlder: { user += 1 }, loadOlderAutomatically: { automatic += 1 }))
+        let rows = await ChatRowBuilder().rows(
+            for: ChatTimelineInput(entries: Self.entries(200..<260), older: .available))
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.apply(Self.state(rows))
+            await Self.settle(controller)
+            #expect(automatic == 0)
+
+            Self.drag(controller, to: controller.timeline.minOffsetY)
+            await Self.settle(controller)
+            #expect(automatic == 1)
+            #expect(user == 0)
+        }
+    }
+
     @Test func aLoadEarlierRowThatGrowsAtTheTopStaysInView() async throws {
         let controller = ChatTimelineController(actions: ChatTimelineActions())
         let builder = ChatRowBuilder()
@@ -771,6 +792,37 @@ struct ChatTimelineControllerTests {
             await Self.settle(controller)
             #expect(abs(try #require(Self.screenY(of: header, in: controller)) - before) <= 0.5)
             #expect(!controller.isFollowing)
+        }
+    }
+
+    /// Once earlier messages wait for the user, the rows above the first
+    /// loaded turn fold when the state's record of their turn's end closes
+    /// it, though the Agent works on a turn the rows do not show yet.
+    @Test func rowsAboveTheFirstLoadedTurnFoldOnTheEndTheStateRecords() async throws {
+        let controller = ChatTimelineController(actions: ChatTimelineActions())
+        func command(_ id: String, at offset: UInt64) -> ChatEntry {
+            ChatEntry(
+                id: ChatEntryID(id), sourceOffset: offset,
+                content: .tool(ChatToolActivity(kind: .command, name: "Bash", title: id, status: .succeeded)))
+        }
+        let answer = ChatEntry(
+            id: ChatEntryID("a0"), sourceOffset: 2, content: .assistant(ChatAssistantMessage(text: "Done.")))
+        let rows = await ChatRowBuilder().rows(
+            for: ChatTimelineInput(entries: [command("c0", at: 0), command("c1", at: 1), answer], older: .available))
+        let signals = ChatTurnSignals(activity: .working, olderAwaitsUser: true)
+        try await withTestWindow(frame: Self.frame, rootViewController: controller) { _ in
+            controller.apply(ChatTimelineState(generation: 1, revision: 1, rows: rows, isReady: true, signals: signals))
+            await Self.settle(controller)
+            #expect(controller.visibleRowIDs.contains(.group(ChatEntryID("c1"))))
+            #expect(!controller.visibleRowIDs.contains(.turn(ChatEntryID("a0"))))
+
+            controller.apply(
+                ChatTimelineState(
+                    generation: 1, revision: 2, rows: rows, isReady: true,
+                    precedingTurnEnd: ChatTurnEnd(ending: .completed), signals: signals))
+            await Self.settle(controller)
+            #expect(controller.visibleRowIDs.contains(.turn(ChatEntryID("a0"))))
+            #expect(!controller.visibleRowIDs.contains(.group(ChatEntryID("c1"))))
         }
     }
 

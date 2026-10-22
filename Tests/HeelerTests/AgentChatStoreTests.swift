@@ -113,6 +113,26 @@ struct AgentChatStoreTests {
         store.conversation.transcript.entries.map(\.id.rawValue)
     }
 
+    /// A Claude Code or Codex store following lines 0..<2 of its transcript
+    /// while herdr reports the Agent idle, with the session and the path.
+    private static func followed(
+        _ program: ChatProgram, screen: BlockedScreenIO
+    ) async -> (fixture: Fixture, session: String, path: String) {
+        var session = first
+        var transcript = Self.path(first)
+        var header = ""
+        if program == .codex {
+            session = "01a10f87-e025-7fb1-8974-8dd09937767a"
+            transcript = "/home/dev/.codex/sessions/2026/10/06/rollout-2026-10-06T12-45-25-\(session).jsonl"
+            header = #"{"type":"session_meta","payload":{"id":"\#(session)"}}"# + "\n"
+        }
+        let fixture = Fixture(session: session, program: program, screen: screen)
+        await fixture.files.write(header + NumberedChatReducer.lines(0..<2), at: transcript)
+        await fixture.store.step()
+        #expect(fixture.store.conversation.phase == .following(path: transcript))
+        return (fixture, session, transcript)
+    }
+
     // MARK: Background work
 
     private static let journal =
@@ -243,7 +263,7 @@ struct AgentChatStoreTests {
         #expect(await fixture.files.reads.isEmpty)
     }
 
-    @Test(arguments: [ChatProgram.claude, .codex])
+    @Test(arguments: [ChatProgram.claude, .codex, .grok])
     func missingSessionExplainsTheMissingIdentityWithoutAnInstallDiagnosis(program: ChatProgram) {
         let reason = ChatUnavailableReason.noSession(program)
         #expect(reason.title == "Waiting for Conversation")
@@ -802,6 +822,21 @@ struct AgentChatStoreTests {
         #expect(Self.ids(fixture.store) == NumberedChatReducer.ids(5..<6))
     }
 
+    /// A link is checked like the session herdr reports: a value that is not
+    /// the program's session id never becomes a path to follow.
+    @Test func aContinuedInLinkThatIsNotASessionIDIsIgnored() async throws {
+        let fixture = Fixture(session: Self.first)
+        await fixture.files.write(
+            NumberedChatReducer.lines(0..<2) + #"{"continued":"my-thread-name"}"# + "\n",
+            at: Self.path(Self.first))
+
+        await fixture.store.step()
+        await fixture.store.step()
+
+        #expect(fixture.store.conversation.phase == .following(path: Self.path(Self.first)))
+        #expect(Self.ids(fixture.store) == NumberedChatReducer.ids(0..<2))
+    }
+
     @Test func olderPagesLoadOnRequest() async throws {
         let fixture = Fixture(
             session: Self.first,
@@ -822,6 +857,39 @@ struct AgentChatStoreTests {
 
         #expect(Self.ids(fixture.store).count > shown)
         #expect(Self.ids(fixture.store).last == "n-29")
+    }
+
+    /// The list's own request reads a failed page again, as Retry does,
+    /// unless the program bounds what the list loads by itself, as Grok
+    /// Build's does: then only Retry reads it again.
+    @Test func theListRetriesAFailedPageUnlessItsProgramBoundsWhatItLoads() async throws {
+        let claude = try #require(ChatTranscriptAdapter.standard(for: .claude))
+        let programs = [
+            (claude.limits.automaticOlderSearch, true), (ChatTranscriptAdapter.grok.limits.automaticOlderSearch, false),
+        ]
+        for (bound, retries) in programs {
+            var limits = TranscriptFollower.Limits(
+                tailWindow: 64, readChunk: 16, pollBudget: 1_024, olderPage: 32,
+                maximumOlderPage: 128, lineStartSearch: 1_024, anchorLength: 8, headLength: 32,
+                lineCap: 4_096, prefixCap: 16)
+            limits.automaticOlderSearch = bound
+            let fixture = Fixture(session: Self.first, limits: limits)
+            await fixture.files.write(NumberedChatReducer.lines(0..<30), at: Self.path(Self.first))
+            await fixture.store.step()
+            let shown = Self.ids(fixture.store).count
+            await fixture.files.failNext(.read, path: Self.path(Self.first), with: TransportError.hostFileTimedOut)
+            fixture.store.loadOlder()
+            await fixture.store.step()
+            guard case .failed = fixture.store.conversation.older else {
+                Issue.record("expected a failed page, got \(fixture.store.conversation.older)")
+                continue
+            }
+
+            fixture.store.loadOlder(automatic: true)
+            await fixture.store.step()
+
+            #expect((Self.ids(fixture.store).count > shown) == retries)
+        }
     }
 
     @Test func aMissingTranscriptIsLookedForAgainWithBackoff() async throws {
@@ -1699,6 +1767,31 @@ struct AgentChatStoreTests {
         #expect(store.sendStatuses[id] == .overdue)
     }
 
+    /// Only Pi's and Oh My Pi's Esc is known to hand steers back: a send
+    /// Claude Code or Codex left overdue when its turn ended is never looked
+    /// for on the screen, where the same steps read Pi's once
+    /// (`aSteerStopPutBackInTheEditorIsReturnedUntilRecorded()`).
+    @Test(arguments: [ChatProgram.claude, .codex])
+    func aSendLeftOverdueAfterStopIsNotLookedForOnTheScreen(program: ChatProgram) async throws {
+        let pane = Pane(try ScreenFixture.screen("pi-36-steer-back-in-editor"))
+        let (fixture, session, _) = await Self.followed(program, screen: pane.io)
+        fixture.store.agentDidChange(Self.agent(session: session, status: .working, program: program))
+        let id = UUID()
+        fixture.store.updateSends([Self.sent(id, "hello ", delivered: false)])
+        fixture.store.updateSends([Self.sent(id, "hello ")])
+        fixture.advance(10)
+        await fixture.store.step()
+        #expect(fixture.store.sendStatuses[id] == .overdue)
+
+        fixture.store.agentDidChange(Self.agent(session: session, status: .idle, program: program))
+        fixture.advance(1)
+        await fixture.store.step()
+        await fixture.store.step()
+
+        #expect(await pane.reads == 0)
+        #expect(fixture.store.sendStatuses[id] == .overdue)
+    }
+
     // MARK: Refused compactions
 
     /// A Pi or Oh My Pi store holding one recorded prompt, with `/compact`
@@ -1902,13 +1995,13 @@ struct AgentChatStoreTests {
         #expect(store.sendStatuses[first] == .abandoned)
     }
 
-    /// Only Pi and Oh My Pi are known to refuse on screen: Claude's
-    /// overdue `/compact` stays overdue without a read.
-    @Test func aClaudeCompactIsNotLookedForOnTheScreen() async throws {
+    /// Only Pi, Oh My Pi and Grok Build are known to refuse on screen:
+    /// Claude Code's and Codex's overdue `/compact` stays overdue without
+    /// a read.
+    @Test(arguments: [ChatProgram.claude, .codex])
+    func anOverdueCompactIsNotLookedForOnTheScreen(program: ChatProgram) async throws {
         let pane = Pane(try ScreenFixture.screen("pi-41-compact-nothing"))
-        let fixture = Fixture(session: Self.first, screen: pane.io)
-        await fixture.files.write(NumberedChatReducer.lines(0..<2), at: Self.path(Self.first))
-        await fixture.store.step()
+        let (fixture, _, _) = await Self.followed(program, screen: pane.io)
         let id = UUID()
         fixture.store.updateSends([Self.sent(id, "/compact", delivered: false)])
         fixture.store.updateSends([Self.sent(id, "/compact")])
@@ -1918,6 +2011,26 @@ struct AgentChatStoreTests {
         await fixture.store.step()
 
         #expect(await pane.reads == 0)
+        #expect(fixture.store.sendStatuses[id] == .overdue)
+    }
+
+    /// Only Pi and Oh My Pi are known to record a compaction before the
+    /// next prompt: a Claude Code or Codex `/compact` that a later prompt
+    /// overtook with no compaction stays overdue, where Pi's is abandoned
+    /// (`anOverdueCompactIsLookedForOnce()`).
+    @Test(arguments: [ChatProgram.claude, .codex])
+    func anOvertakenCompactWithoutACompactionStaysOverdue(program: ChatProgram) async throws {
+        let (fixture, _, path) = await Self.followed(program, screen: .unavailable)
+        let id = UUID()
+        fixture.store.updateSends([Self.sent(id, "/compact", delivered: false)])
+        fixture.store.updateSends([Self.sent(id, "/compact")])
+        fixture.advance(10)
+        await fixture.store.step()
+        #expect(fixture.store.sendStatuses[id] == .overdue)
+
+        await fixture.files.append(NumberedChatReducer.prompt("say PLUM"), to: path)
+        await fixture.store.step()
+
         #expect(fixture.store.sendStatuses[id] == .overdue)
     }
 
@@ -2089,6 +2202,865 @@ struct AgentChatStoreTests {
         await store.step()
 
         #expect(store.conversation.phase == .following(path: path))
+    }
+
+    // MARK: Grok Build's echo clock
+
+    /// The session in `grok/core-turns.jsonl`.
+    private static let grokSession = "01900000-0000-7000-8000-000000000004"
+    private static let grokPath = "/home/dev/.grok/sessions/%2Fhome%2Fdev%2Fproj/\(grokSession)/updates.jsonl"
+
+    private static func grokAgent(_ status: AgentStatus) -> Agent {
+        agent(session: grokSession, status: status, program: .grok)
+    }
+
+    /// Lines `range` of a `grok/` fixture (1-based, inclusive), as written.
+    private static func grokLines(_ fixture: String, _ range: ClosedRange<Int>) throws -> String {
+        let rows = try ChatFixture.text("grok/\(fixture)").split(separator: "\n", omittingEmptySubsequences: false)
+        return rows[(range.lowerBound - 1)..<range.upperBound].joined(separator: "\n") + "\n"
+    }
+
+    /// A store following lines 1 to `line` of `grok/core-turns.jsonl`
+    /// through Grok Build's own adapter, while herdr reports `status`. A
+    /// gate holds stats of the folder's prompt history.
+    private static func grokStore(
+        through line: Int, status: AgentStatus, server: Server? = nil, gate: HistoryGate? = nil,
+        cache: VolatileChatTranscriptCache = VolatileChatTranscriptCache(), screen: BlockedScreenIO = .unavailable,
+        timing: AgentChatStore.Timing = AgentChatStore.Timing(
+            activeInterval: .milliseconds(5), idleInterval: .milliseconds(5))
+    ) async throws -> (files: VirtualHostFiles, store: AgentChatStore, clock: Clock) {
+        let clock = Clock()
+        let files = VirtualHostFiles()
+        let agent = Self.grokAgent(status)
+        await files.write(try grokLines("core-turns.jsonl", 1...line), at: grokPath)
+        let store = AgentChatStore(
+            agentID: ConsoleAgent.ID(hostID: host, paneID: agent.paneID), agent: agent, program: .grok,
+            source: AgentChatSource(
+                hostID: host, socketLocation: .defaultSession,
+                files: gate?.files(files, holding: grokHistory) ?? files.hostFiles(),
+                agentInfo: { try await server?.read() ?? agent }, cache: cache, adapter: .grok, screen: screen),
+            timing: timing, now: { clock.now })
+        await store.step()
+        #expect(store.conversation.phase == .following(path: grokPath))
+        return (files, store, clock)
+    }
+
+    /// Grok Build writes a prompt sent while it works only once the turn
+    /// ahead of it ends and its own starts (27 s later in one capture),
+    /// and herdr reports it Working throughout, so its echo waits that out.
+    @Test func aGrokSendQueuedBehindATurnWaitsForItToStart() async throws {
+        // The terminal's second prompt is running.
+        let (files, store, clock) = try await Self.grokStore(through: 5, status: .working)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ", delivered: false)])
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ")])
+
+        clock.now = clock.now.addingTimeInterval(20)
+        await files.append(try Self.grokLines("core-turns.jsonl", 6...7), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        clock.now = clock.now.addingTimeInterval(7)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        await files.append(try Self.grokLines("core-turns.jsonl", 8...8), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    /// `/compact` keeps herdr reporting Grok Build Working until the
+    /// compaction is written: about 8 s in a small session, longer in a
+    /// real one.
+    @Test func aGrokCompactionLongerThanTheTimeoutStaysAwaiting() async throws {
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "/compact ", delivered: false)])
+        store.updateSends([Self.sent(id, "/compact ")])
+        clock.now = clock.now.addingTimeInterval(1)
+        store.agentDidChange(Self.grokAgent(.working))
+
+        clock.now = clock.now.addingTimeInterval(30)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        await files.append(try Self.grokLines("compaction.jsonl", 5...6), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    /// Grok Build 1.0.62 writes nothing for a `/compact` that Stop
+    /// cancelled, only `Compaction cancelled.` on screen (grok-45, the
+    /// scrollbar's thumb between it and the box). Once the Agent is idle
+    /// and the echo overdue, one read says so instead of "hasn't appeared".
+    @Test func aCancelledGrokCompactionIsSettledAfterOneRead() async throws {
+        let pane = Pane(try ScreenFixture.screen("grok-45-compaction-cancelled-62"))
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle, screen: pane.io)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "/compact ", delivered: false)])
+        store.updateSends([Self.sent(id, "/compact ")])
+        clock.now = clock.now.addingTimeInterval(1)
+        store.agentDidChange(Self.grokAgent(.working))
+        clock.now = clock.now.addingTimeInterval(5)
+        store.agentDidChange(Self.grokAgent(.idle))
+        await store.step()
+        #expect(await pane.reads == 0)
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        await store.step()
+
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .refused("The compaction was cancelled."))
+
+        await files.append(try Self.grokLines("core-turns.jsonl", 5...5), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .abandoned)
+    }
+
+    /// A read that finds Grok Build's spinner row (`⠼ Compacting…`,
+    /// grok-27) while herdr reports it idle keeps the echo awaiting: the
+    /// `Compacting conversation…` row above it stays after a cancel, so
+    /// only the spinner says the compaction still runs.
+    @Test func aRunningGrokCompactionKeepsItsEchoAwaiting() async throws {
+        let pane = Pane(try ScreenFixture.screen("grok-27-compacting"))
+        let (_, store, clock) = try await Self.grokStore(through: 4, status: .idle, screen: pane.io)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "/compact ", delivered: false)])
+        store.updateSends([Self.sent(id, "/compact ")])
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        await store.step()
+        #expect(await pane.reads == 2)
+        #expect(store.sendStatuses[id] == .awaiting)
+    }
+
+    /// herdr reports Grok Build idle for up to half a second after a
+    /// prompt goes in. A send in that moment queues behind that prompt's
+    /// turn, and its echo waits for its own like one sent while Grok works.
+    @Test func aSendRightAfterASubmitWaitsForItsQueuedTurn() async throws {
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ", delivered: false)])
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ")])
+        clock.now = clock.now.addingTimeInterval(1)
+        store.agentDidChange(Self.grokAgent(.working))
+        await store.step()
+
+        // The prompt typed in the terminal runs first.
+        clock.now = clock.now.addingTimeInterval(25)
+        await files.append(try Self.grokLines("core-turns.jsonl", 5...7), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        await files.append(try Self.grokLines("core-turns.jsonl", 8...8), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    /// The echo clock runs whenever herdr reports Grok Build neither
+    /// Working nor Blocked: ten such seconds without a record make a send
+    /// overdue, whatever turns and cards came between them.
+    @Test func aGrokSendUnrecordedForTenIdleSecondsIsOverdue() async throws {
+        let (_, store, clock) = try await Self.grokStore(through: 4, status: .idle)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ", delivered: false)])
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ")])
+
+        clock.now = clock.now.addingTimeInterval(6)
+        store.agentDidChange(Self.grokAgent(.working))
+        clock.now = clock.now.addingTimeInterval(20)
+        store.agentDidChange(Self.grokAgent(.blocked))
+        clock.now = clock.now.addingTimeInterval(15)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        // Polls after the card still leave the busy seconds out.
+        store.agentDidChange(Self.grokAgent(.idle))
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        clock.now = clock.now.addingTimeInterval(2)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(store.sendStatuses[id] == .overdue)
+    }
+
+    /// `agent.get` can report a new terminal in the pane before a snapshot
+    /// does. Its status replaces the old one on the echo clock too: a send
+    /// the old terminal queued runs out once the new one has idled ten
+    /// seconds, rather than waiting on a turn that ended with that terminal.
+    @Test func theEchoClockFollowsAnAgentReplacedByAQuery() async throws {
+        let server = Server(Self.grokAgent(.working))
+        let (_, store, clock) = try await Self.grokStore(through: 5, status: .working, server: server)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ", delivered: false)])
+        store.updateSends([Self.sent(id, "Reply with exactly the word ping. ")])
+
+        await server.set(
+            Agent(
+                terminalID: "term-2", kind: "grok", title: "", status: .idle, workspaceID: "w1", tabID: "t1",
+                paneID: "w1:p1", cwd: Self.cwd, revision: 2,
+                agentSession: AgentSessionInfo(
+                    agent: "grok", kind: .id, source: "herdr:grok", value: Self.grokSession)))
+        await store.step()
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .abandoned)
+    }
+
+    /// A store following `program`'s transcript while herdr reports the
+    /// Agent idle, and that Agent with another status: Claude Code's and
+    /// Codex's through the numbered stand-in, Pi's and Oh My Pi's through
+    /// their own adapter.
+    private static func idleStore(
+        _ program: ChatProgram
+    ) async throws -> (files: VirtualHostFiles, store: AgentChatStore, clock: Clock, agent: (AgentStatus) -> Agent) {
+        switch program {
+        case .pi, .omp:
+            let clock = Clock()
+            let (files, store, path, _) = try skillStore(program, clock: clock)
+            await files.write(piHeader + "\n" + ompMessage("u1", parent: nil, role: "user", "go"), at: path)
+            await store.step()
+            #expect(store.conversation.phase == .following(path: path))
+            return (files, store, clock, { piAgent(program, status: $0) })
+        default:
+            let (fixture, session, _) = await followed(program, screen: .unavailable)
+            return (
+                fixture.files, fixture.store, fixture.clock, { agent(session: session, status: $0, program: program) }
+            )
+        }
+    }
+
+    /// Only Grok Build's echo clock stops while it works: every other
+    /// program's send still goes overdue 10 s after delivery while herdr
+    /// reports the Agent Working.
+    @Test(arguments: [ChatProgram.claude, .codex, .pi, .omp])
+    func otherProgramsTimeOutBusySendsAsBefore(program: ChatProgram) async throws {
+        #expect(ChatTranscriptAdapter.standard(for: program)?.echoClockStopsWhileWorking == false)
+        let (_, store, clock, agent) = try await Self.idleStore(program)
+        store.agentDidChange(agent(.working))
+        let id = UUID()
+        store.updateSends([Self.sent(id, "hello ", delivered: false)])
+        store.updateSends([Self.sent(id, "hello ")])
+
+        clock.now = clock.now.addingTimeInterval(9)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(store.sendStatuses[id] == .overdue)
+    }
+
+    // MARK: Grok Build's stale identity
+
+    /// The prompt history in `grokPath`'s folder, and another session of
+    /// that folder.
+    private static let grokHistory = "/home/dev/.grok/sessions/%2Fhome%2Fdev%2Fproj/prompt_history.jsonl"
+    private static let otherGrokSession = "01900000-0000-7000-8000-000000000054"
+    private static let misdirectedReason =
+        "Your last message went to another Grok Build session. Switch back to this conversation in the terminal, so its newest message shows there, or send from the terminal; then send again here."
+
+    /// Grok Build idle with no message on screen, which the session check
+    /// says nothing about, and with `core-turns.jsonl`'s first prompt at
+    /// the bottom, which it reads as this session.
+    private static var quietGrokScreen: ANSIScreen { GrokScreenBuilder(scrollback: []).screen }
+    private static var pongScreen: ANSIScreen {
+        GrokScreenBuilder(
+            scrollback: ["❯ Reply with exactly the word pong.", "", "pong", "", "Worked for 3.4s"]
+        ).screen
+    }
+
+    /// One line of Grok Build's prompt history, as its serde writes it.
+    private static func historyLine(_ prompt: String, session: String = grokSession) throws -> String {
+        let record: [String: Any] = [
+            "timestamp": "2026-10-20T03:00:00.000Z", "session_id": session, "prompt": prompt, "is_bash": false,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])
+        return String(decoding: data, as: UTF8.self) + "\n"
+    }
+
+    /// Holds stats of one path while closed, as a slow Host would.
+    private actor HistoryGate {
+        private var isOpen = false
+        private var waiting: [CheckedContinuation<Void, Never>] = []
+        private(set) var held = 0
+        /// Whether each held stat's task was cancelled once it went on.
+        private(set) var cancelledOnRelease: [Bool] = []
+
+        func pass() async {
+            guard !isOpen else { return }
+            held += 1
+            await withCheckedContinuation { waiting.append($0) }
+            cancelledOnRelease.append(Task.isCancelled)
+        }
+
+        func open() {
+            isOpen = true
+            for waiter in waiting { waiter.resume() }
+            waiting = []
+        }
+
+        func close() {
+            isOpen = false
+        }
+
+        nonisolated func files(_ files: VirtualHostFiles, holding path: String) -> ChatHostFiles {
+            let base = files.hostFiles()
+            return ChatHostFiles(
+                status: { requested in
+                    if requested == path { await self.pass() }
+                    return try await base.status(requested)
+                },
+                list: base.list, read: base.read, home: base.home)
+        }
+    }
+
+    /// A send of `text` whose mark landed before the check that let it go.
+    private static func witnessedGrokSend(_ text: String, store: AgentChatStore) async -> UUID {
+        let id = UUID()
+        store.updateSends([Self.sent(id, text, delivered: false)])
+        await store.witnessMarksSettled()
+        #expect(store.sendConcern(for: text, after: Self.quietGrokScreen) == nil)
+        store.updateSends([Self.sent(id, text)])
+        return id
+    }
+
+    /// A send of `text` the prompt history says another session took,
+    /// read 2 s after it went while Grok Build was idle.
+    private static func misdirectedGrokSend(
+        _ text: String
+    ) async throws -> (files: VirtualHostFiles, store: AgentChatStore, clock: Clock, id: UUID) {
+        let (files, store, clock) = try await grokStore(through: 4, status: .idle)
+        await files.write(try historyLine("Reply with exactly the word pong."), at: grokHistory)
+        let id = await witnessedGrokSend(text, store: store)
+        await files.append(
+            try historyLine(GrokTranscriptReducer.echoKey(text), session: otherGrokSession), to: grokHistory)
+        clock.now = clock.now.addingTimeInterval(2)
+        await store.step()
+        #expect(store.sendStatuses[id] == .misdirected)
+        #expect(store.sessionConcern?.reason == misdirectedReason)
+        return (files, store, clock, id)
+    }
+
+    /// A send's mark is the history's size when the send first shows,
+    /// taken once: what was written after it, the send's own line among
+    /// it, is what the witness reads.
+    @Test func theWitnessMarkFollowsItsSend() async throws {
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle)
+        let earlier = try Self.historyLine("Reply with exactly the word pong.")
+        await files.write(earlier, at: Self.grokHistory)
+        await files.clearRecords()
+        let id = UUID()
+        let text = "Reply with the word kiwi. "
+        store.updateSends([Self.sent(id, text, delivered: false)])
+        store.updateSends([Self.sent(id, text, delivered: false)])
+        await store.witnessMarksSettled()
+        #expect(await files.statuses == [Self.grokHistory])
+
+        // Another session takes a prompt while the check runs.
+        await files.append(
+            try Self.historyLine("Summarize the README", session: Self.otherGrokSession), to: Self.grokHistory)
+        #expect(store.sendConcern(for: text, after: Self.quietGrokScreen) == nil)
+        store.updateSends([Self.sent(id, text)])
+        await files.append(
+            try Self.historyLine("Reply with the word kiwi.", session: Self.otherGrokSession), to: Self.grokHistory)
+        clock.now = clock.now.addingTimeInterval(2)
+        await store.step()
+
+        let read = try #require(await files.reads.first { $0.path == Self.grokHistory })
+        #expect(read.offset == UInt64(earlier.utf8.count) - 1)
+        #expect(store.sendStatuses[id] == .misdirected)
+    }
+
+    /// A mark landing after the check could postdate the paste.
+    @Test func aMarkStillOnItsWayAtTheConcernCheckIsDropped() async throws {
+        let gate = HistoryGate()
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle, gate: gate)
+        let id = UUID()
+        let text = "Reply with the word kiwi. "
+        store.updateSends([Self.sent(id, text, delivered: false)])
+        try await Self.waitUntil { await gate.held == 1 }
+
+        #expect(store.sendConcern(for: text, after: Self.quietGrokScreen) == nil)
+        await gate.open()
+        await store.witnessMarksSettled()
+        store.updateSends([Self.sent(id, text)])
+        await files.append(
+            try Self.historyLine("Reply with the word kiwi.", session: Self.otherGrokSession), to: Self.grokHistory)
+        clock.now = clock.now.addingTimeInterval(2)
+        await store.step()
+        clock.now = clock.now.addingTimeInterval(8)
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .overdue)
+        #expect(await files.reads.contains { $0.path == Self.grokHistory } == false)
+    }
+
+    /// The send never waits for its mark: one the Host is slow to give
+    /// goes without a witness.
+    @Test func aSlowWitnessMarkNeverHoldsTheSend() async throws {
+        let gate = HistoryGate()
+        var timing = AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5))
+        timing.witnessMarkTimeout = .milliseconds(20)
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle, gate: gate, timing: timing)
+        let screen = Self.quietGrokScreen
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: ChatSendRules(program: .grok, commands: []), activity: { .idle }, readScreen: { screen },
+                sendConcern: { store.sendConcern(for: $0, after: $1) }
+            ).preflight)
+        let id = UUID()
+        let text = "Reply with the word kiwi. "
+        store.updateSends([Self.sent(id, text, delivered: false)])
+        try await Self.waitUntil { await gate.held == 1 }
+
+        #expect(await preflight("Reply with the word kiwi.") == nil)
+        await store.witnessMarksSettled()
+        store.updateSends([Self.sent(id, text)])
+        await files.append(
+            try Self.historyLine("Reply with the word kiwi.", session: Self.otherGrokSession), to: Self.grokHistory)
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        await gate.open()
+
+        #expect(store.sendStatuses[id] == .overdue)
+        #expect(await files.reads.contains { $0.path == Self.grokHistory } == false)
+    }
+
+    /// A cancelled SFTP request can leave its reply for the next request on
+    /// the channel, so the witness never cancels a Host read: a mark or a
+    /// read that outlives its deadline runs on, and its answer is dropped.
+    @Test func theWitnessNeverCancelsAHostRead() async throws {
+        let gate = HistoryGate()
+        var timing = AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5))
+        timing.witnessMarkTimeout = .milliseconds(20)
+        timing.witnessReadTimeout = .milliseconds(20)
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle, gate: gate, timing: timing)
+
+        store.updateSends([Self.sent(UUID(), "Reply with the word kiwi. ", delivered: false)])
+        try await Self.waitUntil { await gate.held == 1 }
+        await store.witnessMarksSettled()
+        await gate.open()
+        try await Self.waitUntil { await gate.cancelledOnRelease.count == 1 }
+
+        let id = await Self.witnessedGrokSend("Reply with the word lime. ", store: store)
+        await files.append(
+            try Self.historyLine("Reply with the word lime.", session: Self.otherGrokSession), to: Self.grokHistory)
+        await gate.close()
+        clock.now = clock.now.addingTimeInterval(2)
+        await store.step()
+        #expect(await gate.held == 2)
+        #expect(store.sendStatuses[id] == .awaiting)
+        await gate.open()
+        try await Self.waitUntil { await gate.cancelledOnRelease.count == 2 }
+
+        #expect(await gate.cancelledOnRelease == [false, false])
+    }
+
+    /// Hiding Chat or suspending the app cancels a step mid-read: the read
+    /// it cut short is the next step's to take.
+    @Test func aWitnessReadACancelledStepCutShortIsTakenAgain() async throws {
+        let gate = HistoryGate()
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle, gate: gate)
+        await gate.open()
+        let id = await Self.witnessedGrokSend("Reply with the word kiwi. ", store: store)
+        await files.append(
+            try Self.historyLine("Reply with the word kiwi.", session: Self.otherGrokSession), to: Self.grokHistory)
+        await gate.close()
+        clock.now = clock.now.addingTimeInterval(2)
+
+        let step = Task { await store.step() }
+        try await Self.waitUntil { await gate.held == 1 }
+        step.cancel()
+        await step.value
+        #expect(store.sendStatuses[id] == .awaiting)
+        await gate.open()
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .misdirected)
+        #expect(store.sessionConcern?.raisedBy == id)
+    }
+
+    /// Chat registers a send as its check starts, as the Chat surface
+    /// does: the mark is on its way during the screen read, lands before
+    /// the check keeps it, and the send is witnessed.
+    @Test func aSendRegisteredBeforeItsScreenReadIsWitnessed() async throws {
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle)
+        await files.write(try Self.historyLine("Reply with exactly the word pong."), at: Self.grokHistory)
+        let id = UUID()
+        let text = "Reply with the word kiwi. "
+        let screen = Self.quietGrokScreen
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: ChatSendRules(program: .grok, commands: []), activity: { .idle },
+                readScreen: {
+                    // `agent.read` takes longer than the mark's stat.
+                    await store.witnessMarksSettled()
+                    return screen
+                },
+                sendConcern: { store.sendConcern(for: $0, after: $1) },
+                willReadScreen: { store.updateSends([Self.sent(id, text, delivered: false)]) }
+            ).preflight)
+
+        #expect(await preflight("Reply with the word kiwi.") == nil)
+        store.updateSends([Self.sent(id, text)])
+        await files.append(
+            try Self.historyLine("Reply with the word kiwi.", session: Self.otherGrokSession), to: Self.grokHistory)
+        clock.now = clock.now.addingTimeInterval(2)
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .misdirected)
+    }
+
+    /// Grok Build's prompt history names another session for the send:
+    /// its echo says so, and every later send is held, whatever the screen
+    /// shows of the session it went to.
+    @Test func aGrokSendRecordedElsewhereIsMisdirectedAndHoldsLaterSends() async throws {
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle)
+        await files.write(try Self.historyLine("Reply with exactly the word pong."), at: Self.grokHistory)
+        let text = "Reply with the word kiwi. "
+        let id = await Self.witnessedGrokSend(text, store: store)
+        await files.append(
+            try Self.historyLine("Reply with the word kiwi.", session: Self.otherGrokSession), to: Self.grokHistory)
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+        #expect(await files.reads.contains { $0.path == Self.grokHistory } == false)
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(store.sendStatuses[id] == .misdirected)
+        #expect(store.sessionConcern?.reason == Self.misdirectedReason)
+
+        let later = UUID()
+        store.updateSends([Self.sent(id, text), Self.sent(later, "Reply with the word lime. ", delivered: false)])
+        let elsewhere = GrokScreenBuilder(scrollback: ["❯ Reply with the word kiwi.", "", "kiwi"]).screen
+        #expect(store.sendConcern(for: "Reply with the word lime. ", after: elsewhere) == Self.misdirectedReason)
+        #expect(
+            store.sendConcern(for: "Reply with the word lime. ", after: Self.quietGrokScreen) == Self.misdirectedReason)
+
+        // Its echo clock running out reads nothing more.
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        #expect(store.sendStatuses[id] == .misdirected)
+        #expect(await files.reads.filter { $0.path == Self.grokHistory }.count == 1)
+    }
+
+    /// A send made while Grok Build works waits in its queue, and its line
+    /// is written only when its turn starts: the history is read once the
+    /// echo clock runs out, not 2 s after delivery.
+    @Test func aQueuedSendIsWitnessedOnlyAfterItsTurnRan() async throws {
+        let (files, store, clock) = try await Self.grokStore(through: 5, status: .working)
+        await files.write(try Self.historyLine("Answer with just the word ok."), at: Self.grokHistory)
+        let id = await Self.witnessedGrokSend("Reply with the word kiwi. ", store: store)
+        clock.now = clock.now.addingTimeInterval(5)
+        await store.step()
+        #expect(await files.reads.contains { $0.path == Self.grokHistory } == false)
+
+        // The running turn ends, and the queued message runs in the
+        // session the screen shows.
+        await files.append(
+            try Self.historyLine("Reply with the word kiwi.", session: Self.otherGrokSession), to: Self.grokHistory)
+        clock.now = clock.now.addingTimeInterval(20)
+        await store.step()
+        store.agentDidChange(Self.grokAgent(.idle))
+        clock.now = clock.now.addingTimeInterval(9)
+        await store.step()
+        #expect(store.sendStatuses[id] == .awaiting)
+        #expect(await files.reads.contains { $0.path == Self.grokHistory } == false)
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await store.step()
+        #expect(store.sendStatuses[id] == .misdirected)
+        #expect(await files.reads.filter { $0.path == Self.grokHistory }.count == 1)
+    }
+
+    /// The history said elsewhere, and the transcript records the send
+    /// after all: the transcript wins.
+    @Test func aRecordedEchoClearsMisdirectedAndTheConcern() async throws {
+        let (files, store, _, id) = try await Self.misdirectedGrokSend("Reply with exactly the word ping. ")
+
+        await files.append(try Self.grokLines("core-turns.jsonl", 8...8), to: Self.grokPath)
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .recorded)
+        #expect(store.sessionConcern == nil)
+    }
+
+    /// The misdirected text sent again from Chat once the terminal is back
+    /// in this conversation: the copy recorded here is the resend's, which
+    /// leaves no echo waiting, and the misdirected echo leaves as it would
+    /// for any later prompt.
+    @Test func aResendOfAMisdirectedMessageIsTheOneRecorded() async throws {
+        let text = "Reply with exactly the word ping. "
+        let (files, store, clock, id) = try await Self.misdirectedGrokSend(text)
+        clock.now = clock.now.addingTimeInterval(60)
+        let resend = UUID()
+        store.updateSends([Self.sent(id, text), Self.sent(resend, text, delivered: false)])
+        await store.witnessMarksSettled()
+        #expect(store.sendConcern(for: text, after: Self.pongScreen) == nil)
+        store.updateSends([Self.sent(id, text), Self.sent(resend, text)])
+        #expect(store.sendStatuses[id] == .misdirected)
+
+        await files.append(try Self.grokLines("core-turns.jsonl", 8...8), to: Self.grokPath)
+        await store.step()
+
+        #expect(store.sendStatuses[resend] == .recorded)
+        #expect(store.sendStatuses[id] == .abandoned)
+        #expect(store.sessionConcern == nil)
+    }
+
+    /// herdr reports another session: Chat follows the one the Agent is
+    /// in now.
+    @Test func aNewSessionReportClearsTheConcern() async throws {
+        let (_, store, _, id) = try await Self.misdirectedGrokSend("Reply with the word kiwi. ")
+
+        store.agentDidChange(Self.agent(session: Self.otherGrokSession, status: .idle, program: .grok))
+        await store.step()
+
+        #expect(store.sessionConcern == nil)
+        #expect(store.sendStatuses[id] == .abandoned)
+    }
+
+    /// A prompt the transcript records since, such as one typed in the
+    /// terminal, shows the terminal is back in this conversation. The
+    /// misdirected echo has said where its send went by then, and leaves
+    /// with the concern rather than stay below the turns after it.
+    @Test func aPromptRecordedHereClearsTheConcernAndTheEcho() async throws {
+        let (files, store, _, id) = try await Self.misdirectedGrokSend("Reply with the word kiwi. ")
+        await store.step()
+        #expect(store.sessionConcern != nil)
+        #expect(store.sendStatuses[id] == .misdirected)
+
+        await files.append(try Self.grokLines("core-turns.jsonl", 5...5), to: Self.grokPath)
+        await store.step()
+
+        #expect(store.sessionConcern == nil)
+        #expect(store.sendStatuses[id] == .abandoned)
+    }
+
+    @Test func theScreenShowingThisSessionClearsTheConcern() async throws {
+        let (_, store, _, _) = try await Self.misdirectedGrokSend("Reply with the word kiwi. ")
+
+        #expect(
+            store.sendConcern(for: "Reply with the word lime. ", after: Self.quietGrokScreen) == Self.misdirectedReason)
+        #expect(store.sendConcern(for: "Reply with the word lime. ", after: Self.pongScreen) == nil)
+        #expect(store.sessionConcern == nil)
+    }
+
+    /// The other session's screen keeps the misdirected copy, however
+    /// old: where it reads the same as this conversation's newest message,
+    /// it never clears the concern.
+    @Test func aMisdirectedCopyLikeTheNewestMessageKeepsTheConcern() async throws {
+        let (_, store, clock, id) = try await Self.misdirectedGrokSend("Reply with exactly the word pong. ")
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .misdirected)
+        #expect(
+            store.sendConcern(for: "Reply with the word lime. ", after: Self.pongScreen) == Self.misdirectedReason)
+        #expect(store.sessionConcern?.raisedBy == id)
+    }
+
+    /// The conversation as the device saved it records no prompts until
+    /// a live read: the Welcome screen holds it all the same.
+    @Test func theWelcomeScreenHoldsARestoredConversation() async throws {
+        let cache = VolatileChatTranscriptCache()
+        _ = try await Self.grokStore(through: 4, status: .idle, cache: cache)
+        // The same Agent on a device that can't reach the Host yet.
+        let agent = Self.grokAgent(.idle)
+        let server = Server(agent)
+        await server.fail(with: .channelFailed(detail: "agent.get failed"))
+        let store = AgentChatStore(
+            agentID: ConsoleAgent.ID(hostID: Self.host, paneID: agent.paneID), agent: agent, program: .grok,
+            source: AgentChatSource(
+                hostID: Self.host, socketLocation: .defaultSession, files: VirtualHostFiles().hostFiles(),
+                agentInfo: { try await server.read() }, cache: cache, adapter: .grok),
+            timing: AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)))
+        await store.step()
+
+        #expect(store.conversation.isFromCache)
+        #expect(store.conversation.transcript.recordedPrompts.isEmpty)
+        #expect(!store.conversation.transcript.needsOlderHistory)
+        #expect(
+            store.sendConcern(for: "Reply with the word lime. ", after: try ScreenFixture.screen("grok-20-welcome"))
+                == GrokSessionCheck.welcomeReason)
+    }
+
+    /// The newest message on screen counts only once a transcript read
+    /// that started after herdr last reported Grok Build idle has landed:
+    /// a prompt typed in the terminal shows before Chat reads it.
+    @Test func theNewestMessageCountsOnlyAfterAReadSinceIdle() async throws {
+        let server = Server(Self.grokAgent(.working))
+        let (_, store, clock) = try await Self.grokStore(through: 4, status: .working, server: server)
+        let lime = GrokScreenBuilder(scrollback: ["❯ Reply with the word lime.", "", "lime"]).screen
+
+        clock.now = clock.now.addingTimeInterval(1)
+        await server.set(Self.grokAgent(.idle))
+        store.agentDidChange(Self.grokAgent(.idle))
+        #expect(store.sendConcern(for: "Reply with the word kiwi. ", after: lime) == nil)
+
+        await store.step()
+        #expect(
+            store.sendConcern(for: "Reply with the word kiwi. ", after: lime) == GrokSessionCheck.unknownPromptReason)
+    }
+
+    /// Chat's own send shows on screen before the transcript records it.
+    /// Once delivered, it says nothing about the session for the echo
+    /// timeout; recorded, it is this conversation's newest message.
+    @Test func aSendOnItsWayIsNoSignOfAnotherSession() async throws {
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle)
+        let ping = GrokScreenBuilder(scrollback: ["❯ Reply with exactly the word ping.", "", "ping"]).screen
+        let id = UUID()
+        let text = "Reply with exactly the word ping. "
+        let lime = "Reply with the word lime. "
+
+        store.updateSends([Self.sent(id, text, delivered: false)])
+        #expect(store.sendConcern(for: lime, after: ping) == GrokSessionCheck.unknownPromptReason)
+        store.updateSends([Self.sent(id, text)])
+        #expect(store.sendConcern(for: lime, after: ping) == nil)
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        #expect(store.sendStatuses[id] == .overdue)
+        #expect(store.sendConcern(for: lime, after: ping) == GrokSessionCheck.unknownPromptReason)
+
+        await files.append(try Self.grokLines("core-turns.jsonl", 8...9), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .recorded)
+        #expect(store.sendConcern(for: lime, after: ping) == nil)
+    }
+
+    /// herdr follows `/new` within its idle recheck: a send held for the
+    /// Session line asks herdr at once, and the next one goes.
+    @Test func aSessionLineHoldRefreshesTheAgentAndTheNextSendPasses() async throws {
+        let server = Server(Self.grokAgent(.idle))
+        let (_, store, _) = try await Self.grokStore(through: 4, status: .idle, server: server)
+        let screen = try ScreenFixture.screen("grok-17-session-new")
+        let reads = await server.reads
+
+        #expect(
+            store.sendConcern(for: "Reply with the word kiwi. ", after: screen) == GrokSessionCheck.sessionLineReason)
+        await server.set(Self.agent(session: "01900000-0000-7000-8000-000000000001", status: .idle, program: .grok))
+        await store.step()
+
+        #expect(await server.reads == reads + 1)
+        #expect(store.sendConcern(for: "Reply with the word kiwi. ", after: screen) == nil)
+    }
+
+    /// herdr reports a new session 60 to 110 ms after its first record, and
+    /// Grok Build wrote the first prompt of a session it started from its
+    /// Welcome screen 84 ms after that record (live, 2026-10-20). A read of
+    /// the session in between finds no message, so the one on screen holds
+    /// a send until a read finds it recorded.
+    @Test func anEmptyConversationHoldsUntilAReadFindsTheMessageOnScreen() async throws {
+        let (files, store, _) = try await Self.grokStore(through: 1, status: .idle)
+        #expect(store.conversation.transcript.turns.isEmpty)
+
+        #expect(
+            store.sendConcern(for: "Reply with the word kiwi. ", after: Self.pongScreen)
+                == GrokSessionCheck.unknownPromptReason)
+        await files.append(try Self.grokLines("core-turns.jsonl", 2...4), to: Self.grokPath)
+        await store.step()
+
+        #expect(store.sendConcern(for: "Reply with the word kiwi. ", after: Self.pongScreen) == nil)
+        #expect(store.sendConcern(for: "Reply with the word kiwi. ", after: Self.quietGrokScreen) == nil)
+    }
+
+    /// The dashboard's view of an agent, as grok-40 to grok-42 draw it at
+    /// the phone's 62 columns, its newest message `rows`' last.
+    private static func grokAgentView(_ rows: [String]) -> ANSIScreen {
+        GrokScreenBuilder(
+            columns: 62, scrollback: rows, hints: ["Ctrl+\\:dashboard", "Ctrl+[/]:prev/next agent", "Ctrl+x:stop"],
+            header: "Se… │ main /p/t/hcl/pr… 21K / 256K │ ‹ 2/3 › │ [Dashboard]"
+        ).screen
+    }
+
+    /// Once the dashboard opened an agent, Grok Build keeps that view, also
+    /// after `/resume` back to this conversation (1.0.62, live). A send from
+    /// Chat goes there only when the newest message is this conversation's.
+    @Test func theDashboardsViewOfAnAgentTakesASendOnlyForThisConversation() async throws {
+        let (_, store, _) = try await Self.grokStore(through: 4, status: .idle)
+        func preflight(_ screen: ANSIScreen) async throws -> ComposerRefusal? {
+            let check = try #require(
+                ComposerDeliveryPolicy.chat(
+                    rules: ChatSendRules(program: .grok, commands: []), activity: { .idle }, readScreen: { screen },
+                    sendConcern: { store.sendConcern(for: $0, after: $1) }
+                ).preflight)
+            return await check("Reply with the word kiwi.")
+        }
+
+        #expect(try await preflight(Self.grokAgentView(["❯ Reply with exactly the word pong.", "", "pong"])) == nil)
+        #expect(
+            try await preflight(try ScreenFixture.screen("grok-40-agent-view-other-62"))
+                == .inputNotReady(GrokSessionCheck.agentViewReason))
+        #expect(
+            try await preflight(Self.grokAgentView(["❯ Reply with exactly the word pong.", "", "❯ /compact"]))
+                == .inputNotReady(GrokSessionCheck.agentViewReason))
+    }
+
+    /// While herdr reports no session, Chat can't tell whose agent the
+    /// dashboard's view shows; the conversation's own view says nothing.
+    @Test func theDashboardsViewOfAnAgentHoldsWhileChatFollowsNoSession() async throws {
+        let agent = Self.agent(session: nil, status: .idle, program: .grok)
+        let store = AgentChatStore(
+            agentID: ConsoleAgent.ID(hostID: Self.host, paneID: agent.paneID), agent: agent, program: .grok,
+            source: AgentChatSource(
+                hostID: Self.host, socketLocation: .defaultSession, files: VirtualHostFiles().hostFiles(),
+                agentInfo: { agent }, cache: VolatileChatTranscriptCache(), adapter: .grok),
+            timing: AgentChatStore.Timing(activeInterval: .milliseconds(5), idleInterval: .milliseconds(5)))
+        await store.step()
+        #expect(store.conversation.phase == .unavailable(.noSession(.grok)))
+        let agentView = try ScreenFixture.screen("grok-41-agent-view-this-62")
+
+        #expect(store.sendConcern(for: "Reply with the word kiwi. ", after: agentView) == GrokSessionCheck.agentViewReason)
+        #expect(store.sendConcern(for: "Reply with the word kiwi. ", after: Self.pongScreen) == nil)
+    }
+
+    /// Grok Build may rewrite its history through a rename when a session
+    /// starts: a log shorter than the mark says nothing.
+    @Test func aRewrittenHistoryFileSaysNothing() async throws {
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle)
+        let earlier = try (1...3).map { try Self.historyLine("Earlier prompt \($0)") }.joined()
+        await files.write(earlier, at: Self.grokHistory)
+        let id = await Self.witnessedGrokSend("Reply with the word kiwi. ", store: store)
+        await files.write(
+            try Self.historyLine("Reply with the word kiwi.", session: Self.otherGrokSession), at: Self.grokHistory)
+
+        clock.now = clock.now.addingTimeInterval(2)
+        await store.step()
+        clock.now = clock.now.addingTimeInterval(8)
+        await store.step()
+
+        #expect(store.sendStatuses[id] == .overdue)
+        #expect(store.sessionConcern == nil)
+    }
+
+    /// Only Grok Build reads its screen for another session and logs its
+    /// prompts: other programs' sends take no mark and are never held.
+    @Test(arguments: [ChatProgram.claude, .codex, .pi, .omp])
+    func otherProgramsTakeNoWitnessMark(program: ChatProgram) async throws {
+        let adapter = try #require(ChatTranscriptAdapter.standard(for: program))
+        #expect(adapter.sendWitness == nil)
+        #expect(adapter.sessionCheck == nil)
+        let (files, store, _, _) = try await Self.idleStore(program)
+        await files.clearRecords()
+        store.updateSends([Self.sent(UUID(), "hello ", delivered: false)])
+        await store.witnessMarksSettled()
+
+        #expect(store.sendConcern(for: "hello ", after: try ScreenFixture.screen("grok-17-session-new")) == nil)
+        #expect(await files.statuses.isEmpty)
     }
 
     // MARK: Tool output

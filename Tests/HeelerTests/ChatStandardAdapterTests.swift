@@ -73,11 +73,96 @@ struct ChatStandardAdapterTests {
         #expect(format.contains("history mode"))
     }
 
+    /// Claude Code's list loads earlier history by itself as Load Earlier
+    /// Messages does: it reads on to the prompt of a turn that opens more
+    /// than 4 MiB above the tail window, and leaves nothing to the user.
+    @Test func claudeLoadsALongTurnsPromptByItselfAsTheUserWould() async throws {
+        let adapter = try #require(ChatTranscriptAdapter.standard(for: .claude))
+        let session = LongClaudeTurn()
+        let cwd = "/home/dev/proj"
+        let path = "/Users/developer/.claude/projects/"
+            + "\(ClaudeProjectKey.key(forDirectory: cwd))/\(LongClaudeTurn.sessionID).jsonl"
+        func engine(_ files: VirtualHostFiles) -> ChatConversationEngine {
+            ChatConversationEngine(
+                reference: ConversationReference(program: .claude, sessionID: LongClaudeTurn.sessionID),
+                cacheKey: ChatCacheKey(
+                    hostID: UUID(), herdrSession: "", program: .claude, conversationID: LongClaudeTurn.sessionID),
+                files: files.hostFiles(), cache: VolatileChatTranscriptCache(), adapter: adapter, now: { Date() })
+        }
+        let automaticFiles = VirtualHostFiles(home: "/Users/developer")
+        let userFiles = VirtualHostFiles(home: "/Users/developer")
+        await automaticFiles.write(session.text, at: path)
+        await userFiles.write(session.text, at: path)
+        let byItself = engine(automaticFiles)
+        let asked = engine(userFiles)
+        let context = ChatProjectionContext(activity: .idle)
+        let opened = await byItself.open(directories: [cwd], context: context)
+        _ = await asked.open(directories: [cwd], context: context)
+        try #require(opened.transcript.turns.isEmpty)
+        let windowStart = try #require(opened.transcript.entries.map(\.sourceOffset).min())
+        try #require(windowStart - session.promptOffset > 4 << 20)
+        await automaticFiles.clearRecords()
+        await userFiles.clearRecords()
+
+        let automatic = await byItself.loadOlder(context: context, automatic: true)
+        let user = await asked.loadOlder(context: context)
+
+        #expect(automatic.transcript.turns.map(\.firstEntryID).contains(LongClaudeTurn.prompt))
+        #expect(automatic.transcript.turns == user.transcript.turns)
+        #expect(automatic.transcript.entries == user.transcript.entries)
+        #expect(!automatic.olderAwaitsUser)
+        let userReads = await userFiles.reads
+        #expect(await automaticFiles.reads == userReads)
+    }
+
     @Test func eachProgramComparesEchoesTheWayItRecordsPrompts() throws {
         let claude = try #require(ChatTranscriptAdapter.standard(for: .claude))
         let codex = try #require(ChatTranscriptAdapter.standard(for: .codex))
+        let grok = try #require(ChatTranscriptAdapter.standard(for: .grok))
         #expect(claude.echoKey("Fix it\r\nplease ") == "Fix it\nplease")
         #expect(codex.echoKey("Fix \u{1B}[31mit\u{1B}[0m\r\nplease ") == "Fix it\nplease")
+        // Grok Build records the space Chat adds, and a prompt sent while it
+        // works only once that prompt's turn starts.
+        #expect(grok.echoKey("Fix it\r\nplease ") == "Fix it\nplease")
+        #expect(grok.echoClockStopsWhileWorking)
+        #expect(!claude.echoClockStopsWhileWorking && !codex.echoClockStopsWhileWorking)
+    }
+
+    /// A Claude Code session in the compact JSON it writes: one short turn,
+    /// then one whose 32 Bash calls each returned 200 KB, still running.
+    /// The long turn's prompt starts 6.4 MB from the end of the file.
+    private struct LongClaudeTurn {
+        static let sessionID = "0b7c8d2e-5f41-4a6b-9c3d-2e1f0a9b8c7d"
+        static let prompt = ChatEntryID("user:p1")
+
+        private(set) var text = ""
+        /// Where the long turn's prompt line starts.
+        private(set) var promptOffset: UInt64 = 0
+        private var parent = "null"
+
+        init() {
+            record("user", "p0", #""message":{"role":"user","content":"Hello"},"promptSource":"typed","origin":{"kind":"human"}"#)
+            record("assistant", "a0", #""message":{"id":"m0","role":"assistant","content":[{"type":"text","text":"Hi."}]},"apiBlockIndex":0"#)
+            record("system", "t0", #""subtype":"turn_duration","durationMs":900"#)
+            promptOffset = UInt64(text.utf8.count)
+            record(
+                "user", "p1",
+                #""message":{"role":"user","content":"Print every log in full"},"promptSource":"typed","origin":{"kind":"human"}"#)
+            let output = String(repeating: "=", count: 200_000)
+            for call in 0..<32 {
+                record(
+                    "assistant", "c\(call)",
+                    #""message":{"id":"m\#(call + 1)","role":"assistant","content":[{"type":"tool_use","id":"toolu_\#(call)","name":"Bash","input":{"command":"cat log\#(call).txt"}}]},"apiBlockIndex":0"#)
+                record(
+                    "user", "r\(call)",
+                    #""message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_\#(call)","content":"\#(output)"}]},"toolUseResult":{"stdout":"","stderr":"","interrupted":false}"#)
+            }
+        }
+
+        private mutating func record(_ type: String, _ uuid: String, _ fields: String) {
+            text += #"{"type":"\#(type)","uuid":"\#(uuid)","parentUuid":\#(parent),\#(fields)}"# + "\n"
+            parent = #""\#(uuid)""#
+        }
     }
 
     private static func codexPath(threadID: String) -> String {

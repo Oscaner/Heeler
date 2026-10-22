@@ -4,19 +4,20 @@ status: accepted
 
 # Native Chat from the Agent's own transcript
 
-A Claude Code, Codex, Pi or Oh My Pi Agent's detail can show Chat in its terminal's place:
+A Claude Code, Codex, Pi, Oh My Pi or Grok Build Agent's detail can show Chat
+in its terminal's place:
 the Agent's conversation as native rows, read from the transcript its program
 writes on the Host. Heeler reads that file read-only over SFTP on the Host's
 existing SSH connection, with one adapter per program: Claude Code's project
-JSONL, with its subagent transcripts under `<session>/subagents/`, and Codex's
-rollout in its paginated and legacy forms, and Pi/Oh My Pi's v2-v3 tree
-JSONL. Nothing is installed on the Host
+JSONL, with its subagent transcripts under `<session>/subagents/`; Codex's
+rollout in its paginated and legacy forms; Pi/Oh My Pi's v2-v3 tree JSONL;
+and Grok Build's `updates.jsonl`. Nothing is installed on the Host
 and herdr is unchanged. herdr still owns the Agent's identity and Agent
 Status, submission through `agent.prompt`, and keys through `agent.send_keys`;
-its `agent_session` names the transcript by a Claude Code session id or a
-Codex thread id, or Pi/OMP's exact absolute JSONL path (with UUID lookup for
-older integrations). Other Agents, and every Agent on a native Windows Host, hide
-the entry.
+its `agent_session` names the transcript by a Claude Code session id, a
+Codex thread id or a Grok Build session id, or Pi/OMP's exact absolute JSONL
+path (with UUID lookup for older integrations). Other Agents, and every Agent
+on a native Windows Host, hide the entry.
 
 The formats as observed are recorded in
 [Claude Code transcripts](../research/claude-code-transcript-format.md) and
@@ -68,6 +69,103 @@ the terminal. Neither program reuses Claude/Codex option digit bindings.
 Their `/` menu and shell-command refusals use the same Chat send rules as the
 existing adapters.
 
+Grok Build observations are in
+[Grok Build transcripts](../research/grok-build-transcript-format.md).
+herdr reports a Grok Build session by the lowercase UUIDv7 that names its
+folder, and Chat reads only that form, as given. The adapter looks for
+`<group>/<id>/updates.jsonl` under `~/.grok/sessions`, where the group is the
+Agent's directory percent-encoded as Grok Build names it or, past 255 bytes,
+a slug whose `.cwd` file holds the directory. A session forked into a
+worktree files under the worktree's group while herdr still reports the
+pane's directory, so the other groups follow, worktrees first, up to 200; a
+file counts only when its first record names the session. Entries are keyed
+by byte offset, never by Grok Build's event ids, which a fork copies. Ctrl+C
+before a turn's first output puts the prompt back in Grok Build's input box
+and writes no end, so once herdr reports the Agent idle, a turn that holds
+only its prompt ends as stopped before a reply; the next prompt is recorded
+under the same index, joined with the text put back, and takes that turn
+over. A `rewind_marker` hides the turns from its target prompt on, even when
+the loaded lines start after that prompt. Grok Build writes a prompt sent
+while it works only when that prompt's turn starts, and herdr reports it
+Working for a whole `/compact`, so a sent message's 10 seconds count only
+while herdr reports the Agent neither Working nor Blocked.
+
+Grok Build's input box is the bottom-most rounded box whose first row starts
+with its `❯` prompt. Chat sends only when the box holds no typed text and the
+footer shows it has focus (`Shift+Tab:mode` or `accept suggestion`), or from
+the Welcome screen; the italic suggestion Grok Build draws is not a draft.
+At 20 rows or fewer, as on a phone with the keyboard up, Grok Build's compact
+footer is only `Ctrl+.:shortcuts` whatever has focus, so there an empty box
+without the `Build anything` placeholder, which it draws only without focus,
+counts as focused. The same holds in the dashboard's view of one agent, whose
+own hints come first and stop before `Shift+Tab:mode` at a phone's 62 columns;
+its box is read like the conversation's own, and the session check below
+decides whose agent it shows.
+Its dashboard, where a message starts a new agent, its pickers, popups and
+`/btw` panel, a pending second key press, `/multiline`, a queued message being
+edited, shell and remember modes, minimal mode, and a wait on a subagent or
+background task, which a message would cancel, all hold the message. A card
+the dashboard's view shows stays generic. Stop presses nothing in that view,
+which stays until Grok Build restarts. Where Ctrl+C there would confirm a
+pending quit, quit while a cancel is pending, or only clear a draft, Stop
+says so as it does on the conversation's own view; otherwise it says to stop
+the turn with Ctrl+C in the terminal. Grok Build can put a stashed draft
+back in the box right after it takes a message, so only text the message
+contains marks it Not delivered; other text holds the next send.
+
+herdr follows Grok Build's `/new`, `/clear` and a message sent from its
+dashboard, but keeps the earlier session after `/resume`, `/fork` and going
+back from the dashboard, and Chat follows herdr. At Grok Build's start a
+message from the Welcome screen went to the session herdr reported, but on
+the Welcome screen `/welcome` opens later, text sent there started a new
+session first, which herdr then reported (1.0.62): a message then ran in it,
+and a `/resume` left herdr on it, empty, while the screen showed the resumed
+session. The Welcome screen's Resume session picker (Ctrl+R) started no
+session, so the hold there names it as the way back. The screen read that
+checks the input box before a send therefore also holds the message when it
+shows a `Session <id>` line for another session, a newest message the
+conversation doesn't have (only once herdr reports the Agent idle and a
+transcript read since then has landed), or the Welcome screen of a
+conversation that already has messages. A conversation with no message yet
+has none of its own on screen, so there any message shown, a command or a
+chip aside, holds the send; herdr can report a new session before Grok Build
+writes its first prompt, and a send in between holds until a read finds that
+prompt. Once the dashboard opened an agent, Grok Build kept the dashboard's
+view of one agent, also after `/resume` and leaving the dashboard, until it
+restarted (1.0.62); that view takes a message only when the check finds this
+conversation's newest message there, and holds it otherwise, also while
+herdr reports no session. Such a hold reads the Agent's record again, so a
+`/new` herdr has just reported is followed. Nothing is read from the Host
+between that screen read and the prompt. At 20 rows or fewer Grok Build
+draws the user's messages without their `❯`, so there the screen shows no
+newest message, and unless a `Session <id>` line for another session shows,
+only the read after a send catches a message another session took. In the
+dashboard's view of one agent nothing on screen can then prove the
+conversation, so Chat holds every send there whenever it recognizes that
+view at that size, even while it shows this conversation; no capture shows
+whether the view keeps its `‹ i/n ›` header and `Ctrl+\:dashboard` footer at
+20 rows. The way out is to show the terminal with the keyboard down, which
+gives the pane more than 20 rows (41 rows on the phone, as measured), or to
+restart Grok Build. After a send, Chat reads what Grok Build added to the
+folder's `prompt_history.jsonl` since just before the send, up to 64 KiB:
+two seconds after a message delivered while herdr reported the Agent neither
+Working nor Blocked, and again when the message would go overdue. When no line
+with the message's text names this session and exactly one names another, the
+message reads "Sent, but the Agent recorded it in another session.", and every
+later send is held until this conversation records a prompt, a send's screen
+check finds this conversation's newest message (not one that reads the same as
+a message recorded elsewhere), that message is recorded here after all, or
+herdr reports another session. That message's echo leaves when this
+conversation records a later prompt, usually at the read that also ends the
+hold, rather than stay below the turns after it. A prompt with the same text
+recorded here is matched to that message only when no other message from Chat
+takes it, so the text sent again from Chat is matched to the new message. A
+`/resume` to a session already open writes nothing until its next prompt, so
+only that read tells, after the send. A session filed under another
+directory's group, such as a worktree fork, records its prompts in that
+group's file, so a message sent to it only goes overdue. Chat doesn't watch
+the screen between sends.
+
 ## Entry and the terminal
 
 A button for the surface not showing, sharing the detail header's More-menu
@@ -102,15 +200,29 @@ while that read shows its compaction running ("Compacting context..."), which
 herdr reports as idle; the 10 seconds then count from the last read that saw
 it. While Chat shows an idle Agent,
 it reads the record at its idle poll, at least 5 seconds apart (about every
-8 seconds at the 4-second pace): Claude Code's `/clear` and Pi's and Oh My
-Pi's `/new` and `/resume` typed in the terminal move the Agent to another
-session, and no event says so. Codex reports a new thread only with its
+8 seconds at the 4-second pace): Claude Code's `/clear`, Pi's and Oh My
+Pi's `/new` and `/resume`, and Grok Build's `/new` and `/clear` typed in the
+terminal move the Agent to another session, and no event says so. Codex
+reports a new thread only with its
 first prompt, when the Agent is working again. Hidden and working Chats
 don't read it on that pace. The
 list is a `UICollectionView`
 of hosted SwiftUI rows with its own single-column layout: it opens at the
 newest row and keeps the reader's place while rows above it measure, which
 needs anchoring in the same main-thread turn.
+
+Earlier history loads by itself as the reader nears the top of the list. Each
+request reads pages until it brings the start of a turn not shown before,
+since a page that ends inside a turn adds only steps its fold hides, or until
+it reaches the start of the file or has read 32 MiB. A request the list makes
+by itself reads as one from Load Earlier Messages does, except in Grok Build,
+where it reads at most 4 MiB. Grok Build records each `read_file` result in
+full, so one turn can fill tens of MB: a turn that read 21 files of 99,000
+bytes and compacted automatically three times wrote result lines of about
+402 KB and grew its file from 62 KB to 34.2 MB. When those 4 MiB end inside
+one turn, the list stops asking, and Load Earlier Messages reads on with the
+32 MiB search. The list loads by itself again once a tap brings a turn's
+start or the conversation opens again.
 
 Tool activity is one row per call, and two or more calls in a row share a
 group row (see Turns and tool groups). Decoding keeps a preview of at most
@@ -119,7 +231,12 @@ shows up to 1,000 lines or 64 KiB. A spilled Claude Code output is read only
 from `<session>/tool-results/` beside the transcript, and a Workflow's journal
 only from `<session>/subagents/workflows/<runId>/journal.jsonl`, with the run
 id checked to be one `wf_` path component. Chat reads no other path a
-transcript names.
+transcript names. Beside a Grok Build session's folder it reads one more
+file, the group's `prompt_history.jsonl`, and only what it gained since
+just before a send, at most 64 KiB. Those lines can hold prompts from other
+Grok Build sessions in the same directory; Chat compares them with the sent
+message in memory and discards them, never caching, logging or showing
+them.
 
 Claude Code's file changes show as its terminal shows them, in the Changes
 view's colors with one column of line numbers. An Edit or Write row expands to
@@ -169,11 +286,14 @@ Chat shares the terminal's Composer and its draft. Send is one `agent.prompt`
 request, under rules that stand in for the screen the user cannot see:
 
 - A draft the program would run rather than read is never sent: a leading
-  `!`, control bytes, and Claude Code's whole-message `exit`, `quit`, `:q`,
-  `:q!`, `:wq` and `:wq!`. Oh My Pi also refuses its whole-message `exit`,
-  `quit` and `q` in any case, a leading `$` or `$$` and whitespace (Python),
-  a whole `.` or `c` (Continue), a leading `->` or `=>` (its queue
-  shorthand), and 100 lines or more, which open its paste menu.
+  `!`, control bytes, and Claude Code's and Grok Build's whole-message
+  `exit`, `quit`, `:q`, `:q!`, `:wq` and `:wq!`. Oh My Pi also refuses its
+  whole-message `exit`, `quit` and `q` in any case, a leading `$` or `$$`
+  and whitespace (Python), a whole `.` or `c` (Continue), a leading `->` or
+  `=>` (its queue shorthand), and 100 lines or more, which open its paste
+  menu. For Grok Build, a `/btw` or `/goal` after the message's start is
+  refused too: Grok Build would make the message a side question kept out
+  of the conversation, or refuse it and leave it in its input box.
 - A leading `/` must name an entry of Chat's `/` menu: the Agent's skills from
   the existing Skills probe, and `/compact` while the Agent is idle. The menu
   offers no interactive or destructive program command. Every program shows
@@ -184,6 +304,9 @@ request, under rules that stand in for the screen the user cannot see:
   `user-invocable: false` stays out too: Claude Code 2.1.302 answers
   "Unknown command" when it is typed. Codex's `allow_implicit_invocation` and
   Pi's `disable-model-invocation` limit only the model, so their skills stay.
+  Grok Build runs its built-in command when a skill shares its name, so the
+  menu leaves such skills out there, and a Grok Build `/compact` with a
+  focus is refused.
   A leading path is text, and any other leading `/word` is refused with a
   pointer to the menu or the terminal.
 - Invisible characters are removed and exactly one trailing space is appended,
@@ -202,10 +325,11 @@ A sent message shows at once as a local echo, matched conservatively against
 the transcript.
 
 While Agent Status is Working and the draft is blank, Send becomes Stop, in
-system red. In Chat, Stop presses Esc through `agent.send_keys`, in line with
-the Agent page's keys; the terminal's Composer sends it on the Attach PTY (ADR
-0013). Then Stop waits. The acknowledgement means only that the key reached
-the PTY, and an Esc that lands after the turn ended can open the program's own
+system red. In Chat, Stop presses the program's Stop keys in one
+`agent.send_keys` request, in line with the Agent page's keys: Esc, except
+in Grok Build (below). The terminal's Composer sends Esc on the Attach PTY
+(ADR 0013). Then Stop waits. The acknowledgement means only that the key
+reached the PTY, and an Esc that lands after the turn ended can open the program's own
 history menus, so Stop shows a spinner until Agent Status leaves Working.
 After three seconds it works again and says the Agent still shows Working;
 background agents and shells, which Esc does not end, can keep it there. A
@@ -225,6 +349,19 @@ back for a second, so the second tap of a double tap cannot interrupt the turn
 the prompt was meant to queue behind. Stop is not offered while Blocked, where
 Esc answers the dialog and, on Claude Code's folder trust dialog, exits the
 program.
+
+Grok Build cancels a turn only with Ctrl+C; Esc there shows a toast. Ctrl+C
+also clears a draft, cancels a permission, skips a question, and on an idle,
+empty input box arms quit, which a second press within a second carries out.
+So Chat's Stop reads Grok Build's screen first, inside the same key queue
+after any key pressed before it, and presses Ctrl+C only when herdr reports
+Working and the screen shows the turn's spinner row or its `Ctrl+c:cancel`
+hint, with the input box empty and focused and no card, menu, pending cancel
+or pending second press; otherwise it presses nothing and says why. Two of
+its presses are at least 1.5 seconds apart, even across status changes, so
+they never fall in one quit window. Ctrl+C with messages queued starts the
+next one, so Stop may then say the Agent still shows Working. The terminal's
+Composer keeps Send for Grok Build, since Esc wouldn't stop it.
 
 With the keyboard down, Chat folds the Composer: the actions row goes, and Add
 and Send or Stop sit beside a one-line input, a longer draft truncated after
@@ -253,13 +390,24 @@ changed, waits until the dialog has shown for 150 ms, presses keys through
 `agent.send_keys`, and types text answers (feedback, a plan note, a custom
 answer) through `pane.send_input`. The answer is confirmed when the dialog on
 screen changes, when Claude Code's transcript shows the matching tool result,
-or when Codex or Oh My Pi leaves Blocked. Staying Blocked proves nothing,
-because herdr stays Blocked while the next queued approval takes the screen.
+or when Codex, Oh My Pi or Grok Build leaves Blocked. Staying Blocked proves
+nothing, because herdr stays Blocked while the next queued approval takes the screen.
 Three seconds without effect shows a hint, and nothing is resent: the card's
 answers stay disabled while the same dialog shows and no call that waited
 has resolved, so a second tap cannot send the key again, and Stop and the
 terminal stay available (the open card shows Stop then, even beside a
-decline option). Codex
+decline option). Grok Build draws identical cards for parallel subagents
+with one description, with herdr Blocked between them, so there only a call
+the card could be answering that waited when the keys went out brings the
+answers back, once it starts or resolves, and it also drops the hint: Grok
+Build writes a call's start only once it runs, while the other programs read
+an open call as waiting or running from herdr's status alone. A command,
+file or question card could be answering the calls it matches, and a
+subagent's card the spawns its `Allow <description>?` names, whole or cut
+at the card's edge; a card that matches none, any call that waited. Another
+call starting or resolving, such as the previous card's call read late or a
+call that needs no approval, which also reads as waiting while herdr reports
+Blocked, shows nothing about the answer. Codex
 0.160.1 holds an answer to its asynchronous question until its next tool call,
 so the card confirms it by Codex's queued-messages notice and shows it as
 Queued. Codex 0.162.1 delivers the answer at once (a waiting `write_stdin`
@@ -288,11 +436,41 @@ then the review page's Submit; an answer is confirmed by the `ask` result or
 by the next page. While Oh My Pi's prompt holds a draft, keys would go into
 it, so the card answers nothing but Stop and says to queue or clear the draft
 in the terminal. Stop on an Oh My Pi question presses Esc, which cancels the
-question and ends the turn, and the card says so. Multi-select questions,
-option notes and typed answers stay in the terminal. A dialog the parsers
-do not know gets a generic card with the Agent controls. Answers the
-transcript does not record join the history as Allowed, Declined, Stopped and
-Answered rows.
+question and ends the turn, and the card says so. Grok Build's permission
+card, its single question, `/fork`'s worktree question and the stop panel
+Ctrl+C opens while subagents run get cards. Each answer presses its row's
+own key, a digit or a question's letter, which selects and submits at once;
+Esc, Ctrl+C and letters on a permission card, which open the reject row's
+feedback field, are never pressed. The permission card offers Yes, proceed
+(Yes on an edit), `Always allow: <command>` and Yes, allow all edits during
+this session, each persistent row with a caption saying what Grok Build
+keeps, and Deny, which presses the reject row and ends the turn; the
+always-approve mode and Never allow rows stay in the terminal. So does a
+lasting rule Grok Build cut to fit with `…`, as at 40 columns, since the cut
+hides how far it reaches; the card then says to widen the terminal to see
+it. Grok Build asks the same way before a subagent starts, under the card's
+own question, `Allow <description>?`, and there Yes, send once approves that
+subagent alone. The Agent wrote that question, so the card's title shows
+all of the question Grok Build drew, with no line limit, and the card does
+not repeat it, also where Grok Build cut it with `…`. The stop panel offers
+Stop running and Continue to run,
+which ends the turn while the subagents go on; Always stop and Always
+continue write the config and stay out. The worktree question `/fork` asks
+gets its own card: Yes and No, each of which forks; Always worktree and
+Never worktree, which save the choice, stay in the terminal. The card says
+that Chat stays with this conversation and holds messages until `/resume`
+switches back to it, since herdr keeps the parent session. A card too
+narrow to show No, as at 40 columns, stays generic with its key pad, and
+says that every answer forks and that the rows out of view save a lasting
+choice. Neither the questions nor the stop panel offers Stop, since Esc
+there only moves Grok Build's focus or keeps the turn running. After Esc,
+Grok Build's focus rests in its scrollback, where keys miss the card, so the
+card then answers nothing and says to answer in the terminal. Grok Build's
+other cards, such as the rewind confirmation, get the generic card without
+numbered answers. Multi-select questions, option notes and typed answers
+stay in the terminal. A dialog the parsers do not know gets a generic card
+with the Agent controls. Answers the transcript does not record join the
+history as Allowed, Declined, Stopped and Answered rows.
 
 ## Background Work
 
@@ -370,6 +548,13 @@ command left running as a background terminal, folds with the steps above
 the answer rather than unfolding the turn. Opening a fold opens none of the rows or groups inside
 it; the model's text there reads in the secondary color. Fold Finished
 Turns in Settings turns folding off.
+
+Rows above the first loaded turn belong to a turn whose start is further up,
+and show as they load while earlier history still loads by itself. Once it
+waits for Load Earlier Messages, which only Grok Build's does (see Reading and
+caching), they read as a finished turn as far as they are loaded: the end the
+loaded lines record closes it, and its header shows the time that end gives
+(`elapsed_ms`), or "Details" without one.
 
 Two or more consecutive tool calls show as one group row: the first call's
 symbol, what the calls did ("Ran 2 commands, Edited 2 files", files counted
@@ -462,12 +647,16 @@ no Attach at all.
   often. Unknown records are skipped, so a format change hides content until
   an adapter learns it rather than breaking Chat. The research notes record
   what each version wrote.
-- Only `~/.claude` and `~/.codex` are searched. herdr learns the session from
-  integration hooks in the program's config directory, so an Agent run with
+- Claude Code and Codex transcripts are looked for only in `~/.claude` and
+  `~/.codex`. herdr learns the session from integration hooks in the
+  program's config directory, so an Agent run with
   `CLAUDE_CONFIG_DIR` or `CODEX_HOME` elsewhere reports none without them
   there, and Chat shows Waiting for Conversation; with them installed there,
   Chat shows Conversation Not Found.
   Compressed (`.zst`) and pre-envelope Codex rollouts are not read.
+  Grok Build sessions are looked for only under `~/.grok/sessions`: a
+  custom `GROK_HOME` lives in the Agent's environment, which herdr does not
+  report, so a session there is not found.
 - Claude Code writes no transcript before the first prompt, and Codex reports
   no session to herdr until after it, also after a resume, by id or by name,
   or a restart in its pane. The Composer works in both states.
@@ -493,6 +682,11 @@ no Attach at all.
   rollouts, whose turns fold under "Details". Claude Code's own `durationMs` can be far
   shorter than a turn's wall time, so "Worked for" can read longer than the
   program's figure.
+- In Grok Build, earlier history loads by itself at most 4 MiB a request.
+  Inside a longer turn, or at a line longer than 2 MiB, it waits for Load
+  Earlier Messages, and the loaded part of that turn folds under the time its
+  end record gives, or "Details" without one. The other programs' lists keep
+  loading by themselves as Load Earlier Messages does.
 - Conversation text now rests on the device, in the protected cache that
   [PRIVACY.md](../../PRIVACY.md) describes.
 - Not in this version:
@@ -501,6 +695,13 @@ no Attach at all.
     one-form answer to several questions, and steering a running Oh My Pi
     turn from Chat. Pi's extension dialogs, and Oh My Pi skills in a
     project's ancestor directories.
+  - Grok Build's Background Work, a Stop on the terminal's Composer for
+    Grok Build, its questions beyond one single-choice question (several
+    questions, multi-select, a typed answer) and skipping one, Keep Running
+    on its subagent stop panel, and its minimal mode, where Chat holds every
+    message and Stop presses nothing. Skills named like a Grok Build
+    built-in command, which Grok Build offers only as `/local:<name>` or
+    `/user:<name>`.
   - The segment before a Codex undo. After one, Chat shows only the turns
     written since; the reducer accepts the earlier segment, but nothing loads
     it yet.
