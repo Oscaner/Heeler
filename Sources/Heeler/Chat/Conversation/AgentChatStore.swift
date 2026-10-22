@@ -1371,7 +1371,9 @@ final class AgentChatStore {
 
     /// Pi and Oh My Pi refuse a `/compact` with nothing to compact on
     /// screen ("Error: Compaction failed: Nothing to compact (session too
-    /// small)") and record nothing, so its echo would stay overdue. The
+    /// small)") and record nothing, so its echo would stay overdue; Grok
+    /// Build does the same for one Stop cancelled ("Compaction cancelled.").
+    /// The
     /// Agent often never leaves idle for it, so the screen is read once for
     /// each `/compact` past its echo timeout while herdr reports the Agent
     /// idle, whenever it last turned so; the echo awaits that read. herdr
@@ -1403,31 +1405,44 @@ final class AgentChatStore {
         }
         guard let failure = Self.latestCompactionFailure(in: screen, program: program) else { return }
         let refusal =
-            failure.text.contains("Nothing to compact")
-            ? "\(program.chatName) had nothing to compact." : "\(program.chatName) couldn't compact."
+            if failure.text.contains(Self.grokCompactionCancelled) {
+                "The compaction was cancelled."
+            } else if failure.text.contains("Nothing to compact") {
+                "\(program.chatName) had nothing to compact."
+            } else {
+                "\(program.chatName) couldn't compact."
+            }
         for send in candidates {
             refusedSends[send.id] = refusal
         }
     }
 
-    /// Pi 0.85.1's and Oh My Pi 18.11's row while a compaction runs, or
-    /// Pi's countdown before it retries a failed summarization call
-    /// ("Retrying (1/3) in 2s... (escape to cancel)").
+    /// Pi 0.85.1's and Oh My Pi 18.11's row while a compaction runs, Pi's
+    /// countdown before it retries a failed summarization call ("Retrying
+    /// (1/3) in 2s... (escape to cancel)"), or Grok Build 1.0.62's turn
+    /// status row ("⠼ Compacting…  1.0s ⇣26.1k [stop]"). Grok's
+    /// "Compacting conversation…" row stays after the compaction ends.
     private static func showsRunningCompaction(_ row: String) -> Bool {
-        row.contains(compactingSpinner) || row.contains(/Retrying \(\d+\/\d+\) in \d+s\.\.\./)
+        row.contains(compactingSpinner) || row.contains(grokCompactingStatus)
+            || row.contains(/Retrying \(\d+\/\d+\) in \d+s\.\.\./)
     }
 
     private static let compactingSpinner = "Compacting context..."
+    private static let grokCompactingStatus = "Compacting…"
+    private static let grokCompactionCancelled = "Compaction cancelled."
 
-    /// The last "Compaction failed:" row, when nothing but blank rows, the
-    /// message's own wrapped rows (drawn in its color: at the phone's 62
-    /// columns `small)` wraps) and Oh My Pi's dim italic session title
+    /// The last "Compaction failed:" row (Grok Build's "Compaction
+    /// cancelled."), when nothing but blank rows, the message's own wrapped
+    /// rows (drawn in its color: at the phone's 62 columns `small)` wraps),
+    /// Oh My Pi's dim italic session title and Grok's scrollbar thumb
     /// separate it from the input box (Pi's rule, Oh My Pi's box or status
-    /// band). One with conversation below it is an earlier attempt's.
+    /// band, Grok's box). One with conversation below it is an earlier
+    /// attempt's.
     private static func latestCompactionFailure(in screen: ANSIScreen, program: ChatProgram) -> ScreenRow? {
         let rows = screen.rows
-        guard let index = rows.lastIndex(where: { $0.text.contains("Compaction failed:") }) else { return nil }
-        let color = rows[index].runs.first { $0.text.contains("Compaction failed:") }?.style.foreground
+        let marker = program == .grok ? grokCompactionCancelled : "Compaction failed:"
+        guard let index = rows.lastIndex(where: { $0.text.contains(marker) }) else { return nil }
+        let color = rows[index].runs.first { $0.text.contains(marker) }?.style.foreground
         func drawn(_ row: ScreenRow, _ matches: (ScreenStyle) -> Bool) -> Bool {
             let runs = row.runs.filter { !$0.text.allSatisfy(\.isWhitespace) }
             return !runs.isEmpty && runs.allSatisfy { matches($0.style) }
@@ -1435,6 +1450,7 @@ final class AgentChatStore {
         let next = rows[(index + 1)...].first { row in
             !row.isBlank && !(color != nil && drawn(row) { $0.foreground == color })
                 && !(program == .omp && drawn(row) { $0.isDim && $0.isItalic })
+                && !(program == .grok && row.trimmedText.allSatisfy { $0 == "█" })
         }
         guard let next else { return rows[index] }
         let text = next.trimmedText
@@ -1563,12 +1579,13 @@ extension ChatProgram {
 
     /// Whether a declined `/compact` shows only on screen, so an overdue
     /// one is looked for there while the Agent idles (Pi 0.85.1,
-    /// Oh My Pi 18.11). Opting in also needs the program's rows in
+    /// Oh My Pi 18.11, and Grok Build 1.0.62 for one Stop cancelled).
+    /// Opting in also needs the program's rows in
     /// `showsRunningCompaction` and `latestCompactionFailure`.
     var declinesCompactOnScreen: Bool {
         switch self {
-        case .pi, .omp: true
-        case .claude, .codex, .grok: false
+        case .pi, .omp, .grok: true
+        case .claude, .codex: false
         }
     }
 }

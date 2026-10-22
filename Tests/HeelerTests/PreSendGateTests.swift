@@ -52,7 +52,7 @@ struct PreSendGateTests {
             "grok-18-session-fork", "grok-19-resumed-other", "grok-20-welcome", "grok-27-compacting",
             "grok-28-welcome-62", "grok-29-welcome-40", "grok-30-idle-62x20", "grok-32-working-62x20",
             "grok-40-agent-view-other-62", "grok-41-agent-view-this-62", "grok-42-agent-view-dispatched-62",
-            "grok-43-resumed-from-welcome-120",
+            "grok-43-resumed-from-welcome-120", "grok-45-compaction-cancelled-62",
         ]
         let screen = try ScreenFixture.screen(stem)
 

@@ -1995,8 +1995,9 @@ struct AgentChatStoreTests {
         #expect(store.sendStatuses[first] == .abandoned)
     }
 
-    /// Only Pi and Oh My Pi are known to refuse on screen: Claude Code's
-    /// and Codex's overdue `/compact` stays overdue without a read.
+    /// Only Pi, Oh My Pi and Grok Build are known to refuse on screen:
+    /// Claude Code's and Codex's overdue `/compact` stays overdue without
+    /// a read.
     @Test(arguments: [ChatProgram.claude, .codex])
     func anOverdueCompactIsNotLookedForOnTheScreen(program: ChatProgram) async throws {
         let pane = Pane(try ScreenFixture.screen("pi-41-compact-nothing"))
@@ -2224,7 +2225,7 @@ struct AgentChatStoreTests {
     /// gate holds stats of the folder's prompt history.
     private static func grokStore(
         through line: Int, status: AgentStatus, server: Server? = nil, gate: HistoryGate? = nil,
-        cache: VolatileChatTranscriptCache = VolatileChatTranscriptCache(),
+        cache: VolatileChatTranscriptCache = VolatileChatTranscriptCache(), screen: BlockedScreenIO = .unavailable,
         timing: AgentChatStore.Timing = AgentChatStore.Timing(
             activeInterval: .milliseconds(5), idleInterval: .milliseconds(5))
     ) async throws -> (files: VirtualHostFiles, store: AgentChatStore, clock: Clock) {
@@ -2237,7 +2238,7 @@ struct AgentChatStoreTests {
             source: AgentChatSource(
                 hostID: host, socketLocation: .defaultSession,
                 files: gate?.files(files, holding: grokHistory) ?? files.hostFiles(),
-                agentInfo: { try await server?.read() ?? agent }, cache: cache, adapter: .grok),
+                agentInfo: { try await server?.read() ?? agent }, cache: cache, adapter: .grok, screen: screen),
             timing: timing, now: { clock.now })
         await store.step()
         #expect(store.conversation.phase == .following(path: grokPath))
@@ -2286,6 +2287,56 @@ struct AgentChatStoreTests {
         await files.append(try Self.grokLines("compaction.jsonl", 5...6), to: Self.grokPath)
         await store.step()
         #expect(store.sendStatuses[id] == .recorded)
+    }
+
+    /// Grok Build 1.0.62 writes nothing for a `/compact` that Stop
+    /// cancelled, only `Compaction cancelled.` on screen (grok-45, the
+    /// scrollbar's thumb between it and the box). Once the Agent is idle
+    /// and the echo overdue, one read says so instead of "hasn't appeared".
+    @Test func aCancelledGrokCompactionIsSettledAfterOneRead() async throws {
+        let pane = Pane(try ScreenFixture.screen("grok-45-compaction-cancelled-62"))
+        let (files, store, clock) = try await Self.grokStore(through: 4, status: .idle, screen: pane.io)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "/compact ", delivered: false)])
+        store.updateSends([Self.sent(id, "/compact ")])
+        clock.now = clock.now.addingTimeInterval(1)
+        store.agentDidChange(Self.grokAgent(.working))
+        clock.now = clock.now.addingTimeInterval(5)
+        store.agentDidChange(Self.grokAgent(.idle))
+        await store.step()
+        #expect(await pane.reads == 0)
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        await store.step()
+
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .refused("The compaction was cancelled."))
+
+        await files.append(try Self.grokLines("core-turns.jsonl", 5...5), to: Self.grokPath)
+        await store.step()
+        #expect(store.sendStatuses[id] == .abandoned)
+    }
+
+    /// A read that finds Grok Build's spinner row (`⠼ Compacting…`,
+    /// grok-27) while herdr reports it idle keeps the echo awaiting: the
+    /// `Compacting conversation…` row above it stays after a cancel, so
+    /// only the spinner says the compaction still runs.
+    @Test func aRunningGrokCompactionKeepsItsEchoAwaiting() async throws {
+        let pane = Pane(try ScreenFixture.screen("grok-27-compacting"))
+        let (_, store, clock) = try await Self.grokStore(through: 4, status: .idle, screen: pane.io)
+        let id = UUID()
+        store.updateSends([Self.sent(id, "/compact ", delivered: false)])
+        store.updateSends([Self.sent(id, "/compact ")])
+
+        clock.now = clock.now.addingTimeInterval(10)
+        await store.step()
+        #expect(await pane.reads == 1)
+        #expect(store.sendStatuses[id] == .awaiting)
+
+        await store.step()
+        #expect(await pane.reads == 2)
+        #expect(store.sendStatuses[id] == .awaiting)
     }
 
     /// herdr reports Grok Build idle for up to half a second after a

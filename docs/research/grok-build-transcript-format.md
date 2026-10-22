@@ -288,8 +288,12 @@ conversation…` and then `Compaction completed in 16s.` (live, 2026-10-20).
 Automatic compaction writes `auto_compact_started{reason, tokens_used,
 context_window, percentage}`, the checkpoint and `auto_compact_completed` in
 mid-turn, and a cancelled one writes `auto_compact_cancelled` (source).
-Nothing above a compaction is rewritten, and `summary_preview` was always
-null.
+A `/compact` that Ctrl+C cancelled while the screen showed `⠼ Compacting…`
+wrote nothing at all; the screen added `Compaction cancelled.` under
+`Compacting conversation…`, and herdr went back to `idle` (live,
+2026-10-22). Chat reads the screen for that row once such a `/compact` is
+overdue. Nothing above a compaction is rewritten, and `summary_preview` was
+always null.
 
 Live (2026-10-20), one turn that read 21 files of 99,000 bytes each
 compacted automatically three times. Each `auto_compact_started` was
