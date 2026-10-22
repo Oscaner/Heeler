@@ -6,17 +6,24 @@ extension ComposerDeliveryPolicy {
     /// into an input box read as empty; a second read `DeliveryCheck.delay`
     /// after `agent.prompt` tells whether Enter took it. Both reads go
     /// through `agent.read`, and a Blocked Agent refuses: nothing here
-    /// touches the Attach PTY.
+    /// touches the Attach PTY. `sendConcern` gets the text as sent and the
+    /// screen the input box passed on, and may hold the message for what
+    /// Chat knows beyond the box; nothing is awaited between them.
+    /// `willReadScreen` runs just before the first read, once the Agent is
+    /// not Blocked: Chat registers the send there, so a send witness's mark
+    /// is on its way before `agent.read` rather than after it.
     ///
     /// `confirmSession`, for a program that can leave its conversation
     /// without herdr reporting it (`ChatProgram.confirmsSessionBeforeSend`),
-    /// runs before the screen read: why the message would land outside the
-    /// conversation Chat shows, or nil to go on.
+    /// runs before `willReadScreen` and the screen read: why the message
+    /// would land outside the conversation Chat shows, or nil to go on.
     static func chat(
         rules: ChatSendRules,
         activity: @escaping @MainActor () -> ChatAgentActivity,
         readScreen: @escaping @MainActor () async throws -> ANSIScreen,
         confirmSession: (@MainActor () async -> String?)? = nil,
+        sendConcern: @escaping @MainActor (_ outgoing: String, _ screen: ANSIScreen) -> String? = { _, _ in nil },
+        willReadScreen: @escaping @MainActor () -> Void = {},
         pause: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     ) -> ComposerDeliveryPolicy {
         let program = rules.program
@@ -25,9 +32,10 @@ extension ComposerDeliveryPolicy {
             insertsIntoAttachWhenBlocked: false,
             outgoingText: { rules.outgoingText($0) },
             validate: { rules.validate($0) },
-            preflight: { _ in
+            preflight: { text in
                 if activity() == .blocked { return .agentBlocked }
                 if let confirmSession, let reason = await confirmSession() { return .inputNotReady(reason) }
+                willReadScreen()
                 let screen: ANSIScreen
                 do {
                     screen = try await readScreen()
@@ -35,17 +43,20 @@ extension ComposerDeliveryPolicy {
                     return .inputNotReady(Self.unreadableScreenReason(error))
                 }
                 switch PreSendGate.check(screen, program: program, activity: activity()) {
-                case .send: return nil
+                case .send:
+                    return sendConcern(rules.outgoingText(text), screen).map { .inputNotReady($0) }
                 case .holdBlocked: return .agentBlocked
                 case .hold(let state): return .inputNotReady(state.holdReason(for: program))
                 }
             },
-            verify: { _ in
+            verify: { sent in
                 await pause(DeliveryCheck.delay)
                 // A screen that cannot be read says nothing; the message
                 // stays marked as sent.
                 guard let screen = try? await readScreen() else { return true }
-                if case .notDelivered = DeliveryCheck.verdict(screen, program: program, activity: activity()) {
+                if case .notDelivered = DeliveryCheck.verdict(
+                    screen, program: program, activity: activity(), sent: sent)
+                {
                     return false
                 }
                 return true
@@ -78,6 +89,10 @@ extension InputBoxState {
                 // Their Esc returns steers the turn has not taken to the
                 // box, but the text may as well be a draft typed there.
                 "The Agent's input box already has text, such as a draft or a steer that Stop returned. Send or clear it in the terminal first."
+            case .grok:
+                // Ctrl+C before the first output puts the turn's prompt back
+                // in the box.
+                "Grok Build's input box already has text, such as a draft or a message Stop put back. Send or clear it in the terminal first."
             case .opencode:
                 // OpenCode's `/undo` puts the undone prompt back in the box,
                 // and Up recalls an earlier one.

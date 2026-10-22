@@ -72,6 +72,8 @@ struct OpenCodeRecordSource: ChatTranscriptSource {
 
     var hasOlder: Bool { (windowStart ?? 0) > 0 }
     var olderPageLengths: (first: Int, maximum: Int) { (budgets.olderPage, budgets.olderMaximumPage) }
+    /// OpenCode's automatic requests read as the user's do.
+    var automaticOlderSearch: Int? { nil }
     var olderSearchExhausted: Bool { olderSearchRead >= budgets.olderSearch }
 
     // MARK: Reading
@@ -117,7 +119,11 @@ struct OpenCodeRecordSource: ChatTranscriptSource {
         }
     }
 
-    mutating func loadOlder(_ files: ChatHostFiles, length: Int?) async throws -> TranscriptFollower.OlderPage {
+    /// `limit` stays nil: with no `automaticOlderSearch`, no request bounds
+    /// its pages.
+    mutating func loadOlder(_ files: ChatHostFiles, length: Int?, limit: Int? = nil) async throws
+        -> TranscriptFollower.OlderPage
+    {
         guard hasOlder, let lowSeq else { return .headReached }
         var budget = min(max(budgets.olderPage, length ?? 0), budgets.olderMaximumPage)
         for _ in 0..<Self.attempts {

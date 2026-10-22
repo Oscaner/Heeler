@@ -298,11 +298,13 @@ struct AgentChatSurfaceView: View {
             }
         }
         .onChange(of: timelineFeed, initial: true) { _, feed in
-            let entries = feed.history.marking(chat?.conversation.transcript.entries ?? [])
+            let transcript = chat?.conversation.transcript
+            let entries = feed.history.marking(transcript?.entries ?? [])
             timeline.update(
                 conversation: feed.generation,
                 input: ChatTimelineInput(entries: feed.outputs.marking(entries), pending: feed.pending, older: feed.older),
-                turns: chat?.conversation.transcript.turns ?? [], signals: feed.signals, isReady: feed.isReady)
+                turns: transcript?.turns ?? [], precedingTurnEnd: transcript?.precedingTurnEnd, signals: feed.signals,
+                isReady: feed.isReady)
         }
         .onChange(of: sentMessages, initial: true) { previous, messages in
             chat?.updateSends(messages)
@@ -656,7 +658,8 @@ struct AgentChatSurfaceView: View {
             activity: ChatAgentActivity(agent.agent.status),
             isBackgroundWorkRunning: chat.backgroundWork.rows.contains { $0.isRunning && !$0.isStale },
             foldsFinishedTurns: foldsFinishedTurns,
-            isLive: ChatTurnSignals.isLive(hostStatus: console.hostStatuses[agent.hostID], conversation: conversation))
+            isLive: ChatTurnSignals.isLive(hostStatus: console.hostStatuses[agent.hostID], conversation: conversation),
+            olderAwaitsUser: conversation.olderAwaitsUser)
         return TimelineFeed(
             generation: chat.conversationGeneration, revision: conversation.revision,
             older: conversation.older, pending: pending, history: chat.blocked.history, outputs: chat.outputs,
@@ -666,6 +669,7 @@ struct AgentChatSurfaceView: View {
     private var timelineActions: ChatTimelineActions {
         ChatTimelineActions(
             loadOlder: { chat?.loadOlder() },
+            loadOlderAutomatically: { chat?.loadOlder(automatic: true) },
             followingChanged: { isFollowing = $0 },
             firstPositionedLayout: { detailCrossfade?.contentDidAppear() },
             loadOutput: { chat?.loadOutput($0) },
@@ -713,7 +717,9 @@ struct AgentChatSurfaceView: View {
     }
 
     private var sendPolicy: ComposerDeliveryPolicy {
-        .chat(rules: sendRules, activity: agentActivity, readScreen: readAgentScreen, confirmSession: confirmSession)
+        .chat(
+            rules: sendRules, activity: agentActivity, readScreen: readAgentScreen, confirmSession: confirmSession,
+            sendConcern: sendConcern, willReadScreen: registerSends)
     }
 
     /// Whether the program still shows the conversation Chat shows, for a
@@ -727,6 +733,23 @@ struct AgentChatSurfaceView: View {
             guard let chat else { return AgentChatStore.uncheckedSessionReason(program) }
             return await chat.confirmSessionBeforeSend()
         }
+    }
+
+    /// Hands Chat the Composer's messages as a send's check starts, ahead
+    /// of the change that follows the next render, so a new send's witness
+    /// mark is on its way before the screen read.
+    private var registerSends: @MainActor () -> Void {
+        let chat = chat
+        let composer = composer
+        let rules = sendRules
+        return { chat?.updateSends(ChatComposerEchoes.sentMessages(composer.messages, rules: rules)) }
+    }
+
+    /// What holds a send the input box would take: a screen showing
+    /// another session, or a send the Agent recorded in another one.
+    private var sendConcern: @MainActor (String, ANSIScreen) -> String? {
+        let chat = chat
+        return { text, screen in chat?.sendConcern(for: text, after: screen) }
     }
 
     /// What herdr reports the Agent doing when asked, not when this view

@@ -69,8 +69,13 @@ struct ChatConversationEngineTests {
             await engine.poll(context: ChatProjectionContext(activity: .idle))
         }
 
-        func loadOlder(_ engine: ChatConversationEngine) async -> ChatConversationSnapshot {
-            await engine.loadOlder(context: ChatProjectionContext(activity: .idle))
+        func loadOlder(_ engine: ChatConversationEngine, automatic: Bool = false) async -> ChatConversationSnapshot {
+            await engine.loadOlder(context: ChatProjectionContext(activity: .idle), automatic: automatic)
+        }
+
+        /// The bytes read from the Host since the records were cleared.
+        func bytesRead() async -> Int {
+            await files.reads.reduce(0) { $0 + $1.maxBytes }
         }
 
         func savedDocument() async -> ChatCacheDocument? {
@@ -515,6 +520,146 @@ struct ChatConversationEngineTests {
         #expect(snapshot.older == .available)
     }
 
+    /// Short turns bring an opener within what a bounded request Chat
+    /// makes by itself may read, so it reads and shows what the user's
+    /// would.
+    @Test func automaticRequestsLoadShortTurnsAsTheUsersDo() async throws {
+        var limits = Self.limits
+        limits.automaticOlderSearch = 160
+        let text = (0..<8).map { turn in
+            NumberedChatReducer.prompt("t\(turn)") + Self.lines((turn * 3)..<(turn * 3 + 3))
+                + NumberedChatReducer.turnEnd
+        }.joined()
+        let automatic = Fixture(limits: limits)
+        let user = Fixture(limits: limits)
+        await automatic.files.write(text, at: Self.claudePath)
+        await user.files.write(text, at: Self.claudePath)
+        let byItself = automatic.makeEngine()
+        let asked = user.makeEngine()
+        var snapshot = await automatic.open(byItself)
+        _ = await user.open(asked)
+
+        var pages = 0
+        while snapshot.older == .available, pages < 50 {
+            snapshot = await automatic.loadOlder(byItself, automatic: true)
+            let expected = await user.loadOlder(asked)
+            #expect(Self.numbers(snapshot) == Self.numbers(expected))
+            #expect(snapshot.transcript.turns == expected.transcript.turns)
+            #expect(snapshot.older == expected.older)
+            #expect(!snapshot.olderAwaitsUser)
+            pages += 1
+        }
+
+        #expect(pages > 3)
+        #expect(snapshot.older == .reachedStart)
+        let userReads = await user.files.reads
+        #expect(await automatic.files.reads == userReads)
+    }
+
+    /// A turn longer than a bounded request Chat makes by itself may read:
+    /// the request stops at its limit and leaves the rest to the user, and
+    /// the next one reads nothing. The user's request reads on to the
+    /// turn's prompt, and then Chat loads by itself again.
+    @Test func automaticRequestsStopInsideATurnLongerThanTheirLimit() async throws {
+        var limits = Self.limits
+        limits.automaticOlderSearch = 96
+        let fixture = Fixture(limits: limits)
+        let first = NumberedChatReducer.prompt("a") + Self.lines(0..<6) + NumberedChatReducer.turnEnd
+        let silent = String(repeating: NumberedChatReducer.end("none"), count: 40)
+        await fixture.files.write(
+            first + NumberedChatReducer.prompt("b") + silent + Self.lines(6..<10), at: Self.claudePath)
+        let engine = fixture.makeEngine()
+        let opened = await fixture.open(engine)
+        try #require(opened.transcript.turns.isEmpty)
+        await fixture.files.clearRecords()
+
+        var snapshot = await fixture.loadOlder(engine, automatic: true)
+        #expect(await fixture.bytesRead() == 96)
+        #expect(snapshot.transcript.turns.isEmpty)
+        #expect(snapshot.older == .available)
+        #expect(snapshot.olderAwaitsUser)
+
+        await fixture.files.clearRecords()
+        snapshot = await fixture.loadOlder(engine, automatic: true)
+        #expect(await fixture.files.reads.isEmpty)
+        #expect(snapshot.olderAwaitsUser)
+
+        snapshot = await fixture.loadOlder(engine)
+        #expect(snapshot.transcript.turns.map(\.firstEntryID.rawValue) == ["p-\(first.utf8.count)"])
+        #expect(!snapshot.olderAwaitsUser)
+
+        snapshot = await fixture.loadOlder(engine, automatic: true)
+        #expect(Self.numbers(snapshot).first == "p-0")
+        #expect(snapshot.older == .reachedStart)
+    }
+
+    /// Once a bounded request leaves earlier messages to the user, a fresh
+    /// tail lets Chat load by itself again: here the program rewrites the
+    /// file shorter, keeping its start, and the poll reloads it.
+    @Test func aFreshTailLetsAutomaticRequestsReadAgain() async throws {
+        var limits = Self.limits
+        limits.automaticOlderSearch = 96
+        let fixture = Fixture(limits: limits)
+        let first = NumberedChatReducer.prompt("a") + Self.lines(0..<6) + NumberedChatReducer.turnEnd
+        func text(silent: Int) -> String {
+            first + NumberedChatReducer.prompt("b") + String(repeating: NumberedChatReducer.end("none"), count: silent)
+                + Self.lines(6..<10)
+        }
+        await fixture.files.write(text(silent: 40), at: Self.claudePath)
+        let engine = fixture.makeEngine()
+        _ = await fixture.open(engine)
+        var snapshot = await fixture.loadOlder(engine, automatic: true)
+        try #require(snapshot.olderAwaitsUser)
+
+        await fixture.files.write(text(silent: 20), at: Self.claudePath)
+        snapshot = await fixture.poll(engine)
+        #expect(!snapshot.olderAwaitsUser)
+
+        await fixture.files.clearRecords()
+        snapshot = await fixture.loadOlder(engine, automatic: true)
+        #expect(await fixture.bytesRead() > 0)
+    }
+
+    /// A program that doesn't bound what Chat loads by itself passes the
+    /// follower no limit, so the timeline's request reads back past a line
+    /// longer than the largest page to the opener above it, as the user's
+    /// does. A limit there would stop every pass at that line without
+    /// moving the window; the read budget fails such a loop instead of
+    /// letting it hang.
+    @Test func automaticRequestsReadPastALineLongerThanAPage() async throws {
+        try #require(Self.limits.automaticOlderSearch == nil)
+        // 201 bytes, more than the 128-byte largest page, just above the
+        // tail window.
+        let long = #"{"pad":""# + String(repeating: "x", count: 190) + "\"}\n"
+        let text = NumberedChatReducer.prompt("a") + Self.lines(0..<2) + long + Self.lines(2..<8)
+        let automatic = Fixture()
+        let user = Fixture()
+        await automatic.files.write(text, at: Self.claudePath)
+        await user.files.write(text, at: Self.claudePath)
+        let byItself = automatic.makeEngine()
+        let asked = user.makeEngine()
+        let opened = await automatic.open(byItself)
+        _ = await user.open(asked)
+        try #require(Self.numbers(opened) == Self.ids(2..<8))
+        await automatic.files.clearRecords()
+        await user.files.clearRecords()
+        // Several times what the request reads.
+        await automatic.files.setReadBudget(64)
+
+        let snapshot = await automatic.loadOlder(byItself, automatic: true)
+        let expected = await user.loadOlder(asked)
+
+        #expect(
+            snapshot.transcript.turns.map(\.firstEntryID.rawValue) == ["p-0"],
+            "\(String(describing: snapshot.readFailure))")
+        #expect(Self.numbers(snapshot) == Self.numbers(expected))
+        #expect(snapshot.transcript.turns == expected.transcript.turns)
+        #expect(snapshot.older == expected.older)
+        #expect(!snapshot.olderAwaitsUser)
+        let userReads = await user.files.reads
+        #expect(await automatic.files.reads == userReads)
+    }
+
     @Test func turnsOpenedAboveALaterWindowComeFromTheSavedDocument() async throws {
         let fixture = Fixture()
         await fixture.files.write(NumberedChatReducer.prompt("a") + Self.lines(0..<6), at: Self.claudePath)
@@ -541,6 +686,76 @@ struct ChatConversationEngineTests {
         #expect(snapshot.older == .reachedStart)
         #expect(snapshot.transcript.turns.map(\.firstEntryID.rawValue) == ["p-0", "p-\(second)"])
         #expect(snapshot.transcript.turns.map(\.ending) == [.completed, nil])
+        // The window's end closes a saved turn, not the rows above it.
+        #expect(snapshot.transcript.precedingTurnEnd == nil)
+    }
+
+    /// Saved rows above a later window that open no turn belong to the
+    /// turn the window opens inside, which the window's end still closes.
+    @Test func savedRowsAboveALaterWindowKeepTheEndOfTheirTurn() async throws {
+        let fixture = Fixture()
+        await fixture.files.write(Self.lines(0..<6), at: Self.claudePath)
+        let first = fixture.makeEngine()
+        let opened = await fixture.open(first)
+        try #require(opened.older == .reachedStart)
+        await first.save(force: true)
+
+        await fixture.files.append(
+            NumberedChatReducer.turnEnd + NumberedChatReducer.prompt("b") + Self.lines(8..<10), to: Self.claudePath)
+        let reopened = fixture.makeEngine()
+        _ = await reopened.restore()
+        let snapshot = await fixture.open(reopened)
+
+        // The tail window starts at the last saved row; the rest fill in.
+        #expect(snapshot.transcript.needsOlderHistory)
+        #expect(snapshot.older == .reachedStart)
+        #expect(Self.numbers(snapshot).prefix(6) == ArraySlice(Self.ids(0..<6)))
+        #expect(snapshot.transcript.turns.count == 1)
+        #expect(snapshot.transcript.precedingTurnEnd == ChatTurnEnd(ending: .completed))
+    }
+
+    /// With Claude Code's limits, a request the list makes by itself reads
+    /// saved rows the Host sends again as the user's does: above more than
+    /// 4 MiB of short turns kept from an earlier visit, it reads on to the
+    /// next turn's prompt.
+    @Test func automaticRequestsReadPastSavedRowsAboveALaterWindow() async throws {
+        let claude = try #require(ChatTranscriptAdapter.standard(for: .claude))
+        try #require(claude.joinsCachedHistory)
+        let fixture = Fixture(limits: claude.limits)
+        // A 64 KiB line no program reads.
+        let filler = String(repeating: "x", count: (64 << 10) - 1) + "\n"
+        func turn(_ name: String, kib: Int) -> String {
+            NumberedChatReducer.prompt(name) + String(repeating: filler, count: kib / 64) + NumberedChatReducer.turnEnd
+        }
+        let early = turn("a", kib: 2_048)
+        await fixture.files.write(early + (0..<8).map { turn("b\($0)", kib: 768) }.joined(), at: Self.claudePath)
+        let first = fixture.makeEngine()
+        var snapshot = await fixture.open(first)
+        let oldestSaved = ChatEntryID("p-\(early.utf8.count)")
+        var pages = 0
+        while snapshot.transcript.turns.first?.firstEntryID != oldestSaved, pages < 20 {
+            snapshot = await fixture.loadOlder(first)
+            pages += 1
+        }
+        try #require(snapshot.transcript.turns.first?.firstEntryID == oldestSaved)
+        await first.save(force: true)
+        let saved = try #require(await fixture.savedDocument())
+
+        // Reopened one short turn later: the saved rows fill in above the
+        // tail window.
+        await fixture.files.append(turn("c", kib: 256), to: Self.claudePath)
+        let size = UInt64(await fixture.files.contents(of: Self.claudePath)?.count ?? 0)
+        try #require(size - UInt64(claude.limits.tailWindow) - saved.coverageStart > 4 << 20)
+        let reopened = fixture.makeEngine()
+        _ = await reopened.restore()
+        snapshot = await fixture.open(reopened)
+        try #require(snapshot.transcript.turns.first?.firstEntryID == oldestSaved)
+        try #require(snapshot.older == .available)
+
+        snapshot = await fixture.loadOlder(reopened, automatic: true)
+
+        #expect(snapshot.transcript.turns.first?.firstEntryID == ChatEntryID("p-0"))
+        #expect(!snapshot.olderAwaitsUser)
     }
 
     @Test func savedEntriesShowBeforeTheHostAnswers() async throws {

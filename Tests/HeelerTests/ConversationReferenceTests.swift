@@ -6,6 +6,7 @@ import Testing
 struct ConversationReferenceTests {
     private static let claudeID = "E951205E-24AF-4A5E-BAA7-3CCBEBD2DE2C"
     private static let codexID = "01a10f87-e025-7fb1-8974-8dd09937767a"
+    private static let grokID = "01900000-0000-7000-8000-000000000001"
     private static let openCodeID = "ses_0a1b2c3d4e5fK2mN8pQ4rT6vX9"
 
     private static func session(
@@ -95,6 +96,38 @@ struct ConversationReferenceTests {
                     == expected,
                 "\(program)")
         }
+    }
+
+    /// Grok Build files a session under the id exactly as it created it, a
+    /// lowercase UUIDv7, so the id binds unchanged.
+    @Test func grokBindsALowercaseUUIDv7() {
+        #expect(
+            ConversationReference.resolve(Self.session(source: "herdr:grok", agent: "grok", value: Self.grokID))
+                == .bound(ConversationReference(program: .grok, sessionID: Self.grokID)))
+    }
+
+    /// Lowercasing another id could name a folder Grok Build never wrote, so
+    /// every other value, an uppercase UUIDv7 or another UUID version
+    /// included, is a session Chat can't locate.
+    @Test(arguments: [
+        "0190A1B2-C3D4-7E5F-8A6B-7C8D9E0F1A2B",
+        "01900000-0000-4000-8000-000000000001",
+        "not-an-id",
+        "",
+    ])
+    func grokLeavesOtherIDsUnidentified(value: String) {
+        #expect(
+            ConversationReference.resolve(Self.session(source: "herdr:grok", agent: "grok", value: value))
+                == .unidentified)
+    }
+
+    /// herdr never reports a transcript path for Grok Build.
+    @Test func grokRefusesPathReports() {
+        let path = "/home/dev/.grok/sessions/%2Fhome%2Fdev%2Fapp/\(Self.grokID)/updates.jsonl"
+        #expect(
+            ConversationReference.resolve(
+                Self.session(source: "herdr:grok", agent: "grok", kind: .path, value: path))
+                == .unsupported)
     }
 
     /// OpenCode ids are case-sensitive, so the id herdr reports binds as

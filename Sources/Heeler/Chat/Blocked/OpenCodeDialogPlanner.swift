@@ -20,7 +20,7 @@ struct OpenCodeDialogPlanner {
         case .claudeBash, .claudeFileEdit, .claudeFileCreate, .claudeFileRead, .claudeFetch, .claudePlan,
             .claudeQuestion, .claudeQuestionReview, .claudeWorkspaceTrust, .codexExec, .codexPatch, .codexNetwork,
             .codexQuestion, .codexAsyncCollapsed, .codexAsyncQuestion, .ompApproval, .ompQuestion,
-            .ompQuestionReview:
+            .ompQuestionReview, .grokPermission, .grokQuestion, .grokCancelTurn, .grokFork:
             throw .unsupported("Not an OpenCode dialog.")
         }
     }

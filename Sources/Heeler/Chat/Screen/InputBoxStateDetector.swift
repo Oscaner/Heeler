@@ -50,6 +50,7 @@ enum InputBoxStateDetector {
         case .claude: return claude(screen)
         case .codex: return codex(screen)
         case .pi, .omp: return PiInputBoxDetector.detect(screen, program: program)
+        case .grok: return GrokInputBoxDetector.detect(screen)
         case .opencode: return OpenCodeScreenReader.read(screen).state
         }
     }

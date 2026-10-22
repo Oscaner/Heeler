@@ -31,16 +31,20 @@ enum ChatCommandMenu {
     /// their `/skill:` skills: a prompt template is a plain `/name`, which
     /// runs the built-in command instead when one shares its name. Claude
     /// Code answers "Unknown command" for a skill marked
-    /// `user-invocable: false`; Codex and Pi have no such key (their
+    /// `user-invocable: false`, and Grok Build doesn't offer one as a
+    /// command; Codex and Pi have no such key (their
     /// `allow_implicit_invocation` and `disable-model-invocation` limit only
-    /// the model). OpenCode gets none, so its menu holds only `/compact`:
-    /// its skills have no form a message can invoke, and its server
-    /// commands are not offered.
+    /// the model). Grok Build also keeps its built-in commands' names, in
+    /// any case, and offers a skill named like one only under a qualified
+    /// name. OpenCode gets none, so its menu holds only `/compact`: its
+    /// skills have no form a message can invoke, and its server commands
+    /// are not offered.
     static func offers(_ skill: AgentSkill, for program: ChatProgram) -> Bool {
         switch program {
         case .pi, .omp: skill.commandPrefix == skillCommandPrefix
         case .claude: skill.isUserInvocable
         case .codex: true
+        case .grok: skill.isUserInvocable && !GrokSlashCommands.builtIns.contains(skill.name.lowercased())
         case .opencode: false
         }
     }
@@ -139,6 +143,13 @@ struct ChatSendProfile: Sendable {
         case .claude:
             // Claude Code runs `/exit` for these whole inputs.
             ChatSendProfile(exitWords: ["exit", "quit", ":q", ":q!", ":wq", ":wq!"])
+        case .grok:
+            // Grok Build quits at once for these whole inputs, and reads
+            // `/btw` and `/goal` anywhere in a message. It trims the
+            // trailing space before it parses a command.
+            ChatSendProfile(
+                exitWords: ["exit", "quit", ":q", ":q!", ":wq", ":wq!"],
+                refusal: { GrokSlashCommands.refusal($0, $1) })
         case .codex, .pi:
             ChatSendProfile(exitWords: [])
         case .omp:

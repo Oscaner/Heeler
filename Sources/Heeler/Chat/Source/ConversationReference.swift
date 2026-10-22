@@ -6,15 +6,15 @@ import Foundation
 /// herdr reports `agent_session` through the official integration hooks.
 /// Chat binds by the exact source/agent pair of a program's
 /// `ChatSessionNaming` and never parses `source`. Claude/Codex use UUID ids;
-/// Pi/OMP also report absolute transcript paths; OpenCode uses its own `ses_`
-/// ids. A value is validated before it becomes a path, path component or
-/// query argument.
+/// Pi/OMP also report absolute transcript paths; Grok Build uses lowercase
+/// UUIDv7 ids and OpenCode its own `ses_` ids. A value is validated before
+/// it becomes a path, path component or query argument.
 struct ConversationReference: Hashable, Sendable {
     let program: ChatProgram
     /// The id the program's naming accepted (a canonical UUID for Claude,
-    /// Codex, Pi and OMP, an OpenCode session id as reported), or Pi/OMP's
-    /// validated absolute JSONL path. Paths are read directly, never
-    /// interpolated into an exec command.
+    /// Codex, Pi and OMP, Grok Build's id and an OpenCode session id as
+    /// reported), or Pi/OMP's validated absolute JSONL path. Paths are read
+    /// directly, never interpolated into an exec command.
     let sessionID: String
 
     enum Resolution: Hashable, Sendable {
@@ -54,6 +54,18 @@ struct ConversationReference: Hashable, Sendable {
         guard text.utf8.count == 36, let uuid = UUID(uuidString: text) else { return nil }
         return uuid.uuidString.lowercased()
     }
+
+    /// The text unchanged when it is a lowercase UUIDv7, the only id Grok
+    /// Build creates, or nil. It is never lowercased: Grok names the session
+    /// folder and `sessionId` with the id as given, so another case would
+    /// name a folder it never wrote.
+    static func lowercaseUUIDv7(_ text: String) -> String? {
+        guard
+            text.utf8.count == 36,
+            text.wholeMatch(of: /[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/) != nil
+        else { return nil }
+        return text
+    }
 }
 
 /// How herdr names one program's sessions, and which values Chat accepts as
@@ -92,6 +104,10 @@ extension ChatProgram {
             ChatSessionNaming(
                 source: "herdr:omp", agent: "omp", sessionID: ConversationReference.canonicalUUID,
                 acceptsTranscriptPath: true)
+        case .grok:
+            ChatSessionNaming(
+                source: "herdr:grok", agent: "grok", sessionID: ConversationReference.lowercaseUUIDv7,
+                acceptsTranscriptPath: false)
         case .opencode:
             ChatSessionNaming(
                 source: "herdr:opencode", agent: "opencode", sessionID: { OpenCodeSessionID($0)?.rawValue },

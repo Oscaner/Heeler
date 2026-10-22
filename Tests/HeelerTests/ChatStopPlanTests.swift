@@ -32,6 +32,42 @@ struct ChatStopPlanTests {
         }
     }
 
+    /// Grok Build's guard reads the screen inside the keys queue; then one
+    /// Ctrl+C goes, or nothing does and Stop says why.
+    @Test func grokPressesOneCtrlCAfterItsGuard() async throws {
+        let recorder = StopRecorder()
+        let agentKeys = Self.agentKeys(recorder)
+        let plan = ChatStopPlan.standard(for: .grok)
+        let working = plan.composerInterrupt(
+            context: Self.context(recorder, screen: try ScreenFixture.screen("grok-03-working")),
+            agentKeys: agentKeys)
+        let drafting = plan.composerInterrupt(
+            context: Self.context(recorder, screen: try ScreenFixture.screen("grok-04-working-draft")),
+            agentKeys: agentKeys)
+
+        let pressed = await working.perform()
+        #expect(pressed == .sent)
+        #expect(recorder.events == ["read", "ctrl+c"])
+
+        let refused = await drafting.perform()
+        let reason = "Grok Build's input box has text, and Ctrl+C would only clear it. Stop it in the terminal."
+        #expect(refused == .failed(reason))
+        #expect(recorder.contextCalls == 2)
+        #expect(recorder.sent == [["ctrl+c"]], "a refused Stop presses nothing")
+    }
+
+    @Test func theGrokPlanWaitsThreeSecondsAndKeepsPressesApart() {
+        let plan = ChatStopPlan.standard(for: .grok)
+
+        #expect(plan.keys == ["ctrl+c"])
+        #expect(plan.wait.window == .seconds(3))
+        #expect(plan.wait.minimumGap == .milliseconds(1500))
+        #expect(
+            plan.wait.unconfirmedNotice
+                == "Ctrl+C went, but the Agent still shows Working. A queued message may have started.")
+        #expect(plan.accessibilityHint == "Presses Ctrl+C to cancel the turn")
+    }
+
     @Test func anUnguardedPlanSendsEveryKeyInOneRequestWithoutReading() async {
         let recorder = StopRecorder()
         let plan = ChatStopPlan(keys: ["esc", "esc"], wait: .escape, accessibilityHint: "Presses Esc twice")

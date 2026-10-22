@@ -22,13 +22,17 @@ protocol ChatTranscriptSource: Sendable {
     /// The length one request for older history asks of its first page, and
     /// the largest it doubles to.
     var olderPageLengths: (first: Int, maximum: Int) { get }
+    /// The most bytes a request the timeline makes by itself may read, or
+    /// nil for no bound.
+    var automaticOlderSearch: Int? { get }
     /// Reads the conversation's newest records. Nil when it is not there.
     mutating func open(_ files: ChatHostFiles) async throws -> [ChatLine]?
     /// One look for what changed since the last read.
     mutating func poll(_ files: ChatHostFiles) async throws -> TranscriptFollower.Change
     /// Reads the records just before the window, oldest first: at least
-    /// `length` bytes when given.
-    mutating func loadOlder(_ files: ChatHostFiles, length: Int?) async throws -> TranscriptFollower.OlderPage
+    /// `length` bytes when given, and never more than `limit` bytes.
+    mutating func loadOlder(_ files: ChatHostFiles, length: Int?, limit: Int?) async throws
+        -> TranscriptFollower.OlderPage
     /// Starts one request for older history, which `olderSearchExhausted`
     /// then measures.
     mutating func beginOlderSearch()

@@ -114,6 +114,7 @@ struct InMemoryRecordSource: ChatTranscriptSource {
     var head: Data? { Data(sessionID.utf8) }
     var hasOlder: Bool { (windowStart ?? 0) > 0 }
     var olderPageLengths: (first: Int, maximum: Int) { (limits.olderPage, limits.olderMaximumPage) }
+    var automaticOlderSearch: Int? { nil }
 
     var olderSearchExhausted: Bool {
         guard let end = olderSearchEnd else { return false }
@@ -136,7 +137,9 @@ struct InMemoryRecordSource: ChatTranscriptSource {
         return .appended(lines)
     }
 
-    mutating func loadOlder(_ files: ChatHostFiles, length: Int?) async throws -> TranscriptFollower.OlderPage {
+    mutating func loadOlder(_ files: ChatHostFiles, length: Int?, limit: Int?) async throws
+        -> TranscriptFollower.OlderPage
+    {
         guard let contents = try await store.answer(.older(length: length)) else { return .missing }
         guard contents.generation == generation else { return .rewritten }
         guard let end = windowStart, end > 0 else { return .headReached }

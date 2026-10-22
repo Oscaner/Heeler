@@ -1289,10 +1289,10 @@ struct AgentTerminalView: View {
             interrupt: stopInterrupt)
     }
 
-    /// The Composer's Stop: one Esc over the Attach PTY, whatever the kind.
-    /// nil would keep Send.
+    /// The Composer's Stop: one Esc over the Attach PTY, or nil to keep Send
+    /// for a kind Esc doesn't stop (`AgentComposerInterrupt.terminal`).
     private var stopInterrupt: AgentComposerInterrupt? {
-        .escape { interruptAgent() }
+        .terminal(forAgentKind: agent.agent.kind) { interruptAgent() }
     }
 
     /// The interaction probe's Stop, as the Composer's button runs it: the

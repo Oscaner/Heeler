@@ -32,6 +32,11 @@ struct TranscriptFollower: Sendable {
         var olderSearch = 32 << 20
         /// The largest page such a search reads at once.
         var olderSearchPage = 4 << 20
+        /// The most one search the timeline makes by itself, as the reader
+        /// nears the top, reads, for a program that bounds it; what lies
+        /// further back loads when the user asks. Nil: the timeline's
+        /// searches read as the user's do.
+        var automaticOlderSearch: Int? = nil
         /// How far that search goes before older history is reported
         /// unreadable.
         var lineStartSearch = 64 << 20
@@ -62,6 +67,9 @@ struct TranscriptFollower: Sendable {
         case missing
         /// The bytes before the window changed; poll to reload.
         case rewritten
+        /// The line before the window starts further back than the read's
+        /// limit; it stays unread.
+        case beyondLimit
     }
 
     /// Reads the conversation a file holds from its first bytes; nil when
@@ -158,10 +166,13 @@ struct TranscriptFollower: Sendable {
     }
 
     /// Reads the lines just before the window, oldest first: at least
-    /// `length` bytes when given, up to the largest page.
-    mutating func loadOlder(_ files: ChatHostFiles, length: Int? = nil) async throws -> OlderPage {
+    /// `length` bytes when given, up to the largest page, and never more
+    /// than `limit` bytes.
+    mutating func loadOlder(_ files: ChatHostFiles, length: Int? = nil, limit: Int? = nil) async throws -> OlderPage {
         guard let end = windowStart, end > 0 else { return .headReached }
-        var pageLength = UInt64(min(max(limits.olderPage, length ?? 0), limits.maximumOlderPage))
+        guard limit.map({ $0 > 0 }) ?? true else { return .beyondLimit }
+        let largest = UInt64(min(limits.maximumOlderPage, limit ?? .max))
+        var pageLength = min(UInt64(max(limits.olderPage, length ?? 0)), largest)
         var page = Data()
         var start = end
         while true {
@@ -188,10 +199,12 @@ struct TranscriptFollower: Sendable {
                 windowStart = first
                 return .lines(lines)
             }
-            if pageLength >= UInt64(limits.maximumOlderPage) {
+            if pageLength >= largest {
+                // The search for a longer line's start reads past any limit.
+                if limit != nil { return .beyondLimit }
                 return try await loadLineLongerThanPage(files, before: end, searchedFrom: start)
             }
-            pageLength = min(pageLength * 2, UInt64(limits.maximumOlderPage))
+            pageLength = min(pageLength * 2, largest)
         }
     }
 
@@ -307,6 +320,8 @@ extension TranscriptFollower: ChatTranscriptSource {
     var olderPageLengths: (first: Int, maximum: Int) {
         (limits.olderPage, limits.olderSearchPage)
     }
+
+    var automaticOlderSearch: Int? { limits.automaticOlderSearch }
 
     mutating func beginOlderSearch() {
         olderSearchEnd = windowStart ?? 0

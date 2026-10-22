@@ -10,6 +10,8 @@ import Testing
 struct ChatDeliveryPolicyTests {
     private static let rules = ChatSendRules(
         program: .codex, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: .codex))
+    private static let grokRules = ChatSendRules(
+        program: .grok, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: .grok))
 
     /// Codex's composer holding a draft the user typed in the terminal.
     private static func draft(_ text: String) -> ANSIScreen {
@@ -55,7 +57,8 @@ struct ChatDeliveryPolicyTests {
     /// Each program's idle capture with an empty input box.
     private static let readyScreens: [ChatProgram: String] = [
         .claude: "claude-01-ready", .codex: "codex-00-ready", .pi: "pi-06-empty-editor-119",
-        .omp: "omp-08-empty-120-after-first", .opencode: "opencode-02-session-empty-180",
+        .omp: "omp-08-empty-120-after-first", .grok: "grok-01-idle-empty",
+        .opencode: "opencode-02-session-empty-180",
     ]
 
     /// Without a session check, a send reads the screen once and goes into
@@ -294,6 +297,150 @@ struct ChatDeliveryPolicyTests {
         }
     }
 
+    /// Grok Build's holds name what to resolve in the terminal.
+    @Test(arguments: [
+        "grok-02-idle-draft", "grok-07-slash-popup", "grok-11-dashboard", "grok-21-resume-picker",
+        "grok-26-waiting-subagent",
+    ])
+    func grokNamesWhatHoldsTheSend(stem: String) async throws {
+        let reasons = [
+            "grok-02-idle-draft":
+                "Grok Build's input box already has text, such as a draft or a message Stop put back. Send or clear it in the terminal first.",
+            "grok-07-slash-popup": "A menu is open over the Agent's input box. Close it in the terminal first.",
+            "grok-11-dashboard":
+                "Grok Build is showing its dashboard, where a message starts a new agent. Go back to the conversation in the terminal first.",
+            "grok-21-resume-picker": "A menu is open over the Agent's input box. Close it in the terminal first.",
+            "grok-26-waiting-subagent":
+                "The Agent isn't taking messages: Grok Build is waiting on a subagent or a background task, and a message now would cancel that turn.",
+        ]
+        let reason = try #require(reasons[stem])
+        let screen = try ScreenFixture.screen(stem)
+        let policy = ComposerDeliveryPolicy.chat(rules: Self.grokRules, activity: { .working }, readScreen: { screen })
+        let preflight = try #require(policy.preflight)
+
+        #expect(await preflight("hello") == .inputNotReady(reason))
+    }
+
+    /// The re-read compares what the box holds with the text sent: Grok
+    /// Build puts a stashed draft back after a send.
+    @Test func grokVerifyComparesTheBoxWithTheSentText() async throws {
+        let restored = try ScreenFixture.screen("grok-24-restored-draft")
+        let verify = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: Self.grokRules, activity: { .idle }, readScreen: { restored }, pause: { _ in }
+            ).verify)
+
+        #expect(await verify("Reply with the word kiwi. ") == false)
+        #expect(await verify("Summarize the README ") == true)
+    }
+
+    /// The order a send's steps ran in, or what one was handed.
+    @MainActor
+    private final class Events {
+        var entries: [String] = []
+    }
+
+    /// What Chat knows beyond the input box, such as Grok Build showing
+    /// another session, holds a send the box would take. It gets the text
+    /// as herdr types it and the screen the box was read from.
+    @Test func aSendConcernHoldsAfterTheInputBoxPasses() async throws {
+        let ready = try ScreenFixture.screen("grok-01-idle-empty")
+        let draft = try ScreenFixture.screen("grok-02-idle-draft")
+        let asked = Events()
+        let concern: @MainActor (String, ANSIScreen) -> String? = { text, screen in
+            asked.entries.append(text)
+            return screen.rows == ready.rows ? "Held for what Chat knows." : nil
+        }
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: Self.grokRules, activity: { .idle }, readScreen: { ready }, sendConcern: concern
+            ).preflight)
+        let gated = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: Self.grokRules, activity: { .idle }, readScreen: { draft }, sendConcern: concern
+            ).preflight)
+
+        #expect(await preflight("hello") == .inputNotReady("Held for what Chat knows."))
+        #expect(asked.entries == ["hello "])
+        // A box the gate holds never gets that far.
+        #expect(
+            await gated("hello")
+                == .inputNotReady(
+                    "Grok Build's input box already has text, such as a draft or a message Stop put back. Send or clear it in the terminal first."
+                ))
+        #expect(asked.entries == ["hello "])
+    }
+
+    /// Nothing is awaited between the screen read, the check and the
+    /// paste, so the check sees the screen the paste meets.
+    @Test func theSendConcernRunsBetweenTheGateAndThePrompt() async throws {
+        let ready = try ScreenFixture.screen("grok-01-idle-empty")
+        let draft = try ScreenFixture.screen("grok-02-idle-draft")
+        let events = Events()
+        let transport = ScriptedTransport()
+        let composer = AgentComposerStore(target: "w1:p1") { params in
+            await MainActor.run { events.entries.append("prompt") }
+            return try await transport.promptAgent(params)
+        }
+        func policy(_ screen: ANSIScreen) -> ComposerDeliveryPolicy {
+            .chat(
+                rules: Self.grokRules, activity: { .idle },
+                readScreen: {
+                    events.entries.append("read")
+                    return screen
+                },
+                sendConcern: { _, _ in
+                    events.entries.append("concern")
+                    return nil
+                },
+                pause: { _ in })
+        }
+
+        composer.replaceDraft(with: "hello")
+        await composer.send(policy: policy(ready))
+        #expect(Array(events.entries.prefix(3)) == ["read", "concern", "prompt"])
+
+        // Held at the input box: neither the check nor the paste runs.
+        events.entries = []
+        composer.replaceDraft(with: "again")
+        await composer.send(policy: policy(draft))
+        #expect(events.entries.filter { $0 != "read" }.isEmpty)
+        #expect(await transport.agentPromptParams.count == 1)
+    }
+
+    /// Chat registers the send just before the screen read, so the
+    /// witness mark a new send takes is on its way before `agent.read`. A
+    /// Blocked Agent's send, refused first, registers nothing.
+    @Test func theSendRegistersBeforeTheScreenRead() async throws {
+        let ready = try ScreenFixture.screen("grok-01-idle-empty")
+        let events = Events()
+        let readScreen: @MainActor () async throws -> ANSIScreen = {
+            events.entries.append("read")
+            return ready
+        }
+        let concern: @MainActor (String, ANSIScreen) -> String? = { _, _ in
+            events.entries.append("concern")
+            return nil
+        }
+        let register: @MainActor () -> Void = { events.entries.append("register") }
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: Self.grokRules, activity: { .idle }, readScreen: readScreen, sendConcern: concern,
+                willReadScreen: register
+            ).preflight)
+        let blocked = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: Self.grokRules, activity: { .blocked }, readScreen: readScreen, sendConcern: concern,
+                willReadScreen: register
+            ).preflight)
+
+        #expect(await preflight("hello") == nil)
+        #expect(events.entries == ["register", "read", "concern"])
+        events.entries = []
+        #expect(await blocked("hello") == .agentBlocked)
+        #expect(events.entries.isEmpty)
+    }
+
     @Test func theRulesShapeWhatIsSentAndRefused() {
         let policy = Self.policy { Self.draft("") }
 
@@ -426,6 +573,26 @@ struct ChatComposerEchoesTests {
             store.messages, statuses: [id: .refused("Pi had nothing to compact.")])
 
         #expect(echoes.map(\.state) == [.refused("Pi had nothing to compact.")])
+    }
+
+    /// The Agent's own log says another session took the send, which
+    /// outranks the check after the send finding its text in the box.
+    @Test func aMisdirectedSendSaysWhereItWent() async throws {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport)
+        store.replaceDraft(with: "say KIWI")
+        await store.send(policy: Self.policy())
+        store.replaceDraft(with: "stuck")
+        await store.send(policy: Self.policy(verify: { _ in false }))
+        try await waitUntil("the verify task should mark the message") {
+            store.messages.last?.state == .undelivered
+        }
+        let ids = store.messages.map(\.id)
+
+        let echoes = ChatComposerEchoes.pending(
+            store.messages, statuses: [ids[0]: .misdirected, ids[1]: .misdirected])
+
+        #expect(echoes.map(\.state) == [.misdirected, .misdirected])
     }
 
     /// A steer Esc put back in Pi's or Oh My Pi's input box.

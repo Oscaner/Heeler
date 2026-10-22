@@ -35,6 +35,19 @@ struct ChatStopPlan: Sendable {
     static func standard(for program: ChatProgram) -> ChatStopPlan {
         switch program {
         case .claude, .codex, .pi, .omp: .escape
+        case .grok:
+            // Ctrl+C cancels Grok Build's turn; Esc only shows a toast. Ctrl+C
+            // can also clear a draft, answer a card or quit, so the guard
+            // reads the screen first.
+            ChatStopPlan(
+                keys: ["ctrl+c"],
+                screenGuard: { GrokStopGuard.verdict($0) },
+                wait: AgentStopWait(
+                    window: .seconds(3),
+                    unconfirmedNotice:
+                        "Ctrl+C went, but the Agent still shows Working. A queued message may have started.",
+                    minimumGap: .milliseconds(1500)),
+                accessibilityHint: "Presses Ctrl+C to cancel the turn")
         case .opencode:
             // OpenCode 2.0.32 interrupts at a second Esc within 5 s of the
             // first; herdr writes both in one PTY write. Ctrl+C would exit

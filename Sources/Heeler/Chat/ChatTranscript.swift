@@ -9,6 +9,7 @@ enum ChatProgram: String, Codable, Sendable, CaseIterable {
     case codex
     case pi
     case omp
+    case grok
     case opencode
 }
 
@@ -1137,6 +1138,9 @@ struct ChatTurn: Equatable, Codable, Sendable {
 struct ChatTurnEnd: Equatable, Codable, Sendable {
     var ending: ChatTurn.Ending
     var endedAt: Date?
+    /// How long the turn ran, when the record that closes it says: Grok
+    /// Build's `elapsed_ms`.
+    var duration: TimeInterval?
 }
 
 /// How a piece of Background Work ended, as one record says.

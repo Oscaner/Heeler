@@ -60,7 +60,8 @@ struct AgentChatAvailabilityTests {
     }
 
     @Test(arguments: [
-        ("claude", ChatProgram.claude), ("codex", .codex), ("pi", .pi), ("omp", .omp), ("opencode", .opencode),
+        ("claude", ChatProgram.claude), ("codex", .codex), ("pi", .pi), ("omp", .omp), ("grok", .grok),
+        ("opencode", .opencode),
     ])
     func supportedProgramsOfferChatOnPOSIXHosts(kind: String, program: ChatProgram) {
         #expect(AgentChatAvailability.program(for: agent(kind: kind), platform: .posix) == program)

@@ -198,12 +198,14 @@ Blocked: Send then inserts the draft into Attach without Enter, and the tools
 keyboard submits or cancels. Delivered means the Host accepted the text into
 the pane — whether the Agent queues or acts on it is the Agent's business,
 and the Composer never claims otherwise.
-While Agent Status is Working and the draft is blank, Send becomes Stop: one
-Esc in the Agent's program (in Chat, two for OpenCode, whose first Esc only
-arms its interrupt), then a wait of up to three seconds for the status to
-leave Working rather than another Esc. The wait is per Agent, shared by
-Chat and the terminal. With text, Send still delivers, so a prompt can queue
-behind the turn.
+While Agent Status is Working and the draft is blank, Send becomes Stop: the
+program's Stop keys (one Esc; in Chat, two for OpenCode, whose first Esc only
+arms its interrupt, or Ctrl+C in Grok Build, whose turns Esc doesn't stop),
+then a wait of up to three seconds for the status to leave Working rather
+than another press. The wait is per Agent, shared by Chat and the terminal.
+Only Chat presses Ctrl+C, after reading Grok Build's screen; the terminal's
+Composer keeps Send for Grok Build. With text, Send still delivers, so a
+prompt can queue behind the turn.
 Composer remains the default authored-input path on Agent detail. Direct Input
 is an explicit, opt-in alternative that hides the Composer card without
 clearing or submitting the draft.
@@ -237,17 +239,20 @@ leaves the detail; a later session discovers whatever its terminal shows anew.
 _Avoid_: recent link, visible link, link history
 
 **Chat**:
-The native conversation a Claude Code, Codex, Pi, Oh My Pi or OpenCode Agent's
-detail can show in its terminal's place, read from the Agent's Transcript. Chat
-holds no Attach; its Composer and draft are the terminal's. Send is one
-`agent.prompt` request, made only after a screen read shows the program's
-input box empty, and refused for text the program would run rather than read.
-Its `/` menu offers the Agent's skills and `/compact`; for OpenCode, only
-`/compact`. Chat never resends: text left in the box after sending marks the
-message Not delivered. Stop presses the program's Stop keys through
-`agent.send_keys`: Esc, or for OpenCode Esc twice after checking the screen.
-When OpenCode leaves the conversation herdr reported, as after its `/new`,
-Chat says so and shows no conversation.
+The native conversation a Claude Code, Codex, Pi, Oh My Pi, Grok Build or
+OpenCode Agent's detail can show in its terminal's place, read from the
+Agent's Transcript. Chat holds no Attach; its Composer and draft are the
+terminal's. Send is one `agent.prompt` request, made only after a screen read
+shows the program's input box empty, and refused for text the program would
+run rather than read. Its `/` menu offers the Agent's skills and `/compact`;
+for OpenCode, only `/compact`. Chat never resends: text left in the box after
+sending marks the message Not delivered. Stop presses the program's Stop keys
+through `agent.send_keys`: Esc, or for OpenCode Esc twice after checking the
+screen, or Ctrl+C in Grok Build once its screen shows the turn running. For
+Grok Build, Chat holds a message when the Agent shows another session, and
+marks one Grok Build recorded elsewhere. When OpenCode leaves the
+conversation herdr reported, as after its `/new`, Chat says so and shows no
+conversation.
 The choice between Chat and the terminal is app-wide, Terminal by default. Not
 offered on native Windows Hosts.
 _Avoid_: chat mode, conversation view, Monitor (ADR 0012's removed surface)
@@ -255,13 +260,16 @@ _Avoid_: chat mode, conversation view, Monitor (ADR 0012's removed surface)
 **Transcript**:
 What an Agent's program writes on its Host as its record of the
 conversation: Claude Code's session JSONL, with its subagents' files, or a
-Codex rollout, or a Pi/Oh My Pi v2-v3 tree JSONL, or, for OpenCode, the
-session's rows in OpenCode's own SQLite database, which Heeler reads with a
-bounded read-only query on the Host (ADR 0025). For Pi and Oh My Pi, herdr
+Codex rollout, or a Pi/Oh My Pi v2-v3 tree JSONL, or Grok Build's
+`updates.jsonl`, or, for OpenCode, the session's rows in OpenCode's own SQLite
+database, which Heeler reads with a bounded read-only query on the Host (ADR
+0025). For Pi and Oh My Pi, herdr
 normally names the exact absolute file path; a UUID can also locate a session
-under that program's default sessions directory. The session herdr reports
-names it. Heeler only reads it, over SFTP, or for OpenCode by that query, and
-keeps decoded entries, never tool output, in an on-device cache.
+under that program's default sessions directory. For Grok Build, herdr names
+the session id, whose folder Chat finds under `~/.grok/sessions`. The session
+herdr reports names it. Heeler only reads it, over SFTP, or for OpenCode by
+that query, and keeps decoded entries, never tool output, in an on-device
+cache.
 _Avoid_: log, history file, session file
 
 **Blocked Card**:

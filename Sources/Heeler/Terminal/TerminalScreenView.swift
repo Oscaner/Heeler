@@ -327,8 +327,10 @@ struct TerminalScreenView: UIViewRepresentable {
             onSend: onSend,
             onScroll: onScroll,
             onPaste: onPaste)
-        keyboardControl?.terminal = view
-        scrollControl?.terminal = view
+        // Ownership is established in makeUIView. An outgoing surface can
+        // still update while its replacement is mounted; reclaiming these
+        // observable controls here makes the two surfaces invalidate each
+        // other indefinitely and routes input back to the retired surface.
         view.onKeyboardHandoffEnded = { [weak view, weak keyboardControl] id, outcome in
             guard let view else { return }
             if let keyboardControl, keyboardControl.terminal !== view { return }

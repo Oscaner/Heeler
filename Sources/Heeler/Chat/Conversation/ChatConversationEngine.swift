@@ -137,6 +137,12 @@ struct ChatConversationSnapshot: Equatable, Sendable {
     /// them on this visit, or the file has since gone.
     var isFromCache = false
     var older: ChatOlderHistory = .reachedStart
+    /// Earlier messages load only when the user asks: a request the
+    /// timeline made by itself, for a program that bounds such requests
+    /// (`TranscriptFollower.Limits.automaticOlderSearch`), read its limit
+    /// without reaching the opener of the turn the window starts in. A
+    /// request that brings an opener clears it, and so does a fresh tail.
+    var olderAwaitsUser = false
     /// The last read failed this way. Whatever was read before still shows.
     var readFailure: TransportError?
     /// How far the transcript has been read. A prompt the program records
@@ -189,6 +195,17 @@ struct ChatTranscriptAdapter: Sendable {
     /// Whether the conversation is read by query, so there is no file to
     /// look for.
     var readsByQuery: Bool { makeRecordSource != nil }
+    /// Whether the program can leave a send unrecorded for as long as herdr
+    /// reports the Agent Working or Blocked, so its echo times out on the
+    /// time herdr reports neither rather than on the time since delivery.
+    var echoClockStopsWhileWorking = false
+    /// Reads the Agent's screen before a send, for a program whose screen
+    /// can move to another session without herdr reporting it. The input
+    /// is nil while herdr reports no session Chat follows.
+    var sessionCheck: (@Sendable (ANSIScreen, ChatSessionCheckInput?) -> ChatScreenSessionVerdict)? = nil
+    /// The program's log of the prompts it submits, which names the
+    /// session that took each one.
+    var sendWitness: ChatSendWitness? = nil
 }
 
 /// One conversation's transcript on its Host: finds the file and follows
@@ -418,10 +435,15 @@ actor ChatConversationEngine {
     /// it brings the opener of a turn not shown before, the file's head or
     /// the saved entries are reached, or the source has spent the request's
     /// search. A turn's steps fold under its header, so pages that end
-    /// inside a turn would add nothing to see.
-    func loadOlder(context: ChatProjectionContext) async -> ChatConversationSnapshot {
+    /// inside a turn would add nothing to see. A request the timeline makes
+    /// by itself (`automatic`) reads as the user's does, unless the source
+    /// bounds it (`automaticOlderSearch`): then it reads at most that many
+    /// bytes, and one that reads them all inside a turn leaves earlier
+    /// history to the user's requests (`olderAwaitsUser`).
+    func loadOlder(context: ChatProjectionContext, automatic: Bool = false) async -> ChatConversationSnapshot {
         setContext(context)
-        guard var first = source, first.hasOlder, !olderUnreadable else { return snapshot }
+        guard var first = source, first.hasOlder, !olderUnreadable, !(automatic && snapshot.olderAwaitsUser)
+        else { return snapshot }
         update { $0.older = .loading }
         let oldestOpener = snapshot.transcript.turns.first?.firstEntryID
         first.beginOlderSearch()
@@ -430,9 +452,15 @@ actor ChatConversationEngine {
         // reads larger pages.
         let pageLengths = first.olderPageLengths
         var pageLength = pageLengths.first
+        // What a bounded automatic request may still read. Its pages read
+        // no more than their length, so this counts every byte, the lines
+        // page boundaries cut and read again included.
+        var allowance = automatic ? first.automaticOlderSearch : nil
         while var source {
+            let limit = allowance.map { min(pageLength, $0) }
+            allowance = allowance.map { $0 - (limit ?? 0) }
             do {
-                switch try await source.loadOlder(files, length: pageLength) {
+                switch try await source.loadOlder(files, length: limit ?? pageLength, limit: limit) {
                 case .lines(let lines):
                     self.source = source
                     reducer?.prepend(lines)
@@ -440,6 +468,9 @@ actor ChatConversationEngine {
                     self.source = source
                 case .unreadable:
                     olderUnreadable = true
+                case .beyondLimit:
+                    // A line longer than this page; the next is larger.
+                    break
                 case .missing, .rewritten:
                     return await open(directories: directories, context: context)
                 }
@@ -462,6 +493,14 @@ actor ChatConversationEngine {
             guard snapshot.transcript.turns.first?.firstEntryID == oldestOpener, snapshot.older != .reachedStart,
                 self.source?.hasOlder == true, !olderUnreadable, self.source?.olderSearchExhausted == false
             else { break }
+            if allowance == 0 {
+                // Further pages would only grow the turn's run of steps.
+                update { $0.olderAwaitsUser = true }
+                break
+            }
+        }
+        if snapshot.transcript.turns.first?.firstEntryID != oldestOpener {
+            update { $0.olderAwaitsUser = false }
         }
         projectIfNeeded()
         return snapshot
@@ -686,6 +725,15 @@ actor ChatConversationEngine {
                 let name = reference.program == .omp ? "Oh My Pi" : "Pi"
                 return .unavailable(.unsupportedFormat("\(name) session version \(version)"))
             }
+        case .grok:
+            switch try await GrokTranscriptLocator(files: files).locate(
+                sessionID: reference.sessionID, directories: directories)
+            {
+            case .success(let path): return .found(path)
+            case .failure(.notFound(let searchedAll)):
+                return .unavailable(.notFound(searchedAll: searchedAll))
+            case .failure(.mismatched): return .unavailable(.mismatched)
+            }
         case .opencode:
             // Its store is read by query, so `open` never looks for a file.
             return .unavailable(.unsupportedSession)
@@ -723,6 +771,8 @@ actor ChatConversationEngine {
             $0.phase = .following(path: source.path)
             $0.readFailure = nil
             $0.isFromCache = false
+            // A fresh tail loads earlier messages by itself again.
+            $0.olderAwaitsUser = false
             if movedLayout { $0.layoutGeneration += 1 }
         }
     }
@@ -791,6 +841,9 @@ actor ChatConversationEngine {
                 earlierTurns[last].ending = end.ending
                 earlierTurns[last].endedAt = end.endedAt ?? earlierTurns[last].endedAt
             }
+            // The window's end belongs to the rows above the first turn
+            // only when the saved rows above the window open none.
+            if joined.turns == nil || !earlierTurns.isEmpty { transcript.precedingTurnEnd = nil }
             transcript.turns = earlierTurns + transcript.turns
             if transcript.title == nil { transcript.title = joined.title }
             // Work launched above the window still runs, or ends in it.

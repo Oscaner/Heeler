@@ -389,6 +389,35 @@ struct AgentDirectInputTests {
         await owner.leave().value
     }
 
+    @Test func chromeStabilityWaitsForTheNewInsetAcrossAnObservedInterval() {
+        var height: CGFloat = 336
+        var bottom: CGFloat = 500
+        let probe = KeyboardTransitionProbe(
+            notificationCenter: NotificationCenter(), insetHeight: { height })
+        defer { probe.stop() }
+        probe.setChromeSample {
+            KeyboardChromeSample(insetHeight: height, switcherBottom: bottom)
+        }
+        for time in [0.0, 0.05, 0.1, 0.2, 0.3, 0.4] {
+            probe.captureChromeSample(at: time)
+        }
+        #expect(probe.hasStableTail())
+
+        // A runner stall drops the old samples out of the time window. Four
+        // notifications at the new inset do not prove its layout has settled.
+        height = 309
+        for time in [1.0, 1.01, 1.02, 1.03] {
+            probe.captureChromeSample(at: time)
+        }
+        #expect(!probe.hasStableTail())
+
+        bottom = 527
+        for time in [1.05, 1.1, 1.2, 1.3, 1.41] {
+            probe.captureChromeSample(at: time)
+        }
+        #expect(probe.hasStableTail())
+    }
+
     @Test func composerAndDirectInputTransferVisibleKeyboardWithoutReloading() async throws {
         let center = NotificationCenter.default
         let inset = TerminalKeyboardInset(notificationCenter: center)
@@ -432,11 +461,18 @@ struct AgentDirectInputTests {
         composerInput.becomeFirstResponder()
         try #require(await Self.eventually { composerInput.isFirstResponder })
         try #require(await Self.eventually { composerInput.inputView == nil })
-        try #require(await Self.eventually {
+        let keyboardPresented = try await Self.eventually {
             inset.height > 0
                 && (keyboardTransitions.willShowCount > 0
                     || keyboardTransitions.willChangeFrameCount > 0)
-        })
+        }
+        try #require(
+            keyboardPresented,
+            """
+            Composer keyboard: inset=\(inset.height), show=\(keyboardTransitions.willShowCount), \
+            change=\(keyboardTransitions.willChangeFrameCount), keyWindow=\(window.isKeyWindow), \
+            window=\(window.frame), guide=\(window.keyboardLayoutGuide.layoutFrame)
+            """)
         let keyboardHeight = inset.height
         #expect(window.isKeyWindow)
         #expect(composerInput.window === window)
@@ -1860,10 +1896,10 @@ struct AgentDirectInputTests {
             chromeSample = sample
         }
 
-        func captureChromeSample() {
+        func captureChromeSample(at time: CFTimeInterval = CACurrentMediaTime()) {
             if let chromeSample {
                 chromeSamples.append(chromeSample())
-                chromeSampleTimes.append(CACurrentMediaTime())
+                chromeSampleTimes.append(time)
             }
         }
 
@@ -1881,18 +1917,21 @@ struct AgentDirectInputTests {
         ) -> Bool {
             guard let baseline = chromeSamples.last,
                   let lastTime = chromeSampleTimes.last,
-                  let firstTime = chromeSampleTimes.first,
                   baseline.switcherBottom != nil,
-                  abs(baseline.insetHeight - insetHeight()) <= 1,
-                  lastTime - firstTime >= duration
+                  abs(baseline.insetHeight - insetHeight()) <= 1
             else { return false }
-            let tail = zip(chromeSamples, chromeSampleTimes)
-                .filter { lastTime - $0.1 <= duration }
-                .map(\.0)
-            return tail.count >= frameCount && tail.allSatisfy { sample in
-                abs(sample.insetHeight - baseline.insetHeight) <= 1
-                    && Self.close(sample.switcherBottom, baseline.switcherBottom)
+            var firstStableIndex = chromeSamples.count - 1
+            while firstStableIndex > 0 {
+                let previous = chromeSamples[firstStableIndex - 1]
+                guard abs(previous.insetHeight - baseline.insetHeight) <= 1,
+                      Self.close(previous.switcherBottom, baseline.switcherBottom)
+                else { break }
+                firstStableIndex -= 1
             }
+            // Measure time actually observed at this inset and position.
+            // A sampling gap must not turn four fresh samples into 350ms.
+            return chromeSamples.count - firstStableIndex >= frameCount
+                && lastTime - chromeSampleTimes[firstStableIndex] >= duration
         }
 
         func observedHandoffWindow(_ duration: TimeInterval = 0.65) -> Bool {

@@ -134,10 +134,10 @@ struct ANSIScreenDecoderTests {
     }
 
     @Test(
-        "Every Pi and Oh My Pi capture decodes into contiguous runs within its columns",
-        arguments: ScreenFixture.pi + ScreenFixture.omp
+        "Every Pi, Oh My Pi and Grok Build capture decodes into contiguous runs within its columns",
+        arguments: ScreenFixture.pi + ScreenFixture.omp + ScreenFixture.grok
     )
-    func everyPiAndOMPCaptureDecodesWithinItsColumns(stem: String) throws {
+    func everyPiOMPAndGrokCaptureDecodesWithinItsColumns(stem: String) throws {
         try expectContiguousRuns(stem)
     }
 

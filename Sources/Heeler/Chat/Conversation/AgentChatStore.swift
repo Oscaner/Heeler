@@ -52,8 +52,17 @@ final class AgentChatStore {
         /// moves an idle Agent to another session without a status change.
         var idleSessionRecheck: TimeInterval = 5
         /// How long after delivery a sent prompt may stay unrecorded before
-        /// its echo says so.
+        /// its echo says so, counted on the send's echo clock.
         var echoTimeout: TimeInterval = 10
+        /// How long after delivery the program's prompt log is first read
+        /// for a send delivered while herdr reported the Agent neither
+        /// Working nor Blocked (`ChatTranscriptAdapter.sendWitness`). The
+        /// last read comes when the send's echo clock reaches `echoTimeout`.
+        var witnessFirstRead: TimeInterval = 2
+        /// How long the log's size, a send's mark, may take to read. A mark
+        /// still on its way when the send goes is dropped.
+        var witnessMarkTimeout: Duration = .seconds(1)
+        var witnessReadTimeout: Duration = .seconds(3)
         /// How long Pi or Oh My Pi stays idle before Chat looks in its input
         /// box for unrecorded sends, overdue or not, that the turn which
         /// just ended put back.
@@ -76,7 +85,7 @@ final class AgentChatStore {
         case awaiting
         /// The transcript recorded it; its entry replaces the echo.
         case recorded
-        /// Still unrecorded `Timing.echoTimeout` after delivery.
+        /// Still unrecorded once its echo clock reaches `Timing.echoTimeout`.
         case overdue
         /// Unrecorded, and its text sits in the idle Agent's input box: Pi
         /// and Oh My Pi put a steer the turn had not taken back there when
@@ -94,11 +103,23 @@ final class AgentChatStore {
         /// for a `/compact` with nothing to compact and record nothing. A
         /// recorded copy still wins.
         case refused(String)
+        /// Unrecorded, and the program's prompt log names one other session
+        /// as the one that took it (`ChatTranscriptAdapter.sendWitness`). A
+        /// recorded copy, such as one the terminal sent, still wins.
+        case misdirected
         /// Unrecorded and no longer worth an echo: it went into an earlier
         /// conversation, was sent before this store was watching, or was
-        /// discarded or refused and the transcript has recorded a prompt
-        /// since.
+        /// discarded, refused or misdirected and the transcript has recorded
+        /// a prompt since.
         case abandoned
+    }
+
+    /// Who asked for earlier messages.
+    private enum OlderRequest {
+        /// The timeline, as the reader neared the top.
+        case automatic
+        /// The user: Load Earlier Messages or Retry.
+        case user
     }
 
     let agentID: ConsoleAgent.ID
@@ -119,6 +140,10 @@ final class AgentChatStore {
     /// The Subagents and Workflows the conversation's program runs beside
     /// it, as last read.
     private(set) var backgroundWork = ChatBackgroundWork()
+    /// A send the program recorded in another session, which holds every
+    /// send until the user is back in this conversation. Only the prompt
+    /// log sets it; what the screen shows is read afresh at each send.
+    private(set) var sessionConcern: ChatSessionConcern?
 
     @ObservationIgnored private let source: AgentChatSource
     @ObservationIgnored private let timing: Timing
@@ -152,7 +177,9 @@ final class AgentChatStore {
     /// Agent queries and transcript reads recover independently.
     @ObservationIgnored private var agentRefreshFailure: TransportError?
     @ObservationIgnored private var transcriptReadFailure: TransportError?
-    @ObservationIgnored private var olderRequested = false
+    /// A page above the oldest message shown that waits for the loop, by
+    /// who asked for it.
+    @ObservationIgnored private var olderRequest: OlderRequest?
     /// Look for the transcript's file again before the next read: Codex
     /// continues an undone thread in a new file and leaves the old one
     /// unchanged, so following it alone never shows the new turns.
@@ -194,12 +221,28 @@ final class AgentChatStore {
     /// When the screen last showed a `/compact` send's compaction running:
     /// its echo waits `Timing.echoTimeout` from then, not from delivery.
     @ObservationIgnored private var compactingSeen: [UUID: Date] = [:]
+    /// Each send's witness, for a program that logs its prompts.
+    @ObservationIgnored private var witnesses: [UUID: WitnessState] = [:]
+    /// The latest mark taken for each send, kept so tests can wait for them.
+    @ObservationIgnored private var witnessMarks: [UUID: Task<Void, Never>] = [:]
+    /// Sends the prompt log says another session took.
+    @ObservationIgnored private var misdirectedSends: Set<UUID> = []
+    /// When the last transcript read applied to this conversation started:
+    /// a session check trusts the transcript once one started after herdr
+    /// last reported the Agent idle.
+    @ObservationIgnored private var lastReadStartedAt: Date?
     /// When herdr last reported the Agent idle, while it still is.
     @ObservationIgnored private var idleSince: Date?
     /// When herdr last reported a turn starting. Esc puts back only the
     /// steers queued in the turn it stops, so sends delivered before this
     /// are never looked for in the box.
     @ObservationIgnored private var turnStartedAt: Date?
+    /// When herdr last reported the Agent Working or Blocked, while it
+    /// still does, and the earlier spells it did so that ended after the
+    /// oldest send still awaiting its echo was delivered: a program whose
+    /// echo clock stops while it works leaves them out of that clock.
+    @ObservationIgnored private var busySince: Date?
+    @ObservationIgnored private var busySpells: [(start: Date, end: Date)] = []
     /// Recorded prompts already taken by a send in the current
     /// conversation: one recorded copy answers one send. Keyed by entry for
     /// a program whose entries outlive a rewrite of its file, otherwise by
@@ -239,6 +282,25 @@ final class AgentChatStore {
         var deliveredAt: Date?
     }
 
+    /// Where a send's witness stands: its mark, taken when the send first
+    /// shows and kept only if it landed before the check that let the send
+    /// go, and which of its reads have run.
+    private struct WitnessState {
+        enum Mark {
+            case taking
+            case taken(ChatSendWitnessMark)
+            case sealed(ChatSendWitnessMark)
+            case unavailable
+        }
+
+        var mark: Mark = .taking
+        /// herdr reported the Agent neither Working nor Blocked when it went:
+        /// the program submitted it at once, so its line is soon there.
+        var deliveredWhileIdle = false
+        var firstReadDone = false
+        var lastReadDone = false
+    }
+
     /// Callers that only ever show one Chat for this Agent.
     static let soleViewer = UUID()
 
@@ -266,6 +328,7 @@ final class AgentChatStore {
         case .working: turnStartedAt = now()
         default: break
         }
+        noteActivity(ChatAgentActivity(agent.status))
         followReference()
     }
 
@@ -368,12 +431,18 @@ final class AgentChatStore {
         try await ChatImagePreviewReader.read(path: path, files: source.files)
     }
 
-    /// Reads one page above the oldest message shown.
-    func loadOlder() {
-        guard conversation.older == .available || isFailedOlder,
-            case .following = conversation.phase
-        else { return }
-        olderRequested = true
+    /// Reads one page above the oldest message shown, for the user or,
+    /// `automatic`, for the timeline as the reader nears the top.
+    func loadOlder(automatic: Bool = false) {
+        // The timeline asks as the user does, unless the program bounds
+        // what it loads by itself: then it never retries a failure, and
+        // stops asking once earlier messages wait for the user.
+        let canLoad =
+            automatic && source.adapter.limits.automaticOlderSearch != nil
+            ? conversation.older == .available && !conversation.olderAwaitsUser
+            : conversation.older == .available || isFailedOlder
+        guard canLoad, case .following = conversation.phase else { return }
+        olderRequest = automatic ? .automatic : .user
         conversation.older = .loading
         wake()
     }
@@ -419,6 +488,14 @@ final class AgentChatStore {
         }
     }
 
+    /// Resolves once every witness mark taken so far has landed or timed
+    /// out, for tests.
+    func witnessMarksSettled() async {
+        for mark in witnessMarks.values {
+            await mark.value
+        }
+    }
+
     /// Looks for the transcript again now, after a failure or an
     /// unavailable state the user may have fixed, such as a program shown
     /// on its home screen that shows the conversation again.
@@ -453,11 +530,17 @@ final class AgentChatStore {
         refusedSends = refusedSends.filter { ids.contains($0.key) }
         compactChecked.formIntersection(ids)
         compactingSeen = compactingSeen.filter { ids.contains($0.key) }
+        witnesses = witnesses.filter { ids.contains($0.key) }
+        witnessMarks = witnessMarks.filter { ids.contains($0.key) }
+        misdirectedSends.formIntersection(ids)
         for message in messages {
             if let index = sends.firstIndex(where: { $0.id == message.id }) {
                 guard message.isDelivered != (sends[index].deliveredAt != nil) else { continue }
                 sends[index].deliveredAt = message.isDelivered ? now() : nil
-                if message.isDelivered { noteSent() }
+                if message.isDelivered {
+                    witnessDelivery(of: message.id)
+                    noteSent()
+                }
             } else {
                 let transcript = conversation.transcript
                 let knownEntries = Set(transcript.entries.map(\.id) + transcript.recordedPrompts.compactMap(\.entryID))
@@ -467,9 +550,64 @@ final class AgentChatStore {
                         generation: conversationGeneration, layout: conversation.layoutGeneration,
                         floor: conversation.readOffset, knownEntries: knownEntries,
                         isOrphan: message.isDelivered, deliveredAt: message.isDelivered ? now() : nil))
+                if !message.isDelivered { takeWitnessMark(for: message.id) }
             }
         }
         matchSends()
+    }
+
+    /// Why a send the input box would take waits all the same, from what
+    /// the box doesn't show: a send the program recorded in another session
+    /// (`sessionConcern`), or a screen showing another session
+    /// (`ChatTranscriptAdapter.sessionCheck`). Nil lets it go, and keeps the
+    /// witness mark of the newest unsent send of that text if it landed
+    /// before this; one still on its way is dropped, so no mark postdates
+    /// the paste. Synchronous: nothing is awaited between the screen read
+    /// and the paste.
+    func sendConcern(for outgoing: String, after screen: ANSIScreen) -> String? {
+        var verdict = ChatScreenSessionVerdict.unknown
+        if let check = source.adapter.sessionCheck { verdict = check(screen, sessionCheckInput) }
+        switch verdict {
+        case .thisSession:
+            sessionConcern = nil
+        case .otherSession:
+            // herdr may have adopted the session already (a `/new` since its
+            // last idle recheck): asking now rebinds Chat within one step.
+            needsAgentRefresh = true
+            wake()
+        case .unknown:
+            break
+        }
+        if let sessionConcern { return sessionConcern.reason }
+        if case .otherSession(let reason) = verdict { return reason }
+        let key = source.adapter.echoKey(outgoing)
+        if let send = sends.last(where: { $0.deliveredAt == nil && $0.key == key }), var witness = witnesses[send.id] {
+            switch witness.mark {
+            case .taken(let mark): witness.mark = .sealed(mark)
+            case .taking: witness.mark = .unavailable
+            case .sealed, .unavailable: break
+            }
+            witnesses[send.id] = witness
+        }
+        return nil
+    }
+
+    /// What a session check reads besides the screen, while herdr reports a
+    /// session Chat follows.
+    private var sessionCheckInput: ChatSessionCheckInput? {
+        guard let sessionID = followed?.sessionID, !isAwaitingSession else { return nil }
+        let date = now()
+        let unrecorded = sends.filter { send in
+            send.generation == conversationGeneration && send.deliveredAt != nil && sendStatuses[send.id] != .recorded
+        }
+        let recent = unrecorded.filter { send in
+            send.deliveredAt.map { date.timeIntervalSince($0) < timing.echoTimeout } ?? false
+        }
+        return ChatSessionCheckInput(
+            sessionID: sessionID, transcript: conversation.transcript, activity: ChatAgentActivity(agent.status),
+            polledSinceIdle: idleSince.flatMap { idle in lastReadStartedAt.map { $0 >= idle } } ?? false,
+            unrecordedSendKeys: Set(recent.map(\.key)),
+            misdirectedSendKeys: Set(unrecorded.filter { misdirectedSends.contains($0.id) }.map(\.key)))
     }
 
     /// The skills the Host offers, so a Codex `$name` prompt shows as the
@@ -503,6 +641,7 @@ final class AgentChatStore {
         guard statusChanged else { return }
         let activity = ChatAgentActivity(next.status)
         blocked.update(activity: activity)
+        noteActivity(activity)
         idleSince = activity == .idle ? now() : nil
         // Answering a dialog resumes the turn it interrupted.
         if activity == .working, previous != .working, previous != .blocked { turnStartedAt = now() }
@@ -543,11 +682,13 @@ final class AgentChatStore {
         }
         let context = projectionContext
         let snapshot: ChatConversationSnapshot
+        let readStart = now()
         var polled = false
+        var opened = false
         var didRead = true
-        if olderRequested {
-            olderRequested = false
-            snapshot = await engine.loadOlder(context: context)
+        if let request = olderRequest {
+            olderRequest = nil
+            snapshot = await engine.loadOlder(context: context, automatic: request == .automatic)
         } else if case .following = conversation.phase {
             if needsRelocate {
                 needsRelocate = false
@@ -561,6 +702,7 @@ final class AgentChatStore {
         } else if openIsDue {
             snapshot = await engine.open(directories: directories, context: context)
             if !Task.isCancelled, engine === self.engine { scheduleNextOpen(after: snapshot) }
+            opened = true
         } else {
             snapshot = await engine.reproject(context: context)
             didRead = false
@@ -568,6 +710,9 @@ final class AgentChatStore {
         guard !Task.isCancelled, engine === self.engine, !isAwaitingSession else { return }
         if didRead { countTimeout(snapshot.readFailure) }
         apply(snapshot, from: engine)
+        if polled || opened, case .following = snapshot.phase, snapshot.readFailure == nil {
+            lastReadStartedAt = readStart
+        }
         matchSends()
         // Persist the transcript before optional journal requests can wait
         // on an unavailable connection.
@@ -576,6 +721,8 @@ final class AgentChatStore {
         await checkReturnedSends()
         guard !Task.isCancelled, engine === self.engine, !isAwaitingSession else { return }
         await checkRefusedCompactions()
+        guard !Task.isCancelled, engine === self.engine, !isAwaitingSession else { return }
+        await checkSendWitnesses()
         guard !Task.isCancelled, engine === self.engine, !isAwaitingSession else { return }
         // A journal read adds a deadline of its own, so a round whose
         // transcript read failed leaves the journals for later.
@@ -752,6 +899,7 @@ final class AgentChatStore {
         if identityChanged {
             agent = fresh
             blocked.update(activity: ChatAgentActivity(fresh.status))
+            noteActivity(ChatAgentActivity(fresh.status))
             forgetStaleSession()
         }
         adopt(resolveReported(fresh.agentSession), replacingAgent: identityChanged)
@@ -800,7 +948,7 @@ final class AgentChatStore {
             conversation.phase = .unavailable(awaitingReason)
             conversation.isFromCache = !conversation.transcript.entries.isEmpty
             if conversation.older == .loading { conversation.older = .available }
-            olderRequested = false
+            olderRequest = nil
             appliedRevision = nil
             refreshBackgroundWork()
             return
@@ -833,10 +981,14 @@ final class AgentChatStore {
         followed = target
         transcriptReadFailure = nil
         conversationGeneration += 1
+        // herdr reports another session: whatever went astray, Chat follows
+        // the one the Agent is in now.
+        sessionConcern = nil
+        lastReadStartedAt = nil
         engine = target.map(makeEngine)
         restored = false
         appliedRevision = nil
-        olderRequested = false
+        olderRequest = nil
         needsRelocate = false
         nextOpen = nil
         failedOpens = 0
@@ -999,8 +1151,15 @@ final class AgentChatStore {
         var next = snapshot
         next.readFailure = transcriptReadFailure ?? agentRefreshFailure
         if isAwaitingSession { next.phase = .unavailable(awaitingReason) }
-        if olderRequested, next.older == .available { next.older = .loading }
+        if olderRequest != nil, next.older == .available { next.older = .loading }
         conversation = next
+        // A prompt the transcript recorded since: the terminal is back in
+        // this conversation.
+        if let concern = sessionConcern, let latest = next.transcript.latestPromptOffset,
+            latest >= concern.promptFloor
+        {
+            sessionConcern = nil
+        }
         blocked.update(transcript: next.transcript)
         if case .following = next.phase, !waitingOutputs.isEmpty {
             let waiting = waitingOutputs
@@ -1093,14 +1252,15 @@ final class AgentChatStore {
     /// the send. A send that went into an earlier conversation, such as the
     /// first prompt that makes Codex report a session, may match anywhere in
     /// the current one, as may one sent before the file was rewritten; an
-    /// entry already showing at the send never matches it. A discarded send
-    /// takes only a prompt no other send matches, so sending its text again
-    /// settles the new send; a returned send the user added to in the box
-    /// takes a prompt that contains it. Conservative on purpose: a wrong match would
-    /// hide a prompt that never arrived. A discarded or refused send that
-    /// any prompt recorded after it overtakes, unmatched or matched by a
-    /// later send, is abandoned: it is no longer the conversation's latest
-    /// message. A send from before it recorded late does not overtake it.
+    /// entry already showing at the send never matches it. A discarded or
+    /// misdirected send takes only a prompt no other send matches, so
+    /// sending its text again settles the new send; a returned send the user
+    /// added to in the box takes a prompt that contains it. Conservative on
+    /// purpose: a wrong match would hide a prompt that never arrived. A
+    /// discarded, refused or misdirected send that any prompt recorded after
+    /// it overtakes, unmatched or matched by a later send, is abandoned: it
+    /// is no longer the conversation's latest message. A send from before it
+    /// recorded late does not overtake it.
     private func matchSends() {
         let byEntry = source.adapter.echoesByEntry
         let layout = conversation.layoutGeneration
@@ -1139,7 +1299,8 @@ final class AgentChatStore {
         if case .unavailable(.awaitingFirstMessage) = conversation.phase { isUnwritten = true }
         var statuses: [UUID: SendStatus] = [:]
         var becameOverdue = false
-        let ordered = sends.filter { !discardedSends.contains($0.id) } + sends.filter { discardedSends.contains($0.id) }
+        let matchedLast = discardedSends.union(misdirectedSends)
+        let ordered = sends.filter { !matchedLast.contains($0.id) } + sends.filter { matchedLast.contains($0.id) }
         for send in ordered {
             if sendStatuses[send.id] == .recorded {
                 statuses[send.id] = .recorded
@@ -1195,6 +1356,9 @@ final class AgentChatStore {
             if let match {
                 claimedPrompts[match.claim] = deliveredAt
                 statuses[send.id] = .recorded
+            } else if misdirectedSends.contains(send.id) {
+                statuses[send.id] =
+                    send.generation == conversationGeneration && !isOvertaken ? .misdirected : .abandoned
             } else if returnedSends.contains(send.id), send.generation == conversationGeneration {
                 statuses[send.id] = .returned
             } else if discardedSends.contains(send.id), send.generation == conversationGeneration {
@@ -1211,7 +1375,7 @@ final class AgentChatStore {
                 // and a refused one nowhere: with a prompt after it and no
                 // compaction, it never ran, whatever the screen read found.
                 statuses[send.id] = .abandoned
-            } else if isUnwritten || date.timeIntervalSince(deliveredAt) < timing.echoTimeout
+            } else if isUnwritten || echoClock(for: send, at: date) < timing.echoTimeout
                 || awaitsCompaction(send, at: date)
             {
                 statuses[send.id] = .awaiting
@@ -1223,6 +1387,13 @@ final class AgentChatStore {
             }
         }
         if statuses != sendStatuses { sendStatuses = statuses }
+        // The send that raised the concern was recorded here after all.
+        if let concern = sessionConcern, statuses[concern.raisedBy] == .recorded { sessionConcern = nil }
+        // Only an awaiting send's clock still decides anything, so spells
+        // that ended before the oldest one was delivered go. Dropping
+        // spells only moves a clock on, past a timeout it already reached.
+        let oldestAwaiting = sends.compactMap { statuses[$0.id] == .awaiting ? $0.deliveredAt : nil }.min()
+        busySpells.removeAll { spell in oldestAwaiting.map { spell.end <= $0 } ?? true }
         // The program may have forked into a session herdr has not
         // reported through the snapshot yet.
         if becameOverdue {
@@ -1230,6 +1401,131 @@ final class AgentChatStore {
             needsRelocate = true
             wake()
         }
+    }
+
+    /// Opens a busy spell when herdr reports the Agent Working or Blocked,
+    /// and closes it when herdr reports anything else.
+    private func noteActivity(_ activity: ChatAgentActivity) {
+        let isBusy = activity == .working || activity == .blocked
+        if isBusy, busySince == nil {
+            busySince = now()
+        } else if !isBusy, let start = busySince {
+            busySpells.append((start: start, end: now()))
+            busySince = nil
+        }
+    }
+
+    /// How long `send` has waited for its record by `date`: the time since
+    /// delivery or, for a program whose echo clock stops while it works
+    /// (`ChatTranscriptAdapter.echoClockStopsWhileWorking`), only the part
+    /// of it herdr reported the Agent neither Working nor Blocked.
+    private func echoClock(for send: TrackedSend, at date: Date) -> TimeInterval {
+        guard let deliveredAt = send.deliveredAt else { return 0 }
+        let waited = date.timeIntervalSince(deliveredAt)
+        guard source.adapter.echoClockStopsWhileWorking else { return waited }
+        let spells = busySpells + (busySince.map { [(start: $0, end: date)] } ?? [])
+        return spells.reduce(waited) { clock, spell in
+            clock - max(0, min(spell.end, date).timeIntervalSince(max(spell.start, deliveredAt)))
+        }
+    }
+
+    // MARK: Send witness
+
+    /// Reads the size of the program's prompt log beside the followed
+    /// transcript for a send that just showed, alongside the check before
+    /// it goes and never awaited by it. The read makes no engine call.
+    private func takeWitnessMark(for id: UUID) {
+        guard let witness = source.adapter.sendWitness, case .following(let path) = conversation.phase else { return }
+        witnesses[id] = WitnessState()
+        let files = source.files
+        let timeout = timing.witnessMarkTimeout
+        witnessMarks[id] = Task { [weak self] in
+            let mark = await Self.witnessRead(within: timeout) {
+                try await witness.mark(forTranscript: path, files: files)
+            } ?? nil
+            // The check before the send may have dropped it meanwhile.
+            guard let self, var state = self.witnesses[id], case .taking = state.mark else { return }
+            state.mark = mark.map { .taken($0) } ?? .unavailable
+            self.witnesses[id] = state
+        }
+    }
+
+    /// Reads the Host for a witness within `timeout`, and never cancels
+    /// the read: a cancelled SFTP request can leave its reply for the next
+    /// request on the channel, so a read that outlives its deadline or its
+    /// step runs on, and its answer is dropped. The transport's own request
+    /// timeout still ends it.
+    private static func witnessRead<Value: Sendable>(
+        within timeout: Duration, _ read: @escaping @Sendable () async throws -> Value
+    ) async -> Value? {
+        let uncancelled = Task { try await read() }
+        return try? await AsyncDeadline.run(for: timeout) { try await uncancelled.value }
+    }
+
+    /// A send went: a mark the check before it did not keep is dropped.
+    private func witnessDelivery(of id: UUID) {
+        guard var state = witnesses[id] else { return }
+        state.deliveredWhileIdle = busySince == nil
+        if case .sealed = state.mark {} else { state.mark = .unavailable }
+        witnesses[id] = state
+    }
+
+    /// Reads what the program's prompt log gained since each unrecorded
+    /// send's mark: once `Timing.witnessFirstRead` after a send delivered
+    /// while the Agent was idle, which the program submitted at once, and
+    /// once its echo clock reaches `Timing.echoTimeout`, by when a queued
+    /// send's turn has run. A log that names one other session for the send
+    /// makes it misdirected, and holds later sends until the terminal is
+    /// back in this conversation. The lines are compared and dropped. A
+    /// read counts once it returns, timed out or not: one a cancelled step
+    /// cut short is the next step's to take.
+    private func checkSendWitnesses() async {
+        guard let witness = source.adapter.sendWitness, let sessionID = followed?.sessionID else { return }
+        let date = now()
+        var due: [(send: TrackedSend, mark: ChatSendWitnessMark, isLast: Bool)] = []
+        for send in sends where send.generation == conversationGeneration {
+            guard let deliveredAt = send.deliveredAt, let state = witnesses[send.id],
+                case .sealed(let mark) = state.mark,
+                sendStatuses[send.id] == .awaiting || sendStatuses[send.id] == .overdue
+            else { continue }
+            let isFirst =
+                !state.firstReadDone && state.deliveredWhileIdle
+                && date.timeIntervalSince(deliveredAt) >= timing.witnessFirstRead
+            let isLast =
+                !state.lastReadDone
+                && (sendStatuses[send.id] == .overdue || echoClock(for: send, at: date) >= timing.echoTimeout)
+            guard isFirst || isLast else { continue }
+            due.append((send, mark, isLast))
+        }
+        guard !due.isEmpty else { return }
+        let generation = conversationGeneration
+        let files = source.files
+        for (send, mark, isLast) in due {
+            let appended = await Self.witnessRead(within: timing.witnessReadTimeout) {
+                try await witness.appended(since: mark, files: files)
+            } ?? nil
+            guard !Task.isCancelled, generation == conversationGeneration else { return }
+            witnesses[send.id]?.firstReadDone = true
+            if isLast { witnesses[send.id]?.lastReadDone = true }
+            guard let appended else { continue }
+            switch witness.verdict(
+                lines: appended.lines, key: send.key, sessionID: sessionID, isWholeAppend: appended.isWholeAppend,
+                echoKey: source.adapter.echoKey)
+            {
+            case .here:
+                // Later reads would find the same line.
+                witnesses[send.id]?.lastReadDone = true
+            case .elsewhere:
+                misdirectedSends.insert(send.id)
+                sessionConcern = ChatSessionConcern(
+                    reason:
+                        "Your last message went to another \(program.chatName) session. Switch back to this conversation in the terminal, so its newest message shows there, or send from the terminal; then send again here.",
+                    raisedBy: send.id, promptFloor: conversation.readOffset, generation: generation)
+            case .unknown:
+                break
+            }
+        }
+        matchSends()
     }
 
     /// Esc in Pi or Oh My Pi puts the steers its turn had not taken back
@@ -1283,7 +1579,9 @@ final class AgentChatStore {
 
     /// Pi and Oh My Pi refuse a `/compact` with nothing to compact on
     /// screen ("Error: Compaction failed: Nothing to compact (session too
-    /// small)") and record nothing, so its echo would stay overdue. The
+    /// small)") and record nothing, so its echo would stay overdue; Grok
+    /// Build does the same for one Stop cancelled ("Compaction cancelled.").
+    /// The
     /// Agent often never leaves idle for it, so the screen is read once for
     /// each `/compact` past its echo timeout while herdr reports the Agent
     /// idle, whenever it last turned so; the echo awaits that read. herdr
@@ -1315,31 +1613,44 @@ final class AgentChatStore {
         }
         guard let failure = Self.latestCompactionFailure(in: screen, program: program) else { return }
         let refusal =
-            failure.text.contains("Nothing to compact")
-            ? "\(program.chatName) had nothing to compact." : "\(program.chatName) couldn't compact."
+            if failure.text.contains(Self.grokCompactionCancelled) {
+                "The compaction was cancelled."
+            } else if failure.text.contains("Nothing to compact") {
+                "\(program.chatName) had nothing to compact."
+            } else {
+                "\(program.chatName) couldn't compact."
+            }
         for send in candidates {
             refusedSends[send.id] = refusal
         }
     }
 
-    /// Pi 0.85.1's and Oh My Pi 18.11's row while a compaction runs, or
-    /// Pi's countdown before it retries a failed summarization call
-    /// ("Retrying (1/3) in 2s... (escape to cancel)").
+    /// Pi 0.85.1's and Oh My Pi 18.11's row while a compaction runs, Pi's
+    /// countdown before it retries a failed summarization call ("Retrying
+    /// (1/3) in 2s... (escape to cancel)"), or Grok Build 1.0.62's turn
+    /// status row ("⠼ Compacting…  1.0s ⇣26.1k [stop]"). Grok's
+    /// "Compacting conversation…" row stays after the compaction ends.
     private static func showsRunningCompaction(_ row: String) -> Bool {
-        row.contains(compactingSpinner) || row.contains(/Retrying \(\d+\/\d+\) in \d+s\.\.\./)
+        row.contains(compactingSpinner) || row.contains(grokCompactingStatus)
+            || row.contains(/Retrying \(\d+\/\d+\) in \d+s\.\.\./)
     }
 
     private static let compactingSpinner = "Compacting context..."
+    private static let grokCompactingStatus = "Compacting…"
+    private static let grokCompactionCancelled = "Compaction cancelled."
 
-    /// The last "Compaction failed:" row, when nothing but blank rows, the
-    /// message's own wrapped rows (drawn in its color: at the phone's 62
-    /// columns `small)` wraps) and Oh My Pi's dim italic session title
+    /// The last "Compaction failed:" row (Grok Build's "Compaction
+    /// cancelled."), when nothing but blank rows, the message's own wrapped
+    /// rows (drawn in its color: at the phone's 62 columns `small)` wraps),
+    /// Oh My Pi's dim italic session title and Grok's scrollbar thumb
     /// separate it from the input box (Pi's rule, Oh My Pi's box or status
-    /// band). One with conversation below it is an earlier attempt's.
+    /// band, Grok's box). One with conversation below it is an earlier
+    /// attempt's.
     private static func latestCompactionFailure(in screen: ANSIScreen, program: ChatProgram) -> ScreenRow? {
         let rows = screen.rows
-        guard let index = rows.lastIndex(where: { $0.text.contains("Compaction failed:") }) else { return nil }
-        let color = rows[index].runs.first { $0.text.contains("Compaction failed:") }?.style.foreground
+        let marker = program == .grok ? grokCompactionCancelled : "Compaction failed:"
+        guard let index = rows.lastIndex(where: { $0.text.contains(marker) }) else { return nil }
+        let color = rows[index].runs.first { $0.text.contains(marker) }?.style.foreground
         func drawn(_ row: ScreenRow, _ matches: (ScreenStyle) -> Bool) -> Bool {
             let runs = row.runs.filter { !$0.text.allSatisfy(\.isWhitespace) }
             return !runs.isEmpty && runs.allSatisfy { matches($0.style) }
@@ -1347,6 +1658,7 @@ final class AgentChatStore {
         let next = rows[(index + 1)...].first { row in
             !row.isBlank && !(color != nil && drawn(row) { $0.foreground == color })
                 && !(program == .omp && drawn(row) { $0.isDim && $0.isItalic })
+                && !(program == .grok && row.trimmedText.allSatisfy { $0 == "█" })
         }
         guard let next else { return rows[index] }
         let text = next.trimmedText
@@ -1459,7 +1771,7 @@ extension ChatProgram {
     var stopReturnsUntakenSends: Bool {
         switch self {
         case .pi, .omp: true
-        case .claude, .codex: false
+        case .claude, .codex, .grok: false
         // OpenCode 2.0.32's Esc interrupt resumes: a steer still waiting
         // runs after the stop rather than coming back to the box.
         case .opencode: false
@@ -1468,24 +1780,25 @@ extension ChatProgram {
 
     /// Whether an accepted `/compact` is always recorded before the next
     /// prompt, so one a later prompt overtook with no compaction never ran
-    /// (Pi 0.85.1, Oh My Pi 18.11, OpenCode 2.0.32, which records its
-    /// compaction rows and then the turn's end).
+    /// (Pi 0.85.1, Oh My Pi 18.11, Grok Build 1.0.62, OpenCode 2.0.32, which
+    /// records its compaction rows and then the turn's end).
     var recordsCompactionBeforeNextPrompt: Bool {
         switch self {
-        case .pi, .omp, .opencode: true
+        case .pi, .omp, .grok, .opencode: true
         case .claude, .codex: false
         }
     }
 
     /// Whether a declined `/compact` shows only on screen, so an overdue
     /// one is looked for there while the Agent idles (Pi 0.85.1,
-    /// Oh My Pi 18.11). Opting in also needs the program's rows in
+    /// Oh My Pi 18.11, and Grok Build 1.0.62 for one Stop cancelled).
+    /// Opting in also needs the program's rows in
     /// `showsRunningCompaction` and `latestCompactionFailure`. OpenCode
     /// 2.0.32 records its refusal (`Nothing to compact yet`) as a failed
     /// compaction row, so that refusal does not show only on screen.
     var declinesCompactOnScreen: Bool {
         switch self {
-        case .pi, .omp: true
+        case .pi, .omp, .grok: true
         case .claude, .codex, .opencode: false
         }
     }
@@ -1498,7 +1811,7 @@ extension ChatProgram {
     /// says why it is Blocked instead (`BlockedCardStore.unreadableNote`).
     var offersKeysWhenBlockedWithoutDialog: Bool {
         switch self {
-        case .claude, .codex, .pi, .omp: true
+        case .claude, .codex, .pi, .omp, .grok: true
         case .opencode: false
         }
     }
@@ -1511,7 +1824,7 @@ extension ChatProgram {
     /// program's screen reader and terminal title in the watch.
     var leavesSessionWithoutReport: Bool {
         switch self {
-        case .claude, .codex, .pi, .omp: false
+        case .claude, .codex, .pi, .omp, .grok: false
         case .opencode: true
         }
     }
@@ -1522,7 +1835,7 @@ extension ChatProgram {
     /// needs the program's terminal title in the check.
     var confirmsSessionBeforeSend: Bool {
         switch self {
-        case .claude, .codex, .pi, .omp: false
+        case .claude, .codex, .pi, .omp, .grok: false
         case .opencode: true
         }
     }

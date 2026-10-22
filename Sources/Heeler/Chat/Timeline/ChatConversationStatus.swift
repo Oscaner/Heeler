@@ -34,10 +34,12 @@ extension ChatUnavailableReason {
             "herdr hasn't reported a Pi conversation for this Agent yet. Pi reports it once it has started, after you answer whether to trust the project folder. If this lasts, check the Pi integration on the Host. Chat will keep checking, and you can continue in the Agent terminal."
         case .noSession(.omp):
             "herdr hasn't reported an Oh My Pi conversation for this Agent yet. Oh My Pi reports it once it has started. If this lasts, check the OMP integration on the Host. Chat will keep checking, and you can continue in the Agent terminal."
+        case .noSession(.grok):
+            "herdr hasn't reported a Grok Build session ID for this Agent. Grok Build reports one when a session starts, including after /new or /clear. Chat keeps checking; you can continue in the Agent terminal."
         case .noSession(.opencode):
             "herdr hasn't reported an OpenCode conversation for this Agent yet. OpenCode reports one once a conversation is open: send a first message in the terminal, or open a session there. Chat will keep checking, and you can continue in the Agent terminal."
         case .unidentifiedSession(.claude), .unidentifiedSession(.codex), .unidentifiedSession(.pi),
-            .unidentifiedSession(.omp):
+            .unidentifiedSession(.omp), .unidentifiedSession(.grok):
             "herdr names this Agent's session without an id, which happens after resuming a conversation by name. Chat can't tell which transcript is its own."
         case .unidentifiedSession(.opencode):
             "herdr reports a session name that isn't an OpenCode session id, so Chat can't tell which conversation is this Agent's."
@@ -259,6 +261,7 @@ extension ChatProgram {
         case .codex: "Codex"
         case .pi: "Pi"
         case .omp: "Oh My Pi"
+        case .grok: "Grok Build"
         case .opencode: "OpenCode"
         }
     }
