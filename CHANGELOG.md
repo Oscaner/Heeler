@@ -12,7 +12,7 @@ Entries reference the pull request that made the change.
 - Pairing Codes can advertise addresses the plugin cannot see on the
   machine's interfaces, such as a NAS address for herdr running in a Docker
   container behind a published port, via `addresses` in the plugin's
-  `pair.json`. They are listed first in the checklist and pre-checked. (#PR)
+  `pair.json`. They are listed first in the checklist and pre-checked. (#489)
 - Read a guide on why SELinux blocks Heeler's herdr socket on Fedora, RHEL,
   CentOS Stream, AlmaLinux and Rocky Linux, how to confirm it from the audit
   log, and the small policy module that allows it, in English or Simplified
