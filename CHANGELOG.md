@@ -46,7 +46,7 @@ Entries reference the pull request that made the change.
   Agents list: a Saved badge instead of a status, a quieter title, and the
   Host's name marked with its connection state, and they open on Chat. By
   Host headers say when their Host is connecting, reconnecting or
-  unavailable.
+  unavailable. (#486)
 
 ### Fixed
 
