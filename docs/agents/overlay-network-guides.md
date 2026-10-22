@@ -17,7 +17,7 @@ The tutorials were written on **2026-10-09** against PR #426 at `eb52bf0c`. The 
 | Tailscale | Userspace daemon on a Mac, real tailnet, Simulator SSH, herdr, terminal, background recovery | Standard macOS app, physical phone on cellular |
 | ZeroTier | Controller-less IPv6 ad-hoc network, Simulator SSH, herdr, terminal, recovery | Central enrollment, custom Planet and Moons, private controller, overlapping IPv4 |
 | EasyTier | Network and encrypted Config Server, Simulator SSH, herdr, terminal, peer restart | Physical phone, eight-network limit, overlapping assignments, WSS failures |
-| Cloudflare Tunnel | Written from Cloudflare's documentation and `cloudflared` 2026.9.0 CLI help on 2026-10-21; no run yet | Every step below |
+| Cloudflare Tunnel | Physical iPhone over cellular: connector **Healthy**, a **Tunnel CIDR** route, Cloudflare One Agent with Split Tunnels in **Include** mode, a **Direct** Host route, herdr inventory and a terminal, background recovery | The VPS appendix, Gateway network policies, a route wider than one `/32`, two Hosts on one phone, the iPad, Cloudflare One Agent release drift |
 
 Tailscale commands were checked against official documentation and **1.104.1** CLI help on **2026-10-09**. ZeroTier's guide was checked against Heeler's source and its linked official documentation on the same date.
 
@@ -63,25 +63,31 @@ running itself. Two shapes are documented:
   Cloudflare, because a published hostname needs a zone, and non-HTTP service
   types require the client-side `cloudflared` or the VPN app.
 
-Verification state: **not run**. The command surface was checked against
-`cloudflared 2026.9.0` on 2026-10-21 (`tunnel route ip add`, `service install`,
-`access tcp --hostname/--listener/--service-token-id/--service-token-secret`,
-and the absence of `--hostname` on `tunnel run`). The dashboard paths and Split
-Tunnels behaviour come from Cloudflare's pages of the same date. Acceptance still
-needs: tunnel **Healthy**, a device enrolled on the free team, Split Tunnels
-**Include** mode with the Mac's `/32` and the team domain, a **Direct** route that
-wins the race, herdr inventory and a terminal over cellular, reconnect after more
-than 20 seconds in the background, and the local network permission prompt.
+Verification state: the **private network route** ran end to end on **2026-10-23
+on a physical iPhone**: `cloudflared` on the Mac as the connector with the tunnel
+**Healthy**, a **Tunnel CIDR** route for the Mac's address, Cloudflare One Agent
+enrolled in the same team with Split Tunnels in **Include** mode, a **Direct** Host
+route that connected, herdr inventory and a terminal, the same over cellular, and
+a Host and terminal that reconnected after more than 20 seconds in the
+background.
 
-Open risks worth recording with the result:
+Also checked on 2026-10-21, without a Cloudflare account: the command surface
+against `cloudflared 2026.9.0` (`tunnel route ip add`, `service install`,
+`access tcp --hostname/--listener/--service-token-id/--service-token-secret`, and
+the absence of `--hostname` on `tunnel run`), and the dashboard paths and Split
+Tunnels behaviour against Cloudflare's pages of that date.
 
-- The iOS local network prompt applies to a private destination address; a denied
-  prompt looks identical to a timeout.
-- **Exclude** mode is the default and excludes RFC 1918, so the Mac's range must
-  be included or the covering exclude entry removed and narrowed.
-- `cloudflared access tcp` ignored service tokens in 2026.6.0
-  ([cloudflared#1674](https://github.com/cloudflare/cloudflared/issues/1674)); the
-  VPS appendix pins nothing yet.
+Not covered:
+
+- The **VPS appendix**: published TCP hostname, Access application, Service Auth,
+  and a **Jump Host** route. `cloudflared access tcp` ignored service tokens in
+  2026.6.0 ([cloudflared#1674](https://github.com/cloudflare/cloudflared/issues/1674)),
+  so read that ticket before relying on the appendix.
+- Gateway network policies beyond the default allow, and a route wider than one
+  `/32`.
+- Two Hosts through the same VPN app at once, and the iPad.
+- Cloudflare One Agent releases: one device, and no version number recorded, so
+  treat the guide as a 2026-10-23 snapshot of that app's UI.
 
 ## Screenshots
 

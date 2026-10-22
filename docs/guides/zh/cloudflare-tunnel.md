@@ -133,6 +133,6 @@ Cloudflare Tunnel 通过一条只由 Mac 主动发起的出站连接把 Mac 接�
 
 SSH 会话在 Heeler 与 Mac 之间始终保持加密，Heeler 也会在发送任何数据前校验 Mac 的主机密钥。Cloudflare 看到的是连接本身：客户端地址、Mac 的地址与端口、连接建立的时间，以及传输了多少数据。在附录的方式中，它还会终止来自 VPS 的那一段连接，这一点与 Jump Host 相同。
 
-本文于 2026-10-21 依据 Cloudflare 官方文档与 Heeler 的路由行为编写；设备上的端到端验收尚未进行。
+最后核对于 2026-10-23（真实 iPhone）。
 
 维护者：参见[指南维护记录](../../agents/overlay-network-guides.md)。

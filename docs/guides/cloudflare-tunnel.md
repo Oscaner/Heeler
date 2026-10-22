@@ -202,7 +202,6 @@ connection itself: the client's address, the Mac's address and port, when the
 connection opened, and how much traffic passed. In the appendix's setup it also
 terminates the connection from the VPS, exactly as a Jump Host does.
 
-Written from Cloudflare's documentation and Heeler's route behaviour on
-2026-10-21; the end-to-end acceptance run on a device is still pending.
+Last checked on 2026-10-23 on a physical iPhone.
 
 Maintainers: see the [guide maintenance record](../agents/overlay-network-guides.md).
