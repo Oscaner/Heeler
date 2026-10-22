@@ -393,8 +393,8 @@ def verify_records(records: list[dict], layout: str) -> tuple[set[str], set[str]
                         "Full ordinary lane executed fewer than 769 tests")
             else:
                 count, suites = {
-                    SESSION: (13, {SESSION}), DIRECT: (9, {DIRECT}), WEAK: (10, {WEAK}),
-                    "SharedFixtureE2ETests": (119, SHARED | {WEAK}) if layout == "serial" else (109, SHARED),
+                    SESSION: (13, {SESSION}), DIRECT: (9, {DIRECT}), WEAK: (11, {WEAK}),
+                    "SharedFixtureE2ETests": (123, SHARED | {WEAK}) if layout == "serial" else (112, SHARED),
                 }[phase]
                 require(len(tests) == count and memberships == suites, f"Fixture suite/count contract changed: {phase}")
                 require(value["summary"]["skipped"] == 0, f"Mandatory fixture tests skipped: {phase}")

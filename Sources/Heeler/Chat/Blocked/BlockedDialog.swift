@@ -30,6 +30,22 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
     case ompQuestion
     /// The `Review answers` page after several Oh My Pi questions.
     case ompQuestionReview
+    /// Grok Build's permission card, answered by a row's digit.
+    case grokPermission
+    /// A single question Grok Build's agent asks during its turn, with
+    /// single-select answers, answered by a row's key.
+    case grokQuestion
+    /// The panel Ctrl+C opens while Grok Build's subagents run.
+    case grokCancelTurn
+    /// The worktree question Grok Build's `/fork` asks, answered by a row's
+    /// key. Every answer forks.
+    case grokFork
+    /// OpenCode's `Permission required`, answered in a row of options:
+    /// `Allow once`, `Always allow`, `Reject`.
+    case openCodePermission
+    /// OpenCode's form with a single single-select question, answered by
+    /// digit.
+    case openCodeQuestion
 
     var program: ChatProgram {
         switch self {
@@ -41,6 +57,10 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
             .codex
         case .ompApproval, .ompQuestion, .ompQuestionReview:
             .omp
+        case .grokPermission, .grokQuestion, .grokCancelTurn, .grokFork:
+            .grok
+        case .openCodePermission, .openCodeQuestion:
+            .opencode
         }
     }
 }
@@ -146,10 +166,15 @@ struct DialogFocusState: Sendable, Hashable {
     /// Oh My Pi: the prompt below the question holds a draft, so keys go
     /// into the draft rather than to the question.
     var composerDraftGuard: Bool
+    /// Grok Build: the footer shows none of the card's hints, so the
+    /// scrollback or one of the card's fields has the keyboard, and keys
+    /// would miss the options.
+    var keysMissOptions: Bool
 
     init(
         focusedOrdinal: Int? = nil, checked: Set<Int> = [], inputText: String? = nil,
-        notesText: String? = nil, feedbackOrdinal: Int? = nil, composerDraftGuard: Bool = false
+        notesText: String? = nil, feedbackOrdinal: Int? = nil, composerDraftGuard: Bool = false,
+        keysMissOptions: Bool = false
     ) {
         self.focusedOrdinal = focusedOrdinal
         self.checked = checked
@@ -157,6 +182,7 @@ struct DialogFocusState: Sendable, Hashable {
         self.notesText = notesText
         self.feedbackOrdinal = feedbackOrdinal
         self.composerDraftGuard = composerDraftGuard
+        self.keysMissOptions = keysMissOptions
     }
 }
 
@@ -164,7 +190,9 @@ struct DialogFocusState: Sendable, Hashable {
 /// transcript matcher compares with pending requests. Narrow screens and
 /// tall dialogs can cut any of them short; the transcript has the full text.
 struct DialogSubject: Sendable, Hashable {
-    /// Oh My Pi approval: the tool its title names, `bash`.
+    /// Oh My Pi approval: the tool its title names, `bash`. OpenCode
+    /// permission: the action its title starts with, `Read`, or `Shell` for
+    /// a command.
     var toolName: String?
     /// Claude Bash and Codex exec: the command, rows joined with spaces.
     /// Oh My Pi approval: the `Command:` row, its cut-off mark dropped.
@@ -199,6 +227,11 @@ struct DialogSubject: Sendable, Hashable {
     var planFilePath: String?
     /// Claude workspace trust: the folder.
     var workspacePath: String?
+    /// OpenCode permission: the lines under the action, wrapped rows
+    /// joined (`Path: .env`, `$ ls -la`). OpenCode swaps them for what the
+    /// rule would allow while `Always allow` has focus, so the fingerprint
+    /// carries them apart from the body (`DialogFingerprint.matches`).
+    var notes: [String] = []
 
     struct ReviewAnswer: Sendable, Hashable {
         var question: String
@@ -233,6 +266,9 @@ struct BlockedDialog: Sendable, Hashable {
     let fingerprint: DialogFingerprint
     let focus: DialogFocusState
     let subject: DialogSubject
+    /// Heeler's own line under the options, about a choice the card leaves
+    /// to the terminal: Grok Build's lasting rule cut short to fit.
+    var note: String? = nil
 
     /// The option at a 1-based ordinal.
     func option(_ ordinal: Int) -> DialogOption? {
@@ -243,6 +279,16 @@ struct BlockedDialog: Sendable, Hashable {
     /// the current prompt to answer`) takes no answer, only Stop.
     var answersHeldByDraft: Bool {
         [.ompQuestion, .ompQuestionReview].contains(kind) && focus.composerDraftGuard
+    }
+
+    /// A Grok Build permission titled with the card's own question, as
+    /// before a subagent starts, whether Grok showed it whole or cut it
+    /// at the card's edge with `…`. The Agent wrote the words, so the
+    /// card's header shows all of them Grok drew, with no line limit, and
+    /// its content doesn't repeat them.
+    var asksInTitle: Bool {
+        guard kind == .grokPermission, let description = body.first else { return false }
+        return description == title || description == "\(title)?"
     }
 }
 
@@ -303,6 +349,8 @@ enum BlockedDialogParser {
         case .claude: ClaudeDialogParser.parse(screen)
         case .codex: CodexDialogParser.parse(screen)
         case .omp: OMPDialogParser.parse(screen)
+        case .grok: GrokDialogParser.parse(screen)
+        case .opencode: OpenCodeDialogParser.parse(screen)
         case .pi: .none
         }
     }

@@ -10,6 +10,8 @@ import Testing
 struct ChatDeliveryPolicyTests {
     private static let rules = ChatSendRules(
         program: .codex, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: .codex))
+    private static let grokRules = ChatSendRules(
+        program: .grok, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: .grok))
 
     /// Codex's composer holding a draft the user typed in the terminal.
     private static func draft(_ text: String) -> ANSIScreen {
@@ -50,6 +52,82 @@ struct ChatDeliveryPolicyTests {
 
         #expect(await preflight("hello") == .agentBlocked)
         #expect(reads.count == 0)
+    }
+
+    /// Each program's idle capture with an empty input box.
+    private static let readyScreens: [ChatProgram: String] = [
+        .claude: "claude-01-ready", .codex: "codex-00-ready", .pi: "pi-06-empty-editor-119",
+        .omp: "omp-08-empty-120-after-first", .grok: "grok-01-idle-empty",
+        .opencode: "opencode-02-session-empty-180",
+    ]
+
+    /// Without a session check, a send reads the screen once and goes into
+    /// an empty box, and a Blocked Agent refuses it unread.
+    @Test(arguments: ChatProgram.allCases)
+    func withoutASessionCheckNothingChanges(program: ChatProgram) async throws {
+        let ready = try ScreenFixture.screen(try #require(Self.readyScreens[program]))
+        let rules = ChatSendRules(
+            program: program, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: program))
+        let reads = Reads()
+        func preflight(_ activity: ChatAgentActivity) throws -> @MainActor (String) async -> ComposerRefusal? {
+            try #require(
+                ComposerDeliveryPolicy.chat(
+                    rules: rules, activity: { activity },
+                    readScreen: {
+                        reads.count += 1
+                        return ready
+                    }
+                ).preflight)
+        }
+
+        let idle = try preflight(.idle)
+        let blocked = try preflight(.blocked)
+
+        #expect(await idle("hello") == nil)
+        #expect(reads.count == 1)
+        #expect(await blocked("hello") == .agentBlocked)
+        #expect(reads.count == 1)
+    }
+
+    @MainActor
+    private final class Calls {
+        var names: [String] = []
+    }
+
+    /// The session check runs after the Blocked check and before the screen
+    /// read: a reason refuses the message unread, and nil lets the read go
+    /// on.
+    @Test func aSessionCheckRunsBeforeTheScreenAndCanRefuse() async throws {
+        let ready = try ScreenFixture.screen("opencode-02-session-empty-180")
+        let reason = "OpenCode's terminal shows another conversation (Other). Open this one in the terminal, then send again."
+        let calls = Calls()
+        func preflight(
+            _ activity: ChatAgentActivity, check: String?
+        ) throws -> @MainActor (String) async -> ComposerRefusal? {
+            try #require(
+                ComposerDeliveryPolicy.chat(
+                    rules: Self.openCodeRules, activity: { activity },
+                    readScreen: {
+                        calls.names.append("read")
+                        return ready
+                    },
+                    confirmSession: {
+                        calls.names.append("check")
+                        return check
+                    }
+                ).preflight)
+        }
+
+        let blocked = try preflight(.blocked, check: reason)
+        let refused = try preflight(.idle, check: reason)
+        let confirmed = try preflight(.idle, check: nil)
+
+        #expect(await blocked("hello") == .agentBlocked)
+        #expect(calls.names.isEmpty)
+        #expect(await refused("hello") == .inputNotReady(reason))
+        #expect(calls.names == ["check"])
+        #expect(await confirmed("hello") == nil)
+        #expect(calls.names == ["check", "check", "read"])
     }
 
     @Test func textAlreadyInTheBoxHoldsTheMessage() async throws {
@@ -93,6 +171,56 @@ struct ChatDeliveryPolicyTests {
         #expect(
             InputBoxState.text("draft").holdReason(for: .claude)
                 == "The Agent's input box already has text. Send or clear it in the terminal first.")
+    }
+
+    /// OpenCode's `/undo` puts the undone prompt back in the box, and Up
+    /// recalls an earlier one; the hold names both beside a draft.
+    @Test func openCodeDraftHoldNamesUndoAndHistory() {
+        #expect(
+            InputBoxState.text("draft").holdReason(for: .opencode)
+                == "The Agent's input box already has text, such as a draft, a prompt /undo put back, or one recalled with Up. Send or clear it in the terminal first."
+        )
+    }
+
+    /// A home screen, dashboard or picker in place of the conversation's
+    /// input box holds with the sentence the program's detector gave.
+    @Test(arguments: ChatProgram.allCases)
+    func aScreenWithNoComposerHoldsWithItsOwnReason(program: ChatProgram) {
+        let reason = "Open this conversation in the terminal first."
+
+        #expect(InputBoxState.noComposer(reason).holdReason(for: program) == reason)
+    }
+
+    private static let openCodeRules = ChatSendRules(
+        program: .opencode, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: .opencode))
+
+    /// A message on OpenCode's home screen would start a new conversation,
+    /// not continue the one Chat shows.
+    @Test func openCodeHomeHoldsWithItsOwnReason() async throws {
+        let home = try ScreenFixture.screen("opencode-01-home-empty-180")
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(rules: Self.openCodeRules, activity: { .idle }, readScreen: { home }).preflight)
+
+        #expect(
+            await preflight("hello")
+                == .inputNotReady(
+                    "OpenCode is on its home screen, where a message starts a new conversation. Open this conversation in the terminal first."
+                ))
+    }
+
+    /// While OpenCode works, herdr's Enter could answer a prompt that shows
+    /// first, so the message waits for the turn to end.
+    @Test func openCodeWorkingHoldsWithItsOwnReason() async throws {
+        let working = try ScreenFixture.screen("opencode-08-working-180")
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(rules: Self.openCodeRules, activity: { .working }, readScreen: { working })
+                .preflight)
+
+        #expect(
+            await preflight("hello")
+                == .inputNotReady(
+                    "The Agent isn't taking messages: OpenCode is working. Send once it's idle, or steer from the terminal."
+                ))
     }
 
     @Test func anUnreadableScreenHoldsTheMessage() async throws {
@@ -146,7 +274,10 @@ struct ChatDeliveryPolicyTests {
         #expect(try ending(await blocked("hello")) == [.idle, .working, .done, .unknown])
         #expect(try ending(busy.validate("/compact")) == [.idle, .done])
         #expect(try ending(await unreadable("hello")) == statuses)
-        for state in [InputBoxState.text("draft"), .disabled("Working."), .overlay("/compact"), .dialog(title: nil), .unknown("")] {
+        for state in [
+            InputBoxState.text("draft"), .disabled("Working."), .overlay("/compact"), .dialog(title: nil),
+            .noComposer(""), .unknown(""),
+        ] {
             #expect(try ending(.inputNotReady(state.holdReason(for: program))) == statuses)
         }
         for refusal in [busy.validate("!ls"), busy.validate("/nope")] {
@@ -164,6 +295,150 @@ struct ChatDeliveryPolicyTests {
                 #expect(!refusal.endsWhenStatusBecomes(status), "\(draft)")
             }
         }
+    }
+
+    /// Grok Build's holds name what to resolve in the terminal.
+    @Test(arguments: [
+        "grok-02-idle-draft", "grok-07-slash-popup", "grok-11-dashboard", "grok-21-resume-picker",
+        "grok-26-waiting-subagent",
+    ])
+    func grokNamesWhatHoldsTheSend(stem: String) async throws {
+        let reasons = [
+            "grok-02-idle-draft":
+                "Grok Build's input box already has text, such as a draft or a message Stop put back. Send or clear it in the terminal first.",
+            "grok-07-slash-popup": "A menu is open over the Agent's input box. Close it in the terminal first.",
+            "grok-11-dashboard":
+                "Grok Build is showing its dashboard, where a message starts a new agent. Go back to the conversation in the terminal first.",
+            "grok-21-resume-picker": "A menu is open over the Agent's input box. Close it in the terminal first.",
+            "grok-26-waiting-subagent":
+                "The Agent isn't taking messages: Grok Build is waiting on a subagent or a background task, and a message now would cancel that turn.",
+        ]
+        let reason = try #require(reasons[stem])
+        let screen = try ScreenFixture.screen(stem)
+        let policy = ComposerDeliveryPolicy.chat(rules: Self.grokRules, activity: { .working }, readScreen: { screen })
+        let preflight = try #require(policy.preflight)
+
+        #expect(await preflight("hello") == .inputNotReady(reason))
+    }
+
+    /// The re-read compares what the box holds with the text sent: Grok
+    /// Build puts a stashed draft back after a send.
+    @Test func grokVerifyComparesTheBoxWithTheSentText() async throws {
+        let restored = try ScreenFixture.screen("grok-24-restored-draft")
+        let verify = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: Self.grokRules, activity: { .idle }, readScreen: { restored }, pause: { _ in }
+            ).verify)
+
+        #expect(await verify("Reply with the word kiwi. ") == false)
+        #expect(await verify("Summarize the README ") == true)
+    }
+
+    /// The order a send's steps ran in, or what one was handed.
+    @MainActor
+    private final class Events {
+        var entries: [String] = []
+    }
+
+    /// What Chat knows beyond the input box, such as Grok Build showing
+    /// another session, holds a send the box would take. It gets the text
+    /// as herdr types it and the screen the box was read from.
+    @Test func aSendConcernHoldsAfterTheInputBoxPasses() async throws {
+        let ready = try ScreenFixture.screen("grok-01-idle-empty")
+        let draft = try ScreenFixture.screen("grok-02-idle-draft")
+        let asked = Events()
+        let concern: @MainActor (String, ANSIScreen) -> String? = { text, screen in
+            asked.entries.append(text)
+            return screen.rows == ready.rows ? "Held for what Chat knows." : nil
+        }
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: Self.grokRules, activity: { .idle }, readScreen: { ready }, sendConcern: concern
+            ).preflight)
+        let gated = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: Self.grokRules, activity: { .idle }, readScreen: { draft }, sendConcern: concern
+            ).preflight)
+
+        #expect(await preflight("hello") == .inputNotReady("Held for what Chat knows."))
+        #expect(asked.entries == ["hello "])
+        // A box the gate holds never gets that far.
+        #expect(
+            await gated("hello")
+                == .inputNotReady(
+                    "Grok Build's input box already has text, such as a draft or a message Stop put back. Send or clear it in the terminal first."
+                ))
+        #expect(asked.entries == ["hello "])
+    }
+
+    /// Nothing is awaited between the screen read, the check and the
+    /// paste, so the check sees the screen the paste meets.
+    @Test func theSendConcernRunsBetweenTheGateAndThePrompt() async throws {
+        let ready = try ScreenFixture.screen("grok-01-idle-empty")
+        let draft = try ScreenFixture.screen("grok-02-idle-draft")
+        let events = Events()
+        let transport = ScriptedTransport()
+        let composer = AgentComposerStore(target: "w1:p1") { params in
+            await MainActor.run { events.entries.append("prompt") }
+            return try await transport.promptAgent(params)
+        }
+        func policy(_ screen: ANSIScreen) -> ComposerDeliveryPolicy {
+            .chat(
+                rules: Self.grokRules, activity: { .idle },
+                readScreen: {
+                    events.entries.append("read")
+                    return screen
+                },
+                sendConcern: { _, _ in
+                    events.entries.append("concern")
+                    return nil
+                },
+                pause: { _ in })
+        }
+
+        composer.replaceDraft(with: "hello")
+        await composer.send(policy: policy(ready))
+        #expect(Array(events.entries.prefix(3)) == ["read", "concern", "prompt"])
+
+        // Held at the input box: neither the check nor the paste runs.
+        events.entries = []
+        composer.replaceDraft(with: "again")
+        await composer.send(policy: policy(draft))
+        #expect(events.entries.filter { $0 != "read" }.isEmpty)
+        #expect(await transport.agentPromptParams.count == 1)
+    }
+
+    /// Chat registers the send just before the screen read, so the
+    /// witness mark a new send takes is on its way before `agent.read`. A
+    /// Blocked Agent's send, refused first, registers nothing.
+    @Test func theSendRegistersBeforeTheScreenRead() async throws {
+        let ready = try ScreenFixture.screen("grok-01-idle-empty")
+        let events = Events()
+        let readScreen: @MainActor () async throws -> ANSIScreen = {
+            events.entries.append("read")
+            return ready
+        }
+        let concern: @MainActor (String, ANSIScreen) -> String? = { _, _ in
+            events.entries.append("concern")
+            return nil
+        }
+        let register: @MainActor () -> Void = { events.entries.append("register") }
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: Self.grokRules, activity: { .idle }, readScreen: readScreen, sendConcern: concern,
+                willReadScreen: register
+            ).preflight)
+        let blocked = try #require(
+            ComposerDeliveryPolicy.chat(
+                rules: Self.grokRules, activity: { .blocked }, readScreen: readScreen, sendConcern: concern,
+                willReadScreen: register
+            ).preflight)
+
+        #expect(await preflight("hello") == nil)
+        #expect(events.entries == ["register", "read", "concern"])
+        events.entries = []
+        #expect(await blocked("hello") == .agentBlocked)
+        #expect(events.entries.isEmpty)
     }
 
     @Test func theRulesShapeWhatIsSentAndRefused() {
@@ -298,6 +573,26 @@ struct ChatComposerEchoesTests {
             store.messages, statuses: [id: .refused("Pi had nothing to compact.")])
 
         #expect(echoes.map(\.state) == [.refused("Pi had nothing to compact.")])
+    }
+
+    /// The Agent's own log says another session took the send, which
+    /// outranks the check after the send finding its text in the box.
+    @Test func aMisdirectedSendSaysWhereItWent() async throws {
+        let transport = ScriptedTransport()
+        let store = Self.store(transport)
+        store.replaceDraft(with: "say KIWI")
+        await store.send(policy: Self.policy())
+        store.replaceDraft(with: "stuck")
+        await store.send(policy: Self.policy(verify: { _ in false }))
+        try await waitUntil("the verify task should mark the message") {
+            store.messages.last?.state == .undelivered
+        }
+        let ids = store.messages.map(\.id)
+
+        let echoes = ChatComposerEchoes.pending(
+            store.messages, statuses: [ids[0]: .misdirected, ids[1]: .misdirected])
+
+        #expect(echoes.map(\.state) == [.misdirected, .misdirected])
     }
 
     /// A steer Esc put back in Pi's or Oh My Pi's input box.

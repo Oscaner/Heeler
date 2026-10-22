@@ -296,6 +296,27 @@ struct TranscriptFollowerTests {
         #expect(!follower.hasOlder)
     }
 
+    @Test func aLimitedPageLeavesALongerLineUnread() async throws {
+        let long = #"{"blob":""# + String(repeating: "z", count: 100) + #""}"#
+        let text = Self.lines(0..<2) + long + "\n" + Self.lines(2..<4)
+        var (follower, files, opened) = try await Self.makeFollower(text)
+        #expect(Self.texts(opened) == Self.expected(2..<4))
+        let start = follower.windowStart
+        await files.clearRecords()
+
+        #expect(try await follower.loadOlder(files.hostFiles(), length: 32, limit: 64) == .beyondLimit)
+        #expect(follower.windowStart == start)
+        #expect(await files.reads.reduce(0) { $0 + $1.maxBytes } <= 64)
+
+        // Without a limit the page grows to the line's start.
+        guard case .lines(let page) = try await follower.loadOlder(files.hostFiles(), length: 32) else {
+            Issue.record("expected the long line")
+            return
+        }
+        #expect(page.last?.offset == 16)
+        #expect(page.last?.length == long.utf8.count)
+    }
+
     @Test func pagingNoticesBytesChangedBeforeTheWindow() async throws {
         var (follower, files, _) = try await Self.makeFollower(Self.lines(0..<30))
         let start = try #require(follower.windowStart)
@@ -304,5 +325,53 @@ struct TranscriptFollowerTests {
         await files.replaceKeepingTime(bytes, at: Self.path)
 
         #expect(try await follower.loadOlder(files.hostFiles()) == .rewritten)
+    }
+
+    @Test func aFollowerReadsAnOutputLineByOffsetAndLength() async throws {
+        let (follower, files, opened) = try await Self.makeFollower(Self.lines(0..<4))
+        let line = try #require(opened.dropFirst().first)
+        let reference = ChatOutputReference(offset: line.offset, length: line.length)
+
+        #expect(try await follower.line(at: reference, files: files.hostFiles()) == line)
+        // The file ends before the length.
+        #expect(try await follower.line(at: ChatOutputReference(offset: 24, length: 16), files: files.hostFiles()) == nil)
+
+        // A reference may name another file.
+        let other = "/home/dev/.claude/projects/-k/other.jsonl"
+        await files.write(Self.lines(7..<8), at: other)
+        #expect(
+            try await follower.line(at: ChatOutputReference(path: other, offset: 0, length: 7), files: files.hostFiles())
+                == ChatLine(offset: 0, data: Data(#"{"n":7}"#.utf8)))
+
+        await files.remove(Self.path)
+        #expect(try await follower.line(at: reference, files: files.hostFiles()) == nil)
+    }
+
+    @Test func aFollowerSearchIsSpentAfterItsLimit() async throws {
+        var limits = Self.limits
+        limits.olderSearch = 48
+        let files = VirtualHostFiles()
+        await files.write(Self.lines(0..<40), at: Self.path)
+        var follower = TranscriptFollower(path: Self.path, limits: limits)
+        _ = try await follower.open(files.hostFiles())
+        #expect(follower.olderPageLengths.first == limits.olderPage)
+        #expect(follower.olderPageLengths.maximum == limits.olderSearchPage)
+        // No request has begun.
+        #expect(!follower.olderSearchExhausted)
+
+        follower.beginOlderSearch()
+        let start = try #require(follower.windowStart)
+        var pages = 0
+        while !follower.olderSearchExhausted, follower.hasOlder {
+            _ = try await follower.loadOlder(files.hostFiles(), length: 16)
+            pages += 1
+        }
+
+        #expect(pages > 1)
+        #expect(start - (follower.windowStart ?? 0) >= 48)
+
+        // The next request measures from where the window is now.
+        follower.beginOlderSearch()
+        #expect(!follower.olderSearchExhausted)
     }
 }

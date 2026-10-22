@@ -347,6 +347,18 @@ struct DialogActionPlannerTests {
         }
     }
 
+    @Test("Codex plans the same with the matched call's id as without it")
+    func codexPlansIgnoreAToolUseID() throws {
+        let planned: [(DialogAction, String)] = [
+            (.choose(ordinal: 1), "codex-01-x1-exec"), (.choose(ordinal: 3), "codex-01-x1-exec"),
+            (.dismiss, "codex-01-x1-exec"), (.choose(ordinal: 2), "codex-04-x3-q1"),
+            (.respond(ordinal: 3, text: "Teal"), "codex-04-x3-q1"),
+        ]
+        for (action, stem) in planned {
+            #expect(try plan(action, stem, toolUseID: "call_1") == plan(action, stem), "\(action) on \(stem)")
+        }
+    }
+
     // MARK: Oh My Pi
 
     @Test("OMP's Approve is ctrl+q alone, confirmed by leaving the panel or Blocked")
@@ -507,6 +519,134 @@ struct DialogActionPlannerTests {
         #expect(throws: DialogPlanError.self) { try plan(.submitSelection([1, 2]), "omp-27-ask-a-dialog") }
     }
 
+    // MARK: OpenCode
+
+    @Test("OpenCode's Allow once has focus when the request shows, so Enter alone allows it")
+    func openCodeAllowOncePressesEnter() throws {
+        let confirmation = ConfirmationRule.fingerprintChangeOrUnblocked
+        #expect(
+            try plan(.choose(ordinal: 1), "opencode-10-permission-180")
+                == DialogActionPlan(steps: [.keys(["enter"])], confirmation: confirmation))
+        #expect(try plan(.choose(ordinal: 1), "opencode-37-permission-long-62").keys == ["enter"])
+        // Moved off it in the terminal: back one checked arrow at a time.
+        #expect(
+            try plan(.choose(ordinal: 1), "opencode-12-permission-right2-180")
+                == DialogActionPlan(
+                    steps: [
+                        .keys(["left"]), .expect(.focus(ordinal: 2)), .keys(["left"]), .expect(.focus(ordinal: 1)),
+                        .keys(["enter"]),
+                    ], confirmation: confirmation))
+    }
+
+    @Test("OpenCode's Always allow is one checked Right, then Enter")
+    func openCodeAlwaysAllowMovesRightThenEnter() throws {
+        #expect(
+            try plan(.choose(ordinal: 2), "opencode-10-permission-180")
+                == DialogActionPlan(
+                    steps: [.keys(["right"]), .expect(.focus(ordinal: 2)), .keys(["enter"])],
+                    confirmation: .fingerprintChangeOrUnblocked))
+        #expect(try plan(.choose(ordinal: 2), "opencode-11-permission-right1-180").keys == ["enter"])
+        #expect(try plan(.choose(ordinal: 2), "opencode-12-permission-right2-180").keys == ["left", "enter"])
+    }
+
+    /// Esc rejects the session's own call; a subagent's asks why first.
+    @Test("OpenCode's Reject and Stop are Esc for a matched call, wherever the focus is")
+    func openCodeRejectPressesEscOnlyForAMatchedRootCall() throws {
+        let esc = DialogActionPlan(steps: [.keys(["esc"])], confirmation: .fingerprintChangeOrUnblocked)
+        for stem in [
+            "opencode-10-permission-180", "opencode-11-permission-right1-180", "opencode-12-permission-right2-180",
+        ] {
+            #expect(try plan(.choose(ordinal: 3), stem, toolUseID: "call_r") == esc, "\(stem)")
+            #expect(try plan(.dismiss, stem, toolUseID: "call_r") == esc, "\(stem)")
+        }
+    }
+
+    @Test("Without a matched call OpenCode's Reject stays in the terminal; allowing goes on")
+    func openCodeRejectWithoutAMatchIsRefused() throws {
+        let stem = "opencode-10-permission-180"
+        let refusal = DialogPlanError.unsupported(
+            "Reject this in the terminal: OpenCode asks why when a subagent's request is rejected.")
+        #expect(throws: refusal) { try plan(.choose(ordinal: 3), stem) }
+        #expect(throws: refusal) { try plan(.dismiss, stem) }
+        #expect(try plan(.choose(ordinal: 1), stem).keys == ["enter"])
+        #expect(try plan(.choose(ordinal: 2), stem).keys == ["right", "enter"])
+        #expect(
+            throws: DialogPlanError.unsupported(
+                "OpenCode takes no note with a permission; reject, then tell OpenCode in the composer.")
+        ) {
+            try plan(.amend(ordinal: 3, note: "Use the other file"), stem, toolUseID: "call_r")
+        }
+        #expect(throws: DialogPlanError.noSuchOption(4)) { try plan(.choose(ordinal: 4), stem, toolUseID: "call_r") }
+    }
+
+    @Test("An OpenCode answer is its digit, which picks it and submits")
+    func openCodeAnswersAQuestionByItsDigit() throws {
+        #expect(
+            try plan(.choose(ordinal: 2), "opencode-13-question-180")
+                == DialogActionPlan(steps: [.keys(["2"])], confirmation: .fingerprintChangeOrUnblocked))
+        #expect(try plan(.choose(ordinal: 1), "opencode-13-question-180", toolUseID: "call_q").keys == ["1"])
+        #expect(try plan(.choose(ordinal: 2), "opencode-38-question-long-62").keys == ["2"])
+    }
+
+    @Test("OpenCode's own answer row and notes stay in the terminal")
+    func openCodeTypeYourOwnAnswerIsRefused() throws {
+        let stem = "opencode-13-question-180"
+        let refusal = DialogPlanError.unsupported("Type your own answer in the terminal.")
+        #expect(throws: refusal) { try plan(.choose(ordinal: 3), stem) }
+        #expect(throws: refusal) { try plan(.respond(ordinal: 3, text: "green"), stem) }
+        #expect(throws: refusal) { try plan(.amend(ordinal: 1, note: "dark red"), stem) }
+        #expect(throws: DialogPlanError.noSuchOption(4)) { try plan(.choose(ordinal: 4), stem) }
+        #expect(throws: DialogPlanError.self) { try plan(.submitSelection([1]), stem) }
+    }
+
+    @Test("Stop dismisses an OpenCode question with Esc only for a matched call")
+    func openCodeDismissPressesEscOnlyForAMatchedCall() throws {
+        let stem = "opencode-13-question-180"
+        #expect(
+            try plan(.dismiss, stem, toolUseID: "call_q")
+                == DialogActionPlan(steps: [.keys(["esc"])], confirmation: .fingerprintChangeOrUnblocked))
+        #expect(
+            throws: DialogPlanError.unsupported(
+                "Dismiss this question in the terminal: Heeler can't match it to OpenCode's call.")
+        ) {
+            try plan(.dismiss, stem)
+        }
+    }
+
+    @Test("Moves along a row send one checked left or right arrow per option")
+    func horizontalMovesCheckFocusAfterEachKey() throws {
+        var right = StepBuilder(dialog: try dialog("opencode-10-permission-180"))
+        try right.move(to: 3, axis: .horizontal)
+        #expect(
+            right.steps == [
+                .keys(["right"]), .expect(.focus(ordinal: 2)), .keys(["right"]), .expect(.focus(ordinal: 3)),
+            ])
+        #expect(right.focus == 3)
+        var left = StepBuilder(dialog: try dialog("opencode-11-permission-right1-180"))
+        try left.move(to: 1, axis: .horizontal)
+        #expect(left.steps == [.keys(["left"]), .expect(.focus(ordinal: 1))])
+
+        // Every OpenCode plan checks the focus after each arrow.
+        for stem in ScreenFixture.opencode {
+            guard let dialog = BlockedDialogParser.parse(try ScreenFixture.screen(stem), program: .opencode).dialog
+            else { continue }
+            let actions = dialog.options.map { DialogAction.choose(ordinal: $0.ordinal) } + [.dismiss]
+            for action in actions {
+                guard let plan = try? DialogActionPlanner.plan(action, for: dialog, toolUseID: "call_1") else {
+                    continue
+                }
+                #expect(plan.keys.allSatisfy(HerdrKeyGrammar.accepts), "\(stem) \(action)")
+                for (index, step) in plan.steps.enumerated() {
+                    guard case .keys(let keys) = step, keys.contains(where: ["left", "right", "up", "down"].contains)
+                    else { continue }
+                    let next = plan.steps.indices.contains(index + 1) ? plan.steps[index + 1] : nil
+                    let checksFocus = if case .expect(.focus)? = next { true } else { false }
+                    #expect(checksFocus, "\(stem) \(action): an arrow without a focus check")
+                }
+            }
+        }
+    }
+
     // MARK: Generic card, text and keys
 
     @Test("The generic card's buttons press the digits it lists")
@@ -566,6 +706,31 @@ struct DialogActionPlannerTests {
         }
         for key in ["home", "end", "pageup", "pagedown", "delete", "", " ", "ctrl+", "ctrl+a+b", "shift", "f256"] {
             #expect(!HerdrKeyGrammar.accepts(key), "\(key)")
+        }
+    }
+
+    @Test("Moves send one checked down or up arrow per row and need a focused row")
+    func verticalMovesAreUnchanged() throws {
+        let dialog = try dialog("omp-27-ask-a-dialog")
+        var down = StepBuilder(dialog: dialog)
+        try down.move(to: 3)
+        #expect(
+            down.steps == [.keys(["down"]), .expect(.focus(ordinal: 2)), .keys(["down"]), .expect(.focus(ordinal: 3))])
+        #expect(down.focus == 3)
+        try down.move(to: 3)
+        #expect(down.steps.count == 4)
+
+        var up = StepBuilder(dialog: try self.dialog("omp-27-ask-c-after-down"))
+        try up.move(to: 1)
+        #expect(up.steps == [.keys(["up"]), .expect(.focus(ordinal: 1))])
+
+        let unfocused = BlockedDialog(
+            kind: dialog.kind, title: dialog.title, sourceSuffix: dialog.sourceSuffix,
+            positionLabel: dialog.positionLabel, body: dialog.body, progress: dialog.progress, options: dialog.options,
+            rows: dialog.rows, fingerprint: dialog.fingerprint, focus: DialogFocusState(), subject: dialog.subject)
+        #expect(throws: DialogPlanError.noFocus) {
+            var builder = StepBuilder(dialog: unfocused)
+            try builder.move(to: 2)
         }
     }
 

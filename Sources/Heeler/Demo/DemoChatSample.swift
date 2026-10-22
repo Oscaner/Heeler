@@ -5,7 +5,8 @@
     /// each demo Agent whose program Chat reads. Each is written in its
     /// program's own transcript format and served from memory as the Host
     /// files Chat's locators look for, so the production adapters read it.
-    /// No Host and no SSH.
+    /// OpenCode's, which Chat queries rather than reads as a file, is
+    /// `DemoOpenCodeChatSample`. No Host and no SSH.
     enum DemoChatSample {
         static let home = "/Users/developer"
 
@@ -28,6 +29,8 @@
                 AgentSessionInfo(agent: "claude", kind: .id, source: "herdr:claude", value: docsSession)
             case "checkout:p3":
                 AgentSessionInfo(agent: "claude", kind: .id, source: "herdr:claude", value: checkoutSession)
+            case "api:p7":
+                DemoOpenCodeChatSample.session
             default:
                 nil
             }
@@ -43,9 +46,11 @@
                 attachConversation(),
         ].merging(DemoPiChatSample.files) { original, _ in original }
 
-        /// Chat's Host file operations over `files`.
+        /// Chat's Host file operations over `files`, and its OpenCode store
+        /// queries over `DemoOpenCodeChatSample`.
         static let hostFiles = ChatHostFiles(
-            status: { status(atPath: $0) }, list: { list($0) }, read: { read($0) }, home: { home })
+            status: { status(atPath: $0) }, list: { list($0) }, read: { read($0) }, home: { home },
+            queryOpenCode: { DemoOpenCodeChatSample.response($0) })
 
         /// Every sample is as old as the demo's day.
         private static let modificationTime: UInt32 = 1_791_320_000

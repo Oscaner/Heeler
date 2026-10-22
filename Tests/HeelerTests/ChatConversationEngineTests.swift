@@ -69,8 +69,13 @@ struct ChatConversationEngineTests {
             await engine.poll(context: ChatProjectionContext(activity: .idle))
         }
 
-        func loadOlder(_ engine: ChatConversationEngine) async -> ChatConversationSnapshot {
-            await engine.loadOlder(context: ChatProjectionContext(activity: .idle))
+        func loadOlder(_ engine: ChatConversationEngine, automatic: Bool = false) async -> ChatConversationSnapshot {
+            await engine.loadOlder(context: ChatProjectionContext(activity: .idle), automatic: automatic)
+        }
+
+        /// The bytes read from the Host since the records were cleared.
+        func bytesRead() async -> Int {
+            await files.reads.reduce(0) { $0 + $1.maxBytes }
         }
 
         func savedDocument() async -> ChatCacheDocument? {
@@ -515,6 +520,146 @@ struct ChatConversationEngineTests {
         #expect(snapshot.older == .available)
     }
 
+    /// Short turns bring an opener within what a bounded request Chat
+    /// makes by itself may read, so it reads and shows what the user's
+    /// would.
+    @Test func automaticRequestsLoadShortTurnsAsTheUsersDo() async throws {
+        var limits = Self.limits
+        limits.automaticOlderSearch = 160
+        let text = (0..<8).map { turn in
+            NumberedChatReducer.prompt("t\(turn)") + Self.lines((turn * 3)..<(turn * 3 + 3))
+                + NumberedChatReducer.turnEnd
+        }.joined()
+        let automatic = Fixture(limits: limits)
+        let user = Fixture(limits: limits)
+        await automatic.files.write(text, at: Self.claudePath)
+        await user.files.write(text, at: Self.claudePath)
+        let byItself = automatic.makeEngine()
+        let asked = user.makeEngine()
+        var snapshot = await automatic.open(byItself)
+        _ = await user.open(asked)
+
+        var pages = 0
+        while snapshot.older == .available, pages < 50 {
+            snapshot = await automatic.loadOlder(byItself, automatic: true)
+            let expected = await user.loadOlder(asked)
+            #expect(Self.numbers(snapshot) == Self.numbers(expected))
+            #expect(snapshot.transcript.turns == expected.transcript.turns)
+            #expect(snapshot.older == expected.older)
+            #expect(!snapshot.olderAwaitsUser)
+            pages += 1
+        }
+
+        #expect(pages > 3)
+        #expect(snapshot.older == .reachedStart)
+        let userReads = await user.files.reads
+        #expect(await automatic.files.reads == userReads)
+    }
+
+    /// A turn longer than a bounded request Chat makes by itself may read:
+    /// the request stops at its limit and leaves the rest to the user, and
+    /// the next one reads nothing. The user's request reads on to the
+    /// turn's prompt, and then Chat loads by itself again.
+    @Test func automaticRequestsStopInsideATurnLongerThanTheirLimit() async throws {
+        var limits = Self.limits
+        limits.automaticOlderSearch = 96
+        let fixture = Fixture(limits: limits)
+        let first = NumberedChatReducer.prompt("a") + Self.lines(0..<6) + NumberedChatReducer.turnEnd
+        let silent = String(repeating: NumberedChatReducer.end("none"), count: 40)
+        await fixture.files.write(
+            first + NumberedChatReducer.prompt("b") + silent + Self.lines(6..<10), at: Self.claudePath)
+        let engine = fixture.makeEngine()
+        let opened = await fixture.open(engine)
+        try #require(opened.transcript.turns.isEmpty)
+        await fixture.files.clearRecords()
+
+        var snapshot = await fixture.loadOlder(engine, automatic: true)
+        #expect(await fixture.bytesRead() == 96)
+        #expect(snapshot.transcript.turns.isEmpty)
+        #expect(snapshot.older == .available)
+        #expect(snapshot.olderAwaitsUser)
+
+        await fixture.files.clearRecords()
+        snapshot = await fixture.loadOlder(engine, automatic: true)
+        #expect(await fixture.files.reads.isEmpty)
+        #expect(snapshot.olderAwaitsUser)
+
+        snapshot = await fixture.loadOlder(engine)
+        #expect(snapshot.transcript.turns.map(\.firstEntryID.rawValue) == ["p-\(first.utf8.count)"])
+        #expect(!snapshot.olderAwaitsUser)
+
+        snapshot = await fixture.loadOlder(engine, automatic: true)
+        #expect(Self.numbers(snapshot).first == "p-0")
+        #expect(snapshot.older == .reachedStart)
+    }
+
+    /// Once a bounded request leaves earlier messages to the user, a fresh
+    /// tail lets Chat load by itself again: here the program rewrites the
+    /// file shorter, keeping its start, and the poll reloads it.
+    @Test func aFreshTailLetsAutomaticRequestsReadAgain() async throws {
+        var limits = Self.limits
+        limits.automaticOlderSearch = 96
+        let fixture = Fixture(limits: limits)
+        let first = NumberedChatReducer.prompt("a") + Self.lines(0..<6) + NumberedChatReducer.turnEnd
+        func text(silent: Int) -> String {
+            first + NumberedChatReducer.prompt("b") + String(repeating: NumberedChatReducer.end("none"), count: silent)
+                + Self.lines(6..<10)
+        }
+        await fixture.files.write(text(silent: 40), at: Self.claudePath)
+        let engine = fixture.makeEngine()
+        _ = await fixture.open(engine)
+        var snapshot = await fixture.loadOlder(engine, automatic: true)
+        try #require(snapshot.olderAwaitsUser)
+
+        await fixture.files.write(text(silent: 20), at: Self.claudePath)
+        snapshot = await fixture.poll(engine)
+        #expect(!snapshot.olderAwaitsUser)
+
+        await fixture.files.clearRecords()
+        snapshot = await fixture.loadOlder(engine, automatic: true)
+        #expect(await fixture.bytesRead() > 0)
+    }
+
+    /// A program that doesn't bound what Chat loads by itself passes the
+    /// follower no limit, so the timeline's request reads back past a line
+    /// longer than the largest page to the opener above it, as the user's
+    /// does. A limit there would stop every pass at that line without
+    /// moving the window; the read budget fails such a loop instead of
+    /// letting it hang.
+    @Test func automaticRequestsReadPastALineLongerThanAPage() async throws {
+        try #require(Self.limits.automaticOlderSearch == nil)
+        // 201 bytes, more than the 128-byte largest page, just above the
+        // tail window.
+        let long = #"{"pad":""# + String(repeating: "x", count: 190) + "\"}\n"
+        let text = NumberedChatReducer.prompt("a") + Self.lines(0..<2) + long + Self.lines(2..<8)
+        let automatic = Fixture()
+        let user = Fixture()
+        await automatic.files.write(text, at: Self.claudePath)
+        await user.files.write(text, at: Self.claudePath)
+        let byItself = automatic.makeEngine()
+        let asked = user.makeEngine()
+        let opened = await automatic.open(byItself)
+        _ = await user.open(asked)
+        try #require(Self.numbers(opened) == Self.ids(2..<8))
+        await automatic.files.clearRecords()
+        await user.files.clearRecords()
+        // Several times what the request reads.
+        await automatic.files.setReadBudget(64)
+
+        let snapshot = await automatic.loadOlder(byItself, automatic: true)
+        let expected = await user.loadOlder(asked)
+
+        #expect(
+            snapshot.transcript.turns.map(\.firstEntryID.rawValue) == ["p-0"],
+            "\(String(describing: snapshot.readFailure))")
+        #expect(Self.numbers(snapshot) == Self.numbers(expected))
+        #expect(snapshot.transcript.turns == expected.transcript.turns)
+        #expect(snapshot.older == expected.older)
+        #expect(!snapshot.olderAwaitsUser)
+        let userReads = await user.files.reads
+        #expect(await automatic.files.reads == userReads)
+    }
+
     @Test func turnsOpenedAboveALaterWindowComeFromTheSavedDocument() async throws {
         let fixture = Fixture()
         await fixture.files.write(NumberedChatReducer.prompt("a") + Self.lines(0..<6), at: Self.claudePath)
@@ -541,6 +686,76 @@ struct ChatConversationEngineTests {
         #expect(snapshot.older == .reachedStart)
         #expect(snapshot.transcript.turns.map(\.firstEntryID.rawValue) == ["p-0", "p-\(second)"])
         #expect(snapshot.transcript.turns.map(\.ending) == [.completed, nil])
+        // The window's end closes a saved turn, not the rows above it.
+        #expect(snapshot.transcript.precedingTurnEnd == nil)
+    }
+
+    /// Saved rows above a later window that open no turn belong to the
+    /// turn the window opens inside, which the window's end still closes.
+    @Test func savedRowsAboveALaterWindowKeepTheEndOfTheirTurn() async throws {
+        let fixture = Fixture()
+        await fixture.files.write(Self.lines(0..<6), at: Self.claudePath)
+        let first = fixture.makeEngine()
+        let opened = await fixture.open(first)
+        try #require(opened.older == .reachedStart)
+        await first.save(force: true)
+
+        await fixture.files.append(
+            NumberedChatReducer.turnEnd + NumberedChatReducer.prompt("b") + Self.lines(8..<10), to: Self.claudePath)
+        let reopened = fixture.makeEngine()
+        _ = await reopened.restore()
+        let snapshot = await fixture.open(reopened)
+
+        // The tail window starts at the last saved row; the rest fill in.
+        #expect(snapshot.transcript.needsOlderHistory)
+        #expect(snapshot.older == .reachedStart)
+        #expect(Self.numbers(snapshot).prefix(6) == ArraySlice(Self.ids(0..<6)))
+        #expect(snapshot.transcript.turns.count == 1)
+        #expect(snapshot.transcript.precedingTurnEnd == ChatTurnEnd(ending: .completed))
+    }
+
+    /// With Claude Code's limits, a request the list makes by itself reads
+    /// saved rows the Host sends again as the user's does: above more than
+    /// 4 MiB of short turns kept from an earlier visit, it reads on to the
+    /// next turn's prompt.
+    @Test func automaticRequestsReadPastSavedRowsAboveALaterWindow() async throws {
+        let claude = try #require(ChatTranscriptAdapter.standard(for: .claude))
+        try #require(claude.joinsCachedHistory)
+        let fixture = Fixture(limits: claude.limits)
+        // A 64 KiB line no program reads.
+        let filler = String(repeating: "x", count: (64 << 10) - 1) + "\n"
+        func turn(_ name: String, kib: Int) -> String {
+            NumberedChatReducer.prompt(name) + String(repeating: filler, count: kib / 64) + NumberedChatReducer.turnEnd
+        }
+        let early = turn("a", kib: 2_048)
+        await fixture.files.write(early + (0..<8).map { turn("b\($0)", kib: 768) }.joined(), at: Self.claudePath)
+        let first = fixture.makeEngine()
+        var snapshot = await fixture.open(first)
+        let oldestSaved = ChatEntryID("p-\(early.utf8.count)")
+        var pages = 0
+        while snapshot.transcript.turns.first?.firstEntryID != oldestSaved, pages < 20 {
+            snapshot = await fixture.loadOlder(first)
+            pages += 1
+        }
+        try #require(snapshot.transcript.turns.first?.firstEntryID == oldestSaved)
+        await first.save(force: true)
+        let saved = try #require(await fixture.savedDocument())
+
+        // Reopened one short turn later: the saved rows fill in above the
+        // tail window.
+        await fixture.files.append(turn("c", kib: 256), to: Self.claudePath)
+        let size = UInt64(await fixture.files.contents(of: Self.claudePath)?.count ?? 0)
+        try #require(size - UInt64(claude.limits.tailWindow) - saved.coverageStart > 4 << 20)
+        let reopened = fixture.makeEngine()
+        _ = await reopened.restore()
+        snapshot = await fixture.open(reopened)
+        try #require(snapshot.transcript.turns.first?.firstEntryID == oldestSaved)
+        try #require(snapshot.older == .available)
+
+        snapshot = await fixture.loadOlder(reopened, automatic: true)
+
+        #expect(snapshot.transcript.turns.first?.firstEntryID == ChatEntryID("p-0"))
+        #expect(!snapshot.olderAwaitsUser)
     }
 
     @Test func savedEntriesShowBeforeTheHostAnswers() async throws {
@@ -698,5 +913,391 @@ struct ChatConversationEngineTests {
 
         // Not found keeps the saved entries rather than overwriting them.
         #expect(await fixture.savedDocument()?.entries.count == 3)
+    }
+
+    // MARK: Sources read by query
+
+    private static let recordSession = "s1"
+    private static let recordPath = "memory:s1"
+
+    /// Host files that hold nothing and count every call made through them.
+    private actor HostFileCalls {
+        private(set) var count = 0
+
+        private func record() {
+            count += 1
+        }
+
+        nonisolated var files: ChatHostFiles {
+            ChatHostFiles(
+                status: { _ in
+                    await self.record()
+                    return nil
+                },
+                list: { _ in
+                    await self.record()
+                    return nil
+                },
+                read: { _ in
+                    await self.record()
+                    return RemoteFileSlice(data: Data(), length: nil)
+                },
+                home: {
+                    await self.record()
+                    return "/home/dev"
+                })
+        }
+    }
+
+    /// A conversation its adapter reads by query from an in-memory store.
+    private struct RecordFixture {
+        let store = InMemoryRecordSource.Store()
+        let hostFiles = HostFileCalls()
+        let cache = VolatileChatTranscriptCache()
+        let program: ChatProgram
+        let limits: InMemoryRecordSource.Limits
+        let wantsFirstLine: Bool
+
+        init(
+            program: ChatProgram = .claude, limits: InMemoryRecordSource.Limits = InMemoryRecordSource.Limits(),
+            wantsFirstLine: Bool = false
+        ) {
+            self.program = program
+            self.limits = limits
+            self.wantsFirstLine = wantsFirstLine
+        }
+
+        var key: ChatCacheKey {
+            ChatCacheKey(hostID: host, herdrSession: "", program: program, conversationID: recordSession)
+        }
+
+        func makeEngine() -> ChatConversationEngine {
+            ChatConversationEngine(
+                reference: ConversationReference(program: program, sessionID: recordSession),
+                cacheKey: key, files: hostFiles.files, cache: cache,
+                adapter: InMemoryRecordSource.adapter(
+                    store, sessionID: recordSession, limits: limits, wantsFirstLine: wantsFirstLine),
+                now: { start })
+        }
+
+        func open(_ engine: ChatConversationEngine) async -> ChatConversationSnapshot {
+            await engine.open(directories: [cwd], context: ChatProjectionContext(activity: .idle))
+        }
+
+        func poll(_ engine: ChatConversationEngine) async -> ChatConversationSnapshot {
+            await engine.poll(context: ChatProjectionContext(activity: .idle))
+        }
+
+        func loadOlder(_ engine: ChatConversationEngine) async -> ChatConversationSnapshot {
+            await engine.loadOlder(context: ChatProjectionContext(activity: .idle))
+        }
+
+        func savedDocument() async -> ChatCacheDocument? {
+            guard case .hit(let document) = await cache.load(key) else { return nil }
+            return document
+        }
+    }
+
+    @Test func aRecordSourceOpensWithoutLookingForAFile() async throws {
+        // Codex relocates by looking for its rollout again, and wants the
+        // file's first line under a window that starts past it.
+        let fixture = RecordFixture(program: .codex, wantsFirstLine: true)
+        await fixture.store.write(Self.lines(0..<30))
+        let engine = fixture.makeEngine()
+
+        let opened = await fixture.open(engine)
+
+        #expect(opened.phase == .following(path: Self.recordPath))
+        #expect(opened.older == .available)
+        #expect(Self.numbers(opened).last == "n-29")
+        // The reducer was seeded without a first line.
+        #expect(opened.transcript.title == nil)
+
+        await fixture.store.append(Self.lines(30..<31))
+        let relocated = await engine.relocate(context: ChatProjectionContext(activity: .idle))
+
+        #expect(relocated.phase == .following(path: Self.recordPath))
+        #expect(Self.numbers(relocated).last == "n-30")
+        #expect(await fixture.store.calls == [.open, .poll])
+        #expect(await fixture.hostFiles.count == 0)
+    }
+
+    /// An id the adapter makes no source for is no session to read, in the
+    /// program's own terms; nothing is asked of the store or the files.
+    @Test func anIDWithoutASourceIsUnidentifiedForItsProgram() async throws {
+        let fixture = RecordFixture(program: .opencode)
+        let engine = ChatConversationEngine(
+            reference: ConversationReference(program: .opencode, sessionID: "s2"),
+            cacheKey: fixture.key, files: fixture.hostFiles.files, cache: fixture.cache,
+            adapter: InMemoryRecordSource.adapter(fixture.store, sessionID: Self.recordSession), now: { Self.start })
+
+        let opened = await fixture.open(engine)
+
+        #expect(opened.phase == .unavailable(.unidentifiedSession(.opencode)))
+        #expect(await fixture.store.calls.isEmpty)
+        #expect(await fixture.hostFiles.count == 0)
+    }
+
+    @Test func aRecordSourcePollAppendsResetsAndReopensWhenMissing() async throws {
+        let fixture = RecordFixture()
+        await fixture.store.write(Self.lines(0..<3))
+        let engine = fixture.makeEngine()
+        #expect(Self.numbers(await fixture.open(engine)) == Self.ids(0..<3))
+
+        await fixture.store.append(Self.lines(3..<5))
+        let appended = await fixture.poll(engine)
+
+        #expect(Self.numbers(appended) == Self.ids(0..<5))
+        #expect(appended.readOffset == Self.offset(of: 5))
+        #expect(await fixture.poll(engine).revision == appended.revision)
+
+        // The store replaced its records: the source starts over, and so
+        // does the engine.
+        await fixture.store.write(Self.lines(7..<9))
+        let reset = await fixture.poll(engine)
+
+        #expect(Self.numbers(reset) == Self.ids(7..<9))
+        #expect(reset.layoutGeneration > appended.layoutGeneration)
+
+        // The session is gone: the engine opens a new source at once, which
+        // finds nothing, and keeps what shows.
+        await fixture.store.setMissing(true)
+        let missing = await fixture.poll(engine)
+
+        #expect(missing.phase == .unavailable(.notFound(searchedAll: true)))
+        #expect(missing.isFromCache)
+        #expect(Self.numbers(missing) == Self.ids(7..<9))
+
+        // It comes back: opening again follows it.
+        await fixture.store.setMissing(false)
+        await fixture.store.append(Self.lines(9..<10))
+        let reopened = await fixture.open(engine)
+
+        #expect(reopened.phase == .following(path: Self.recordPath))
+        #expect(Self.numbers(reopened) == Self.ids(7..<10))
+        #expect(await fixture.store.calls == [.open, .poll, .poll, .poll, .poll, .open, .open])
+        #expect(await fixture.hostFiles.count == 0)
+    }
+
+    @Test func anUnreadableRecordSourceStopsWithItsReason() async throws {
+        let reason = ChatUnavailableReason.unsupportedFormat("probe")
+        let fixture = RecordFixture()
+        await fixture.store.write(Self.lines(0..<30))
+        let engine = fixture.makeEngine()
+
+        // On opening, nothing shows.
+        await fixture.store.failNext(with: ChatSourceUnavailable(reason: reason))
+        let refused = await fixture.open(engine)
+
+        #expect(refused.phase == .unavailable(reason))
+        #expect(refused.readFailure == nil)
+        #expect(refused.transcript.entries.isEmpty)
+
+        // On a poll, what showed stays.
+        let opened = await fixture.open(engine)
+        #expect(opened.phase == .following(path: Self.recordPath))
+        await fixture.store.failNext(with: ChatSourceUnavailable(reason: reason))
+        let stopped = await fixture.poll(engine)
+
+        #expect(stopped.phase == .unavailable(reason))
+        #expect(stopped.readFailure == nil)
+        #expect(stopped.isFromCache)
+        #expect(Self.numbers(stopped) == Self.numbers(opened))
+
+        // On a page of older records, nothing is left loading.
+        _ = await fixture.open(engine)
+        await fixture.store.failNext(with: ChatSourceUnavailable(reason: reason))
+        let paged = await fixture.loadOlder(engine)
+
+        #expect(paged.phase == .unavailable(reason))
+        #expect(paged.older == .available)
+
+        // Any other error is a read failure, and following goes on.
+        _ = await fixture.open(engine)
+        await fixture.store.failNext(with: TransportError.hostFileTimedOut)
+        let failed = await fixture.poll(engine)
+
+        #expect(failed.phase == .following(path: Self.recordPath))
+        #expect(failed.readFailure == .hostFileTimedOut)
+    }
+
+    @Test func olderRecordsStopWhenTheSourceSpendsItsSearch() async throws {
+        let fixture = RecordFixture(limits: InMemoryRecordSource.Limits(olderSearch: 256))
+        // Records that show nothing, many pages of them, inside one turn.
+        let silent = String(repeating: NumberedChatReducer.end("none"), count: 40)
+        await fixture.store.write(Self.lines(0..<3) + silent + Self.lines(3..<6))
+        let engine = fixture.makeEngine()
+        let opened = Self.numbers(await fixture.open(engine))
+
+        let snapshot = await fixture.loadOlder(engine)
+
+        // Pages double up to the source's largest, until the request has
+        // read back as far as one may.
+        #expect(Self.numbers(snapshot) == opened)
+        #expect(snapshot.older == .available)
+        #expect(await fixture.store.olderLengths == [32, 64, 128, 128])
+
+        // The next request searches as far again.
+        _ = await fixture.loadOlder(engine)
+
+        #expect(await fixture.store.olderLengths == [32, 64, 128, 128, 32, 64, 128, 128])
+    }
+
+    @Test func anExpandedOutputIsReadThroughTheSource() async throws {
+        let fixture = RecordFixture()
+        await fixture.store.write(Self.lines(0..<2) + NumberedChatReducer.tool(1, output: "line 1\nline 2"))
+        let engine = fixture.makeEngine()
+        let opened = await fixture.open(engine)
+        guard case .tool(let row)? = opened.transcript.entries.last?.content else {
+            Issue.record("expected the tool row")
+            return
+        }
+        let reference = try #require(row.output)
+
+        let result = await engine.output(of: row)
+
+        #expect(result == .success(ChatExpandedOutput(preview: ChatToolPreview(text: "line 1\nline 2", isTruncated: false))))
+        #expect(await fixture.store.calls.last == .line(reference))
+
+        // A line longer than the fetch cap is never asked for.
+        var long = row
+        long.output?.length = ChatToolPreview.maximumFetchBytes + 1
+        #expect(await engine.output(of: long) == .failure(.tooLong))
+        #expect(await fixture.store.calls.last == .line(reference))
+
+        // A source can find a line too long only once it reads it.
+        await fixture.store.failNext(with: ChatToolOutputFailure.tooLong)
+        #expect(await engine.output(of: row) == .failure(.tooLong))
+
+        // The store no longer holds the line.
+        await fixture.store.write(Self.lines(0..<3))
+        #expect(await engine.output(of: row) == .failure(.gone))
+        #expect(await fixture.hostFiles.count == 0)
+    }
+
+    @Test func aRecordSourceIsSavedUnderItsHeadAndWindow() async throws {
+        let fixture = RecordFixture()
+        await fixture.store.write(Self.lines(0..<30))
+        let first = fixture.makeEngine()
+        let opened = await fixture.open(first)
+
+        await first.save(force: true)
+
+        let saved = try #require(await fixture.savedDocument())
+        #expect(saved.transcriptPath == Self.recordPath)
+        #expect(saved.head == Data(Self.recordSession.utf8))
+        #expect(saved.coverageStart == opened.transcript.entries.first?.sourceOffset)
+        #expect(saved.coverageEnd == opened.readOffset)
+        #expect(!saved.reachedStart)
+
+        // The next visit's source names the same conversation, so the saved
+        // entries fill in above its later window.
+        await fixture.store.append(Self.lines(30..<32))
+        let second = fixture.makeEngine()
+        #expect(await second.restore().isFromCache)
+        let snapshot = await fixture.open(second)
+
+        #expect(snapshot.phase == .following(path: Self.recordPath))
+        #expect(Self.numbers(snapshot) == Self.numbers(opened) + Self.ids(30..<32))
+        #expect(await fixture.savedDocument() != nil)
+    }
+
+    // MARK: OpenCode
+
+    /// A scratch OpenCode store, queried the way a Host's is.
+    private actor OpenCodeStore {
+        private let harness: OpenCodeSQLiteHarness
+
+        init(scenario: String) throws {
+            harness = try OpenCodeSQLiteHarness(scenario: scenario)
+        }
+
+        /// Changes the store in one transaction, as OpenCode does.
+        func commit(_ sql: String) throws {
+            try harness.execute("BEGIN;\n\(sql)\nCOMMIT;")
+        }
+
+        func response(_ query: OpenCodeQuery) throws -> OpenCodeQueryResponse {
+            try harness.response(query)
+        }
+
+        /// Only queries reach the store: there are no files to read.
+        nonisolated var files: ChatHostFiles {
+            let none = TransportError.hostFeatureUnavailable(feature: "Files")
+            return ChatHostFiles(
+                status: { _ in throw none }, list: { _ in throw none }, read: { _ in throw none },
+                home: { throw none }, queryOpenCode: { try await self.response($0) })
+        }
+    }
+
+    @Test func anOpenCodeConversationFollowsThroughItsStore() async throws {
+        let id = "ses_0a1b2c3d4e5fK2mN8pQ4rT6vX9"
+        let store = try OpenCodeStore(scenario: "pong")
+        let context = ChatProjectionContext(activity: .idle)
+        func makeEngine() -> ChatConversationEngine {
+            ChatConversationEngine(
+                reference: ConversationReference(program: .opencode, sessionID: id),
+                cacheKey: ChatCacheKey(hostID: Self.host, herdrSession: "", program: .opencode, conversationID: id),
+                files: store.files, cache: VolatileChatTranscriptCache(), adapter: .openCode, now: { Self.start })
+        }
+        /// What opening the store afresh shows, which following it must
+        /// show too.
+        func reopened() async -> ChatTranscript {
+            await makeEngine().open(directories: [], context: context).transcript
+        }
+        func texts(_ snapshot: ChatConversationSnapshot) -> [String] {
+            snapshot.transcript.entries.compactMap { entry -> String? in
+                switch entry.content {
+                case .user(let message): message.text
+                case .assistant(let message): message.text
+                default: nil
+                }
+            }
+        }
+        let engine = makeEngine()
+
+        let opened = await engine.open(directories: [], context: context)
+
+        #expect(opened.phase == .following(path: "opencode:\(id)"))
+        #expect(opened.transcript.title == "Pong")
+        #expect(texts(opened) == ["Reply with exactly the word pong.", "pong"])
+        #expect(opened.older == .reachedStart)
+        #expect(opened.readOffset == 13)
+
+        // A prompt's row and the counter move together.
+        try await store.commit(
+            """
+            INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+              VALUES ('msg_0a1b2c3d4e40aaaaaaaaaaaaaa', '\(id)', 'user', 13, 1800000020000, 1800000020000,
+                      '{"time":{"created":1800000020000},"text":"Once more.","files":[],"agents":[]}');
+            UPDATE event_sequence SET seq = 13 WHERE aggregate_id = '\(id)';
+            """)
+        let appended = await engine.poll(context: context)
+
+        #expect(texts(appended) == ["Reply with exactly the word pong.", "pong", "Once more."])
+        #expect(appended.readOffset == 14)
+        #expect(appended.layoutGeneration == opened.layoutGeneration)
+        let afresh = await reopened()
+        #expect(appended.transcript.entries == afresh.entries)
+        #expect(appended.transcript.turns == afresh.turns)
+
+        // The counter alone says nothing changed.
+        #expect(await engine.poll(context: context).revision == appended.revision)
+
+        // A committed undo deletes the rows from its boundary on while the
+        // counter moves on: following starts over.
+        try await store.commit(
+            """
+            DELETE FROM session_message WHERE session_id = '\(id)' AND seq >= 13;
+            UPDATE event_sequence SET seq = 15 WHERE aggregate_id = '\(id)';
+            """)
+        let reset = await engine.poll(context: context)
+
+        #expect(texts(reset) == ["Reply with exactly the word pong.", "pong"])
+        #expect(reset.layoutGeneration > appended.layoutGeneration)
+        #expect(reset.readOffset == 16)
+        let undone = await reopened()
+        #expect(reset.transcript.entries == undone.entries)
+        #expect(reset.transcript.turns == undone.turns)
     }
 }

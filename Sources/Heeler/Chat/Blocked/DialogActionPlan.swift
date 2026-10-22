@@ -71,7 +71,10 @@ enum ConfirmationRule: Sendable, Hashable {
     /// transcript shows a waiting call resolve.
     case fingerprintChange
     /// Codex: the dialog left the screen, or herdr reports the Agent idle
-    /// or working.
+    /// or working. Grok Build can draw the next card just like the last
+    /// while herdr stays Blocked, so there a call the card could be
+    /// answering that waited starting or resolving also releases an answer
+    /// that showed no effect (`BlockedCardStore.waitingCalls(answering:)`).
     case fingerprintChangeOrUnblocked
     /// Codex asynchronous answers: the queued-messages notice lists an
     /// answer to this question, or the question left the screen. Codex
@@ -152,8 +155,8 @@ struct DialogObservation: Sendable {
 
 extension DialogExpectation {
     /// Whether `observation` shows this. Expectations about the same dialog
-    /// fail once its fingerprint changes, so later keys never land on a
-    /// dialog the user did not see.
+    /// fail once its fingerprint no longer matches, so later keys never
+    /// land on a dialog the user did not see.
     func isMet(by observation: DialogObservation, fingerprint: DialogFingerprint) -> Bool {
         switch self {
         case .page(let page):
@@ -164,7 +167,7 @@ extension DialogExpectation {
         case .focus, .feedbackMode, .inputText, .notes, .checked:
             break
         }
-        guard let dialog = observation.result.dialog, dialog.fingerprint == fingerprint else { return false }
+        guard let dialog = observation.result.dialog, dialog.fingerprint.matches(fingerprint) else { return false }
         let focus = dialog.focus
         switch self {
         case .focus(let ordinal):
@@ -195,7 +198,7 @@ extension ConfirmationRule {
     /// Whether `observation` confirms the keys sent for the dialog with
     /// `fingerprint`.
     func isMet(by observation: DialogObservation, fingerprint: DialogFingerprint) -> Bool {
-        let dialogLeft = observation.result.fingerprint != fingerprint
+        let dialogLeft = observation.result.fingerprint?.matches(fingerprint) != true
         switch self {
         case .toolResult(let id):
             return observation.resolvedToolUseIDs.contains(id) || dialogLeft

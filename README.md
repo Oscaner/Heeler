@@ -125,7 +125,7 @@ troubleshooting, see the [pairing guide](https://docs.heeler.bybee.dev/pairing).
 
 ## Native Chat
 
-On macOS and Linux Hosts, Chat displays Claude Code, Codex, Pi and Oh My Pi conversations from their transcript files over SSH. Saved conversations remain readable while reconnecting. Chat needs the conversation reference reported by herdr to identify the correct transcript; installing the integration alone does not prove that the current Agent has reported one.
+On macOS and Linux Hosts, Chat displays Claude Code, Codex, Pi, Oh My Pi, Grok Build and OpenCode conversations from what each program records on the Host, read over SSH. Saved conversations remain readable while reconnecting. Chat needs the conversation reference reported by herdr to identify the correct transcript; installing the integration alone does not prove that the current Agent has reported one.
 
 For Pi and Oh My Pi, install the corresponding `herdr integration install pi`
 or `herdr integration install omp` on the Host and restart that Agent to load
@@ -133,6 +133,23 @@ its extension. Chat reads the v2/v3 JSONL file the integration reports, includin
 custom session directories. Messages, reasoning, tool results and compaction
 boundaries use the native timeline. Custom editors and extension dialogs stay
 available in the terminal. See [format and compatibility details](docs/research/pi-transcript-format.md).
+
+For Grok Build, run `herdr integration install grok` on the Host and restart
+the Agent. Chat reads `~/.grok/sessions`; a custom `GROK_HOME` isn't found.
+herdr follows `/new`, `/clear` and a message sent from the dashboard, but not
+`/resume`, `/fork` or going back from the dashboard, so Chat holds a message
+when Grok Build shows another session. See [format and compatibility details](docs/research/grok-build-transcript-format.md).
+
+For OpenCode 2.x, Chat reads the conversation from OpenCode's own database with
+a short read-only query on the Host, so the Host needs `sqlite3` or `python3`.
+herdr's OpenCode integration must be installed, with
+`herdr integration install opencode` on the Host before starting OpenCode, and
+Chat follows the session it reports. Chat sends while OpenCode is idle; steer a
+running turn from the terminal. After `/new` in the terminal, Chat says
+OpenCode has left the conversation and shows none until you open one or send a
+first message there. Add Image and Add File put the file's path into the draft
+as text, and OpenCode can take a message that is only a path as an attachment,
+so add a few words before the path. See [how Chat reads OpenCode](docs/adr/0025-opencode-chat-reads-its-session-store.md).
 
 ### Codex shows “Waiting for Conversation”
 

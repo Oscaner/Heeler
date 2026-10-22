@@ -116,7 +116,8 @@ final class ConsoleStore {
     @ObservationIgnored private var chatCacheValidatedGenerations: [Host.ID: UInt64] = [:]
     @ObservationIgnored private var chatCacheRetention: Task<Void, Never>?
     /// How Chat reads each program's transcripts; nil leaves the program
-    /// without Chat.
+    /// without Chat: not offered, not prefetched, and no reason to ask for
+    /// its Host's platform.
     @ObservationIgnored private let chatAdapter: @Sendable (ChatProgram) -> ChatTranscriptAdapter?
     /// One Chat per Agent whose detail has shown it, kept like the Composer
     /// so leaving and returning keeps the conversation and its position.
@@ -642,8 +643,8 @@ final class ConsoleStore {
         return store
     }
 
-    /// Chat's transcript reads on the Host's live connection, resolved on
-    /// every call like `sessionFileReader(for:)`.
+    /// Chat's transcript reads and store queries on the Host's live
+    /// connection, resolved on every call like `sessionFileReader(for:)`.
     func chatHostFiles(for hostID: Host.ID) -> ChatHostFiles {
         ChatHostFiles(
             status: { [weak self] path in
@@ -661,6 +662,13 @@ final class ConsoleStore {
             home: { [weak self] in
                 guard let self else { throw TransportError.cancelled }
                 return try await liveChatHostFiles(for: hostID).home()
+            },
+            queryOpenCode: { [weak self] query in
+                guard let self else { throw TransportError.cancelled }
+                guard let queryOpenCode = try await liveChatHostFiles(for: hostID).queryOpenCode else {
+                    throw TransportError.hostFeatureUnavailable(feature: "Chat")
+                }
+                return try await queryOpenCode(query)
             })
     }
 
@@ -1104,7 +1112,7 @@ final class ConsoleStore {
             let hostID = projection.host.id
             guard hostPlatformGenerations[hostID] != projection.transportGeneration,
                 projection.agentsByPane.values.contains(where: {
-                    AgentChatAvailability.mayOfferChat(for: $0.agent)
+                    AgentChatAvailability.mayOfferChat(for: $0.agent, hasAdapter: { chatAdapter($0) != nil })
                 })
             else { continue }
             Task { [weak self] in await self?.resolveHostPlatform(hostID) }
@@ -1199,10 +1207,14 @@ final class ConsoleStore {
 
     func chatProgram(for agent: ConsoleAgent) -> ChatProgram? {
         let platform = hostPlatforms[agent.hostID]
-        if let platform { return AgentChatAvailability.program(for: agent.agent, platform: platform) }
+        if let platform {
+            return AgentChatAvailability.program(
+                for: agent.agent, platform: platform, hasAdapter: { chatAdapter($0) != nil })
+        }
         guard let host = projections[agent.hostID]?.host,
             cachedChats.agents(on: host).contains(where: { $0.id == agent.id }) else { return nil }
-        return AgentChatAvailability.program(for: agent.agent, platform: .posix)
+        return AgentChatAvailability.program(
+            for: agent.agent, platform: .posix, hasAdapter: { chatAdapter($0) != nil })
     }
 
     private func reconcileChatCache() {
@@ -1224,7 +1236,13 @@ final class ConsoleStore {
             guard chatPrefetchTasks[host.id] == nil else { continue }
             let generation = projection.transportGeneration
             let candidates = projection.agentsByPane.values.filter { agent in
-                guard AgentChatAvailability.mayOfferChat(for: agent.agent) else { return false }
+                guard AgentChatAvailability.mayOfferChat(for: agent.agent, hasAdapter: { chatAdapter($0) != nil })
+                else { return false }
+                // A conversation read by query costs an exec on the Host,
+                // and the key changes with every status (ADR 0025): only an
+                // open Chat reads it.
+                guard ChatProgram(rawValue: agent.agent.kind).flatMap(chatAdapter)?.readsByQuery != true
+                else { return false }
                 return chatPrefetched[agent.id] != chatPrefetchKey(agent, generation: generation)
             }
             guard !candidates.isEmpty else { continue }

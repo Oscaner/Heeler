@@ -1,11 +1,13 @@
 import Foundation
 
-/// The Host file operations Chat reads transcripts through.
+/// The Host file operations Chat reads transcripts through, and the query
+/// it reads OpenCode's session store with (ADR 0025).
 ///
 /// Like `SessionFileReader`, each closure is bound late: it reaches whichever
 /// transport the Host has installed when it runs, so a reconnect never leaves
 /// an open Chat holding a dead transport. Errors are the transport's Chat
-/// errors (`.hostFileTimedOut`, `.hostFileUnreadable`), never a redial.
+/// errors (`.hostFileTimedOut`, `.hostFileUnreadable`,
+/// `.hostStoreUnreadable`), never a redial.
 struct ChatHostFiles: Sendable {
     /// Stats a path, following symlinks; nil when it does not exist.
     let status: @Sendable (_ path: String) async throws -> RemoteFileStatus?
@@ -13,17 +15,22 @@ struct ChatHostFiles: Sendable {
     let list: @Sendable (_ request: RemoteFileListingRequest) async throws -> RemoteFileListing?
     let read: @Sendable (_ range: RemoteFileRange) async throws -> RemoteFileSlice
     let home: @Sendable () async throws -> String
+    /// Reads one OpenCode session from OpenCode's database on the Host
+    /// (`Transport.queryOpenCode`); nil where nothing can, as in the demo.
+    let queryOpenCode: (@Sendable (_ query: OpenCodeQuery) async throws -> OpenCodeQueryResponse)?
 
     init(
         status: @escaping @Sendable (_ path: String) async throws -> RemoteFileStatus?,
         list: @escaping @Sendable (_ request: RemoteFileListingRequest) async throws -> RemoteFileListing?,
         read: @escaping @Sendable (_ range: RemoteFileRange) async throws -> RemoteFileSlice,
-        home: @escaping @Sendable () async throws -> String
+        home: @escaping @Sendable () async throws -> String,
+        queryOpenCode: (@Sendable (_ query: OpenCodeQuery) async throws -> OpenCodeQueryResponse)? = nil
     ) {
         self.status = status
         self.list = list
         self.read = read
         self.home = home
+        self.queryOpenCode = queryOpenCode
     }
 
     /// Reads `[start, end)` in pieces of at most `chunk` bytes. Nil when the

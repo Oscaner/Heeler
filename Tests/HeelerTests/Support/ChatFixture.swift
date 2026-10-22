@@ -33,6 +33,12 @@ enum ChatFixture {
         String(decoding: try data(relativePath), as: UTF8.self)
     }
 
+    /// The sorted names of the files in a fixture directory.
+    static func fileNames(in relativeDirectory: String) throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: url(relativeDirectory).path(percentEncoded: false))
+            .sorted()
+    }
+
     /// The fixture's complete lines with their true offsets.
     static func lines(_ relativePath: String) throws -> [ChatLine] {
         JSONLLineFramer.lines(in: try data(relativePath))

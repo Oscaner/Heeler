@@ -110,7 +110,7 @@ struct AgentComposerStopStoreTests {
 
         await store.stop(using: { await esc.press() })?.value
         #expect(store.phase == .unconfirmed)
-        #expect(store.notice == AgentComposerStopStore.unconfirmedMessage)
+        #expect(store.notice == "Esc went, but the Agent still shows Working.")
         #expect(!store.isStopping)
 
         await store.stop(using: { await esc.press() })?.value
@@ -170,6 +170,164 @@ struct AgentComposerStopStoreTests {
         #expect(store.phase == .ready)
         #expect(store.notice == nil)
     }
+
+    /// Esc keeps no gap: once a status change readies Stop, the next tap
+    /// presses at once, even while the last Esc is still on its way.
+    @Test func anEscTapAfterAStatusChangePressesWhileTheLastEscIsOnItsWay() async {
+        let send = ScriptedTransportCallGate()
+        let store = AgentComposerStopStore(sleep: { _ in })
+        let esc = EscRecorder()
+
+        let first = store.stop(using: {
+            let outcome = await esc.press()
+            await send.waitUntilOpen()
+            return outcome
+        })
+        await send.waitForEntry()
+        store.agentStatusChanged(to: .done)
+        #expect(store.phase == .ready)
+
+        let second = store.stop(using: { await esc.press() })
+        #expect(second != nil)
+        await second?.value
+        #expect(esc.count == 2, "the second Esc went while the first was still on its way")
+
+        await send.open()
+        await first?.value
+        #expect(esc.count == 2)
+    }
+
+    @Test func aStopWaitsItsOwnWindowAndSaysItsOwnNotice() async {
+        let sleeps = SleepRecorder()
+        let store = AgentComposerStopStore(sleep: { await sleeps.record($0) })
+
+        await store.stop(using: { .sent })?.value
+        #expect(await sleeps.durations == [.seconds(3)])
+        #expect(store.notice == "Esc went, but the Agent still shows Working.")
+
+        let keys = AgentStopWait(
+            window: .seconds(5), unconfirmedNotice: "Keys went, but the Agent still shows Working.")
+        await store.stop(waiting: keys, using: { .sent })?.value
+        #expect(await sleeps.durations == [.seconds(3), .seconds(5)])
+        #expect(store.notice == "Keys went, but the Agent still shows Working.")
+    }
+
+    /// The terminal's Stop: Esc's 3 s window and notice with no gap, Esc's
+    /// hint, and the surface's own press.
+    @Test func anEscapeInterruptCarriesEscsWaitAndHint() async {
+        let interrupt = AgentComposerInterrupt.escape { .failed("The surface's own press.") }
+
+        #expect(
+            interrupt.wait
+                == AgentStopWait(
+                    window: .seconds(3), unconfirmedNotice: "Esc went, but the Agent still shows Working.",
+                    minimumGap: .zero))
+        #expect(interrupt.accessibilityHint == "Presses Esc to interrupt the Agent")
+        #expect(await interrupt.perform() == .failed("The surface's own press."))
+    }
+
+    /// Esc only shows a toast in Grok Build, whose turns stop with Ctrl+C,
+    /// so its terminal Composer keeps Send. Every other kind presses Esc.
+    @Test func theTerminalStopIsEscOutsideGrokBuild() async {
+        let grok = AgentComposerInterrupt.terminal(forAgentKind: "grok") { .sent }
+        #expect(grok == nil)
+
+        for kind in ["claude", "codex", "pi", "omp", "opencode", "an-unknown-agent"] {
+            let interrupt = AgentComposerInterrupt.terminal(forAgentKind: kind) { .failed("The surface's own press.") }
+            #expect(interrupt?.wait == .escape, "\(kind)")
+            #expect(interrupt?.accessibilityHint == AgentComposerInterrupt.escapeHint, "\(kind)")
+            #expect(await interrupt?.perform() == .failed("The surface's own press."), "\(kind)")
+        }
+    }
+
+    @Test func aStopIgnoresTapsInsideItsMinimumGapAcrossStatusChanges() async {
+        let window = ScriptedTransportCallGate()
+        let clock = StopClock()
+        let start = clock.now
+        let store = AgentComposerStopStore(
+            sleep: { _ in await window.waitUntilOpen() }, now: { clock.now })
+        let presses = EscRecorder()
+
+        let first = store.stop(waiting: Self.gapped, using: { await presses.press() })
+        await window.waitForEntry()
+        store.agentStatusChanged(to: .done)
+
+        clock.now = start + .milliseconds(500)
+        #expect(store.stop(waiting: Self.gapped, using: { await presses.press() }) == nil)
+        #expect(presses.count == 1)
+        #expect(store.phase == .ready, "an ignored tap leaves Stop as it was")
+
+        clock.now = start + .milliseconds(1600)
+        let second = store.stop(waiting: Self.gapped, using: { await presses.press() })
+        #expect(second != nil)
+        await window.waitForEntry(count: 2)
+        #expect(presses.count == 2)
+
+        await window.open()
+        await first?.value
+        await second?.value
+    }
+
+    @Test func aGappedStopIgnoresTapsWhileAnAttemptIsOnItsWay() async {
+        let send = ScriptedTransportCallGate()
+        let clock = StopClock()
+        let start = clock.now
+        let store = AgentComposerStopStore(sleep: { _ in }, now: { clock.now })
+        let presses = EscRecorder()
+
+        let first = store.stop(waiting: Self.gapped, using: {
+            let outcome = await presses.press()
+            await send.waitUntilOpen()
+            return outcome
+        })
+        await send.waitForEntry()
+        store.agentStatusChanged(to: .done)
+        #expect(store.phase == .ready)
+
+        clock.now = start + .seconds(2)
+        #expect(store.stop(waiting: Self.gapped, using: { await presses.press() }) == nil)
+
+        // The attempt ends once its keys have gone, here at +2 s.
+        await send.open()
+        await first?.value
+        clock.now = start + .milliseconds(2500)
+        #expect(store.stop(waiting: Self.gapped, using: { await presses.press() }) == nil)
+        #expect(presses.count == 1)
+
+        clock.now = start + .milliseconds(3600)
+        await store.stop(waiting: Self.gapped, using: { await presses.press() })?.value
+        #expect(presses.count == 2)
+    }
+
+    @Test func anIgnoredTapKeepsTheRunningStopsWaitAndNotice() async {
+        let window = ScriptedTransportCallGate()
+        let sleeps = SleepRecorder()
+        let store = AgentComposerStopStore(sleep: { duration in
+            await sleeps.record(duration)
+            await window.waitUntilOpen()
+        })
+        let running = AgentStopWait(
+            window: .seconds(5), unconfirmedNotice: "The running stop's notice.")
+        let ignored = AgentStopWait(
+            window: .seconds(7), unconfirmedNotice: "The ignored tap's notice.")
+        let ignoredPresses = EscRecorder()
+
+        let wait = store.stop(waiting: running, using: { .sent })
+        await window.waitForEntry()
+        #expect(store.stop(waiting: ignored, using: { await ignoredPresses.press() }) == nil)
+
+        await window.open()
+        await wait?.value
+        #expect(ignoredPresses.count == 0)
+        #expect(store.phase == .unconfirmed)
+        #expect(store.notice == "The running stop's notice.")
+        #expect(await sleeps.durations == [.seconds(5)])
+    }
+
+    /// A wait with a gap, as a program whose second press could quit it.
+    private static let gapped = AgentStopWait(
+        window: .seconds(3), unconfirmedNotice: "Keys went, but the Agent still shows Working.",
+        minimumGap: .milliseconds(1500))
 }
 
 /// Stop belongs to the Agent's Composer store, not to a view: its status
@@ -228,9 +386,10 @@ struct AgentComposerStopOwnershipTests {
 }
 
 /// The hosted Composer: Chat folds it to one line without replacing its
-/// text view, and Stop presses Esc once until Agent Status moves.
+/// text view, Stop presses Esc once until Agent Status moves, and a long
+/// notice keeps its lines.
 @MainActor
-@Suite("Agent Composer fold and Stop, hosted", .serialized)
+@Suite("Agent Composer fold, Stop and notices, hosted", .serialized)
 struct AgentComposerFoldHostedTests {
     @Test func chatFoldsToOneLineUntilTheEditorTakesFocus() async throws {
         let harness = ComposerHarness(status: .idle)
@@ -423,10 +582,75 @@ struct AgentComposerFoldHostedTests {
         }
     }
 
+    /// A notice shows the six lines that the longest notices wrap to at a
+    /// phone's width, such as Grok Build's holds at a larger text size and
+    /// OpenCode's unconfirmed Stop, whether it says why a send was refused
+    /// or why Stop pressed nothing.
+    @Test func aLongNoticeShowsItsSixthLine() async throws {
+        for kind in NoticeKind.allCases {
+            var heights: [CGFloat] = []
+            for count in 1...6 {
+                heights.append(try await Self.height(showing: Self.notice(lines: count), as: kind))
+            }
+            let line = heights[1] - heights[0]
+            #expect(line > 8, "a second line should add one to the \(kind) notice: \(heights)")
+            #expect(
+                abs(heights[5] - heights[4] - line) < 1,
+                "the \(kind) notice should show its sixth line as it does its second: \(heights)")
+        }
+    }
+
     // MARK: Helpers
+
+    private enum NoticeKind: CaseIterable {
+        /// Why a send was refused.
+        case refusal
+        /// Why Stop pressed nothing.
+        case stop
+    }
+
+    /// The narrowest iPhone's width, where a notice wraps to the most lines.
+    private static let phoneWidth: CGFloat = 375
 
     private static let longDraft = (1...12).map { "Line \($0) of a long draft" }
         .joined(separator: "\n")
+
+    /// A notice of `count` lines at any width.
+    private static func notice(lines count: Int) -> String {
+        (1...count).map { "Line \($0) of the notice." }.joined(separator: "\n")
+    }
+
+    /// The hosted Composer's height at `phoneWidth` while it shows `notice`.
+    private static func height(showing notice: String, as kind: NoticeKind) async throws -> CGFloat {
+        let policy = refusing(with: notice)
+        let harness: ComposerHarness
+        switch kind {
+        case .refusal:
+            harness = ComposerHarness(status: .idle)
+            harness.composer.replaceDraft(with: "Reply with the word fig")
+            await harness.composer.send(policy: policy)
+        case .stop:
+            harness = ComposerHarness(status: .working)
+            await harness.composer.stop.stop { .failed(notice) }?.value
+        }
+        let controller = UIHostingController(
+            rootView: ComposerHost(harness: harness, collapses: true, sendPolicy: policy))
+        var height: CGFloat = 0
+        try await withTestWindow(
+            frame: CGRect(x: 0, y: 0, width: phoneWidth, height: 812), rootViewController: controller
+        ) { _ in
+            controller.view.layoutIfNeeded()
+            height = Self.height(of: controller, width: phoneWidth)
+        }
+        return height
+    }
+
+    /// Chat's route, refusing every draft with `notice`.
+    private static func refusing(with notice: String) -> ComposerDeliveryPolicy {
+        ComposerDeliveryPolicy(
+            route: .chat, insertsIntoAttachWhenBlocked: false, outgoingText: { $0 },
+            validate: { _ in .inputNotReady(notice) }, preflight: nil, verify: nil)
+    }
 
     private static func editor(in root: UIView) -> UITextView? {
         if let textView = root as? UITextView, textView.accessibilityLabel == "Message the Agent" {
@@ -438,8 +662,8 @@ struct AgentComposerFoldHostedTests {
         return nil
     }
 
-    private static func height(of controller: UIHostingController<ComposerHost>) -> CGFloat {
-        controller.sizeThatFits(in: CGSize(width: 402, height: CGFloat.greatestFiniteMagnitude)).height
+    private static func height(of controller: UIHostingController<ComposerHost>, width: CGFloat = 402) -> CGFloat {
+        controller.sizeThatFits(in: CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)).height
     }
 
     private static func activate(labeled label: String, in root: UIView) async throws -> Bool {
@@ -511,6 +735,21 @@ private final class EscRecorder {
     }
 }
 
+/// How long each of Stop's waits asked to sleep; the terminal's Stop in
+/// `AgentDirectInputTests` records its wait too.
+actor SleepRecorder {
+    private(set) var durations: [Duration] = []
+
+    func record(_ duration: Duration) {
+        durations.append(duration)
+    }
+}
+
+/// Stop's clock, moved by hand.
+private final class StopClock: @unchecked Sendable {
+    var now = ContinuousClock.now
+}
+
 /// Hands each sleep the next gate, so overlapping waits end one by one.
 @MainActor
 private final class GateQueue {
@@ -567,6 +806,8 @@ private final class ComposerHarness {
 private struct ComposerHost: View {
     @Bindable var harness: ComposerHarness
     let collapses: Bool
+    /// Each route shows only the notices its own refusals leave.
+    var sendPolicy: ComposerDeliveryPolicy = .terminal
 
     var body: some View {
         AgentComposerView(
@@ -602,8 +843,9 @@ private struct ComposerHost: View {
             skills: nil,
             keyboardPresentation: $harness.keyboardPresentation,
             prepareKeyboardPresentation: { _ in },
+            sendPolicy: sendPolicy,
             collapsesWithoutKeyboard: collapses,
-            interruptAgent: { [harness] in
+            interrupt: .escape { [harness] in
                 harness.escapes += 1
                 return .sent
             })

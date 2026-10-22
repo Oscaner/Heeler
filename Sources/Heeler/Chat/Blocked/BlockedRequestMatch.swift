@@ -10,6 +10,14 @@ enum BlockedRequestMatch {
         requests.first { matches($0, dialog) }
     }
 
+    /// Every request the dialog could be asking about, oldest first: those
+    /// it matches, and on a Grok Build subagent's card, which names neither
+    /// a command nor a file, the spawns its title names. A start of one of
+    /// these shows a Grok Build answer took (`BlockedCardStore`).
+    static func requests(answering dialog: BlockedDialog, in requests: [ChatPendingRequest]) -> [ChatPendingRequest] {
+        requests.filter { matches($0, dialog) || asksToStart($0, dialog) }
+    }
+
     private static func matches(_ request: ChatPendingRequest, _ dialog: BlockedDialog) -> Bool {
         let subject = dialog.subject
         switch dialog.kind {
@@ -46,8 +54,58 @@ enum BlockedRequestMatch {
             return request.toolName == "ask" && asks(request, subject.question ?? dialog.title)
         case .ompQuestionReview:
             return request.toolName == "ask"
-        case .claudeWorkspaceTrust, .codexNetwork:
+        case .grokPermission:
+            // A command by its start; an edit or a new file by its name.
+            if let command = subject.command {
+                return request.toolName == "run_terminal_command" && begins(request.summary, with: command)
+            }
+            return ["search_replace", "write"].contains(request.toolName) && sameFile(request.summary, subject.filePath)
+        case .grokQuestion:
+            return request.toolName == "ask_user_question" && asks(request, subject.question ?? dialog.title)
+        case .openCodePermission:
+            return openCodePermission(request, subject)
+        case .openCodeQuestion:
+            return request.kind == .question && asks(request, subject.question ?? dialog.title)
+        case .claudeWorkspaceTrust, .codexNetwork, .grokCancelTurn, .grokFork:
             return false
+        }
+    }
+
+    /// Before a subagent starts, Grok Build's card asks `Allow
+    /// <description>?` and takes that question as its title, whole or as
+    /// far as the card's edge, where Grok cut it with `…`. A cut title
+    /// names every spawn whose question it starts. Runs of whitespace count
+    /// as one space.
+    private static func asksToStart(_ request: ChatPendingRequest, _ dialog: BlockedDialog) -> Bool {
+        guard request.kind == .agent, dialog.asksInTitle, dialog.subject.command == nil,
+            dialog.subject.filePath == nil
+        else { return false }
+        let asked = words("Allow " + request.summary)
+        let title = words(dialog.title)
+        guard title.hasSuffix("…") else { return asked == title }
+        return asked.hasPrefix(words(String(title.dropLast())))
+    }
+
+    /// `text` with each run of whitespace as one space, trimmed.
+    private static func words(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// The action on OpenCode's permission names the call's kind, and its
+    /// target is the call's file, command or URL. Other actions match no
+    /// call, so the card won't reject them.
+    private static func openCodePermission(_ request: ChatPendingRequest, _ subject: DialogSubject) -> Bool {
+        switch subject.toolName {
+        case "Read":
+            request.kind == .fileRead && samePath(request.summary, subject.filePath)
+        case "Edit", "Write", "Patch":
+            [.fileEdit, .fileWrite].contains(request.kind) && samePath(request.summary, subject.filePath)
+        case "Shell", "Bash":
+            request.kind == .command && begins(request.summary, with: subject.command)
+        case "WebFetch":
+            request.kind == .web && begins(request.summary, with: subject.url)
+        default:
+            false
         }
     }
 

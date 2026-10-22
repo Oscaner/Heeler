@@ -25,7 +25,7 @@
                 #expect(reference.program == program)
                 bound.append(agent.paneID)
             }
-            #expect(bound.sorted() == ["checkout:p3", "docs:p2", "mobile:p1"])
+            #expect(bound.sorted() == ["api:p7", "checkout:p3", "docs:p2", "mobile:p1"])
         }
 
         @Test(arguments: ["mobile:p1", "docs:p2", "checkout:p3"])
@@ -91,13 +91,39 @@
             #expect(progress.started == 3)
         }
 
+        /// OpenCode keeps its conversation in a database, not a file: the
+        /// demo answers Chat's store queries with the sample's rows.
+        @Test func theOpenCodeSampleOpensThroughItsRecordSource() async throws {
+            let snapshot = try await Self.open("api:p7")
+
+            let path = "opencode:\(DemoOpenCodeChatSample.sessionID)"
+            #expect(snapshot.phase == .following(path: path))
+            #expect(DemoChatSample.files[path] == nil)
+            #expect(snapshot.older == .reachedStart)
+            #expect(snapshot.transcript.diagnostics == ChatTranscriptDiagnostics())
+            #expect(snapshot.transcript.title == "Harden webhook retries")
+            let entries = snapshot.transcript.entries
+            #expect(Self.kinds(entries).isSuperset(of: ["user", "assistant", "reasoning", "tool", "compaction"]))
+            let tools = entries.compactMap { entry -> ChatToolActivity? in
+                guard case .tool(let tool) = entry.content else { return nil }
+                return tool
+            }
+            #expect(tools.contains { $0.showsDiffAsOutput && $0.fileChanges?.files.first?.hunks.count == 1 })
+            #expect(tools.contains { $0.kind == .command && $0.status == .failed })
+            // The Agent is working: its last turn is still open, running the
+            // matrix again.
+            #expect(snapshot.transcript.turns.map(\.ending) == [.completed, .completed, nil])
+            #expect(tools.last?.kind == .command)
+            #expect(tools.last?.status == .running)
+        }
+
         @Test func samplesUseInventedNamesOnly() async throws {
             let forbidden = [
                 "heeler", "herdr", "github", "anthropic", "openai", "stripe",
                 "microsoft", "google", "apple", "voiceover", "claude", "codex",
                 "gemini", "opencode",
             ]
-            for paneID in ["mobile:p1", "docs:p2", "checkout:p3"] {
+            for paneID in ["mobile:p1", "docs:p2", "checkout:p3", "api:p7"] {
                 for text in try await Self.open(paneID).transcript.entries.flatMap(Self.texts) {
                     let folded = text.lowercased()
                     for name in forbidden {
@@ -118,7 +144,7 @@
                 console.agents.count == 5 && console.hostPlatforms.count == 2
             }
 
-            for paneID in ["mobile:p1", "docs:p2", "checkout:p3"] {
+            for paneID in ["mobile:p1", "docs:p2", "checkout:p3", "api:p7"] {
                 let agent = try #require(console.agents.first { $0.agent.paneID == paneID })
                 let program = try #require(
                     AgentChatAvailability.program(for: agent.agent, platform: console.hostPlatforms[agent.hostID]))

@@ -15,9 +15,26 @@ Entries reference the pull request that made the change.
   Chinese. (#477)
 - See the Agent's task title in the detail header, with its harness and
   working directory on a second line. (#480)
+- Chat shows Grok Build conversations on macOS and Linux Hosts: messages,
+  reasoning, tools with their file changes, subagents and compactions. Chat
+  sends prompts and skills, stops a turn with Ctrl+C while Grok Build shows
+  it working, answers its permission and single-choice question cards, and
+  holds a message, with the reason, when Grok Build shows a draft, a menu,
+  its dashboard or another session. In an agent opened from the dashboard,
+  Chat sends only when the screen shows this conversation's newest message.
+  A message Grok Build recorded in another session says so, and Chat holds
+  later ones until you switch back. (#482)
+- Read OpenCode 2.x conversations in Chat on macOS and Linux Hosts, with
+  sends, Stop and cards for its permission and question dialogs. Chat reads
+  OpenCode's own database with a short read-only query on the Host, which
+  needs sqlite3 or python3, and says when OpenCode has left the
+  conversation it shows. (#483)
 
 ### Changed
 
+- A working Grok Build Agent's terminal Composer keeps Send instead of
+  showing Stop, because Esc doesn't stop a Grok Build turn. Stop it with
+  Chat's Stop, which presses Ctrl+C, or with Ctrl+C in the terminal. (#482)
 - The Agent detail header shows one button for the surface not on screen,
   Chat or the Agent terminal, instead of a two-segment switch. (#480)
 - The detail header's Workspace Terminals, Changes and Hide Header buttons
@@ -44,6 +61,8 @@ Entries reference the pull request that made the change.
 - Show five whole lines of a long Composer draft, with the line being
   typed clear of the edge, instead of the last line cut off; the draft
   fades out at the edge it scrolls past. (#480)
+- Show long Composer notices whole, up to six lines, instead of cutting
+  them after three, which could hide what to do next. (#482)
 
 ## [0.1.15] - 2026-10-19
 

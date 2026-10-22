@@ -40,6 +40,23 @@ extension ChatTranscriptAdapter {
                 },
                 identity: { PiTranscriptLocator.sessionID(inHead: $0) },
                 echoesByEntry: true)
+        case .grok:
+            .grok
+        case .opencode:
+            // Read by query from OpenCode's session store (ADR 0025).
+            openCode
         }
     }
+
+    /// OpenCode's conversations, read by query from its session store (ADR
+    /// 0025). A committed `/undo` deletes rows at or above its boundary, so
+    /// a saved prefix may hold rows the store no longer has: older pages,
+    /// cheap point queries, are read instead of joining the cache. Rows keep
+    /// their ids when OpenCode rewrites them.
+    static let openCode = ChatTranscriptAdapter(
+        revision: OpenCodeTranscriptReducer.revision,
+        joinsCachedHistory: false,
+        makeReducer: { _ in OpenCodeTranscriptReducer() },
+        echoesByEntry: true,
+        makeRecordSource: { OpenCodeSessionID($0).map { OpenCodeRecordSource(session: $0) } })
 }

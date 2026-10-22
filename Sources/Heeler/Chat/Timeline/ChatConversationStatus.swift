@@ -8,17 +8,18 @@ extension ChatUnavailableReason {
         switch self {
         case .noSession: "Waiting for Conversation"
         case .unidentifiedSession: "Conversation Not Identified"
-        case .notFound, .mismatched: "Conversation Not Found"
+        case .notFound, .mismatched, .sessionStore(_, .sessionMissing): "Conversation Not Found"
         case .awaitingFirstMessage: "No Messages Yet"
         case .compressed: "Conversation Compressed"
-        case .unsupportedSession, .unsupportedFormat: "Conversation Not Readable"
+        case .unsupportedSession, .unsupportedFormat, .sessionStore: "Conversation Not Readable"
+        case .startScreen: "Not in This Conversation"
         }
     }
 
     var systemImage: String {
         switch self {
         case .noSession, .awaitingFirstMessage: "bubble.left.and.bubble.right"
-        case .notFound, .mismatched: "doc.text.magnifyingglass"
+        case .notFound, .mismatched, .sessionStore(_, .sessionMissing): "doc.text.magnifyingglass"
         default: "exclamationmark.bubble"
         }
     }
@@ -33,8 +34,15 @@ extension ChatUnavailableReason {
             "herdr hasn't reported a Pi conversation for this Agent yet. Pi reports it once it has started, after you answer whether to trust the project folder. If this lasts, check the Pi integration on the Host. Chat will keep checking, and you can continue in the Agent terminal."
         case .noSession(.omp):
             "herdr hasn't reported an Oh My Pi conversation for this Agent yet. Oh My Pi reports it once it has started. If this lasts, check the OMP integration on the Host. Chat will keep checking, and you can continue in the Agent terminal."
-        case .unidentifiedSession:
+        case .noSession(.grok):
+            "herdr hasn't reported a Grok Build session ID for this Agent. Grok Build reports one when a session starts, including after /new or /clear. Chat keeps checking; you can continue in the Agent terminal."
+        case .noSession(.opencode):
+            "herdr hasn't reported an OpenCode conversation for this Agent yet. OpenCode reports one once a conversation is open: send a first message in the terminal, or open a session there. Chat will keep checking, and you can continue in the Agent terminal."
+        case .unidentifiedSession(.claude), .unidentifiedSession(.codex), .unidentifiedSession(.pi),
+            .unidentifiedSession(.omp), .unidentifiedSession(.grok):
             "herdr names this Agent's session without an id, which happens after resuming a conversation by name. Chat can't tell which transcript is its own."
+        case .unidentifiedSession(.opencode):
+            "herdr reports a session name that isn't an OpenCode session id, so Chat can't tell which conversation is this Agent's."
         case .unsupportedSession:
             "herdr reports a session Chat doesn't read."
         case .notFound(let searchedAll):
@@ -49,6 +57,10 @@ extension ChatUnavailableReason {
             "The transcript under this session's name holds another conversation."
         case .unsupportedFormat(let format):
             "Chat can't read \(format)."
+        case .sessionStore(_, let problem):
+            problem.explanation
+        case .startScreen(let program):
+            "\(program.chatName) is on its home screen, so the conversation herdr reported is no longer open there. Open a conversation in the terminal, or send a first message there to start one. Chat follows it once herdr reports it."
         }
     }
 
@@ -72,13 +84,19 @@ extension ChatUnavailableReason {
             "The transcript under this session's name holds another conversation.\(saved)"
         case .compressed, .unsupportedFormat:
             "Chat can't read this transcript now.\(saved)"
+        case .sessionStore(let program, _):
+            "Chat can't read this conversation from \(program.chatName)'s database now.\(saved)"
+        // Never over the timeline, which this reason hides.
+        case .startScreen(let program):
+            "\(program.chatName) is on its home screen."
         }
     }
 
     /// Whether looking again could find something the user may have fixed.
     var offersRetry: Bool {
         switch self {
-        case .noSession, .notFound, .mismatched: true
+        case .noSession, .notFound, .mismatched, .startScreen: true
+        case .sessionStore(_, let problem): problem.isRetryable
         default: false
         }
     }
@@ -93,6 +111,32 @@ extension ChatUnavailableReason {
         switch self {
         case .noSession, .awaitingFirstMessage: true
         default: false
+        }
+    }
+}
+
+extension ChatSessionStoreProblem {
+    /// OpenCode's database is the only session store Chat reads (ADR 0025).
+    var explanation: String {
+        switch self {
+        case .noStore(let path):
+            "Heeler couldn't find OpenCode's database at \(path). Chat reads OpenCode's default database."
+        case .sessionMissing(let otherStores) where otherStores.isEmpty:
+            "OpenCode's database has no conversation with this id. If this OpenCode uses another database, such as one set with OPENCODE_DB, Chat can't read it."
+        case .sessionMissing(let otherStores):
+            "OpenCode's default database has no conversation with this id. This Host also has \(otherStores.joined(separator: ", ")), which other OpenCode builds use; Chat reads only the default database."
+        case .noReader:
+            "Reading OpenCode's conversations needs sqlite3 or python3 on the Host. Install one, then tap Check Again."
+        case .readerTooOld(let version):
+            "The Host's SQLite \(version) can't read OpenCode's database: Chat needs SQLite 3.25 or newer with JSON support, through sqlite3 or Python 3.6 or newer."
+        case .storeClosed:
+            "OpenCode's database is closed, which usually means OpenCode isn't running. Chat shows saved messages and checks again."
+        case .olderOpenCode:
+            "This OpenCode keeps conversations in its 1.x format, which Chat doesn't read. Chat reads OpenCode 2.x."
+        case .unsupportedLayout(let detail):
+            "OpenCode's database has a layout Chat doesn't read (\(detail)). A newer OpenCode may have changed it."
+        case .subagentSession:
+            "herdr reports a subagent's session, which Chat doesn't show. Open the main conversation in the terminal."
         }
     }
 }
@@ -201,9 +245,11 @@ enum ChatBannerLine: Equatable, Identifiable {
 
 extension ChatConversationSnapshot {
     /// Whether the timeline is up rather than a placeholder: it has entries,
-    /// or messages sent from this device the program hasn't recorded yet.
+    /// or messages sent from this device the program hasn't recorded yet,
+    /// and no reason hides them.
     func showsTimeline(hasPendingEchoes: Bool) -> Bool {
-        !transcript.entries.isEmpty || hasPendingEchoes
+        if case .unavailable(let reason) = phase, reason.hidesConversation { return false }
+        return !transcript.entries.isEmpty || hasPendingEchoes
     }
 }
 
@@ -215,6 +261,8 @@ extension ChatProgram {
         case .codex: "Codex"
         case .pi: "Pi"
         case .omp: "Oh My Pi"
+        case .grok: "Grok Build"
+        case .opencode: "OpenCode"
         }
     }
 }

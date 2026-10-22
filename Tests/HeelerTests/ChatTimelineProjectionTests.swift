@@ -49,9 +49,11 @@ struct ChatTimelineProjectionTests {
     }
 
     private static func project(
-        _ rows: [ChatRow], turns: [ChatTurn], signals: ChatTurnSignals = idle, open: Set<ChatRowID> = []
+        _ rows: [ChatRow], turns: [ChatTurn], precedingTurnEnd: ChatTurnEnd? = nil, signals: ChatTurnSignals = idle,
+        open: Set<ChatRowID> = []
     ) -> ChatTimelineProjection.Output {
-        ChatTimelineProjection.project(rows, turns: turns, signals: signals, open: open)
+        ChatTimelineProjection.project(
+            rows, turns: turns, precedingTurnEnd: precedingTurnEnd, signals: signals, open: open)
     }
 
     private static func ids(_ output: ChatTimelineProjection.Output) -> [String] {
@@ -197,12 +199,12 @@ struct ChatTimelineProjectionTests {
     func anOpenTurnDoesNotRunWithoutALiveHost(_ activity: ChatAgentActivity) {
         let rows = [Self.user("u1"), Self.tool("c1"), Self.text("a1")]
         let signals = ChatTurnSignals(activity: activity, isLive: false)
-        #expect(ChatTimelineProjection.newestPhase(Self.turn("u1", ended: false), signals: signals) == .settled)
+        #expect(ChatTimelineProjection.newestPhase(ending: nil, signals: signals) == .settled)
         let output = Self.project(rows, turns: [Self.turn("u1", ended: false)], signals: signals)
         #expect(Self.ids(output) == ["u1", "[turn a1]", "a1"])
         var held = signals
         held.isBackgroundWorkRunning = true
-        #expect(ChatTimelineProjection.newestPhase(Self.turn("u1", ended: false), signals: held) == .held)
+        #expect(ChatTimelineProjection.newestPhase(ending: nil, signals: held) == .held)
     }
 
     /// Rows are live only from a connected Host and a conversation read on
@@ -307,6 +309,64 @@ struct ChatTimelineProjectionTests {
             let partial = Self.project(rows(older), turns: [Self.turn("u1")])
             #expect(Self.ids(partial) == ["older", "[group c1]", "a0", "u1", "a1"])
         }
+    }
+
+    /// Once earlier messages wait for the user, the rows above the first
+    /// loaded turn read as a finished turn while the user's own requests
+    /// load or fail: folded behind a header with the time the record that
+    /// ends the turn gives, or Details without one. An interrupted one
+    /// stays open, as a loaded one does.
+    @Test func rowsAboveTheFirstLoadedTurnFoldOnceEarlierMessagesWaitForTheUser() {
+        func rows(_ older: ChatOlderHistory) -> [ChatRow] {
+            let row = ChatRow(id: .olderHistory, content: .olderHistory(older), revision: 1, topSpacing: 0)
+            return [row, Self.tool("c0"), Self.tool("c1"), Self.text("a0"), Self.user("u1"), Self.text("a1")]
+        }
+        let waiting = ChatTurnSignals(activity: .idle, olderAwaitsUser: true)
+        let end = ChatTurnEnd(ending: .completed, endedAt: Self.start, duration: 136.363)
+        let header = ChatRowID.turn(ChatEntryID("a0"))
+        for older in [ChatOlderHistory.available, .loading, .failed("x")] {
+            let timed = Self.project(rows(older), turns: [Self.turn("u1")], precedingTurnEnd: end, signals: waiting)
+            #expect(Self.ids(timed) == ["older", "[turn a0]", "a0", "u1", "a1"])
+            #expect(Self.turnHeader(timed, header)?.state == .worked(136.363))
+        }
+        let untimed = Self.project(rows(.available), turns: [Self.turn("u1")], signals: waiting)
+        #expect(Self.ids(untimed) == ["older", "[turn a0]", "a0", "u1", "a1"])
+        #expect(Self.turnHeader(untimed, header)?.state == .worked(nil))
+
+        let interrupted = ChatTurnEnd(ending: .interrupted, endedAt: Self.start)
+        let stopped = Self.project(
+            rows(.available), turns: [Self.turn("u1")], precedingTurnEnd: interrupted, signals: waiting)
+        #expect(Self.ids(stopped) == ["older", "[group c1]", "a0", "u1", "a1"])
+    }
+
+    /// The record that ends the turn above the loaded rows closes it as a
+    /// turn's own record does: while the Agent works on a turn the rows do
+    /// not show yet, it stays finished. Without one, it runs.
+    @Test func theRecordThatEndsTheTurnAboveTheLoadedRowsClosesIt() {
+        let older = ChatRow(id: .olderHistory, content: .olderHistory(.available), revision: 1, topSpacing: 0)
+        let rows = [older, Self.tool("c0"), Self.tool("c1"), Self.text("a0")]
+        let waiting = ChatTurnSignals(activity: .working, olderAwaitsUser: true)
+
+        let ended = Self.project(rows, turns: [], precedingTurnEnd: ChatTurnEnd(ending: .completed), signals: waiting)
+        #expect(Self.ids(ended) == ["older", "[turn a0]", "a0"])
+        let running = Self.project(rows, turns: [], signals: waiting)
+        #expect(Self.ids(running) == ["older", "[group c1]", "a0"])
+    }
+
+    /// Until earlier messages wait for the user, which only Grok Build's
+    /// can, the record that ends the turn above the loaded rows changes
+    /// nothing: they show as they load, and with the file's start loaded
+    /// they fold as before.
+    @Test func rowsAboveTheFirstLoadedTurnIgnoreTheirEndUntilEarlierMessagesWait() {
+        let older = ChatRow(id: .olderHistory, content: .olderHistory(.available), revision: 1, topSpacing: 0)
+        let loading = [older, Self.tool("c0"), Self.tool("c1")]
+        let ended = Self.project(
+            loading, turns: [], precedingTurnEnd: ChatTurnEnd(ending: .completed), signals: Self.working)
+        #expect(Self.ids(ended) == Self.ids(Self.project(loading, turns: [], signals: Self.working)))
+
+        let loaded = [Self.tool("c0"), Self.tool("c1"), Self.text("a0")]
+        let interrupted = Self.project(loaded, turns: [], precedingTurnEnd: ChatTurnEnd(ending: .interrupted))
+        #expect(Self.ids(interrupted) == Self.ids(Self.project(loaded, turns: [])))
     }
 
     @Test func aTurnOpenedByARowThatIsNotAPromptStillFolds() {

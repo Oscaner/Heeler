@@ -1,5 +1,7 @@
 import Foundation
+import SwiftUI
 import Testing
+import UIKit
 
 @testable import Heeler
 
@@ -337,6 +339,29 @@ struct BlockedCardStoreTests {
         #expect(store.content == .none)
     }
 
+    /// Blocked with no dialog on screen, these programs' cards keep their
+    /// sentence and key pad, even after a failed turn.
+    @Test(arguments: [ChatProgram.claude, .codex, .pi, .omp])
+    func otherProgramsKeepTheKeyPad(program: ChatProgram) async throws {
+        let idle: [ChatProgram: String] = [
+            .claude: "claude-01-ready", .codex: "codex-00-ready", .pi: "pi-06-empty-editor-119",
+            .omp: "omp-08-empty-120-after-first",
+        ]
+        let pane = FakePane(try ScreenFixture.screen(try #require(idle[program])))
+        let clock = ManualClock()
+        let store = Self.store(program, pane: pane, clock: clock)
+        store.update(transcript: Self.failedTurn("Provider error: connection refused"))
+        store.update(activity: .blocked)
+        clock.advance(.seconds(2))
+
+        await store.refresh()
+
+        #expect(program.offersKeysWhenBlockedWithoutDialog)
+        #expect(store.content == .unreadable)
+        #expect(store.unreadableNote == nil)
+        #expect(await pane.keys.isEmpty)
+    }
+
     @Test func anAnsweredDialogLeavesNothingBehindWhileBlockedLingers() async throws {
         let pane = FakePane(try ScreenFixture.screen("claude-02-c1-bash-blocked"))
         await pane.react(to: ["1"], with: try ScreenFixture.screen("claude-29-c3-after-immediate"))
@@ -666,7 +691,702 @@ struct BlockedCardStoreTests {
         #expect(await tui.queued.isEmpty)
     }
 
+    // MARK: Grok Build
+
+    /// A digit approves at once. Grok Build records no approval, so the
+    /// card keeps it, and the call's row reads Allowed.
+    @Test func aGrokApprovalRecordsAllowedOnTheCall() async throws {
+        let pane = FakePane(try ScreenFixture.screen("grok-12-permission-command"))
+        await pane.react(to: ["3"], with: try ScreenFixture.screen("grok-03-working"))
+        let store = Self.store(.grok, pane: pane)
+        store.update(transcript: Self.transcript(pending: [Self.grokCommand("call-1", "chmod 644 README.md")]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.kind == .grokPermission)
+        #expect(card.request?.callID == "call-1")
+
+        await store.perform(.choose(ordinal: 2))
+
+        #expect(await pane.keys == [["3"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        #expect(store.history.calls["call-1"] == .allowed)
+    }
+
+    /// The reject row's digit, from its button or from Stop. Grok Build's
+    /// transcript records the rejection, so the card keeps nothing.
+    @Test func aGrokDenyLeavesTheDeclineToTheTranscript() async throws {
+        let request = Self.grokCommand("call-1", "chmod 644 README.md")
+        for action in [DialogAction.dismiss, .choose(ordinal: 3)] {
+            let pane = FakePane(try ScreenFixture.screen("grok-12-permission-command"))
+            await pane.react(to: ["4"], with: try ScreenFixture.screen("grok-01-idle-empty"))
+            let store = Self.store(.grok, pane: pane)
+            store.update(transcript: Self.transcript(pending: [request]))
+            store.update(activity: .blocked)
+            await store.refresh()
+
+            await store.perform(action)
+
+            #expect(await pane.keys == [["4"]], "\(action)")
+            #expect(store.progress == .ready, "\(action)")
+            #expect(store.composerFocusRequest == 0, "\(action)")
+            #expect(store.history.isEmpty, "\(action)")
+        }
+    }
+
+    /// Parallel subagents with one description get identical cards, one
+    /// after the other, and herdr stays Blocked between them, so approving
+    /// the first shows no effect on screen. Grok Build writes
+    /// `subagent_spawned` as the approved subagent starts, which can come
+    /// in while the key's effect is checked: the second card's answers stay
+    /// on. grok-44 is the second card as Grok drew it after the first's
+    /// approval, its subagent running.
+    @Test(arguments: [
+        ("grok-35-permission-subagent-62", "Sleep 60 then reply done"),
+        ("grok-44-permission-second-subagent-120", "Sleep 90 then done"),
+    ])
+    func aGrokSubagentStartingKeepsTheNextIdenticalCardAnswerable(stem: String, description: String) async throws {
+        let first = Self.grokSpawn("call-1", description)
+        let second = Self.grokSpawn("call-2", description)
+        let pane = FakePane(try ScreenFixture.screen(stem))
+        let box = StoreBox()
+        let store = BlockedCardStore(
+            program: .grok,
+            io: BlockedScreenIO(
+                readScreen: { await pane.read() },
+                sendKeys: { keys in
+                    await pane.send(keys)
+                    await MainActor.run {
+                        box.store?.update(transcript: Self.transcript(pending: [second], running: [first]))
+                    }
+                },
+                paste: { await pane.paste($0) }),
+            clock: ManualClock().clock)
+        box.store = store
+        store.update(transcript: Self.transcript(pending: [first, second]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        let approve = try #require(card.dialog.options.first { $0.role == .approve }?.ordinal)
+        #expect(card.dialog.options.contains { $0.role == .decline })
+
+        await store.perform(.choose(ordinal: approve))
+
+        #expect(await pane.keys == [["2"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        // The second card's Approve goes, as its Deny would.
+        await store.perform(.choose(ordinal: approve))
+        #expect(await pane.keys == [["2"], ["2"]])
+    }
+
+    /// Without a start the same answer stays unconfirmed, and a call that
+    /// only starts waiting, as Grok writes the second spawn's call once the
+    /// first runs, proves nothing. The first call starting later brings the
+    /// answers back and drops the hint, also when the transcript shows it
+    /// already resolved, as a quick command's would be.
+    @Test(arguments: [false, true])
+    func aGrokAnswerStaysUnconfirmedUntilACallThatWaitedStarts(alreadyResolved: Bool) async throws {
+        let first = Self.grokSpawn("call-1", "Sleep 60 then reply done")
+        let second = Self.grokSpawn("call-2", "Sleep 60 then reply done")
+        let pane = FakePane(try ScreenFixture.screen("grok-35-permission-subagent-62"))
+        let store = Self.store(.grok, pane: pane)
+        store.update(transcript: Self.transcript(pending: [first]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        let approve = try #require(card.dialog.options.first { $0.role == .approve }?.ordinal)
+
+        await store.perform(.choose(ordinal: approve))
+
+        #expect(await pane.keys == [["2"]])
+        #expect(store.progress == .unconfirmed)
+        #expect(store.notice == "The Agent hasn't responded yet. Answer in the terminal if it stays.")
+        store.update(transcript: Self.transcript(pending: [first, second]))
+        await store.refresh()
+        #expect(store.progress == .unconfirmed)
+        await store.perform(.choose(ordinal: approve))
+        #expect(await pane.keys == [["2"]])
+
+        store.update(
+            transcript: alreadyResolved
+                ? Self.transcript(pending: [second], resolved: [first])
+                : Self.transcript(pending: [second], running: [first]))
+
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        await store.perform(.choose(ordinal: approve))
+        #expect(await pane.keys == [["2"], ["2"]])
+    }
+
+    /// Only a call the card could be answering shows its answer took. The
+    /// previous card's call can start late, or read as already done, after
+    /// the next card's keys went out, which shows nothing about them; the
+    /// next card's own call starting does. grok-44 follows grok-35 here as
+    /// the card for another subagent.
+    @Test(arguments: [false, true])
+    func aGrokAnswerIgnoresThePreviousCardsCallStartingLate(alreadyResolved: Bool) async throws {
+        let first = Self.grokSpawn("call-1", "Sleep 60 then reply done")
+        let second = Self.grokSpawn("call-2", "Sleep 90 then done")
+        let pane = FakePane(try ScreenFixture.screen("grok-35-permission-subagent-62"))
+        await pane.react(to: ["2"], with: try ScreenFixture.screen("grok-44-permission-second-subagent-120"))
+        let store = Self.store(.grok, pane: pane)
+        store.update(transcript: Self.transcript(pending: [first, second]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        let approve = try #require(card.dialog.options.first { $0.role == .approve }?.ordinal)
+        await store.perform(.choose(ordinal: approve))
+        #expect(store.progress == .ready)
+        guard case .card(let next) = store.content else {
+            Issue.record("Expected the next card, got \(store.content)")
+            return
+        }
+        #expect(next.dialog.title == "Allow Sleep 90 then done")
+
+        await store.perform(.choose(ordinal: approve))
+        #expect(await pane.keys == [["2"], ["2"]])
+        #expect(store.progress == .unconfirmed)
+        store.update(
+            transcript: alreadyResolved
+                ? Self.transcript(pending: [second], resolved: [first])
+                : Self.transcript(pending: [second], running: [first]))
+
+        #expect(store.progress == .unconfirmed)
+        #expect(store.notice == "The Agent hasn't responded yet. Answer in the terminal if it stays.")
+        await store.perform(.choose(ordinal: approve))
+        #expect(await pane.keys == [["2"], ["2"]])
+        store.update(transcript: Self.transcript(running: [first, second]))
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+    }
+
+    /// A card that matches no waiting call, as when the transcript records
+    /// its command otherwise, still has its answer brought back by any
+    /// call that waited starting, as before calls were matched to cards.
+    @Test func aGrokCardMatchingNoCallWaitsOnAnyCallThatWaited() async throws {
+        let other = Self.grokCommand("call-1", "ls -la")
+        let pane = FakePane(try ScreenFixture.screen("grok-12-permission-command"))
+        let store = Self.store(.grok, pane: pane)
+        store.update(transcript: Self.transcript(pending: [other]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.subject.command == "chmod 644 README.md")
+        let approve = try #require(card.dialog.options.first { $0.role == .approve }?.ordinal)
+        await store.perform(.choose(ordinal: approve))
+        #expect(store.progress == .unconfirmed)
+
+        store.update(transcript: Self.transcript(running: [other]))
+
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+    }
+
+    /// While herdr reports Blocked, a call Grok Build hasn't started reads
+    /// as waiting, also one that needs no approval, so a command starting
+    /// beside a subagent's card shows nothing about its answer. The spawn
+    /// starting does.
+    @Test func aGrokCommandStartingLeavesASubagentAnswerUnconfirmed() async throws {
+        let spawn = Self.grokSpawn("call-1", "Sleep 60 then reply done")
+        let command = Self.grokCommand("call-2", "git status")
+        let pane = FakePane(try ScreenFixture.screen("grok-35-permission-subagent-62"))
+        let store = Self.store(.grok, pane: pane)
+        store.update(transcript: Self.transcript(pending: [spawn, command]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        let approve = try #require(card.dialog.options.first { $0.role == .approve }?.ordinal)
+        await store.perform(.choose(ordinal: approve))
+        #expect(store.progress == .unconfirmed)
+
+        store.update(transcript: Self.transcript(pending: [spawn], running: [command]))
+
+        #expect(store.progress == .unconfirmed)
+        store.update(transcript: Self.transcript(running: [command, spawn]))
+        #expect(store.progress == .ready)
+    }
+
+    /// Where Grok Build cut the card's question at its edge with `…`, the
+    /// title still names its subagent by the description's start, with
+    /// each run of whitespace read as one space, so another subagent's
+    /// call starting leaves the answer unconfirmed.
+    @Test(arguments: ["Sleep 60 then reply done", "Sleep 60  then\nreply done"])
+    func aCutGrokSubagentCardWaitsOnItsOwnCall(description: String) async throws {
+        let spawn = Self.grokSpawn("call-1", description)
+        let other = Self.grokSpawn("call-2", "Sleep 90 then done")
+        let pane = FakePane(try GrokCards.screen("synthetic-subagent-permission-40"))
+        let store = Self.store(.grok, pane: pane)
+        store.update(transcript: Self.transcript(pending: [other, spawn]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.title == "Allow Sleep 60 then reply d…")
+        let approve = try #require(card.dialog.options.first { $0.role == .approve }?.ordinal)
+        await store.perform(.choose(ordinal: approve))
+        #expect(store.progress == .unconfirmed)
+
+        store.update(transcript: Self.transcript(pending: [spawn], running: [other]))
+
+        #expect(store.progress == .unconfirmed)
+        store.update(transcript: Self.transcript(running: [other, spawn]))
+        #expect(store.progress == .ready)
+    }
+
+    /// Only Grok Build writes a call's start once its card is answered.
+    /// Claude Code's open calls read waiting or running from herdr's status
+    /// alone, so one that reads running brings nothing back.
+    @Test func outsideGrokBuildACallThatReadsRunningLeavesTheAnswerUnconfirmed() async throws {
+        let pane = FakePane(try ScreenFixture.screen("claude-02-c1-bash-blocked"))
+        let store = Self.store(.claude, pane: pane)
+        let waiting = Self.bash("toolu_x", "echo other")
+        store.update(transcript: Self.transcript(pending: [waiting]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        await store.perform(.choose(ordinal: 1))
+        #expect(store.progress == .unconfirmed)
+
+        store.update(transcript: Self.transcript(running: [waiting]))
+
+        #expect(store.progress == .unconfirmed)
+    }
+
+    // MARK: OpenCode
+
+    /// The permission to read `.env` matches the session's read of it, not
+    /// the command before it, so Reject goes as Esc. OpenCode records the
+    /// rejection, so the card keeps nothing.
+    @Test func anOpenCodePermissionMatchesItsPendingCall() async throws {
+        let read = Self.openCodeRead("call_r", "/Users/developer/work/heeler-tmp-chat/opencode-a/project/.env")
+        for action in [DialogAction.choose(ordinal: 3), .dismiss] {
+            let pane = FakePane(try ScreenFixture.screen("opencode-10-permission-180"))
+            await pane.react(to: ["esc"], with: try ScreenFixture.screen("opencode-08-working-180"))
+            let store = Self.store(.opencode, pane: pane)
+            store.update(transcript: Self.transcript(pending: [Self.bash("call_s", "ls -la"), read]))
+            store.update(activity: .blocked)
+            await store.refresh()
+            guard case .card(let card) = store.content else {
+                Issue.record("Expected a card, got \(store.content)")
+                return
+            }
+            #expect(card.dialog.kind == .openCodePermission)
+            #expect(card.request?.callID == "call_r")
+
+            await store.perform(action)
+
+            #expect(await pane.keys == [["esc"]], "\(action)")
+            #expect(store.progress == .ready, "\(action)")
+            #expect(store.notice == nil, "\(action)")
+            #expect(store.composerFocusRequest == 0, "\(action)")
+            #expect(store.history.isEmpty, "\(action)")
+        }
+    }
+
+    /// Esc dismisses a matched question, and OpenCode records the dismissal
+    /// ("The user dismissed this question"), so the card keeps nothing and
+    /// the row shows the transcript's Declined.
+    @Test func anOpenCodeQuestionDismissKeepsNoCardAnswer() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-13-question-180"))
+        await pane.react(to: ["esc"], with: try ScreenFixture.screen("opencode-21-done-interrupted-180"))
+        let store = Self.store(.opencode, pane: pane)
+        let asked = ChatPendingRequest(
+            entryID: ChatEntryID("call_q"), callID: "call_q", kind: .question, toolName: "question",
+            summary: "Do you prefer red or blue?")
+        store.update(transcript: Self.transcript(pending: [asked]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected a card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.kind == .openCodeQuestion)
+        #expect(card.request?.callID == "call_q")
+
+        await store.perform(.dismiss)
+
+        #expect(await pane.keys == [["esc"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        #expect(store.history.isEmpty)
+    }
+
+    /// Right moves the fill to Always allow, checked there before Enter. A
+    /// Right that leaves the fill where it was stops before Enter.
+    @Test func alwaysAllowPassesItsFocusCheck() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-10-permission-180"))
+        await pane.react(to: ["right"], with: try ScreenFixture.screen("opencode-11-permission-right1-180"))
+        await pane.react(to: ["enter"], with: try ScreenFixture.screen("opencode-08-working-180"))
+        let store = Self.store(.opencode, pane: pane)
+        let read = Self.openCodeRead("call_r", "/Users/developer/work/heeler-tmp-chat/opencode-a/project/.env")
+        store.update(transcript: Self.transcript(pending: [read]))
+        store.update(activity: .blocked)
+        await store.refresh()
+
+        await store.perform(.choose(ordinal: 2))
+
+        #expect(await pane.keys == [["right"], ["enter"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        #expect(store.history.calls["call_r"] == .allowed)
+
+        let stuck = FakePane(try ScreenFixture.screen("opencode-10-permission-180"))
+        let stuckStore = Self.store(.opencode, pane: stuck)
+        stuckStore.update(activity: .blocked)
+        await stuckStore.refresh()
+
+        await stuckStore.perform(.choose(ordinal: 2))
+
+        #expect(await stuck.keys == [["right"]])
+        #expect(
+            stuckStore.notice
+                == "The dialog didn't respond the way Heeler expected, so it stopped. Finish here or in the terminal.")
+    }
+
+    /// From Reject, Allow once is two Lefts away, each checked, then Enter.
+    @Test func allowOnceFromRejectMovesTwiceAndConfirms() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-12-permission-right2-180"))
+        await pane.react(
+            to: ["left"],
+            withEach: [
+                try ScreenFixture.screen("opencode-11-permission-right1-180"),
+                try ScreenFixture.screen("opencode-10-permission-180"),
+            ])
+        await pane.react(to: ["enter"], with: try ScreenFixture.screen("opencode-08-working-180"))
+        let store = Self.store(.opencode, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+
+        await store.perform(.choose(ordinal: 1))
+
+        #expect(await pane.keys == [["left"], ["left"], ["enter"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+    }
+
+    /// OpenCode draws every shell command's permission alike but for its
+    /// `$` line, so a tap on the card for `git status` sends nothing once
+    /// the screen asks about `rm -rf build`.
+    @Test func aShellCommandThatChangedBeforeTheTapGetsNoKeys() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        let store = Self.store(.opencode, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+        await pane.show(try ScreenFixture.screen("opencode-29-permission-shell-next-180"))
+
+        await store.perform(.choose(ordinal: 1))
+
+        #expect(await pane.keys.isEmpty)
+        #expect(store.notice == "This prompt changed. Check it before answering.")
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected the next command's card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.subject.command == "rm -rf build")
+    }
+
+    /// With Always allow focused in the terminal, OpenCode shows the rule
+    /// in place of the command. A card that showed the command answers
+    /// only once it shows the rule too.
+    @Test func aCardAnswersOnlyTheLinesItShows() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        await pane.react(to: ["enter"], with: try ScreenFixture.screen("opencode-08-working-180"))
+        let store = Self.store(.opencode, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+        await pane.show(try ScreenFixture.screen("opencode-28-permission-shell-right1-180"))
+
+        await store.perform(.choose(ordinal: 2))
+
+        #expect(await pane.keys.isEmpty)
+        #expect(store.notice == "This prompt changed. Check it before answering.")
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected the rule's card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.subject.notes.last == "- git status *")
+
+        await store.perform(.choose(ordinal: 2))
+        #expect(await pane.keys == [["enter"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+    }
+
+    /// After an answer OpenCode can show the next command's permission
+    /// while herdr stays Blocked. Its `$` line confirms the answer, and a
+    /// tap on it waits out the grace from when it showed.
+    @Test func theNextShellCommandConfirmsTheAnswer() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        await pane.react(to: ["enter"], with: try ScreenFixture.screen("opencode-29-permission-shell-next-180"))
+        let clock = ManualClock()
+        let store = Self.store(.opencode, pane: pane, clock: clock)
+        store.update(activity: .blocked)
+        await store.refresh()
+
+        await store.perform(.choose(ordinal: 1))
+
+        #expect(await pane.keys == [["enter"]])
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+        guard case .card(let card) = store.content else {
+            Issue.record("Expected the next command's card, got \(store.content)")
+            return
+        }
+        #expect(card.dialog.subject.command == "rm -rf build")
+
+        let sleeps = clock.sleeps.count
+        await pane.react(to: ["enter"], with: try ScreenFixture.screen("opencode-08-working-180"))
+        await store.perform(.choose(ordinal: 1))
+        #expect(await pane.keys == [["enter"], ["enter"]])
+        #expect(clock.sleeps.dropFirst(sleeps).first == .milliseconds(150))
+    }
+
+    /// An answer that showed no effect keeps the answers off while its
+    /// permission stays, and the next command's brings them back. After
+    /// Always allow the answer's last read showed the rule, so the next
+    /// command's rule tells it apart as well.
+    @Test func theNextShellCommandReleasesAnUnconfirmedAnswer() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        let store = Self.store(.opencode, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+        await store.perform(.choose(ordinal: 1))
+        #expect(await pane.keys == [["enter"]])
+        #expect(store.progress == .unconfirmed)
+        await store.refresh()
+        #expect(store.progress == .unconfirmed)
+
+        await pane.show(try ScreenFixture.screen("opencode-29-permission-shell-next-180"))
+        await store.refresh()
+        #expect(store.progress == .ready)
+        #expect(store.notice == nil)
+
+        let always = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        await always.react(to: ["right"], with: try ScreenFixture.screen("opencode-28-permission-shell-right1-180"))
+        let alwaysStore = Self.store(.opencode, pane: always)
+        alwaysStore.update(activity: .blocked)
+        await alwaysStore.refresh()
+        await alwaysStore.perform(.choose(ordinal: 2))
+        #expect(await always.keys == [["right"], ["enter"]])
+        #expect(alwaysStore.progress == .unconfirmed)
+        await alwaysStore.refresh()
+        #expect(alwaysStore.progress == .unconfirmed)
+
+        // `rm -rf build`'s permission with Always allow focused.
+        let rule = try ScreenFixture.text("opencode-28-permission-shell-right1-180")
+        try #require(rule.components(separatedBy: "- git status *").count == 2)
+        await always.show(ANSIScreenDecoder.decode(rule.replacingOccurrences(of: "- git status *", with: "- rm *        ")))
+        await alwaysStore.refresh()
+        #expect(alwaysStore.progress == .ready)
+    }
+
+    /// The next command's permission is a new dialog: the card unfolds,
+    /// and a tap waits out the grace from when it showed.
+    @Test func theNextShellCommandUnfoldsTheCardAndRestartsTheGrace() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        await pane.react(to: ["enter"], with: try ScreenFixture.screen("opencode-08-working-180"))
+        let clock = ManualClock()
+        let store = Self.store(.opencode, pane: pane, clock: clock)
+        store.update(activity: .blocked)
+        await store.refresh()
+        store.isCollapsed = true
+        clock.advance(.seconds(5))
+
+        await pane.show(try ScreenFixture.screen("opencode-29-permission-shell-next-180"))
+        await store.refresh()
+        #expect(!store.isCollapsed)
+
+        await store.perform(.choose(ordinal: 1))
+        #expect(await pane.keys == [["enter"]])
+        #expect(clock.sleeps == [.milliseconds(150)])
+        #expect(store.progress == .ready)
+    }
+
+    /// Always allow's focus swaps the command's line for the rule's on the
+    /// same card; the next command's permission makes a new one.
+    @Test func onlyTheNextShellCommandMakesANewCard() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        let store = Self.store(.opencode, pane: pane)
+        store.update(activity: .blocked)
+        await store.refresh()
+        let card = store.dialogGeneration
+
+        await pane.show(try ScreenFixture.screen("opencode-28-permission-shell-right1-180"))
+        await store.refresh()
+        #expect(store.dialogGeneration == card)
+        await pane.show(try ScreenFixture.screen("opencode-27-permission-shell-180"))
+        await store.refresh()
+        #expect(store.dialogGeneration == card)
+
+        await pane.show(try ScreenFixture.screen("opencode-29-permission-shell-next-180"))
+        await store.refresh()
+        #expect(store.dialogGeneration != card)
+    }
+
+    /// OpenCode's prompt would act on the key pad's keys, so a block with
+    /// no dialog on screen gets a note in their place, once the quiet time
+    /// has passed.
+    @Test func anOpenCodeBlockWithoutADialogOffersNoKeys() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-02-session-empty-180"))
+        let clock = ManualClock()
+        let store = Self.store(.opencode, pane: pane, clock: clock)
+        store.update(activity: .blocked)
+
+        await store.refresh()
+        #expect(store.content == .none)
+        #expect(store.unreadableNote == nil)
+        clock.advance(.seconds(2))
+        await store.refresh()
+
+        #expect(!ChatProgram.opencode.offersKeysWhenBlockedWithoutDialog)
+        #expect(store.content == .unreadable)
+        #expect(store.unreadableNote == Self.openCodeBlockedNote)
+        #expect(await pane.keys.isEmpty)
+
+        // A screen read that fails says the same.
+        let unread = BlockedCardStore(program: .opencode, io: .unavailable, clock: clock.clock)
+        unread.update(activity: .blocked)
+        clock.advance(.seconds(2))
+        await unread.refresh()
+        #expect(unread.content == .unreadable)
+        #expect(unread.unreadableNote == Self.openCodeBlockedNote)
+
+        store.update(activity: .working)
+        #expect(store.content == .none)
+        #expect(store.unreadableNote == nil)
+    }
+
+    /// The panel draws in place of the prompt, and of a request waiting
+    /// there, at any width. It comes first, even after a failed turn.
+    @Test func aPanelOverTheRequestSaysToCloseIt() async throws {
+        for stem in ["opencode-15-subagent-panel-180", "opencode-41-subagent-panel-62"] {
+            let pane = FakePane(try ScreenFixture.screen(stem))
+            let clock = ManualClock()
+            let store = Self.store(.opencode, pane: pane, clock: clock)
+            store.update(transcript: Self.failedTurn("Provider error: connection refused"))
+            store.update(activity: .blocked)
+            clock.advance(.seconds(2))
+
+            await store.refresh()
+
+            #expect(store.content == .unreadable, "\(stem)")
+            #expect(
+                store.unreadableNote
+                    == "OpenCode's subagent panel covers its request. Close the panel in the terminal to answer it.",
+                "\(stem)")
+            #expect(await pane.keys.isEmpty, "\(stem)")
+        }
+    }
+
+    /// herdr reports OpenCode Blocked when a model request fails. The note
+    /// quotes the failure: the newest turn's ending, or an error it shows
+    /// before the turn ends. A failure in an earlier turn says nothing.
+    @Test func aFailedTurnExplainsTheBlock() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-02-session-empty-180"))
+        let clock = ManualClock()
+        let store = Self.store(.opencode, pane: pane, clock: clock)
+        store.update(transcript: Self.failedTurn("Provider error: connection refused"))
+        store.update(activity: .blocked)
+        clock.advance(.seconds(2))
+
+        await store.refresh()
+
+        #expect(store.content == .unreadable)
+        #expect(
+            store.unreadableNote
+                == "OpenCode stopped with an error: Provider error: connection refused. herdr holds Chat's messages "
+                + "while it reports Blocked, so continue in the terminal.")
+
+        // A step's error, before the row that ends the turn.
+        var open = Self.failedTurn("Rate limit reached.\n  Retry later.")
+        open.turns[0].ending = nil
+        store.update(transcript: open)
+        await store.refresh()
+        #expect(
+            store.unreadableNote
+                == "OpenCode stopped with an error: Rate limit reached. Retry later. herdr holds Chat's messages "
+                + "while it reports Blocked, so continue in the terminal.")
+
+        // A question or an exclamation ends the sentence by itself, as
+        // OpenCode 2.0.32 words a refused connection.
+        for failure in [
+            "ConnectionRefused: Unable to connect. Is the computer able to access the url?",
+            "Quota exhausted!",
+        ] {
+            store.update(transcript: Self.failedTurn(failure))
+            await store.refresh()
+            #expect(
+                store.unreadableNote
+                    == "OpenCode stopped with an error: \(failure) herdr holds Chat's messages while it reports "
+                    + "Blocked, so continue in the terminal.")
+        }
+
+        // A long error is cut, and its ellipsis ends the sentence.
+        store.update(transcript: Self.failedTurn(String(repeating: "x", count: 300)))
+        await store.refresh()
+        #expect(
+            store.unreadableNote
+                == "OpenCode stopped with an error: \(String(repeating: "x", count: 200))… herdr holds Chat's "
+                + "messages while it reports Blocked, so continue in the terminal.")
+
+        // The next turn opened, and has shown no error.
+        var next = Self.failedTurn("Provider error: connection refused")
+        let prompt = ChatEntryID("oc:msg_next")
+        next.entries.append(
+            ChatEntry(id: prompt, sourceOffset: 3, content: .user(ChatUserMessage(text: "Reply with the word kiwi"))))
+        next.turns.append(ChatTurn(firstEntryID: prompt))
+        store.update(transcript: next)
+        await store.refresh()
+        #expect(store.unreadableNote == Self.openCodeBlockedNote)
+    }
+
+    /// The reject-feedback stage is a dialog Heeler doesn't answer: its
+    /// excerpt shows what the keys would answer, so the pad stays.
+    @Test func anUnrecognizedOpenCodeDialogKeepsTheKeyPad() async throws {
+        let pane = FakePane(try ScreenFixture.screen("opencode-25-reject-feedback-180"))
+        let clock = ManualClock()
+        let store = Self.store(.opencode, pane: pane, clock: clock)
+        store.update(transcript: Self.failedTurn("Provider error: connection refused"))
+        store.update(activity: .blocked)
+        clock.advance(.seconds(2))
+
+        await store.refresh()
+
+        guard case .generic = store.content else {
+            Issue.record("Expected the generic card, got \(store.content)")
+            return
+        }
+        #expect(store.unreadableNote == nil)
+        await store.sendKeys(["esc"])
+        #expect(await pane.keys == [["esc"]])
+    }
+
     // MARK: Helpers
+
+    private static let openCodeBlockedNote =
+        "OpenCode reports Blocked, but its screen shows no question. This usually means the model request failed. "
+        + "Check the terminal."
 
     private static let fruit = FakeQuestionTUI.Question(
         header: "fruit", text: "Pick a fruit", options: ["apple", "pear", "plum"])
@@ -690,8 +1410,24 @@ struct BlockedCardStoreTests {
             clock: ManualClock().clock)
     }
 
+    private static func grokCommand(_ id: String, _ command: String) -> ChatPendingRequest {
+        ChatPendingRequest(
+            entryID: ChatEntryID(id), callID: id, kind: .command, toolName: "run_terminal_command", summary: command)
+    }
+
+    /// A subagent's spawn while its card waits: its title is the
+    /// description the card asks about.
+    private static func grokSpawn(_ id: String, _ description: String) -> ChatPendingRequest {
+        ChatPendingRequest(
+            entryID: ChatEntryID(id), callID: id, kind: .agent, toolName: "spawn_subagent", summary: description)
+    }
+
     private static func ompBash(_ id: String, _ command: String) -> ChatPendingRequest {
         ChatPendingRequest(entryID: ChatEntryID(id), callID: id, kind: .command, toolName: "bash", summary: command)
+    }
+
+    private static func openCodeRead(_ id: String, _ path: String) -> ChatPendingRequest {
+        ChatPendingRequest(entryID: ChatEntryID(id), callID: id, kind: .fileRead, toolName: "read", summary: path)
     }
 
     private static func store(_ program: ChatProgram, pane: FakePane, clock: ManualClock = ManualClock()) -> BlockedCardStore {
@@ -714,10 +1450,28 @@ struct BlockedCardStoreTests {
             entryID: ChatEntryID(id), callID: id, kind: .command, toolName: "Bash", summary: command)
     }
 
+    /// A conversation whose newest turn failed, as OpenCode's `idle` row
+    /// records a provider error.
+    private static func failedTurn(_ message: String) -> ChatTranscript {
+        let prompt = ChatEntryID("oc:msg_prompt")
+        return ChatTranscript(
+            entries: [
+                ChatEntry(
+                    id: prompt, sourceOffset: 1,
+                    content: .user(ChatUserMessage(text: "Reply with exactly the word pong."))),
+                ChatEntry(
+                    id: ChatEntryID("oc:msg_idle"), sourceOffset: 2,
+                    content: .notice(ChatNotice(kind: .error, title: message))),
+            ],
+            turns: [ChatTurn(firstEntryID: prompt, ending: .failed)])
+    }
+
+    /// Calls waiting for approval, running past it, and resolved.
     private static func transcript(
-        pending: [ChatPendingRequest] = [], resolved: [ChatPendingRequest] = []
+        pending: [ChatPendingRequest] = [], running: [ChatPendingRequest] = [], resolved: [ChatPendingRequest] = []
     ) -> ChatTranscript {
         let entries = (pending.map { ($0, ChatToolActivity.Status.awaitingApproval) }
+            + running.map { ($0, ChatToolActivity.Status.running) }
             + resolved.map { ($0, ChatToolActivity.Status.succeeded) }).enumerated().map { index, item in
                 ChatEntry(
                     id: item.0.entryID, sourceOffset: UInt64(index),
@@ -739,6 +1493,7 @@ private final class StoreBox {
 private actor FakePane {
     private var screen: ANSIScreen
     private var reactions: [[String]: ANSIScreen] = [:]
+    private var queuedReactions: [[String]: [ANSIScreen]] = [:]
     private(set) var keys: [[String]] = []
     private(set) var pastes: [String] = []
     private(set) var reads = 0
@@ -760,13 +1515,103 @@ private actor FakePane {
         reactions[keys] = screen
     }
 
+    /// One screen per press of `keys`, in turn, before any fixed reaction.
+    func react(to keys: [String], withEach screens: [ANSIScreen]) {
+        queuedReactions[keys] = screens
+    }
+
     func send(_ keys: [String]) {
         self.keys.append(keys)
-        if let next = reactions[keys] { screen = next }
+        if var queue = queuedReactions[keys], !queue.isEmpty {
+            screen = queue.removeFirst()
+            queuedReactions[keys] = queue
+        } else if let next = reactions[keys] {
+            screen = next
+        }
     }
 
     func paste(_ text: String) {
         pastes.append(text)
+    }
+}
+
+/// The card hosted in a window, read as VoiceOver reads it: what its Esc
+/// button says.
+@MainActor
+@Suite("Blocked card, hosted", .serialized, .timeLimit(.minutes(1)))
+struct BlockedCardHostedTests {
+    /// OpenCode's question footer says `esc dismiss`, and so does the
+    /// card's Esc, open or folded.
+    @Test func anOpenCodeQuestionsEscSaysDismiss() async throws {
+        let store = try await Self.store(
+            "opencode-13-question-180",
+            pending: ChatPendingRequest(
+                entryID: ChatEntryID("call_q"), callID: "call_q", kind: .question, toolName: "question",
+                summary: "Do you prefer red or blue?"))
+        try await Self.host(store) { controller in
+            #expect(await Self.eventually { Self.labels(in: controller).contains("Dismiss") })
+            #expect(!Self.labels(in: controller).contains("Stop"))
+            store.isCollapsed = true
+            #expect(await Self.eventually { Self.labels(in: controller).isSuperset(of: ["Dismiss", "Show"]) })
+        }
+    }
+
+    /// An answer that showed no effect leaves the options waiting, Reject
+    /// too, and Esc as the way out. It says Stop, so the open card shows no
+    /// second Reject.
+    @Test func anUnconfirmedOpenCodePermissionOffersStopBesideItsReject() async throws {
+        let store = try await Self.store(
+            "opencode-10-permission-180",
+            pending: ChatPendingRequest(
+                entryID: ChatEntryID("call_r"), callID: "call_r", kind: .fileRead, toolName: "read",
+                summary: "/Users/developer/work/heeler-tmp-chat/opencode-a/project/.env"))
+        await store.perform(.choose(ordinal: 1))
+        try #require(store.progress == .unconfirmed)
+        try await Self.host(store) { controller in
+            #expect(await Self.eventually { Self.labels(in: controller).isSuperset(of: ["Reject", "Stop"]) })
+        }
+    }
+
+    /// An OpenCode card for the dialog on `stem`, matched to `pending`.
+    private static func store(_ stem: String, pending: ChatPendingRequest) async throws -> BlockedCardStore {
+        let pane = FakePane(try ScreenFixture.screen(stem))
+        let store = BlockedCardStore(
+            program: .opencode,
+            io: BlockedScreenIO(
+                readScreen: { await pane.read() },
+                sendKeys: { await pane.send($0) },
+                paste: { await pane.paste($0) }),
+            clock: ManualClock().clock)
+        store.update(transcript: ChatTranscript(entries: [], pendingRequests: [pending]))
+        store.update(activity: .blocked)
+        await store.refresh()
+        return store
+    }
+
+    private static func host(
+        _ store: BlockedCardStore, _ body: @MainActor (UIViewController) async throws -> Void
+    ) async throws {
+        let controller = UIHostingController(rootView: BlockedCardView(store: store, maxHeight: 600, openTerminal: {}))
+        try await withTestWindow(
+            frame: CGRect(x: 0, y: 0, width: 402, height: 874), rootViewController: controller
+        ) { _ in
+            try await body(controller)
+        }
+    }
+
+    private static func labels(in controller: UIViewController) -> Set<String> {
+        controller.view.layoutIfNeeded()
+        return AgentSurfaceReplacementTests.accessibilityLabels(in: controller.view)
+    }
+
+    private static func eventually(_ condition: () -> Bool) async -> Bool {
+        var budget = PollBudget(.seconds(5))
+        while budget.hasTimeLeft {
+            if condition() { return true }
+            try? await Task.sleep(for: .milliseconds(10))
+            budget.charge()
+        }
+        return condition()
     }
 }
 
@@ -913,6 +1758,60 @@ struct BlockedRequestMatchTests {
         ]
         #expect(BlockedRequestMatch.request(for: approval, in: requests)?.callID == "c|fc")
         #expect(BlockedRequestMatch.request(for: approval, in: [request("d", "Bash", "echo approved-2")]) == nil)
+    }
+
+    /// A command by its start, a file by its name, a question by its text.
+    /// The subagent panel and the fork question have no call, and a
+    /// subagent's approval names neither a command nor a file, so they
+    /// match none of these.
+    @Test(arguments: [
+        "grok-12-permission-command", "grok-13-permission-compound", "grok-14-permission-edit", "grok-15-question",
+        "grok-16-subagent-panel", "grok-35-permission-subagent-62", "grok-36-permission-command-40",
+        "grok-37-permission-command-62", "grok-38-fork-question-62",
+    ])
+    func grokCardsMatchTheirCall(stem: String) throws {
+        let question = "How should we handle the README rename plan?"
+        let requests = [
+            request("compound", "run_terminal_command", #"chmod 600 README.md; echo "EXIT_CODE:$?"; ls -l README.md"#),
+            request("command", "run_terminal_command", "chmod 644 README.md"),
+            request("write", "write", "/Users/developer/scratch/cap-grok-a/proj/notes.txt", kind: .fileWrite),
+            request(
+                "ask", "ask_user_question", question, kind: .question, questions: [ChatQuestion(text: question)]),
+            // The same command under another tool's name never matches.
+            request("read", "read_file", "chmod 644 README.md", kind: .fileRead),
+        ]
+        let expected = [
+            "grok-12-permission-command": "command", "grok-13-permission-compound": "compound",
+            "grok-14-permission-edit": "write", "grok-15-question": "ask", "grok-36-permission-command-40": "command",
+            "grok-37-permission-command-62": "command",
+        ]
+
+        #expect(BlockedRequestMatch.request(for: try dialog(stem), in: requests)?.callID == expected[stem])
+        #expect(BlockedRequestMatch.request(for: try dialog(stem), in: [requests[4]]) == nil)
+    }
+
+    /// OpenCode's action names the call's kind, and its target is the
+    /// call's file; a question matches the call asking it.
+    @Test func openCodeDialogsMatchTheirCallsByKindAndTarget() throws {
+        let permission = try dialog("opencode-10-permission-180")
+        let requests = [
+            request("a", "bash", "cat .env"), request("b", "read", "/w/project/.env.example", kind: .fileRead),
+            request("c", "read", "/w/project/.env", kind: .fileRead),
+        ]
+        #expect(BlockedRequestMatch.request(for: permission, in: requests)?.callID == "c")
+        let write = request("d", "write", "/w/project/.env", kind: .fileWrite)
+        #expect(BlockedRequestMatch.request(for: permission, in: [write]) == nil)
+
+        let wrapped = try dialog("opencode-37-permission-long-62")
+        let path = "config/scratch-environments/placeholder-staging-environment/phone-width-capture/dummy-settings.env"
+        let read = request("e", "read", "/w/project/" + path, kind: .fileRead)
+        #expect(BlockedRequestMatch.request(for: wrapped, in: [read])?.callID == "e")
+
+        let question = try dialog("opencode-13-question-180")
+        let asked = request("q", "question", "Do you prefer red or blue?", kind: .question)
+        #expect(BlockedRequestMatch.request(for: question, in: [request("x", "bash", "ls"), asked])?.callID == "q")
+        let other = request("y", "question", "Which size?", kind: .question)
+        #expect(BlockedRequestMatch.request(for: question, in: [other]) == nil)
     }
 
     @Test func aCodexCommandMatchesInsideItsScript() throws {
