@@ -42,6 +42,11 @@ Entries reference the pull request that made the change.
   Collapse, so the header covers less output. (#480)
 - Chat's Collapse Steps and Jump to Latest buttons are glass icons like the
   detail header's, and Collapse Steps uses a clearer collapse glyph. (#480)
+- Saved Chats from a Host that is not connected read as saved in the
+  Agents list: a Saved badge instead of a status, a quieter title, and the
+  Host's name marked with its connection state, and they open on Chat. By
+  Host headers say when their Host is connecting, reconnecting or
+  unavailable. (#486)
 
 ### Fixed
 

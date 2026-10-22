@@ -57,6 +57,28 @@ struct ConsoleChatCacheTests {
         #expect(sections.flatMap(\.agents).map(\.id) == [agent.id])
     }
 
+    @Test func coldOfflineSavedChatReadsAsItsHostsHeader() async throws {
+        let host = Host(address: "offline.invalid", username: "reader")
+        let cache = VolatileChatTranscriptCache()
+        let agent = Self.agent(host: host, session: Self.sessionA)
+        await cache.saveAgentDirectory([ChatCachedAgent(agent)], for: host)
+        let console = ConsoleStore(chatCache: cache)
+        defer { console.setHosts([]) }
+        console.setHosts([host])
+        await console.cachedChats.settled()
+        let suiteName = "hm-console-chat-cache-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let presentation = ConsoleListPresentationStore(defaults: defaults)
+
+        let section = try #require(presentation.sections(hosts: [host], console: console).first)
+        let readiness = try #require(console.savedChatEntries[agent.id])
+
+        #expect(console.savedChatEntries.count == 1)
+        #expect(readiness == ConsoleHostSectionHeaderPresentation(section: section).readiness)
+        #expect(readiness.tone != .connected)
+    }
+
     @Test func liveAgentWithoutSessionOpensItsExactSavedConversation() async throws {
         let host = Host(address: "offline.invalid", username: "reader")
         let cache = VolatileChatTranscriptCache()
