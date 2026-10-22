@@ -2,13 +2,15 @@ import Foundation
 
 /// The program that writes the transcript a Chat reads. Each one gets its own
 /// adapter: the files share nothing beyond being JSON Lines, and herdr, not
-/// the file, says which program an Agent runs.
+/// the file, says which program an Agent runs. OpenCode keeps its
+/// conversations in a store Chat reads by query instead (ADR 0025).
 enum ChatProgram: String, Codable, Sendable, CaseIterable {
     case claude
     case codex
     case pi
     case omp
     case grok
+    case opencode
 }
 
 /// What herdr last reported the Agent doing. Adapters need it only to tell a

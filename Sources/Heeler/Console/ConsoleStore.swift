@@ -643,8 +643,8 @@ final class ConsoleStore {
         return store
     }
 
-    /// Chat's transcript reads on the Host's live connection, resolved on
-    /// every call like `sessionFileReader(for:)`.
+    /// Chat's transcript reads and store queries on the Host's live
+    /// connection, resolved on every call like `sessionFileReader(for:)`.
     func chatHostFiles(for hostID: Host.ID) -> ChatHostFiles {
         ChatHostFiles(
             status: { [weak self] path in
@@ -662,6 +662,13 @@ final class ConsoleStore {
             home: { [weak self] in
                 guard let self else { throw TransportError.cancelled }
                 return try await liveChatHostFiles(for: hostID).home()
+            },
+            queryOpenCode: { [weak self] query in
+                guard let self else { throw TransportError.cancelled }
+                guard let queryOpenCode = try await liveChatHostFiles(for: hostID).queryOpenCode else {
+                    throw TransportError.hostFeatureUnavailable(feature: "Chat")
+                }
+                return try await queryOpenCode(query)
             })
     }
 
@@ -1205,6 +1212,11 @@ final class ConsoleStore {
             let generation = projection.transportGeneration
             let candidates = projection.agentsByPane.values.filter { agent in
                 guard AgentChatAvailability.mayOfferChat(for: agent.agent, hasAdapter: { chatAdapter($0) != nil })
+                else { return false }
+                // A conversation read by query costs an exec on the Host,
+                // and the key changes with every status (ADR 0025): only an
+                // open Chat reads it.
+                guard ChatProgram(rawValue: agent.agent.kind).flatMap(chatAdapter)?.readsByQuery != true
                 else { return false }
                 return chatPrefetched[agent.id] != chatPrefetchKey(agent, generation: generation)
             }

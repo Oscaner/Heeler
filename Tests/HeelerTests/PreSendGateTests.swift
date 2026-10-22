@@ -65,6 +65,24 @@ struct PreSendGateTests {
         }
         #expect(PreSendGate.check(screen, program: .grok, activity: .blocked) == .holdBlocked)
     }
+
+    /// Of OpenCode's captures, only an empty box in a conversation with no
+    /// turn running takes a message, whatever herdr reports short of
+    /// Blocked.
+    @Test(arguments: ScreenFixture.opencode)
+    func openCodeScreensHoldOrSend(stem: String) throws {
+        let sendable = [
+            "opencode-02-session-empty-180", "opencode-21-done-interrupted-180", "opencode-24-after-ctrl-u-180",
+            "opencode-32-session-empty-62",
+        ]
+        let screen = try ScreenFixture.screen(stem)
+        let state = InputBoxStateDetector.detect(screen, program: .opencode)
+        let decision: PreSendDecision = sendable.contains(stem) ? .send : .hold(state)
+        for activity in [ChatAgentActivity.idle, .working, .unknown] {
+            #expect(PreSendGate.check(screen, program: .opencode, activity: activity) == decision)
+        }
+        #expect(PreSendGate.check(screen, program: .opencode, activity: .blocked) == .holdBlocked)
+    }
 }
 
 @Suite("Delivery check")
@@ -104,6 +122,43 @@ struct DeliveryCheckTests {
         #expect(
             DeliveryCheck.verdict(try ScreenFixture.screen("codex-03-x2-after-esc"), program: .codex, activity: .idle)
                 == .delivered)
+    }
+
+    /// OpenCode's captures as a re-read after sending would find them: an
+    /// emptied box, or a prompt in its place, took the message; text left
+    /// in the box did not; a running turn, a menu, shell mode, the home
+    /// screen or the subagent panel leaves it marked as sent.
+    @Test(arguments: ScreenFixture.opencode)
+    func openCodeVerdicts(stem: String) throws {
+        let delivered = [
+            "opencode-02-session-empty-180", "opencode-10-permission-180", "opencode-11-permission-right1-180",
+            "opencode-12-permission-right2-180", "opencode-13-question-180", "opencode-21-done-interrupted-180",
+            "opencode-24-after-ctrl-u-180", "opencode-25-reject-feedback-180", "opencode-27-permission-shell-180",
+            "opencode-28-permission-shell-right1-180", "opencode-29-permission-shell-next-180",
+            "opencode-32-session-empty-62", "opencode-37-permission-long-62", "opencode-38-question-long-62",
+            "opencode-42-reject-feedback-62",
+        ]
+        let notDelivered = [
+            "opencode-03-session-draft-180", "opencode-05-slash-space-180", "opencode-17-recalled-draft-180",
+            "opencode-19-undo-draft-180", "opencode-20-pasted-lines-180", "opencode-22-home-draft-180",
+            "opencode-23-at-space-180", "opencode-26-session-command-draft-180", "opencode-31-home-draft-62",
+            "opencode-33-wrapped-draft-62", "opencode-34-pasted-lines-62",
+        ]
+        let screen = try ScreenFixture.screen(stem)
+        for activity in [ChatAgentActivity.idle, .working] {
+            let verdict = DeliveryCheck.verdict(screen, program: .opencode, activity: activity)
+            if delivered.contains(stem) {
+                #expect(verdict == .delivered)
+            } else if notDelivered.contains(stem) {
+                guard case .notDelivered(let draft) = verdict else {
+                    Issue.record("Expected notDelivered, got \(verdict)")
+                    continue
+                }
+                #expect(!draft.isEmpty)
+            } else {
+                #expect(verdict == .unconfirmed)
+            }
+        }
     }
 
     @Test("The re-read waits three seconds")

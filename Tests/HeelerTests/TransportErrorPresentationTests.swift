@@ -27,6 +27,27 @@ struct TransportErrorPresentationTests {
         #expect(refused.presentation.recoverySuggestion == "Check the file's permissions on the Host.")
     }
 
+    /// The detail is the whole message. A reader's own line cut at its limit
+    /// keeps its ellipsis, under a summary that says what failed.
+    @Test func hostStoreUnreadableExplainsItself() {
+        let busy = TransportError.hostStoreUnreadable(detail: "OpenCode's database is busy.")
+        #expect(!busy.isRetryable)
+        #expect(busy.presentation.summary == "OpenCode's database is busy")
+        #expect(busy.presentation.detail == nil)
+        #expect(busy.presentation.recoverySuggestion == nil)
+        #expect(busy.presentation.explanation == "OpenCode's database is busy.")
+
+        let line = TransportError.hostStoreUnreadable(detail: "Error: disk I/O error")
+        #expect(line.presentation.explanation == "Error: disk I/O error.")
+
+        let long = "Runtime error near line 9: " + String(repeating: "x", count: 172) + "…"
+        let cut = TransportError.hostStoreUnreadable(detail: long)
+        #expect(!cut.isRetryable)
+        #expect(cut.presentation.summary == "OpenCode's database couldn't be read")
+        #expect(cut.presentation.detail == long)
+        #expect(cut.presentation.explanation == "OpenCode's database couldn't be read: \(long)")
+    }
+
     private static let homebrewPATH =
         "Put herdr's install directory on the account's non-interactive SSH PATH."
 

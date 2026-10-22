@@ -272,6 +272,63 @@ struct ConsoleStoreTests {
         store.setHosts([])
     }
 
+    /// Each read of a conversation an adapter reads by query is an exec on
+    /// the Host, and the prefetch key changes with every status: only an
+    /// open Chat reads it (ADR 0025).
+    @Test func openCodeAgentsAreNotPrefetched() async throws {
+        let host = Host.fixture()
+        let claudeSession = "e951205e-24af-4a5e-baa7-3ccbebd2de2c"
+        let openCodeSession = "ses_0a1b2c3d4e5fK2mN8pQ4rT6vX9"
+        let claude = AgentInfo(
+            agentStatus: .idle, focused: false, paneID: "w1:p1", revision: 1,
+            tabID: "t1", terminalID: "term-1", workspaceID: "w1", agent: "claude",
+            agentSession: AgentSessionInfo(agent: "claude", kind: .id, source: "herdr:claude", value: claudeSession),
+            cwd: "/home/dev/proj")
+        let openCode = AgentInfo(
+            agentStatus: .idle, focused: false, paneID: "w1:p2", revision: 1,
+            tabID: "t1", terminalID: "term-2", workspaceID: "w1", agent: "opencode",
+            agentSession: AgentSessionInfo(
+                agent: "opencode", kind: .id, source: "herdr:opencode", value: openCodeSession),
+            cwd: "/home/dev/proj")
+        let transport = ScriptedTransport(snapshot: .fixture(agents: [claude, openCode]))
+        let files = VirtualHostFiles()
+        await files.write(
+            NumberedChatReducer.lines(0..<3),
+            at: "/home/dev/.claude/projects/-home-dev-proj/\(claudeSession).jsonl")
+        await transport.scriptChat(files: files.hostFiles(), agent: Agent(claude))
+        let records = InMemoryRecordSource.Store()
+        await records.write(NumberedChatReducer.lines(0..<3))
+        let cache = VolatileChatTranscriptCache()
+        let store = ConsoleStore(
+            snapshotRetryDelay: .milliseconds(10), chatPrefetchRetryDelay: .milliseconds(10), chatCache: cache,
+            makeSession: { _, subscriptions in
+                EventsSession(
+                    subscriptions: subscriptions, connect: { transport },
+                    reconnectPolicy: Self.fastPolicy, keepalive: nil)
+            },
+            chatAdapter: { program in
+                program == .opencode
+                    ? InMemoryRecordSource.adapter(records, sessionID: openCodeSession) : NumberedChatReducer.adapter()
+            })
+        defer { store.setHosts([]) }
+        let claudeKey = ChatCacheKey(
+            hostID: host.id, socketLocation: host.socketLocation,
+            reference: ConversationReference(program: .claude, sessionID: claudeSession))
+
+        store.setHosts([host])
+        await store.resume()
+        try await waitUntil("the Claude Code conversation is prefetched") {
+            guard case .hit(let document) = await cache.load(claudeKey) else { return false }
+            return document.entries.map(\.id.rawValue) == NumberedChatReducer.ids(0..<3)
+        }
+        try await Task.sleep(for: .milliseconds(300))
+
+        #expect(Set(await transport.chatAgentReads.map(\.target)) == ["w1:p1"])
+        #expect(await records.calls.isEmpty)
+        let agent = try #require(store.agents.first(where: { $0.agent.paneID == "w1:p2" }))
+        #expect(store.chatProgram(for: agent) == .opencode)
+    }
+
     /// Chat's availability asks the adapters the store reads with: a program
     /// it has none for is not offered, and its Agents never ask for the
     /// Host's platform.

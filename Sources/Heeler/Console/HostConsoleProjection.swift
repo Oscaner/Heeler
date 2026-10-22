@@ -298,8 +298,9 @@ final class HostConsoleProjection {
         }
     }
 
-    /// Chat's transcript reads (ADR 0024), on this connection's session.
-    /// Their timeouts and refusals are Chat's own errors, which never redial.
+    /// Chat's transcript reads (ADR 0024) and OpenCode store queries (ADR
+    /// 0025), on this connection's session. Their timeouts and refusals are
+    /// Chat's own errors, which never redial.
     func chatHostFiles() -> ChatHostFiles {
         let session = session
         return ChatHostFiles(
@@ -314,6 +315,9 @@ final class HostConsoleProjection {
             },
             home: {
                 try await session.withTransport { try await $0.hostHomeDirectory() }
+            },
+            queryOpenCode: { query in
+                try await session.withTransport { try await $0.queryOpenCode(query) }
             })
     }
 

@@ -133,8 +133,9 @@ enum PiFileChanges {
     // MARK: Pi
 
     /// Pi's patch has only `---`/`+++` file headers, so the Changes parser
-    /// reads it under a git header of its own.
-    private static func unifiedFile(_ patch: String, path: String) -> ChatFileChange? {
+    /// reads it under a git header of its own. OpenCode's patches read the
+    /// same way once their `Index:` lines are dropped.
+    static func unifiedFile(_ patch: String, path: String) -> ChatFileChange? {
         let body = Data("diff --git a/file b/file\n".utf8) + Data(patch.utf8)
         guard let file = GitProbe.parsePatchFiles(body, isTruncated: false).first, !file.hunks.isEmpty else {
             return nil

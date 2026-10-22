@@ -149,6 +149,16 @@ extension TransportError {
                 summary: "The conversation file cannot be read",
                 detail: "SFTP status \(status)",
                 recoverySuggestion: "Check the file's permissions on the Host.")
+        case .hostStoreUnreadable(let detail):
+            // A whole sentence explains itself. A reader's own line cut
+            // short keeps its ellipsis rather than gaining a period.
+            detail.hasSuffix("…")
+                ? TransportErrorPresentation(
+                    summary: "OpenCode's database couldn't be read", detail: detail,
+                    recoverySuggestion: nil)
+                : TransportErrorPresentation(
+                    summary: Self.droppingTrailingPeriods(detail), detail: nil,
+                    recoverySuggestion: nil)
         case .cancelled:
             TransportErrorPresentation(
                 summary: "Connection cancelled",

@@ -4,7 +4,7 @@ import Testing
 @testable import Heeler
 
 /// The adapters the app reads transcripts with, run through the engine
-/// against captured files.
+/// against captured files and an OpenCode store.
 @Suite("Chat standard adapters")
 struct ChatStandardAdapterTests {
     @Test func claudeFollowsACapturedSessionAsTheReducerProjectsIt() async throws {
@@ -115,6 +115,40 @@ struct ChatStandardAdapterTests {
         #expect(await automaticFiles.reads == userReads)
     }
 
+    /// OpenCode writes no file: Chat follows the session by querying its
+    /// database, and shows the rows the query prints as the reducer
+    /// projects them (ADR 0025).
+    @Test func openCodeFollowsACapturedStore() async throws {
+        let scenario = "patch"
+        let store = try OpenCodeStore(scenario: scenario)
+        let sessionID = try #require(try OpenCodeStoreFixture.named(scenario).sessionID).rawValue
+        let adapter = try #require(ChatTranscriptAdapter.standard(for: .opencode))
+        let engine = ChatConversationEngine(
+            reference: ConversationReference(program: .opencode, sessionID: sessionID),
+            cacheKey: ChatCacheKey(
+                hostID: UUID(), herdrSession: "", program: .opencode, conversationID: sessionID),
+            files: store.files, cache: VolatileChatTranscriptCache(), adapter: adapter, now: { Date() })
+
+        let snapshot = await engine.open(directories: [], context: ChatProjectionContext(activity: .idle))
+
+        // The probe's lines, each row at its `seq` as the record source
+        // hands them on.
+        var reducer = OpenCodeTranscriptReducer()
+        reducer.append(
+            try ChatFixture.lines("opencode/rows-\(scenario).jsonl").map { line in
+                guard case .row(let row) = OpenCodeLine(line.data) else { return line }
+                return ChatLine(offset: UInt64(row.seq), data: line.data)
+            })
+        let expected = reducer.transcript(ChatProjectionContext(activity: .idle))
+        #expect(snapshot.phase == .following(path: "opencode:\(sessionID)"))
+        #expect(snapshot.older == .reachedStart)
+        #expect(!expected.entries.isEmpty)
+        #expect(snapshot.transcript.entries == expected.entries)
+        #expect(snapshot.transcript.turns == expected.turns)
+        // One query read the whole session.
+        #expect(await store.queries.count == 1)
+    }
+
     @Test func eachProgramComparesEchoesTheWayItRecordsPrompts() throws {
         let claude = try #require(ChatTranscriptAdapter.standard(for: .claude))
         let codex = try #require(ChatTranscriptAdapter.standard(for: .codex))
@@ -162,6 +196,29 @@ struct ChatStandardAdapterTests {
         private mutating func record(_ type: String, _ uuid: String, _ fields: String) {
             text += #"{"type":"\#(type)","uuid":"\#(uuid)","parentUuid":\#(parent),\#(fields)}"# + "\n"
             parent = #""\#(uuid)""#
+        }
+    }
+
+    /// A scratch OpenCode store built from a captured one, queried the way a
+    /// Host's is. Only queries reach it: there are no files to read.
+    private actor OpenCodeStore {
+        private let harness: OpenCodeSQLiteHarness
+        private(set) var queries: [OpenCodeQuery] = []
+
+        init(scenario: String) throws {
+            harness = try OpenCodeSQLiteHarness(scenario: scenario)
+        }
+
+        func response(_ query: OpenCodeQuery) throws -> OpenCodeQueryResponse {
+            queries.append(query)
+            return try harness.response(query)
+        }
+
+        nonisolated var files: ChatHostFiles {
+            let none = TransportError.hostFeatureUnavailable(feature: "Files")
+            return ChatHostFiles(
+                status: { _ in throw none }, list: { _ in throw none }, read: { _ in throw none },
+                home: { throw none }, queryOpenCode: { try await self.response($0) })
         }
     }
 

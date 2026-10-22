@@ -26,7 +26,7 @@ struct BlockedCardView: View {
                             BlockedDialogCard(card: card, store: store, maxHeight: maxHeight)
                         }
                     }
-                    .id(card.dialog.fingerprint)
+                    .id(store.dialogGeneration)
                 case .generic(let excerpt):
                     GenericDialogCard(excerpt: excerpt, store: store, maxHeight: maxHeight, openTerminal: openTerminal)
                 case .unreadable:
@@ -88,13 +88,18 @@ private struct BlockedDialogCard: View {
             // keyboard it raises.
             textEntry
                 .disabled(!isReady)
-            // While an answer is unconfirmed its options wait, decline too,
-            // so Stop shows as the way out.
             BlockedCardFooter(
-                notice: store.notice,
-                stopTitle: dialog.stopsFromCard || (dialog.canStop && store.progress == .unconfirmed) ? "Stop" : nil,
-                isReady: isReady, canStop: store.canStop, stop: { perform(.dismiss) })
+                notice: store.notice, stopTitle: stopTitle, isReady: isReady, canStop: store.canStop,
+                stop: { perform(.dismiss) })
         }
+    }
+
+    /// Esc, named for what it does when no option sends it. While an answer
+    /// is unconfirmed the options wait, decline too, so Esc shows as the
+    /// way out; it says Stop then, rather than repeat the declining option.
+    private var stopTitle: String? {
+        if dialog.stopsFromCard { return dialog.stopTitle }
+        return dialog.canStop && store.progress == .unconfirmed ? "Stop" : nil
     }
 
     /// Who asked, when a subagent did.
@@ -144,7 +149,7 @@ private struct BlockedDialogCard: View {
             // screen's rows leave out the question the options answer.
             let shown = dialog.body.filter { !$0.hasPrefix("Claude has written up a plan") }
             BlockedPlanBox(text: BlockedRequestMatch.claudePlanText(call: card.request?.summary, shownRows: shown))
-        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion, .grokQuestion:
+        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion, .grokQuestion, .openCodeQuestion:
             VStack(alignment: .leading, spacing: 4) {
                 // Codex's asynchronous questions name their page by the
                 // question itself.
@@ -203,6 +208,21 @@ private struct BlockedDialogCard: View {
             BlockedCardText(
                 "Either answer forks this conversation and moves Grok Build to the fork. Chat stays here and holds "
                     + "messages until you switch back with /resume in the terminal.")
+        case .openCodePermission:
+            // The action and its target, then OpenCode's lines about it; a
+            // command has only its `$` line, shown as the target instead.
+            if let target = dialog.body.first ?? card.request?.summary ?? subject.command {
+                BlockedCodeBox(text: target)
+            }
+            let notes = subject.notes.filter { !dialog.body.isEmpty || !$0.hasPrefix("$ ") }
+            ForEach(Array(notes.enumerated()), id: \.offset) { @Sendable item in
+                MainActorContent {
+                    BlockedCardText(item.element)
+                }
+            }
+            if let focused = dialog.focus.focusedOrdinal, focused != 1, let option = dialog.option(focused) {
+                BlockedCardText("Selected in the terminal: \(option.label)")
+            }
         case .codexNetwork:
             EmptyView()
         }
@@ -316,6 +336,10 @@ private struct BlockedDialogCard: View {
             }
             .font(.footnote)
             .foregroundStyle(.secondary)
+        case .openCodeQuestion:
+            Text("Type your own answer in the terminal.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         default:
             EmptyView()
         }
@@ -513,8 +537,12 @@ extension DialogOption {
     /// until the session ends. Grok Build's `Always allow: <prefix>` saves
     /// the rule for the project's folder, where it outlives the session,
     /// and `allow all edits during this session` saves none (the 1.0.45
-    /// source, `permission/hub_gate.rs`; not captured live). Recheck when a
-    /// program's version changes.
+    /// source, `permission/hub_gate.rs`; not captured live). OpenCode
+    /// 2.0.32's `Always allow` saves a rule for the project whose patterns
+    /// reach past the request: `*` for most tools, a command's first words
+    /// (`rm *` for `rm -rf build`), or a subagent's type. OpenCode lists
+    /// them only while that option has focus, which the card's keys pass
+    /// straight through. Recheck when a program's version changes.
     func persistenceNote(program: ChatProgram) -> String {
         let folded = DialogRowScanner.comparable(label.lowercased())
         switch program {
@@ -532,6 +560,8 @@ extension DialogOption {
             return "Grok Build saves this rule for the project and won't ask again."
         case .claude, .codex, .pi:
             return "Saves a rule, so this isn't asked again."
+        case .opencode:
+            return "Saves an OpenCode rule for this project that can allow more than this request."
         }
     }
 }
@@ -539,7 +569,8 @@ extension DialogOption {
 private extension BlockedDialog {
     var cardTitle: String {
         switch kind {
-        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion, .grokQuestion: "Question"
+        case .claudeQuestion, .codexQuestion, .codexAsyncQuestion, .ompQuestion, .grokQuestion, .openCodeQuestion:
+            "Question"
         case .codexAsyncCollapsed: "Questions"
         case .ompApproval: "Allow \(subject.toolName ?? "Tool")"
         case .grokCancelTurn: "Subagents Still Running"
@@ -553,13 +584,17 @@ private extension BlockedDialog {
     /// running.
     var canStop: Bool { ![.codexAsyncQuestion, .grokQuestion, .grokCancelTurn, .grokFork].contains(kind) }
 
-    /// What Stop does, for the folded card: it quits Claude Code on the
-    /// trust dialog, only denies an Oh My Pi approval, and presses a Grok
-    /// Build permission's reject row.
+    /// What Stop does, for the folded card and an open card whose options
+    /// don't send it: it quits Claude Code on the trust dialog, only denies
+    /// an Oh My Pi approval, presses a Grok Build permission's reject row,
+    /// rejects an OpenCode permission and dismisses an OpenCode question,
+    /// as OpenCode's `esc dismiss` says.
     var stopTitle: String {
         switch kind {
         case .claudeWorkspaceTrust: "Exit Claude Code"
         case .ompApproval, .grokPermission: "Deny"
+        case .openCodePermission: "Reject"
+        case .openCodeQuestion: "Dismiss"
         default: "Stop"
         }
     }

@@ -96,6 +96,9 @@ struct TranscriptFollower: Sendable {
     /// The bytes just before `readOffset`.
     private(set) var tailAnchor = Data()
     private(set) var isOpen = false
+    /// Where the window started when the last request for older history
+    /// began.
+    private(set) var olderSearchEnd: UInt64?
 
     init(path: String, limits: Limits = Limits(), identity: Identity? = nil) {
         self.path = path
@@ -310,5 +313,36 @@ struct TranscriptFollower: Sendable {
         else { return .missing }
         windowStart = lineStart
         return .lines([ChatLine(offset: lineStart, length: length, data: prefix)])
+    }
+}
+
+extension TranscriptFollower: ChatTranscriptSource {
+    var olderPageLengths: (first: Int, maximum: Int) {
+        (limits.olderPage, limits.olderSearchPage)
+    }
+
+    var automaticOlderSearch: Int? { limits.automaticOlderSearch }
+
+    mutating func beginOlderSearch() {
+        olderSearchEnd = windowStart ?? 0
+    }
+
+    /// Spent once the window has moved back `olderSearch` bytes since the
+    /// request began.
+    var olderSearchExhausted: Bool {
+        guard let end = olderSearchEnd else { return false }
+        return end - min(end, windowStart ?? 0) >= UInt64(limits.olderSearch)
+    }
+
+    /// The line at the reference's offset, in the file it names or this
+    /// one; nil when the file is gone or no longer that long there.
+    func line(at reference: ChatOutputReference, files: ChatHostFiles) async throws -> ChatLine? {
+        guard
+            let data = try await files.read(
+                path: reference.path ?? path, from: reference.offset,
+                to: reference.offset + UInt64(reference.length), chunk: 256 << 10),
+            data.count == reference.length
+        else { return nil }
+        return ChatLine(offset: reference.offset, data: data)
     }
 }

@@ -67,6 +67,7 @@ struct PreflightReportTests {
         (.gitTimedOut, .connection),
         (.hostFileTimedOut, .connection),
         (.hostFileUnreadable(status: 3), .connection),
+        (.hostStoreUnreadable(detail: "OpenCode's database is busy."), .connection),
         (.cancelled, .connection),
         (.channelFailed(detail: "boom"), .connection),
         (.attachExited(status: 1, output: "herdr: lost connection"), .connection),

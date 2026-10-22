@@ -7,6 +7,7 @@ struct ConversationReferenceTests {
     private static let claudeID = "E951205E-24AF-4A5E-BAA7-3CCBEBD2DE2C"
     private static let codexID = "01a10f87-e025-7fb1-8974-8dd09937767a"
     private static let grokID = "01900000-0000-7000-8000-000000000001"
+    private static let openCodeID = "ses_0a1b2c3d4e5fK2mN8pQ4rT6vX9"
 
     private static func session(
         source: String, agent: String, kind: AgentSessionRefKind = .id, value: String
@@ -127,5 +128,37 @@ struct ConversationReferenceTests {
             ConversationReference.resolve(
                 Self.session(source: "herdr:grok", agent: "grok", kind: .path, value: path))
                 == .unsupported)
+    }
+
+    /// OpenCode ids are case-sensitive, so the id herdr reports binds as
+    /// it is.
+    @Test func openCodeBindsItsSessionIDAndKeepsItsCase() {
+        #expect(
+            ConversationReference.resolve(
+                Self.session(source: "herdr:opencode", agent: "opencode", value: Self.openCodeID))
+                == .bound(ConversationReference(program: .opencode, sessionID: Self.openCodeID)))
+        #expect(OpenCodeSessionID(Self.openCodeID)?.description == Self.openCodeID)
+    }
+
+    @Test(arguments: [
+        "ses_ABC", "ses_0a1b2c3d4e5fK2mN8pQ4rT6vX", "SES_0a1b2c3d4e5fK2mN8pQ4rT6vX9", "ses_0a1b2c3d4e5FK2mN8pQ4rT6vX9",
+        "ses_0a1b2c3d4e5fK2mN8pQ4rT6vX9\n", "../ses_x",
+    ])
+    func openCodeRefusesIDsOutsideItsShape(value: String) {
+        #expect(OpenCodeSessionID(value) == nil)
+        #expect(
+            ConversationReference.resolve(Self.session(source: "herdr:opencode", agent: "opencode", value: value))
+                == .unidentified)
+    }
+
+    /// OpenCode keeps its conversations in a store, not in transcript
+    /// files, so a path is a kind Chat cannot read for it.
+    @Test func openCodeNeverBindsATranscriptPath() {
+        for value in ["/home/dev/sessions/\(Self.openCodeID).jsonl", "/home/dev/.local/share/opencode/opencode.db"] {
+            #expect(
+                ConversationReference.resolve(
+                    Self.session(source: "herdr:opencode", agent: "opencode", kind: .path, value: value))
+                    == .unsupported)
+        }
     }
 }

@@ -40,6 +40,12 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
     /// The worktree question Grok Build's `/fork` asks, answered by a row's
     /// key. Every answer forks.
     case grokFork
+    /// OpenCode's `Permission required`, answered in a row of options:
+    /// `Allow once`, `Always allow`, `Reject`.
+    case openCodePermission
+    /// OpenCode's form with a single single-select question, answered by
+    /// digit.
+    case openCodeQuestion
 
     var program: ChatProgram {
         switch self {
@@ -53,6 +59,8 @@ enum BlockedDialogKind: String, Sendable, Hashable, CaseIterable {
             .omp
         case .grokPermission, .grokQuestion, .grokCancelTurn, .grokFork:
             .grok
+        case .openCodePermission, .openCodeQuestion:
+            .opencode
         }
     }
 }
@@ -182,7 +190,9 @@ struct DialogFocusState: Sendable, Hashable {
 /// transcript matcher compares with pending requests. Narrow screens and
 /// tall dialogs can cut any of them short; the transcript has the full text.
 struct DialogSubject: Sendable, Hashable {
-    /// Oh My Pi approval: the tool its title names, `bash`.
+    /// Oh My Pi approval: the tool its title names, `bash`. OpenCode
+    /// permission: the action its title starts with, `Read`, or `Shell` for
+    /// a command.
     var toolName: String?
     /// Claude Bash and Codex exec: the command, rows joined with spaces.
     /// Oh My Pi approval: the `Command:` row, its cut-off mark dropped.
@@ -217,6 +227,11 @@ struct DialogSubject: Sendable, Hashable {
     var planFilePath: String?
     /// Claude workspace trust: the folder.
     var workspacePath: String?
+    /// OpenCode permission: the lines under the action, wrapped rows
+    /// joined (`Path: .env`, `$ ls -la`). OpenCode swaps them for what the
+    /// rule would allow while `Always allow` has focus, so the fingerprint
+    /// carries them apart from the body (`DialogFingerprint.matches`).
+    var notes: [String] = []
 
     struct ReviewAnswer: Sendable, Hashable {
         var question: String
@@ -335,6 +350,7 @@ enum BlockedDialogParser {
         case .codex: CodexDialogParser.parse(screen)
         case .omp: OMPDialogParser.parse(screen)
         case .grok: GrokDialogParser.parse(screen)
+        case .opencode: OpenCodeDialogParser.parse(screen)
         case .pi: .none
         }
     }

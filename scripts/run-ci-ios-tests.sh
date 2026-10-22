@@ -2188,19 +2188,19 @@ run_app_fixture_suites() {
     fi
     case "$ci_app_shard" in
         session-weak)
-            run_suite WeakNetworkE2ETests 10 1 0 WeakNetworkE2ETests || return $?
+            run_suite WeakNetworkE2ETests 11 1 0 WeakNetworkE2ETests || return $?
             ;;
         all | transport)
             run_suite HeelerSSHDirectStreamLocalE2ETests 9 1 0 \
                 HeelerSSHDirectStreamLocalE2ETests || return $?
             if [[ "$ci_app_shard" == all ]]; then
-                run_suite SharedFixtureE2ETests 119 7 0 \
+                run_suite SharedFixtureE2ETests 123 7 0 \
                     HeelerSSHPTYE2ETests HeelerSSHJumpHostGateE2ETests \
                     HeelerSSHTransportBehaviorE2ETests ChangesFieldHostE2ETests \
                     ImageStagingE2ETests WeakNetworkE2ETests PairingCeremonyE2ETests || return $?
                 ln -s SharedFixtureE2ETests.log "$fixture_dir/WeakNetworkE2ETests.log"
             else
-                run_suite SharedFixtureE2ETests 109 6 0 \
+                run_suite SharedFixtureE2ETests 112 6 0 \
                     HeelerSSHPTYE2ETests HeelerSSHJumpHostGateE2ETests \
                     HeelerSSHTransportBehaviorE2ETests ChangesFieldHostE2ETests \
                     ImageStagingE2ETests PairingCeremonyE2ETests || return $?

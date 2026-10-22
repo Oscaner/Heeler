@@ -54,6 +54,82 @@ struct ChatDeliveryPolicyTests {
         #expect(reads.count == 0)
     }
 
+    /// Each program's idle capture with an empty input box.
+    private static let readyScreens: [ChatProgram: String] = [
+        .claude: "claude-01-ready", .codex: "codex-00-ready", .pi: "pi-06-empty-editor-119",
+        .omp: "omp-08-empty-120-after-first", .grok: "grok-01-idle-empty",
+        .opencode: "opencode-02-session-empty-180",
+    ]
+
+    /// Without a session check, a send reads the screen once and goes into
+    /// an empty box, and a Blocked Agent refuses it unread.
+    @Test(arguments: ChatProgram.allCases)
+    func withoutASessionCheckNothingChanges(program: ChatProgram) async throws {
+        let ready = try ScreenFixture.screen(try #require(Self.readyScreens[program]))
+        let rules = ChatSendRules(
+            program: program, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: program))
+        let reads = Reads()
+        func preflight(_ activity: ChatAgentActivity) throws -> @MainActor (String) async -> ComposerRefusal? {
+            try #require(
+                ComposerDeliveryPolicy.chat(
+                    rules: rules, activity: { activity },
+                    readScreen: {
+                        reads.count += 1
+                        return ready
+                    }
+                ).preflight)
+        }
+
+        let idle = try preflight(.idle)
+        let blocked = try preflight(.blocked)
+
+        #expect(await idle("hello") == nil)
+        #expect(reads.count == 1)
+        #expect(await blocked("hello") == .agentBlocked)
+        #expect(reads.count == 1)
+    }
+
+    @MainActor
+    private final class Calls {
+        var names: [String] = []
+    }
+
+    /// The session check runs after the Blocked check and before the screen
+    /// read: a reason refuses the message unread, and nil lets the read go
+    /// on.
+    @Test func aSessionCheckRunsBeforeTheScreenAndCanRefuse() async throws {
+        let ready = try ScreenFixture.screen("opencode-02-session-empty-180")
+        let reason = "OpenCode's terminal shows another conversation (Other). Open this one in the terminal, then send again."
+        let calls = Calls()
+        func preflight(
+            _ activity: ChatAgentActivity, check: String?
+        ) throws -> @MainActor (String) async -> ComposerRefusal? {
+            try #require(
+                ComposerDeliveryPolicy.chat(
+                    rules: Self.openCodeRules, activity: { activity },
+                    readScreen: {
+                        calls.names.append("read")
+                        return ready
+                    },
+                    confirmSession: {
+                        calls.names.append("check")
+                        return check
+                    }
+                ).preflight)
+        }
+
+        let blocked = try preflight(.blocked, check: reason)
+        let refused = try preflight(.idle, check: reason)
+        let confirmed = try preflight(.idle, check: nil)
+
+        #expect(await blocked("hello") == .agentBlocked)
+        #expect(calls.names.isEmpty)
+        #expect(await refused("hello") == .inputNotReady(reason))
+        #expect(calls.names == ["check"])
+        #expect(await confirmed("hello") == nil)
+        #expect(calls.names == ["check", "check", "read"])
+    }
+
     @Test func textAlreadyInTheBoxHoldsTheMessage() async throws {
         let preflight = try #require(Self.policy { Self.draft("half typed") }.preflight)
 
@@ -97,6 +173,15 @@ struct ChatDeliveryPolicyTests {
                 == "The Agent's input box already has text. Send or clear it in the terminal first.")
     }
 
+    /// OpenCode's `/undo` puts the undone prompt back in the box, and Up
+    /// recalls an earlier one; the hold names both beside a draft.
+    @Test func openCodeDraftHoldNamesUndoAndHistory() {
+        #expect(
+            InputBoxState.text("draft").holdReason(for: .opencode)
+                == "The Agent's input box already has text, such as a draft, a prompt /undo put back, or one recalled with Up. Send or clear it in the terminal first."
+        )
+    }
+
     /// A home screen, dashboard or picker in place of the conversation's
     /// input box holds with the sentence the program's detector gave.
     @Test(arguments: ChatProgram.allCases)
@@ -104,6 +189,38 @@ struct ChatDeliveryPolicyTests {
         let reason = "Open this conversation in the terminal first."
 
         #expect(InputBoxState.noComposer(reason).holdReason(for: program) == reason)
+    }
+
+    private static let openCodeRules = ChatSendRules(
+        program: .opencode, commands: ChatCommandMenu.commands(skills: [], agentIsIdle: true, program: .opencode))
+
+    /// A message on OpenCode's home screen would start a new conversation,
+    /// not continue the one Chat shows.
+    @Test func openCodeHomeHoldsWithItsOwnReason() async throws {
+        let home = try ScreenFixture.screen("opencode-01-home-empty-180")
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(rules: Self.openCodeRules, activity: { .idle }, readScreen: { home }).preflight)
+
+        #expect(
+            await preflight("hello")
+                == .inputNotReady(
+                    "OpenCode is on its home screen, where a message starts a new conversation. Open this conversation in the terminal first."
+                ))
+    }
+
+    /// While OpenCode works, herdr's Enter could answer a prompt that shows
+    /// first, so the message waits for the turn to end.
+    @Test func openCodeWorkingHoldsWithItsOwnReason() async throws {
+        let working = try ScreenFixture.screen("opencode-08-working-180")
+        let preflight = try #require(
+            ComposerDeliveryPolicy.chat(rules: Self.openCodeRules, activity: { .working }, readScreen: { working })
+                .preflight)
+
+        #expect(
+            await preflight("hello")
+                == .inputNotReady(
+                    "The Agent isn't taking messages: OpenCode is working. Send once it's idle, or steer from the terminal."
+                ))
     }
 
     @Test func anUnreadableScreenHoldsTheMessage() async throws {

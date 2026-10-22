@@ -7,14 +7,14 @@ import Foundation
 /// Chat binds by the exact source/agent pair of a program's
 /// `ChatSessionNaming` and never parses `source`. Claude/Codex use UUID ids;
 /// Pi/OMP also report absolute transcript paths; Grok Build uses lowercase
-/// UUIDv7 ids. A value is validated before it becomes a path or path
-/// component.
+/// UUIDv7 ids and OpenCode its own `ses_` ids. A value is validated before
+/// it becomes a path, path component or query argument.
 struct ConversationReference: Hashable, Sendable {
     let program: ChatProgram
     /// The id the program's naming accepted (a canonical UUID for Claude,
-    /// Codex, Pi and OMP, Grok Build's id as reported), or Pi/OMP's
-    /// validated absolute JSONL path. Paths are read directly, never
-    /// interpolated into an exec command.
+    /// Codex, Pi and OMP, Grok Build's id and an OpenCode session id as
+    /// reported), or Pi/OMP's validated absolute JSONL path. Paths are read
+    /// directly, never interpolated into an exec command.
     let sessionID: String
 
     enum Resolution: Hashable, Sendable {
@@ -25,7 +25,7 @@ struct ConversationReference: Hashable, Sendable {
         /// A session from another program, or of a kind Chat cannot read.
         case unsupported
         /// The right program, but the value is not a session id Chat can
-        /// file-locate, such as a Codex thread name after `resume <name>`.
+        /// look up, such as a Codex thread name after `resume <name>`.
         case unidentified
     }
 
@@ -107,6 +107,10 @@ extension ChatProgram {
         case .grok:
             ChatSessionNaming(
                 source: "herdr:grok", agent: "grok", sessionID: ConversationReference.lowercaseUUIDv7,
+                acceptsTranscriptPath: false)
+        case .opencode:
+            ChatSessionNaming(
+                source: "herdr:opencode", agent: "opencode", sessionID: { OpenCodeSessionID($0)?.rawValue },
                 acceptsTranscriptPath: false)
         }
     }

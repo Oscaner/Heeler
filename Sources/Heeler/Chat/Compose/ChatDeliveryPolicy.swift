@@ -12,10 +12,16 @@ extension ComposerDeliveryPolicy {
     /// `willReadScreen` runs just before the first read, once the Agent is
     /// not Blocked: Chat registers the send there, so a send witness's mark
     /// is on its way before `agent.read` rather than after it.
+    ///
+    /// `confirmSession`, for a program that can leave its conversation
+    /// without herdr reporting it (`ChatProgram.confirmsSessionBeforeSend`),
+    /// runs before `willReadScreen` and the screen read: why the message
+    /// would land outside the conversation Chat shows, or nil to go on.
     static func chat(
         rules: ChatSendRules,
         activity: @escaping @MainActor () -> ChatAgentActivity,
         readScreen: @escaping @MainActor () async throws -> ANSIScreen,
+        confirmSession: (@MainActor () async -> String?)? = nil,
         sendConcern: @escaping @MainActor (_ outgoing: String, _ screen: ANSIScreen) -> String? = { _, _ in nil },
         willReadScreen: @escaping @MainActor () -> Void = {},
         pause: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
@@ -28,6 +34,7 @@ extension ComposerDeliveryPolicy {
             validate: { rules.validate($0) },
             preflight: { text in
                 if activity() == .blocked { return .agentBlocked }
+                if let confirmSession, let reason = await confirmSession() { return .inputNotReady(reason) }
                 willReadScreen()
                 let screen: ANSIScreen
                 do {
@@ -86,6 +93,10 @@ extension InputBoxState {
                 // Ctrl+C before the first output puts the turn's prompt back
                 // in the box.
                 "Grok Build's input box already has text, such as a draft or a message Stop put back. Send or clear it in the terminal first."
+            case .opencode:
+                // OpenCode's `/undo` puts the undone prompt back in the box,
+                // and Up recalls an earlier one.
+                "The Agent's input box already has text, such as a draft, a prompt /undo put back, or one recalled with Up. Send or clear it in the terminal first."
             }
         case .shellMode:
             "The Agent's input box is in shell mode. Leave it in the terminal first."

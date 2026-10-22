@@ -24,6 +24,11 @@ Entries reference the pull request that made the change.
   Chat sends only when the screen shows this conversation's newest message.
   A message Grok Build recorded in another session says so, and Chat holds
   later ones until you switch back. (#482)
+- Read OpenCode 2.x conversations in Chat on macOS and Linux Hosts, with
+  sends, Stop and cards for its permission and question dialogs. Chat reads
+  OpenCode's own database with a short read-only query on the Host, which
+  needs sqlite3 or python3, and says when OpenCode has left the
+  conversation it shows. (#483)
 
 ### Changed
 

@@ -48,8 +48,23 @@ struct ChatStopPlan: Sendable {
                         "Ctrl+C went, but the Agent still shows Working. A queued message may have started.",
                     minimumGap: .milliseconds(1500)),
                 accessibilityHint: "Presses Ctrl+C to cancel the turn")
+        case .opencode:
+            // OpenCode 2.0.32 interrupts at a second Esc within 5 s of the
+            // first; herdr writes both in one PTY write. Ctrl+C would exit
+            // it when its input is empty.
+            ChatStopPlan(
+                keys: ["esc", "esc"], screenGuard: OpenCodeStopGuard.verdict,
+                wait: AgentStopWait(window: .seconds(3), unconfirmedNotice: openCodeUnconfirmedNotice),
+                accessibilityHint: "Presses Esc twice to interrupt OpenCode")
         }
     }
+
+    /// OpenCode's interrupt resumes: a message waiting during the turn
+    /// runs after it.
+    private static let openCodeUnconfirmedNotice =
+        "Esc went twice, but OpenCode still shows Working. If a message was waiting during this turn, OpenCode runs "
+        + "it after a stop; tap Stop again to stop that too. In the terminal, use Esc, not Ctrl+C, which exits "
+        + "OpenCode when its input is empty."
 
     /// The request failed, so the keys may not have arrived.
     static let unreachableMessage = "Couldn't reach the Agent, so it may still be working."

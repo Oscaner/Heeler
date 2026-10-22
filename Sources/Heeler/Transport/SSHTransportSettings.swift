@@ -41,6 +41,9 @@ struct SSHTransportSettings: Sendable {
     /// Changes reads have a separate, shorter budget. Calibrate this value
     /// against large repositories and weak networks without changing RPCs.
     static let defaultGitExecTimeout: Duration = .seconds(10)
+    /// Chat's store queries (ADR 0025) have their own budget, so calibrating
+    /// one feature leaves the other alone.
+    static let defaultChatQueryTimeout: Duration = .seconds(10)
 
     static var defaultAgentDiscoveryCommand: String {
         let checks = SupportedAgentKind.allCases.map { kind in
@@ -151,6 +154,11 @@ struct SSHTransportSettings: Sendable {
     /// dispatched execs retain their lease until SSH observes their exit.
     /// Expiry reports `.gitTimedOut`, which does not trigger link recovery.
     var gitExecTimeout: Duration = Self.defaultGitExecTimeout
+    /// Bounds Chat's wait for one store query (ADR 0025) the way
+    /// ``gitExecTimeout`` bounds a Changes read. The query's remote watchdog
+    /// stops two seconds earlier, so the Host normally ends a slow query
+    /// first. Expiry reports `.hostFileTimedOut`, which never redials.
+    var chatQueryTimeout: Duration = Self.defaultChatQueryTimeout
 
     init(
         routes: [SSHRoute],
